@@ -22,8 +22,17 @@ function buildOneRiserBoard(tread, riserHeight, treadThickness, thickness, inwar
   const zTop = tread.index * riserHeight + riserHeight - treadThickness;
   const zBottom = tread.index * riserHeight - treadThickness;
 
-  const [inner0, outer0] = tread.rearRiser;
-  const { normal } = outwardRearNormal(tread);
+  // Podstopień, tak jak wanga (patrz stringerGeometry.js), ma zostać na SUROWEJ linii —
+  // ręczna edycja krawędzi (edgeOverrides.js) świadomie przestawia tread.rearRiser/outline
+  // (żeby stopień/nosek mógł się wysunąć), ale NIGDY nie dotyka outerChain/innerChain. Budujemy
+  // więc podstopień z tych nietkniętych łańcuchów zamiast z (potencjalnie mocno przekształconej)
+  // krawędzi stopnia — inaczej podstopień rozciągałby się i wykręcał razem z edytowanym noskiem,
+  // dokładnie tak jak wanga zanim to naprawiliśmy.
+  const hasRawChain = tread.innerChain?.length > 0 && tread.outerChain?.length > 0;
+  const inner0 = hasRawChain ? tread.innerChain[0] : tread.rearRiser[0];
+  const outer0 = hasRawChain ? tread.outerChain[0] : tread.rearRiser[1];
+  const rawOutline = hasRawChain ? [...tread.innerChain, ...[...tread.outerChain].reverse()] : tread.outline;
+  const { normal } = outwardRearNormal({ outline: rawOutline, rearRiser: [inner0, outer0] });
 
   const dir = { x: outer0.x - inner0.x, y: outer0.y - inner0.y };
   const width = Math.hypot(dir.x, dir.y);
