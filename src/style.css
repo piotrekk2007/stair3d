@@ -62,6 +62,19 @@ html, body {
   height: 100%;
 }
 
+.edge-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.edge-handle:hover {
+  fill: #fff3e0;
+}
+
+.edge-handle.dragging {
+  cursor: grabbing;
+}
+
 #plan2d-toolbar {
   position: absolute;
   top: 12px;

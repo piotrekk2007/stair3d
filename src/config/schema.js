@@ -27,6 +27,13 @@ export function createDefaultConfig() {
     walklineSplitOffset: 400,
     minInnerWidth: 110, // mm, minimalna dopuszczalna szerokość stopnia przy duszy
 
+    // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
+    // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza
+    // krawędź, przed stopniem 0; N = ostatnia, za stopniem N-1). Wartość: { point: {x,y},
+    // movedEndpoint: 'inner'|'outer' } — zapamiętujemy TYLKO przesunięty koniec, drugi (zawias)
+    // zawsze bierzemy z aktualnej geometrii wzorcowej, więc przetrwa zmianę innych parametrów.
+    manualEdgeOverrides: {},
+
     treadThickness: 40, // mm
     nosing: 25, // mm, wysunięcie noska stopnia
 

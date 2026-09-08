@@ -1,4 +1,5 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints } from './pathUtils.js';
+import { applyManualEdgeOverrides } from './edgeOverrides.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
 // Metoda zabiegu: PROPORCJONALNA (linia podziału) — punkty podziału na linii biegu są
@@ -12,9 +13,21 @@ import { cumulativeDistances, pointAtDistance, subPathPoints } from './pathUtils
 // względem osi X, jeśli turnDirection === 'left' — dzięki temu oba zakręty schodów U
 // zawsze skręcają w tę samą stronę (spirala), a nie zygzakiem.
 export function buildPlanLayout(config) {
-  if (config.stairType === 'straight') return buildStraightLayout(config);
-  if (config.stairType === 'U') return buildMultiTurnLayout(config);
-  return buildMultiTurnLayout(config, 1);
+  const layout =
+    config.stairType === 'straight'
+      ? buildStraightLayout(config)
+      : config.stairType === 'U'
+      ? buildMultiTurnLayout(config)
+      : buildMultiTurnLayout(config, 1);
+
+  // Ręczne przesunięcia krawędzi (przeciąganie na planie 2D) — jedno miejsce, więc każdy
+  // konsument planLayout (widok 3D, plan 2D, wymiary, formatki zabiegowe) dostaje już
+  // poprawioną geometrię bez własnej wiedzy o istnieniu edycji. Patrz edgeOverrides.js.
+  if (config.manualEdgeOverrides && Object.keys(config.manualEdgeOverrides).length > 0) {
+    layout.treads = applyManualEdgeOverrides(layout.treads, config.manualEdgeOverrides);
+  }
+
+  return layout;
 }
 
 function mirrorX(pt) {

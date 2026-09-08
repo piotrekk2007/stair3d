@@ -3,6 +3,7 @@
 // co dla rzutu "od wejścia w górę ekranu" jest wygodniejsze niż matematyczny układ).
 
 import { computeWinderBlank } from '../geometry/winderBlank.js';
+import { getBoundaryPoints } from '../geometry/edgeOverrides.js';
 
 const PAD = 600; // mm, margines wokół rzutu
 const DIM_OFFSET = 350; // mm, odsunięcie linii wymiarowych od rzutu
@@ -29,7 +30,33 @@ function dimensionLine(x1, y1, x2, y2, label, strokeWidth) {
     </g>`;
 }
 
-export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = true) {
+// Rysuje wszystkie (numTreads+1) granice między stopniami jako przeciągalne uchwyty — szare
+// przerywane = wg wzoru, pomarańczowe ciągłe = ręcznie przesunięte (patrz edgeOverrides.js).
+// Klasy/atrybuty data-* czytane są przez delegację zdarzeń w main.js (przeciąganie).
+function editableEdgesXML(planLayout, overrides) {
+  const treads = planLayout.treads;
+  const n = treads.length;
+  let xml = '';
+  for (let i = 0; i <= n; i++) {
+    const { current } = getBoundaryPoints(treads, i);
+    if (!current) continue;
+    const [inner, outer] = current;
+    const isManual = !!(overrides && overrides[i]);
+    const color = isManual ? '#e08214' : '#9aa0a6';
+    const lineWidth = isManual ? 10 : 6;
+    const dash = isManual ? 'none' : '20,20';
+    xml += `
+      <line class="edge-line" data-boundary="${i}" x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}"
+            stroke="${color}" stroke-width="${lineWidth}" stroke-dasharray="${dash}" />
+      <circle class="edge-handle" data-boundary="${i}" data-endpoint="inner"
+              cx="${fmt(inner.x)}" cy="${fmt(-inner.y)}" r="40" fill="#fff" stroke="${color}" stroke-width="10" />
+      <circle class="edge-handle" data-boundary="${i}" data-endpoint="outer"
+              cx="${fmt(outer.x)}" cy="${fmt(-outer.y)}" r="40" fill="#fff" stroke="${color}" stroke-width="10" />`;
+  }
+  return `<g id="edge-edit-layer">${xml}</g>`;
+}
+
+export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = true, editMode = false) {
   const b = planLayout.bounds;
   const minX = b.minX - PAD - DIM_OFFSET * 2;
   const maxX = b.maxX + PAD + DIM_OFFSET * 2;
@@ -105,6 +132,8 @@ export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = 
       <text x="${fmt(minX + 100)}" y="${fmt(minY + 150)}">Stopni: ${derived.numTreads} | głębokość ${config.treadGoing}mm | podstopień ${derived.riserHeight.toFixed(0)}mm | szer. biegu ${config.stairWidth}mm</text>
     </g>`;
 
+  const editXML = editMode ? editableEdgesXML(planLayout, config.manualEdgeOverrides) : '';
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(minX)} ${fmt(minY)} ${fmt(width)} ${fmt(height)}" width="100%" height="100%">
     <rect x="${fmt(minX)}" y="${fmt(minY)}" width="${fmt(width)}" height="${fmt(height)}" fill="#ffffff"/>
     ${treadsXML}
@@ -117,5 +146,6 @@ export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = 
     ${dimTop}
     ${dimSide}
     ${legendXML}
+    ${editXML}
   </svg>`;
 }

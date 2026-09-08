@@ -1,6 +1,6 @@
 import GUI from 'lil-gui';
 
-export function createUI({ config, onChange, onReset, viewState, onViewChange, exportHandlers = {}, onExportPlan2D, onTogglePlan2D, onSaveProject, onLoadProject, exportSelection }) {
+export function createUI({ config, onChange, onReset, viewState, onViewChange, exportHandlers = {}, onExportPlan2D, onTogglePlan2D, onResetEdgeOverrides, onSaveProject, onLoadProject, exportSelection }) {
   const gui = new GUI({ title: 'Parametry schodów' });
 
   if (onSaveProject) {
@@ -61,6 +61,10 @@ export function createUI({ config, onChange, onReset, viewState, onViewChange, e
     view.add({ plan2d: () => onTogglePlan2D() }, 'plan2d').name('Plan 2D (pokaż/ukryj)');
   }
   view.add(viewState, 'plan2dShowWinderBlanks').name('Formatki na planie 2D').onChange((v) => onViewChange('plan2dShowWinderBlanks', v));
+  view.add(viewState, 'plan2dEditMode').name('Edytuj krawędzie (przeciąganie)').onChange((v) => onViewChange('plan2dEditMode', v));
+  if (onResetEdgeOverrides) {
+    view.add({ reset: onResetEdgeOverrides }, 'reset').name('Resetuj ręczne edycje krawędzi');
+  }
 
   const exportFolder = gui.addFolder('Eksport');
   if (exportSelection) {
