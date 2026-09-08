@@ -26,15 +26,22 @@ export function getBoundaryPoints(treads, boundaryIndex) {
 }
 
 // Podmienia (przez porównanie wartości z epsilonem) każde wystąpienie `oldPoint` na `newPoint`
-// we wszystkich polach stopnia opisujących geometrię — ten sam zestaw 5 pól co transformTread()
-// w planLayout.js. Mutuje `tread` w miejscu (wywołujący dostaje już własną, sklonowaną kopię).
+// w polach stopnia opisujących jego WŁASNY, widoczny kształt: `outline` (bryła stopnia),
+// `rearRiser`/`frontRiser` (krawędzie, z których korzysta też nosek i podstopień — patrz
+// treadGeometry.js/riserGeometry.js — więc one słusznie mają podążać za edycją).
+//
+// CELOWO NIE dotyka `innerChain`/`outerChain` — to jedyne pola, z których korzysta
+// stringerGeometry.js do budowania wangi. Wanga ma zostać na surowej, wzorcowej linii,
+// dokładnie tak jak przy nosku (patrz treadGeometry.js/nosingUtils.js: nosek też liczy się
+// z osobnej, nieedytowanej linii konstrukcyjnej, a wanga nigdy go "nie goni"). Bez tego
+// rozdzielenia przesunięcie jednego punktu przekręcało od razu 2 sąsiednie panele wangi w
+// przeciwne strony (bo każdy panel wangi liczy swoją płaszczyznę z WŁASNYCH dwóch końców
+// outerChain/innerChain, niezależnie od sąsiada).
 function retargetPoint(tread, oldPoint, newPoint) {
   const replace = (pts) => pts.map((p) => (sameAs(p, oldPoint) ? newPoint : p));
   tread.outline = replace(tread.outline);
   tread.rearRiser = replace(tread.rearRiser);
   tread.frontRiser = replace(tread.frontRiser);
-  tread.innerChain = replace(tread.innerChain);
-  tread.outerChain = replace(tread.outerChain);
 }
 
 // Pole powierzchni konturu (wzór Gaussa) — dodatnie i sensownie duże = kształt nie jest
