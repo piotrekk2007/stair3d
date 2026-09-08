@@ -139,16 +139,19 @@ function buildStraightLayout(config) {
 // Buduje pojedynczy odcinek prosty->zabieg->prosty w lokalnym układzie (local +Y = kierunek
 // wejścia, local +X = kierunek wyjścia po skręcie w prawo o 90°, local x=0 = policzek
 // zewnętrzny, local x=stairWidth = policzek wewnętrzny/dusza).
-function buildTurnLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn, windersCount, treadsOut, startIndex) {
+function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitOffset }, treadsIn, windersCount, treadsOut, startIndex) {
   const Yc = treadsIn * treadGoing;
   const Ic = { x: stairWidth, y: Yc };
   const Oc = { x: 0, y: Yc + stairWidth };
 
+  // Wx: odsunięcie linii biegu od duszy (poprzek biegu, oś X lokalna) — walklineOffset.
+  // distanceToCorner_A: ile z długości zabiegu (wzdłuż biegu) przypada PRZED narożnikiem —
+  // niezależny parametr walklineSplitOffset, pozwala na niesymetryczny zabieg.
   const Wx = stairWidth - walklineOffset;
-  const Wc = { x: Wx, y: Yc + walklineOffset };
+  const Wc = { x: Wx, y: Yc + walklineSplitOffset };
 
   const totalTurnPathLength = windersCount * treadGoing;
-  const distanceToCorner_A = walklineOffset;
+  const distanceToCorner_A = walklineSplitOffset;
   const distanceFromCorner_B = totalTurnPathLength - distanceToCorner_A;
 
   const turnZoneEndWalk = { x: Wx + distanceFromCorner_B, y: Wc.y };
@@ -333,9 +336,9 @@ function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut,
 
 // numTurns: 1 dla L, 2 dla U. turn1Type/turn2Type: 'winder' | 'landing' niezależnie na każdym zakręcie.
 function buildMultiTurnLayout(config, numTurnsOverride) {
-  const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
+  const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
-  const params = { stairWidth, treadGoing, walklineOffset };
+  const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset };
 
   // "1 duży podest" zamiast 2 półpodestów: gdy OBA zakręty w U są typu 'landing' i mergeLandings
   // jest włączone, traktujemy je jako jedną, ciągłą platformę na jednej wysokości — patrz

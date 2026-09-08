@@ -20,6 +20,11 @@ export function createDefaultConfig() {
     mergeLandings: true,
 
     walklineOffset: 400, // mm, odsunięcie linii biegu od policzka wewnętrznego (duszy) — zgodnie z wymogiem 40-50cm
+    // mm, gdzie na DŁUGOŚCI zabiegu (wzdłuż kierunku biegu) leży punkt załamania linii biegu —
+    // czyli ile z całkowitej długości zabiegu (windersPerTurn * treadGoing) przypada PRZED
+    // załamaniem. Niezależne od walklineOffset (ten steruje tylko odsunięciem w poprzek, od
+    // duszy) — pozwala na niesymetryczny zabieg (więcej stopni przed narożnikiem niż po nim).
+    walklineSplitOffset: 400,
     minInnerWidth: 110, // mm, minimalna dopuszczalna szerokość stopnia przy duszy
 
     treadThickness: 40, // mm
@@ -48,18 +53,22 @@ export function createDefaultConfig() {
   };
 }
 
-function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffset, minInnerWidth) {
+function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth) {
   if (turnType === 'landing') {
     // Podest to płaski kwadrat — brak zwężenia przy duszy, warunek zabiegu nie dotyczy.
     return { type: 'landing', feasible: true, message: '', minInnerSegment: null, minInnerWidthOk: true };
   }
   const totalTurnPathLength = windersPerTurn * treadGoing;
-  const innerTurnPathLength = totalTurnPathLength - 2 * walklineOffset;
+  // Policzek wewnętrzny "traci" walklineOffset przed narożnikiem i walklineSplitOffset po nim
+  // (patrz planLayout.js/buildTurnLocal: innerTurnLen = distanceFromCorner_B - walklineOffset,
+  // gdzie distanceFromCorner_B = totalTurnPathLength - walklineSplitOffset) — przy równych
+  // wartościach obu przesunięć sprowadza się to do dawnego wzoru (totalTurnPathLength - 2×offset).
+  const innerTurnPathLength = totalTurnPathLength - walklineOffset - walklineSplitOffset;
   if (innerTurnPathLength <= 0) {
     return {
       type: 'winder',
       feasible: false,
-      message: `Skręt niewykonalny geometrycznie: ${windersPerTurn} stopni × ${treadGoing}mm musi przekraczać 2× odsunięcie linii biegu (${2 * walklineOffset}mm). Zwiększ liczbę stopni zabiegowych, głębokość stopnia, lub zmniejsz odsunięcie linii biegu.`,
+      message: `Skręt niewykonalny geometrycznie: ${windersPerTurn} stopni × ${treadGoing}mm musi przekraczać sumę odsunięcia linii biegu i przesunięcia punktu podziału (${walklineOffset + walklineSplitOffset}mm). Zwiększ liczbę stopni zabiegowych, głębokość stopnia, lub zmniejsz te odsunięcia.`,
       minInnerSegment: null,
       minInnerWidthOk: false,
     };
@@ -69,7 +78,7 @@ function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffs
 }
 
 export function deriveStairData(config) {
-  const { stairType, totalRise, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, minInnerWidth, minRiser, maxRiser, turn1Type, turn2Type, stairWidth, mergeLandings } = config;
+  const { stairType, totalRise, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, minRiser, maxRiser, turn1Type, turn2Type, stairWidth, mergeLandings } = config;
 
   const numTurns = stairType === 'U' ? 2 : stairType === 'L' ? 1 : 0;
 
@@ -101,8 +110,8 @@ export function deriveStairData(config) {
   const riserRangeOk = riserHeight >= minRiser && riserHeight <= maxRiser;
 
   const turnChecks = [];
-  if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, minInnerWidth));
-  if (numTurns >= 2) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, minInnerWidth));
+  if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth));
+  if (numTurns >= 2) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth));
 
   const turnFeasible = turnChecks.every((t) => t.feasible);
   const turnFeasibleMessage = turnChecks

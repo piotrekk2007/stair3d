@@ -31,6 +31,7 @@ export function createUI({ config, onChange, onReset, viewState, onViewChange, e
 
   const winder = gui.addFolder('Geometria zabiegu');
   winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]').onChange(onChange);
+  winder.add(config, 'walklineSplitOffset', 250, 500, 10).name('Przesunięcie punktu podziału [mm]').onChange(onChange);
   winder.add(config, 'minInnerWidth', 80, 200, 5).name('Min. szer. przy duszy [mm]').onChange(onChange);
 
   const build = gui.addFolder('Konstrukcja');
