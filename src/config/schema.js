@@ -1,5 +1,20 @@
 export function createDefaultConfig() {
   return {
+    // Id into src/rules/profiles/definitions.js DESIGN_PROFILES — which bundle of legal /
+    // industry-best-practice / company-manufacturing / user-preference rules this project is
+    // currently being checked against. Purely informational at the model level: nothing in
+    // buildStaircase.js or planLayout.js reads this field, geometry generation does not
+    // depend on it. It exists so a project can always answer "which rules is this being
+    // validated against right now?" — see src/rules/validator.js and docs/rules/PROFILES.md.
+    designProfileId: 'POLAND_RESIDENTIAL_TIMBER_DEFAULT',
+
+    // Nazwy pól configu, które użytkownik świadomie ZABLOKOWAŁ przed przypadkową zmianą w UI
+    // (patrz src/ui/ui.js — kontrolka zablokowanego pola jest wyłączona, z ikoną kłódki).
+    // To WYŁĄCZNIE blokada interfejsu — nie jest to twarde ograniczenie solvera ani reguła
+    // walidacji (te żyją w src/rules/, patrz docs/rules/). Blokada przetrwa zapis/wczytanie
+    // projektu, bo jest częścią configu, tak jak manualEdgeOverrides.
+    lockedFields: [],
+
     stairType: 'L', // 'straight' | 'L' | 'U'
     turnDirection: 'right', // 'right' | 'left' — kierunek skrętu patrząc od dołu w gorę
 
@@ -37,8 +52,10 @@ export function createDefaultConfig() {
     treadThickness: 40, // mm
     nosing: 25, // mm, wysunięcie noska stopnia
 
-    stringerHeight: 300, // mm, wysokość policzka (poniżej linii schodkowej)
-    stringerThickness: 40, // mm
+    stringerHeight: 300, // mm, wysokość policzka (poniżej linii schodkowej) — "width" w StringerModel (src/geometry/stringerModel.js)
+    stringerThickness: 40, // mm — "thickness" w StringerModel
+    stringerConstructionType: 'closed', // 'closed' (wanga wcinana, schowana) | 'cut' (wanga wycinana, otwarta) — patrz stringerModel.js CONSTRUCTION_TYPES
+    timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia
     riserBoardThickness: 20, // mm, grubość podstopnia

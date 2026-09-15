@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import { buildPlanLayout } from './planLayout.js';
-import { buildTreadMesh } from './treadGeometry.js';
-import { buildStringerGeometries } from './stringerGeometry.js';
-import { buildPosts } from './postGeometry.js';
+import { buildTreadModels } from './treadSolver.js';
+import { renderTreads } from './treadRenderer.js';
+import { buildRiserModels } from './riserSolver.js';
+import { renderRisers } from './riserRenderer.js';
+import { buildStringerModelsForFlight } from './stringerSolver.js';
+import { renderStringers } from './stringerRenderer.js';
+import { buildPostModels } from './postSolver.js';
+import { renderPosts } from './postRenderer.js';
 import { buildCeiling } from './ceilingGeometry.js';
-import { buildRiserBoards } from './riserGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 
 const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
@@ -15,62 +19,48 @@ const stringerMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5a34, rough
 const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.65, metalness: 0.02 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
+// ORKIESTRATOR — żadna geometria nie jest tu ROZWIĄZYWANA, tylko SKŁADANA. Kolejność:
+//
+//   config -> buildPlanLayout() -----------------------------------------------[MODEL 2D]
+//          -> buildTreadModels() / buildRiserModels() / buildStringerModelsForFlight()
+//             / buildPostModels() ----------------------------------------[MODELE, bez THREE]
+//          -> renderTreads() / renderRisers() / renderStringers() / renderPosts() -[RENDER]
+//
+// Każdy `build*Models()` jest czystą funkcją (planLayout, config) -> dane; każdy `render*()`
+// przyjmuje TYLKO już gotowy model i zwraca THREE.Group — żaden renderer nie woła solvera
+// sam, i żaden solver nie zagląda do Three.js. Patrz docs/architecture/CONSOLIDATION.md.
 export function buildStaircase(config) {
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);
 
+  const treadModels = buildTreadModels(planLayout, fullConfig);
+  const riserModels = buildRiserModels(planLayout, fullConfig);
+  const stringerModels = buildStringerModelsForFlight(planLayout, fullConfig);
+  const postModels = buildPostModels(planLayout, fullConfig);
+
   const root = new THREE.Group();
   root.name = 'Staircase';
 
-  const treadsGroup = new THREE.Group();
-  treadsGroup.name = 'Treads';
-  for (const tread of planLayout.treads) {
-    // Stopień o indeksie i leży NA szczycie i-tego podstopnia: góra stopnia = (i+1)*h.
-    const elevation = (tread.index + 1) * derived.riserHeight - fullConfig.treadThickness;
-    const geometry = buildTreadMesh(tread, elevation, fullConfig);
-    const mesh = new THREE.Mesh(geometry, treadMaterial);
-    mesh.name = `Tread_${tread.index}_${tread.type}`;
-    treadsGroup.add(mesh);
-  }
-  root.add(treadsGroup);
+  root.add(renderTreads(treadModels, treadMaterial));
+  root.add(renderStringers(stringerModels.outer, fullConfig.hasCornerPost, stringerMaterial, 'StringerOuter'));
+  root.add(renderStringers(stringerModels.inner, fullConfig.hasCornerPost, stringerMaterial, 'StringerInner'));
 
-  const stringerOuterGroup = new THREE.Group();
-  stringerOuterGroup.name = 'StringerOuter';
-  buildStringerGeometries(planLayout, fullConfig, 'outer').forEach((geo, i) => {
-    const mesh = new THREE.Mesh(geo, stringerMaterial);
-    mesh.name = `StringerOuter_${i}`;
-    stringerOuterGroup.add(mesh);
-  });
-  root.add(stringerOuterGroup);
-
-  const stringerInnerGroup = new THREE.Group();
-  stringerInnerGroup.name = 'StringerInner';
-  buildStringerGeometries(planLayout, fullConfig, 'inner').forEach((geo, i) => {
-    const mesh = new THREE.Mesh(geo, stringerMaterial);
-    mesh.name = `StringerInner_${i}`;
-    stringerInnerGroup.add(mesh);
-  });
-  root.add(stringerInnerGroup);
-
-  const postsGroup = buildPosts(planLayout, fullConfig);
-  for (const mesh of postsGroup.children) mesh.material = postMaterial;
+  const postsGroup = renderPosts(postModels, postMaterial);
   root.add(postsGroup);
 
   if (config.hasRiserBoards) {
-    const riserGroup = new THREE.Group();
-    riserGroup.name = 'RiserBoards';
-    buildRiserBoards(planLayout, fullConfig).forEach((geo, i) => {
-      const mesh = new THREE.Mesh(geo, riserBoardMaterial);
-      mesh.name = `RiserBoard_${i}`;
-      riserGroup.add(mesh);
-    });
-    root.add(riserGroup);
+    root.add(renderRisers(riserModels, riserBoardMaterial));
   }
 
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig);
 
   // root = tylko elementy schodów (do eksportu); strop jest osobno, tylko do wizualizacji.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit };
+  // treadModels/riserModels/stringerModels/postModels są tu już policzone raz — zwracamy je też
+  // jawnie, żeby np. src/validator/StaircaseValidator.js (validateModels) albo
+  // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
+  // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
+  // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, postModels };
 }

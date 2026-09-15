@@ -1,19 +1,59 @@
 import { downloadTextFile } from '../export/downloadTextFile.js';
 
+// Schemat pliku projektu — patrz docs/model/STAIRCASE_DATA_MODEL.md §7.1 dla pełnego
+// uzasadnienia wersji 2: `edgeOverrides` (ręczne korekty krawędzi — patrz §3, Nominal ->
+// Override -> Final) są koncepcyjnie WARSTWĄ KOREKT, nie parametrem wejściowym Staircase, więc
+// w wersji 2 pliku żyją jako osobne, top-level pole zamiast być zagnieżdżone w `config`.
+//
+// UWAGA O ZAKRESIE: to jest zmiana FORMATU PLIKU, nie modelu w pamięci. `config` używany
+// wewnątrz aplikacji (main.js, planLayout.js, ...) nadal ma `manualEdgeOverrides` zagnieżdżone
+// — ten moduł konwertuje między dwoma reprezentacjami przy zapisie/odczycie. Rozdzielenie
+// runtime'owego kształtu configu to osobny, większy refaktor modelu danych, świadomie
+// zostawiony na później (poza zakresem etapu konsolidacji — patrz CLAUDE.md).
 const PROJECT_TYPE = 'schody3d-project';
-const PROJECT_VERSION = 1;
+export const CURRENT_PROJECT_VERSION = 2;
+
+// Buduje payload wersji 2 z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
+// oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
+// środowiska przeglądarki (downloadTextFile potrzebuje document/Blob, których nie ma w
+// środowisku testowym node:test).
+export function buildProjectPayloadV2(config) {
+  const { manualEdgeOverrides, ...configWithoutOverrides } = config;
+  return {
+    _type: PROJECT_TYPE,
+    _version: CURRENT_PROJECT_VERSION,
+    savedAt: new Date().toISOString(),
+    config: configWithoutOverrides,
+    edgeOverrides: manualEdgeOverrides || {},
+  };
+}
 
 export function exportProjectJSON(config, filename = 'schody_projekt.json') {
-  const payload = {
-    _type: PROJECT_TYPE,
-    _version: PROJECT_VERSION,
-    savedAt: new Date().toISOString(),
-    config,
-  };
+  const payload = buildProjectPayloadV2(config);
   downloadTextFile(JSON.stringify(payload, null, 2), filename, 'application/json');
 }
 
-// Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d.
+// Migruje payload wersji 1 (edgeOverrides zagnieżdżone jako config.manualEdgeOverrides) do
+// kształtu wersji 2 (edgeOverrides jako osobne, top-level pole). Rejestr MIGRATIONS jest
+// otwarty na kolejne wersje w przyszłości — parseProjectJSON stosuje je po kolei, aż dojdzie
+// do CURRENT_PROJECT_VERSION, więc plik sprzed dwóch wersji też się wczyta.
+function migrateV1ToV2(data) {
+  const { manualEdgeOverrides, ...configWithoutOverrides } = data.config || {};
+  return {
+    ...data,
+    _version: 2,
+    config: configWithoutOverrides,
+    edgeOverrides: manualEdgeOverrides || {},
+  };
+}
+
+const MIGRATIONS = {
+  1: migrateV1ToV2,
+};
+
+// Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d albo nie da się
+// go zmigrować do bieżącej wersji. Zwraca PŁASKI config gotowy do użycia w runtime (z
+// manualEdgeOverrides z powrotem zagnieżdżonym — patrz uwaga o zakresie na górze pliku).
 export function parseProjectJSON(text) {
   let data;
   try {
@@ -24,5 +64,14 @@ export function parseProjectJSON(text) {
   if (!data || data._type !== PROJECT_TYPE || typeof data.config !== 'object') {
     throw new Error('To nie jest plik projektu schody3d (brak znacznika _type/config).');
   }
-  return data.config;
+
+  let version = data._version || 1;
+  while (version < CURRENT_PROJECT_VERSION) {
+    const migrate = MIGRATIONS[version];
+    if (!migrate) throw new Error(`Brak migracji ze schematu wersji ${version} do ${CURRENT_PROJECT_VERSION}.`);
+    data = migrate(data);
+    version = data._version;
+  }
+
+  return { ...data.config, manualEdgeOverrides: data.edgeOverrides || {} };
 }

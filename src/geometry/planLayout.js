@@ -1,4 +1,4 @@
-import { cumulativeDistances, pointAtDistance, subPathPoints } from './pathUtils.js';
+import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides } from './edgeOverrides.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
@@ -34,13 +34,31 @@ function mirrorX(pt) {
   return { x: -pt.x, y: pt.y };
 }
 
-const PT_EPS = 1e-6;
-function sameAsPt(p, q) {
-  return Math.abs(p.x - q.x) < PT_EPS && Math.abs(p.y - q.y) < PT_EPS;
+// mirrorX() jest liniowe (bez przesunięcia), więc ten sam wzór poprawnie odbija zarówno
+// punkty, jak i wektory kierunkowe — używane, żeby winderInfo (patrz buildTurnLocal)
+// przetrwało lustrzane odbicie całego układu przy turnDirection === 'left'.
+function mirrorWinderEdge(edge) {
+  return {
+    inner: mirrorX(edge.inner),
+    outer: mirrorX(edge.outer),
+    innerDirection: mirrorX(edge.innerDirection),
+    outerDirection: mirrorX(edge.outerDirection),
+  };
+}
+
+function mirrorWinderInfo(winderInfo) {
+  return {
+    ...winderInfo,
+    frontEdge: mirrorWinderEdge(winderInfo.frontEdge),
+    backEdge: mirrorWinderEdge(winderInfo.backEdge),
+    direction: mirrorX(winderInfo.direction),
+  };
 }
 
 // Usuwa punkty pośrednie leżące na prostej między sąsiadami (np. sztuczny szew po scaleniu
 // dwóch łańcuchów) — zostają tylko prawdziwe narożniki (rzeczywiste załamania kierunku).
+// Ten sam kanoniczny test współliniowości co stringerSolver.js (patrz pathUtils.js/isCollinear
+// + tolerances.js/COLLINEAR_EPS) — wcześniej ta funkcja miała własny, niezależny próg.
 function removeCollinearPoints(points) {
   if (points.length < 3) return points;
   const result = [points[0]];
@@ -48,8 +66,7 @@ function removeCollinearPoints(points) {
     const a = result[result.length - 1];
     const b = points[i];
     const c = points[i + 1];
-    const cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    if (Math.abs(cross) > PT_EPS) result.push(b);
+    if (!isCollinear(a, b, c)) result.push(b);
   }
   result.push(points[points.length - 1]);
   return result;
@@ -65,7 +82,7 @@ function removeCollinearPoints(points) {
 function mergeLandingPair(landingA, landingB) {
   const merged = [...landingA.outerChain];
   for (const p of landingB.outerChain) {
-    if (!sameAsPt(merged[merged.length - 1], p)) merged.push(p);
+    if (!pointsEqual(merged[merged.length - 1], p)) merged.push(p);
   }
   const outerChain = removeCollinearPoints(merged);
 
@@ -73,15 +90,22 @@ function mergeLandingPair(landingA, landingB) {
     index: landingA.index,
     type: 'landing',
     outline: [...outerChain].reverse(),
-    rearRiser: landingA.rearRiser,
-    frontRiser: landingB.frontRiser,
+    frontEdge: landingA.frontEdge,
+    backEdge: landingB.backEdge,
     innerChain: [],
     outerChain,
   };
 }
 
-function rotate90CW(v) {
-  // lokalny kierunek "w prawo" względem v (skręt w prawo o -90°)
+// Lokalny kierunek "w prawo" względem v (skręt w prawo o -90°) — KANONICZNA definicja
+// "kierunku poprzecznego" w całym module (item 3 konsolidacji): przy każdym łańcuchowaniu
+// odcinków biegu (makeFrame) i przy każdej transformacji punktu/wektora (toWorld,
+// transformDirection) "right" jest DOKŁADNIE tym, co ta funkcja zwraca dla "forward" danej
+// lokalnej ramki — nigdzie indziej w tym pliku nie ma alternatywnego sposobu wyznaczania
+// strony poprzecznej. Eksportowana, żeby renderer wangi (stringerRenderer.js) używał TEJ
+// SAMEJ definicji przy ustalaniu, w którą stronę biegnie grubość policzka (na zewnątrz vs.
+// do wnętrza schodów), zamiast liczyć to na nowo własnym wzorem.
+export function rotate90CW(v) {
   return { x: v.y, y: -v.x };
 }
 
@@ -103,15 +127,45 @@ function transformPoints(points, frame) {
   return points.map((p) => toWorld(p, frame));
 }
 
+// Obraca (BEZ przesunięcia) wektor kierunkowy — używane dla pól typu "direction"
+// (innerDirection/outerDirection/direction w winderInfo), które muszą podążać za obrotem
+// ramki przy łańcuchowaniu kolejnych odcinków biegu (buildMultiTurnLayout), ale nie mają
+// własnej pozycji do przesunięcia — w przeciwieństwie do punktów (toWorld/transformPoints).
+function transformDirection(v, frame) {
+  return {
+    x: v.x * frame.right.x + v.y * frame.fwd.x,
+    y: v.x * frame.right.y + v.y * frame.fwd.y,
+  };
+}
+
+function transformWinderEdge(edge, frame) {
+  return {
+    inner: toWorld(edge.inner, frame),
+    outer: toWorld(edge.outer, frame),
+    innerDirection: transformDirection(edge.innerDirection, frame),
+    outerDirection: transformDirection(edge.outerDirection, frame),
+  };
+}
+
+function transformWinderInfo(winderInfo, frame) {
+  return {
+    ...winderInfo,
+    frontEdge: transformWinderEdge(winderInfo.frontEdge, frame),
+    backEdge: transformWinderEdge(winderInfo.backEdge, frame),
+    direction: transformDirection(winderInfo.direction, frame),
+  };
+}
+
 function transformTread(tread, frame) {
   if (frame === IDENTITY_FRAME) return tread;
   return {
     ...tread,
     outline: transformPoints(tread.outline, frame),
-    rearRiser: transformPoints(tread.rearRiser, frame),
-    frontRiser: transformPoints(tread.frontRiser, frame),
+    frontEdge: transformPoints(tread.frontEdge, frame),
+    backEdge: transformPoints(tread.backEdge, frame),
     innerChain: transformPoints(tread.innerChain, frame),
     outerChain: transformPoints(tread.outerChain, frame),
+    ...(tread.winderInfo ? { winderInfo: transformWinderInfo(tread.winderInfo, frame) } : {}),
   };
 }
 
@@ -133,8 +187,8 @@ function buildStraightLayout(config) {
       index: i,
       type: 'straight',
       outline: [inner0, inner1, outer1, outer0],
-      rearRiser: [inner0, outer0],
-      frontRiser: [inner1, outer1],
+      frontEdge: [inner0, outer0],
+      backEdge: [inner1, outer1],
       innerChain: [inner0, inner1],
       outerChain: [outer0, outer1],
     });
@@ -187,22 +241,55 @@ function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitO
 
   const numTreads = treadsIn + windersCount + treadsOut;
 
+  // Kierunek "wzdłuż" policzka zewnętrznego/wewnętrznego w punkcie odległości d od początku
+  // danej ścieżki — czyli lokalny odpowiednik kierunku wchodzenia (Step.localWalkingDirection
+  // z docs/model/STAIRCASE_DATA_MODEL.md §2.8) DLA TEJ KONKRETNEJ strony biegu w tym miejscu.
+  // Dusza (policzek wewnętrzny) w metodzie proporcjonalnej ma swój narożnik DOKŁADNIE na
+  // starcie strefy zabiegu (Ic), więc jej kierunek jest w całym zabiegu stały. Policzek
+  // zewnętrzny łamie się dopiero przy Oc — stąd jego kierunek zależy od tego, czy dana
+  // odległość d wypadła przed, czy po tym załamaniu. To właśnie ta różnica faz — gdy
+  // kierunek zewnętrzny i wewnętrzny w tym samym punktcie NIE są zgodne — jest źródłem
+  // "nienaturalnie szerokiego/obróconego" podstopnia opisanego w audycie: prosty odcinek
+  // między punktem wewnętrznym i zewnętrznym łączy dwa punkty, które fizycznie "patrzą" w
+  // innych kierunkach. Zamiast łatać to jednym warunkiem przy budowie podstopnia,
+  // eksponujemy tu wprost oba kierunki dla każdej granicy — geometria podstopnia
+  // (riserGeometry.js) korzysta z nich, żeby zbudować wachlarz paneli zamiast jednego,
+  // błędnie zorientowanego płaskiego panelu (patrz buildWinderRiserPanels).
+  function unit(dx, dy) {
+    return normalizeVector({ x: dx, y: dy });
+  }
+  const innerDirConst = unit(innerTurnEnd.x - innerTurnStart.x, innerTurnEnd.y - innerTurnStart.y);
+  const outerSeg1Len = Math.hypot(Oc.x - outerTurnStart.x, Oc.y - outerTurnStart.y);
+  const outerDirBeforeBend = unit(Oc.x - outerTurnStart.x, Oc.y - outerTurnStart.y);
+  const outerDirAfterBend = unit(outerTurnEnd.x - Oc.x, outerTurnEnd.y - Oc.y);
+  function outerDirectionAtDistance(d) {
+    return d <= outerSeg1Len ? outerDirBeforeBend : outerDirAfterBend;
+  }
+
   const outerPts = [];
   const innerPts = [];
+  const outerDirAt = [];
+  const innerDirAt = [];
   for (let k = 0; k <= numTreads; k++) {
     if (k <= treadsIn) {
       const y = k * treadGoing;
       outerPts.push({ x: 0, y });
       innerPts.push({ x: stairWidth, y });
+      outerDirAt.push({ x: 0, y: 1 });
+      innerDirAt.push({ x: 0, y: 1 });
     } else if (k >= treadsIn + windersCount) {
       const m = k - (treadsIn + windersCount);
       const x = turnZoneEndWalk.x + m * treadGoing;
       outerPts.push({ x, y: Yc + stairWidth });
       innerPts.push({ x, y: Yc });
+      outerDirAt.push({ x: 1, y: 0 });
+      innerDirAt.push({ x: 1, y: 0 });
     } else {
       const f = (k - treadsIn) / windersCount;
       outerPts.push(pointAtDistance(outerTurnPath, outerTurnCum, f * outerTurnLen));
       innerPts.push(pointAtDistance(innerTurnPath, innerTurnCum, f * innerTurnLen));
+      outerDirAt.push(outerDirectionAtDistance(f * outerTurnLen));
+      innerDirAt.push(innerDirConst);
     }
   }
 
@@ -230,15 +317,40 @@ function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitO
 
     const outline = [...innerChain, ...[...outerChain].reverse()];
 
-    treads.push({
+    const tread = {
       index: startIndex + i,
       type: isWinder ? 'winder' : 'straight',
       outline,
-      rearRiser: [inner0, outer0],
-      frontRiser: [inner1, outer1],
+      frontEdge: [inner0, outer0],
+      backEdge: [inner1, outer1],
       innerChain,
       outerChain,
-    });
+    };
+
+    // Dane zabiegowe stopnia (czoło/tył/kierunek/pozycja na walkline/szerokości) — patrz
+    // docs/model/STAIRCASE_DATA_MODEL.md §4.3/§4.6 i §4 audytu naprawy zabiegu. Wyłącznie
+    // dla stopni zabiegowych — proste i podestowe mają stałe, zgodne kierunki wewn./zewn.,
+    // więc to rozróżnienie nic by im nie dodało.
+    if (isWinder) {
+      const m = i - treadsIn;
+      tread.winderInfo = {
+        frontEdge: { inner: inner0, outer: outer0, innerDirection: innerDirAt[k0], outerDirection: outerDirAt[k0] },
+        backEdge: { inner: inner1, outer: outer1, innerDirection: innerDirAt[k1], outerDirection: outerDirAt[k1] },
+        direction: unit(
+          innerDirConst.x + outerDirectionAtDistance(((m + 0.5) / windersCount) * outerTurnLen).x,
+          innerDirConst.y + outerDirectionAtDistance(((m + 0.5) / windersCount) * outerTurnLen).y
+        ),
+        stationStart: m * treadGoing,
+        stationEnd: (m + 1) * treadGoing,
+        widths: {
+          atFront: Math.hypot(outer0.x - inner0.x, outer0.y - inner0.y),
+          atBack: Math.hypot(outer1.x - inner1.x, outer1.y - inner1.y),
+        },
+        walklinePosition: { index: m, count: windersCount, fractionStart: m / windersCount, fractionEnd: (m + 1) / windersCount },
+      };
+    }
+
+    treads.push(tread);
   }
 
   return {
@@ -279,8 +391,8 @@ function buildLandingLocal({ stairWidth, treadGoing }, treadsIn, treadsOut, star
       index: idx++,
       type: 'straight',
       outline: [inner0, inner1, outer1, outer0],
-      rearRiser: [inner0, outer0],
-      frontRiser: [inner1, outer1],
+      frontEdge: [inner0, outer0],
+      backEdge: [inner1, outer1],
       innerChain: [inner0, inner1],
       outerChain: [outer0, outer1],
     });
@@ -294,7 +406,7 @@ function buildLandingLocal({ stairWidth, treadGoing }, treadsIn, treadsOut, star
 
   // Podest ma DWA różne kierunki wejścia/wyjścia (wchodzi się od Yc, wychodzi się przy
   // x=stairWidth) — w przeciwieństwie do zwykłego stopnia to NIE jest ten sam kierunek.
-  // frontRiser (krawędź wyjściowa) musi więc leżeć na x=stairWidth (tam gdzie zaczyna się
+  // backEdge (krawędź wyjściowa) musi więc leżeć na x=stairWidth (tam gdzie zaczyna się
   // pierwszy stopień odcinka wyjściowego), a nie na y=Yc+stairWidth jak wcześniej błędnie
   // przyjęto — to właśnie ta pomyłka obracała ząb wcięcia policzka o 90° i dawała naprzemienne
   // kolizje/szczeliny. outerChain łamie się w Oc (analogicznie do zabiegu, opasuje zewnętrzny
@@ -306,8 +418,8 @@ function buildLandingLocal({ stairWidth, treadGoing }, treadsIn, treadsOut, star
     index: idx++,
     type: 'landing',
     outline: [Ic, IcFront, Oc, rearOuterLanding],
-    rearRiser: [Ic, rearOuterLanding],
-    frontRiser: [Ic, IcFront],
+    frontEdge: [Ic, rearOuterLanding],
+    backEdge: [Ic, IcFront],
     innerChain: [],
     outerChain: [rearOuterLanding, Oc, IcFront],
   });
@@ -399,10 +511,11 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
     treads = treads.map((t) => ({
       ...t,
       outline: t.outline.map(mirrorX),
-      rearRiser: t.rearRiser.map(mirrorX),
-      frontRiser: t.frontRiser.map(mirrorX),
+      frontEdge: t.frontEdge.map(mirrorX),
+      backEdge: t.backEdge.map(mirrorX),
       innerChain: t.innerChain.map(mirrorX),
       outerChain: t.outerChain.map(mirrorX),
+      ...(t.winderInfo ? { winderInfo: mirrorWinderInfo(t.winderInfo) } : {}),
     }));
     for (const t of turns) {
       t.innerCorner = mirrorX(t.innerCorner);

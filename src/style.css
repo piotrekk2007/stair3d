@@ -57,9 +57,15 @@ html, body {
   display: block;
 }
 
-#plan2d-panel svg {
+#plan2d-svg-container {
+  position: absolute;
+  inset: 0;
+}
+
+#plan2d-svg-container svg {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .edge-handle {
@@ -137,4 +143,295 @@ html, body {
   padding: 6px 8px;
   border-radius: 4px;
   margin-top: 6px;
+}
+
+#info-panel .note.locked {
+  color: #8a5a00;
+}
+
+#info-panel .row.resultant span {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+#info-panel .row.resultant i {
+  font-size: 10px;
+}
+
+/* --- Blokada pól (wymaganie 13) --- */
+.lock-toggle {
+  margin-left: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  opacity: 0.6;
+  flex: 0 0 auto;
+}
+
+.lock-toggle:hover {
+  opacity: 1;
+}
+
+.lock-toggle.locked {
+  opacity: 1;
+}
+
+/* --- Panel szczegółów zaznaczonego stopnia (wymaganie 9) --- */
+#step-info-panel {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #1a5fb4;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  min-width: 240px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 22;
+}
+
+#step-info-panel .title {
+  font-weight: 700;
+  color: #1a5fb4;
+  margin-bottom: 4px;
+}
+
+#step-info-panel .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+#step-info-panel .row.resultant span {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+#step-info-panel .row.auto b {
+  color: #6c7278;
+}
+
+#step-info-panel .row.manual b {
+  color: #e08214;
+}
+
+/* --- Plan 2D: pan/zoom/selekcja --- */
+#plan2d-panel.space-pan-ready svg,
+#plan2d-panel .space-pan-ready {
+  cursor: grab;
+}
+
+#plan2d-panel.panning svg {
+  cursor: grabbing;
+}
+
+.step-object {
+  cursor: pointer;
+}
+
+.step-object:hover polygon {
+  filter: brightness(0.95);
+}
+
+.step-object.selected polygon {
+  filter: brightness(1);
+}
+
+#plan2d-hud {
+  position: absolute;
+  top: 12px;
+  /* 270px clears lil-gui's default panel width (245px) + margin — lil-gui is appended to
+     document.body with its own fixed top-right docking, outside of #plan2d-panel, so this
+     HUD (a sibling-ish overlay within #plan2d-panel) would otherwise render underneath it. */
+  right: 270px;
+  z-index: 23;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+#plan2d-hud > * {
+  pointer-events: auto;
+}
+
+#plan2d-zoom-controls {
+  display: flex;
+  gap: 4px;
+}
+
+#plan2d-zoom-controls button {
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+#plan2d-scale-readout {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+#plan2d-legend {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+#plan2d-legend .swatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-style: solid;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* --- Panel wyników walidatora (Staircase Validator) --- */
+/* z-index 24: ponad #plan2d-panel (20) i jego HUD (23), żeby był widoczny NIEZALEŻNIE od tego,
+   czy aktualnie pokazany jest widok 2D czy 3D — panel "obok" obu, nie w żadnym z nich. */
+#validator-panel {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 340px;
+  max-height: 70vh;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+#validator-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e0e0e0;
+  flex: 0 0 auto;
+}
+
+#validator-panel-title {
+  font-weight: 700;
+  color: #333;
+}
+
+#validator-panel-summary {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.validator-count.error {
+  color: #c0392b;
+}
+
+.validator-count.warning {
+  color: #b8860b;
+}
+
+.validator-count.info {
+  color: #1a5fb4;
+}
+
+#validator-panel-toggle {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+#validator-panel-body {
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+}
+
+.validator-empty {
+  color: #27ae60;
+  padding: 8px 0;
+}
+
+.validator-finding {
+  border-left: 3px solid #ccc;
+  padding: 6px 8px;
+  margin: 6px 0;
+  border-radius: 0 4px 4px 0;
+  background: #fafafa;
+}
+
+.validator-finding.error {
+  border-left-color: #c0392b;
+  background: #fdf0ee;
+}
+
+.validator-finding.warning {
+  border-left-color: #b8860b;
+  background: #fdf7e8;
+}
+
+.validator-finding.info {
+  border-left-color: #1a5fb4;
+  background: #eef4fc;
+}
+
+.validator-finding-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.validator-badge {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.validator-badge.error {
+  color: #c0392b;
+}
+
+.validator-badge.warning {
+  color: #b8860b;
+}
+
+.validator-badge.info {
+  color: #1a5fb4;
+}
+
+.validator-finding-location {
+  font-weight: 600;
+  color: #444;
+}
+
+.validator-finding-message {
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.validator-finding-detail {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #777;
 }

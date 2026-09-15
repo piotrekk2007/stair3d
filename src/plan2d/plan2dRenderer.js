@@ -1,19 +1,62 @@
 // Rzut 2D z góry (SVG), budowany bezpośrednio z planLayout — niezależny od widoku 3D.
-// Współrzędne SVG = współrzędne planu (mm) wprost, z paddingiem i odwróconym Y (SVG rośnie w dół,
-// co dla rzutu "od wejścia w górę ekranu" jest wygodniejsze niż matematyczny układ).
+// Współrzędne SVG = współrzędne planu (mm) wprost, z odwróconym Y (SVG rośnie w dół, co dla
+// rzutu "od wejścia w górę ekranu" jest wygodniejsze niż matematyczny układ).
+//
+// Widoczny obszar (pan/zoom) jest CAŁKOWICIE zewnętrzny wobec tego modułu — renderer tylko
+// rysuje treść przy podanym `viewport` (patrz viewport.js), nigdy sam nie decyduje, co jest
+// aktualnie widoczne. HUD (przyciski, legenda, odczyt skali) też żyje poza tym modułem
+// (main.js) — SVG zwracany stąd to WYŁĄCZNIE treść rysunku, żeby powiększanie/przesuwanie
+// widoku nigdy nie przesuwało elementów interfejsu razem z planem.
 
 import { computeWinderBlank } from '../geometry/winderBlank.js';
-import { getBoundaryPoints } from '../geometry/edgeOverrides.js';
-
-const PAD = 600; // mm, margines wokół rzutu
-const DIM_OFFSET = 350; // mm, odsunięcie linii wymiarowych od rzutu
+import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
 
 function fmt(n) {
-  return Math.round(n);
+  return Math.round(n * 100) / 100;
 }
 
 function polygonPoints(outline) {
   return outline.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ');
+}
+
+function lerpPoint(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+// Siatka pomocnicza (wymaganie 5: opcjonalna) — odstęp dobierany tak, żeby w bieżącym oknie
+// widoku mieściło się rozsądnie mało linii niezależnie od poziomu przybliżenia (od 1mm przy
+// bardzo dużym zoomie po 5m przy pełnym rzucie), zamiast jednego stałego rozstawu.
+const GRID_STEPS_MM = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+export function pickGridSpacing(viewportWidthMm, targetLines = 14) {
+  const raw = viewportWidthMm / targetLines;
+  let best = GRID_STEPS_MM[0];
+  let bestDiff = Infinity;
+  for (const step of GRID_STEPS_MM) {
+    const diff = Math.abs(Math.log(step) - Math.log(raw));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = step;
+    }
+  }
+  return best;
+}
+
+function gridXML(viewport) {
+  const spacing = pickGridSpacing(viewport.width);
+  const x0 = Math.floor(viewport.x / spacing) * spacing;
+  const x1 = viewport.x + viewport.width;
+  const y0 = Math.floor(viewport.y / spacing) * spacing;
+  const y1 = viewport.y + viewport.height;
+  const strokeWidth = Math.max(0.5, viewport.width / 2000);
+
+  const lines = [];
+  for (let x = x0; x <= x1; x += spacing) {
+    lines.push(`<line x1="${fmt(x)}" y1="${fmt(viewport.y)}" x2="${fmt(x)}" y2="${fmt(y1)}"/>`);
+  }
+  for (let y = y0; y <= y1; y += spacing) {
+    lines.push(`<line x1="${fmt(viewport.x)}" y1="${fmt(y)}" x2="${fmt(x1)}" y2="${fmt(y)}"/>`);
+  }
+  return `<g id="grid-layer" stroke="#dfe3e8" stroke-width="${strokeWidth}">${lines.join('')}</g>`;
 }
 
 function dimensionLine(x1, y1, x2, y2, label, strokeWidth) {
@@ -30,10 +73,52 @@ function dimensionLine(x1, y1, x2, y2, label, strokeWidth) {
     </g>`;
 }
 
-// Rysuje wszystkie (numTreads+1) granice między stopniami jako przeciągalne uchwyty — szare
-// przerywane = wg wzoru, pomarańczowe ciągłe = ręcznie przesunięte (patrz edgeOverrides.js).
-// Klasy/atrybuty data-* czytane są przez delegację zdarzeń w main.js (przeciąganie).
-function editableEdgesXML(planLayout, overrides) {
+// Oś biegu — linia środkowa (wymaganie 7: "osie") liczona jako połowa odległości między
+// policzkiem zewnętrznym i wewnętrznym w każdym wierzchołku pełnej ścieżki — działa
+// jednakowo na prostych odcinkach i w zabiegu, bo outerFullPath/innerFullPath mają zawsze
+// tę samą liczbę wierzchołków (budowane łańcuchowo w lockstep w planLayout.js).
+function axisXML(planLayout) {
+  const pts = planLayout.outerFullPath.map((o, i) => lerpPoint(o, planLayout.innerFullPath[i], 0.5));
+  return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#8f3fd1" stroke-width="6" stroke-dasharray="30,20,4,20"/>`;
+}
+
+// Linia biegu (walkline) — wymaganie 7. Liczona ZAWSZE z NOMINALNEJ (nieedytowanej) geometrii
+// granic (getNominalBoundaryPoints — patrz edgeOverrides.js), nigdy z finalnej/edytowanej,
+// bo to konstrukcyjna linia odniesienia (patrz docs/model/STAIRCASE_DATA_MODEL.md §3.2:
+// "Walkline.path czyta zawsze Nominal").
+function walklineXML(planLayout, config) {
+  const n = planLayout.treads.length;
+  const t = Math.min(1, Math.max(0, (config.stairWidth - config.walklineOffset) / config.stairWidth));
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const boundary = getNominalBoundaryPoints(planLayout.treads, i);
+    if (!boundary) continue; // np. granica przez pusty innerChain podestu — brak linii biegu tutaj
+    pts.push(lerpPoint(boundary[1], boundary[0], t)); // boundary = [inner, outer]; lerp od outer(t=0) do inner(t=1)
+  }
+  if (pts.length < 2) return '';
+  return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#c0392b" stroke-width="8" stroke-dasharray="4,18" stroke-linecap="round"/>`;
+}
+
+// Granice biegu (wymaganie 7) — miejsca, gdzie zmienia się TYP odcinka (prosty -> zabiegowy
+// -> podest -> prosty...), pokazane wyraźną, ciągłą poprzeczką w miejscu tej granicy.
+function runBoundariesXML(planLayout) {
+  const treads = planLayout.treads;
+  const lines = [];
+  for (let i = 1; i < treads.length; i++) {
+    if (treads[i].type === treads[i - 1].type) continue;
+    const { current } = getBoundaryPoints(treads, i);
+    if (!current) continue;
+    const [inner, outer] = current;
+    lines.push(`<line x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="#0f7a3d" stroke-width="14"/>`);
+  }
+  return `<g id="run-boundaries-layer">${lines.join('')}</g>`;
+}
+
+// Granice stopni (wymaganie 7 + 8/9: każdy stopień to osobny obiekt) — linie zawsze widoczne
+// gdy warstwa włączona; kolorystyka koduje wymaganie 14 (auto/manual): szara przerywana =
+// nominalna (automatyczna) pozycja z algorytmu, pomarańczowa ciągła = ręcznie skorygowana.
+// Uchwyty do przeciągania (kółka) są dodawane OSOBNO, tylko w trybie edycji (editHandlesXML).
+function stepBoundariesXML(planLayout, overrides) {
   const treads = planLayout.treads;
   const n = treads.length;
   let xml = '';
@@ -43,11 +128,23 @@ function editableEdgesXML(planLayout, overrides) {
     const [inner, outer] = current;
     const isManual = !!(overrides && overrides[i]);
     const color = isManual ? '#e08214' : '#9aa0a6';
-    const lineWidth = isManual ? 10 : 6;
     const dash = isManual ? 'none' : '20,20';
+    xml += `<line class="step-boundary-line" data-boundary="${i}" x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="${color}" stroke-width="6" stroke-dasharray="${dash}"/>`;
+  }
+  return `<g id="step-boundaries-layer">${xml}</g>`;
+}
+
+function editHandlesXML(planLayout, overrides) {
+  const treads = planLayout.treads;
+  const n = treads.length;
+  let xml = '';
+  for (let i = 0; i <= n; i++) {
+    const { current } = getBoundaryPoints(treads, i);
+    if (!current) continue;
+    const [inner, outer] = current;
+    const isManual = !!(overrides && overrides[i]);
+    const color = isManual ? '#e08214' : '#9aa0a6';
     xml += `
-      <line class="edge-line" data-boundary="${i}" x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}"
-            stroke="${color}" stroke-width="${lineWidth}" stroke-dasharray="${dash}" />
       <circle class="edge-handle" data-boundary="${i}" data-endpoint="inner"
               cx="${fmt(inner.x)}" cy="${fmt(-inner.y)}" r="40" fill="#fff" stroke="${color}" stroke-width="10" />
       <circle class="edge-handle" data-boundary="${i}" data-endpoint="outer"
@@ -56,26 +153,47 @@ function editableEdgesXML(planLayout, overrides) {
   return `<g id="edge-edit-layer">${xml}</g>`;
 }
 
-export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = true, editMode = false) {
-  const b = planLayout.bounds;
-  const minX = b.minX - PAD - DIM_OFFSET * 2;
-  const maxX = b.maxX + PAD + DIM_OFFSET * 2;
-  const minY = -b.maxY - PAD - DIM_OFFSET * 2;
-  const maxY = -b.minY + PAD + DIM_OFFSET * 2;
-  const width = maxX - minX;
-  const height = maxY - minY;
-
-  const treadsXML = planLayout.treads
+// Każdy stopień jako osobny obiekt logiczny (wymaganie 8) — <g data-step-index> pozwala
+// zaznaczyć DOKŁADNIE jeden stopień (wymaganie 9); podświetlenie zaznaczenia to jedyny wyraz
+// selekcji w SVG, panel z parametrami stopnia renderowany jest poza SVG (main.js/ui.js).
+function stepsXML(planLayout, selectedStepIndex) {
+  return planLayout.treads
     .map((t) => {
+      const isSelected = t.index === selectedStepIndex;
       const isLanding = t.type === 'landing';
       const fill = isLanding ? '#e8d9b5' : t.type === 'winder' ? '#f0e6c8' : '#f5efdc';
+      const stroke = isSelected ? '#1a5fb4' : '#333';
+      const strokeWidth = isSelected ? 26 : 12;
       const cx = t.outline.reduce((s, p) => s + p.x, 0) / t.outline.length;
       const cy = t.outline.reduce((s, p) => s - p.y, 0) / t.outline.length;
       return `
-      <polygon points="${polygonPoints(t.outline)}" fill="${fill}" stroke="#333" stroke-width="12"/>
-      <text x="${fmt(cx)}" y="${fmt(cy)}" font-size="110" fill="#333" text-anchor="middle" dy="35">${t.index + 1}</text>`;
+      <g class="step-object${isSelected ? ' selected' : ''}" data-step-index="${t.index}">
+        <polygon points="${polygonPoints(t.outline)}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+        <text x="${fmt(cx)}" y="${fmt(cy)}" font-size="110" fill="#333" text-anchor="middle" dy="35">${t.index + 1}</text>
+      </g>`;
     })
     .join('');
+}
+
+/**
+ * @param {import('../geometry/planLayout.js').PlanLayout} planLayout
+ * @param {object} config
+ * @param {object} derived
+ * @param {object} options
+ * @param {{x:number,y:number,width:number,height:number}} options.viewport  Widoczny obszar
+ *   (SVG viewBox) — patrz plan2d/viewport.js. WYMAGANE; renderer nigdy nie liczy go sam,
+ *   żeby stan pan/zoom żył wyłącznie w jednym miejscu (main.js).
+ * @param {boolean} [options.showWinderBlanks]
+ * @param {boolean} [options.editMode]
+ * @param {number|null} [options.selectedStepIndex]
+ * @param {{grid?:boolean, axes?:boolean, widths?:boolean, walkline?:boolean,
+ *   runBoundaries?:boolean, stepBoundaries?:boolean, stringers?:boolean}} [options.layers]
+ */
+export function renderPlan2DSVG(planLayout, config, derived, options) {
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, layers = {} } = options;
+  const b = planLayout.bounds;
+
+  const treadsXML = stepsXML(planLayout, selectedStepIndex);
 
   const winderBlanksXML = !showWinderBlanks
     ? ''
@@ -91,8 +209,9 @@ export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = 
         })
         .join('');
 
-  const outerXML = `<polyline points="${polygonPoints(planLayout.outerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>`;
-  const innerXML = `<polyline points="${polygonPoints(planLayout.innerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>`;
+  const stringersXML = layers.stringers === false ? '' : `
+    <polyline points="${polygonPoints(planLayout.outerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>
+    <polyline points="${polygonPoints(planLayout.innerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>`;
 
   const postsXML = planLayout.turns
     .map((t) => {
@@ -114,8 +233,9 @@ export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = 
 
   const footprintX = b.maxX - b.minX;
   const footprintY = b.maxY - b.minY;
-  const dimTop = dimensionLine(fmt(b.minX), fmt(-b.maxY) - DIM_OFFSET, fmt(b.maxX), fmt(-b.maxY) - DIM_OFFSET, `${fmt(footprintX)} mm`, 12);
-  const dimSide = dimensionLine(fmt(b.minX) - DIM_OFFSET, fmt(-b.maxY), fmt(b.minX) - DIM_OFFSET, fmt(-b.minY), `${fmt(footprintY)} mm`, 12);
+  const widthsXML = layers.widths === false ? '' : `
+    ${dimensionLine(fmt(b.minX), fmt(-b.maxY) - 350, fmt(b.maxX), fmt(-b.maxY) - 350, `${fmt(footprintX)} mm`, 12)}
+    ${dimensionLine(fmt(b.minX) - 350, fmt(-b.maxY), fmt(b.minX) - 350, fmt(-b.minY), `${fmt(footprintY)} mm`, 12)}`;
 
   const arrowStart = planLayout.innerFullPath[0];
   const arrowXML = `
@@ -129,23 +249,39 @@ export function renderPlan2DSVG(planLayout, config, derived, showWinderBlanks = 
 
   const legendXML = `
     <g font-size="110" fill="#222">
-      <text x="${fmt(minX + 100)}" y="${fmt(minY + 150)}">Stopni: ${derived.numTreads} | głębokość ${config.treadGoing}mm | podstopień ${derived.riserHeight.toFixed(0)}mm | szer. biegu ${config.stairWidth}mm</text>
+      <text x="${fmt(b.minX)}" y="${fmt(-b.maxY - 550)}">Stopni: ${derived.numTreads} | głębokość ${config.treadGoing}mm | podstopień ${derived.riserHeight.toFixed(0)}mm | szer. biegu ${config.stairWidth}mm</text>
     </g>`;
 
-  const editXML = editMode ? editableEdgesXML(planLayout, config.manualEdgeOverrides) : '';
+  const gridXMLStr = layers.grid ? gridXML(viewport) : '';
+  const axisXMLStr = layers.axes ? axisXML(planLayout) : '';
+  const walklineXMLStr = layers.walkline ? walklineXML(planLayout, config) : '';
+  const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
+  const stepBoundariesXMLStr = layers.stepBoundaries || editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
+  const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(minX)} ${fmt(minY)} ${fmt(width)} ${fmt(height)}" width="100%" height="100%">
-    <rect x="${fmt(minX)}" y="${fmt(minY)}" width="${fmt(width)}" height="${fmt(height)}" fill="#ffffff"/>
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
+    <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
+    ${gridXMLStr}
     ${treadsXML}
     ${winderBlanksXML}
-    ${outerXML}
-    ${innerXML}
+    ${stringersXML}
+    ${axisXMLStr}
+    ${walklineXMLStr}
+    ${runBoundariesXMLStr}
     ${postsXML}
     ${startEndPostsXML}
     ${arrowXML}
-    ${dimTop}
-    ${dimSide}
+    ${widthsXML}
     ${legendXML}
+    ${stepBoundariesXMLStr}
     ${editXML}
   </svg>`;
+}
+
+// Zwraca prostokąt otaczający CAŁY rzut (w konwencji Y-odwróconej SVG, jak reszta tego
+// modułu) — używane przez main.js do "Dopasuj widok" (wymaganie 3), zawsze niezależnie od
+// tego, co jest akurat narysowane/włączone jako warstwa.
+export function planSvgBounds(planLayout) {
+  const b = planLayout.bounds;
+  return { minX: b.minX, maxX: b.maxX, minY: -b.maxY, maxY: -b.minY };
 }

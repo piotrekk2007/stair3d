@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { planToWorld } from '../geometry/geometryUtils.js';
-import { sameAs } from '../geometry/nosingUtils.js';
+import { pointsEqual } from '../geometry/pathUtils.js';
 import { computeWinderBlank } from '../geometry/winderBlank.js';
 
 function variantStyle(variant) {
@@ -45,17 +45,17 @@ export function buildDimensionLabels(planLayout, config, derived) {
   // Głębokość stopnia i wysokość podstopnia — przy pierwszym stopniu.
   const firstTread = planLayout.treads[0];
   if (firstTread) {
-    const rearMid = {
-      x: (firstTread.rearRiser[0].x + firstTread.rearRiser[1].x) / 2,
-      y: (firstTread.rearRiser[0].y + firstTread.rearRiser[1].y) / 2,
-    };
     const frontMid = {
-      x: (firstTread.frontRiser[0].x + firstTread.frontRiser[1].x) / 2,
-      y: (firstTread.frontRiser[0].y + firstTread.frontRiser[1].y) / 2,
+      x: (firstTread.frontEdge[0].x + firstTread.frontEdge[1].x) / 2,
+      y: (firstTread.frontEdge[0].y + firstTread.frontEdge[1].y) / 2,
     };
-    const goingLabelPos = planToWorld((rearMid.x + frontMid.x) / 2, (rearMid.y + frontMid.y) / 2, derived.riserHeight + 60);
+    const backMid = {
+      x: (firstTread.backEdge[0].x + firstTread.backEdge[1].x) / 2,
+      y: (firstTread.backEdge[0].y + firstTread.backEdge[1].y) / 2,
+    };
+    const goingLabelPos = planToWorld((frontMid.x + backMid.x) / 2, (frontMid.y + backMid.y) / 2, derived.riserHeight + 60);
     group.add(makeLabel(`e = ${config.treadGoing} mm`, goingLabelPos));
-    group.add(makeLabel(`h = ${derived.riserHeight.toFixed(0)} mm`, planToWorld(rearMid.x, rearMid.y, derived.riserHeight / 2)));
+    group.add(makeLabel(`h = ${derived.riserHeight.toFixed(0)} mm`, planToWorld(frontMid.x, frontMid.y, derived.riserHeight / 2)));
   }
 
   // Szerokość biegu — na pierwszym stopniu, w poprzek.
@@ -148,7 +148,7 @@ function locateCutPoint(treads, side, target, zBottomFn, zGoingFn) {
     const tread = treads[i];
     const chain = side === 'outer' ? tread.outerChain : tread.innerChain;
     for (let j = 0; j < chain.length; j++) {
-      if (!sameAs(chain[j], target)) continue;
+      if (!pointsEqual(chain[j], target)) continue;
       if (j === chain.length - 1 && chain.length > 1) continue; // to samo co chain[0] następnego stopnia
       if (j === 0) {
         // Trafienie dokładnie na PIERWSZY punkt przekazanego zakresu — granica leży POZA nim
