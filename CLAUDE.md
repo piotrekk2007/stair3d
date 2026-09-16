@@ -43,16 +43,58 @@ function) are now the **only** stringer geometry logic in the codebase, consumed
 segment is `StringerReferenceGeometry` (the physical board's straight axis, derived ONLY from
 `tread.outerChain`/`innerChain` — never touched by manual edits) plus one `StringerSupport`
 (kind `'tread-bearing'`) per tread, derived from `tread.frontEdge`/`backEdge` (the FINAL,
-possibly manually-edited fields) and rendered as one flat panel spanning
-`[finalUStart, finalUEnd]` along that segment's own already-straight reference line — so a
-panel can never be crooked, because there is nothing left to compute per-panel except where
-along a known-straight line it starts and ends. `stringerRenderer.js` also reproduces the old
-renderer's lap-joint corner extension (when `hasCornerPost` is false) generically, by
-detecting geometrically-adjacent segments, rather than tracking specific bend points.
-Regression tests enforcing this ("no `stringerGeometry.js`", "no independent path solver in
-the renderer", "renderer panel count == solver bearing count", straightness/parallelism/
-spacing, manual-edit invariants) live in
+possibly manually-edited fields), positioned at `[finalUStart, finalUEnd]` along that segment's
+own already-straight reference line — so a bearing can never be crooked, because there is
+nothing left to compute per-bearing except where along a known-straight line it sits. **This
+analytical model is unchanged by the construction-geometry stage below** — only how
+`stringerRenderer.js` turns it into a mesh changed (it used to render one independent
+rectangle per bearing; see "Stringer construction geometry" for why and what replaced it).
+`hasCornerPost === false` lap-joint corner extension is still driven by real geometric
+adjacency between consecutive segments, generically. Regression tests enforcing this ("no
+`stringerGeometry.js`", "no independent path solver in the renderer", straightness/
+parallelism/spacing, manual-edit invariants) live in
 [src/geometry/__tests__/consolidationInvariants.test.js](src/geometry/__tests__/consolidationInvariants.test.js).
+
+## Stringer construction geometry (implemented)
+
+See [docs/architecture/STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_MODEL.md)
+for the full technical model. `src/geometry/stringerConstructionGeometry.js`
+(`buildStringerConstructionGeometry(stringerModel, config)`) is a NEW solver layer **on top
+of**, never replacing, `StringerModel`/`StringerSegment`/`StringerTreadBearing` — it turns the
+analytical bearing model into a real, continuous timber board contour
+(`StringerSegmentConstructionGeometry`, one per segment): a plain 2-point "pitch line" struck
+through the segment's first/last bearing, then either a stepped-top/straight-bottom contour
+(`cut`, "wanga nakładana") with separate `cleats[]`, or a plain-rectangle contour (`closed`,
+"wanga wpuszczana") with separate `housings[]` recessed into the inner face — never the old
+per-bearing rectangle stack whose bottom edge sawtoothed along with the top. Diagnostics
+(`STRINGER-MIN-SECTION`, `STRINGER-CONTOUR-SELF-INTERSECTION`) are computed but **not yet wired
+into the Staircase Validator UI** — same deliberate staging pattern used throughout this
+project. `stringerRenderer.js` now takes both `StringerModel` and this construction geometry
+and decides nothing itself — one continuous board mesh per segment, plus one small mesh per
+cleat/housing, each tagged with the same traceability `userData` scheme as every other element.
+Tests: [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
+
+**Technical specification lock (implemented, docs+rules-catalogue only — no geometry/UI
+change).** A product/geometry reality check across 6 live scenarios (straight/L-winder ×
+overlay/housed, plus manual outer/inner edge edits) confirmed the geometry works, but
+surfaced open technical questions the spec above didn't yet resolve. See
+[docs/STRINGER_CONSTRUCTION_SPEC.md](docs/STRINGER_CONSTRUCTION_SPEC.md) for the full
+resolution: terminology (confirms `cut`=cut/open string, `closed`=housed/closed string, but
+finds **`cleats[]`'s attachment to `cut` is a Stair3D software choice, not a confirmed industry
+pairing** — "open-cleated" isn't a distinct published category), the two-point pitch-line
+method (now explicitly documented as a `SOFTWARE_DESIGN_CHOICE`/`ASSUMPTION`, not an
+established industry method — mathematically exact for uniform straight flights, an
+approximation elsewhere, safely diagnosed when it degrades), winder transition (multi-piece
+post-jointed boards confirmed as the right structural concept per published sources, with two
+gaps documented but not fixed: local board widening at a winder, and a shaped transition piece
+at the newel), housing depth (flagged as conflating structural-minimum/manufacturing-depth/
+visual-recess into one number), and every `stringer*Mm` config default reclassified as
+`CONFIGURABLE` (never "recommended") pending an authoritative source.
+`src/rules/schema.js` gained `RULE_TYPES.SOFTWARE_DESIGN_CHOICE` and a new `RULE_STATUS`
+(`CONFIRMED`/`ASSUMPTION`/`CONFIGURABLE`) + `constructionType`/`affects*` optional Rule fields
+(purely additive — existing rules untouched); the classifications themselves live in
+[src/rules/sets/stringerConstructionAssumptions.js](src/rules/sets/stringerConstructionAssumptions.js).
+Tests: [src/rules/__tests__/schema.test.js](src/rules/__tests__/schema.test.js).
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
@@ -230,42 +272,121 @@ given — no validation logic lives there.
 ## Material Takeoff Layer (implemented, not yet wired into the UI)
 
 `src/takeoff/` computes a bill-of-quantities from the same constructional model as everything
-above (`TreadModel[]`/`RiserModel[]`/`StringerModel`/`PostModel[]`) — zero Three.js, zero cost
-calculation. Three deliberately separate layers, mirroring the Validator's own composition:
+above (`TreadModel[]`/`RiserModel[]`/`StringerModel`+`StringerConstructionGeometry`/
+`PostModel[]`) — zero Three.js, zero cost calculation, and (unlike the takeoff's first draft)
+never derives a stringer quantity from tread-bearing count. Five deliberately separate layers,
+mirroring the Validator's own composition:
 
-- **`src/takeoff/materialTakeoff.js`** (`computeMaterialTakeoff`) — QUANTITIES only. One
-  `TakeoffItem` per (element type, subtype): `tread-straight`/`tread-winder`/`tread-landing`
-  (a landing tread already covers "podesty" — it's just a tread of type `landing`),
-  `stringer-outer`/`stringer-inner`, `riser-board` (present only when `hasRiserBoards`),
-  `post-newel`/`post-corner` (corner posts only when `hasCornerPost`) — config-conditional
-  elements are simply absent, never emitted with `quantity: 0`, and are marked `optional: true`
-  when present. Every quantity is measured from the REAL model (tread area via
-  `pathUtils.js`'s new canonical `signedPolygonArea`, summed per real winder tread — never a
-  nominal `width × treadGoing` guess), never re-derived independently of it.
+- **`src/takeoff/materialTakeoff.js`** (`computeMaterialTakeoff`) — QUANTITIES only, at maximum
+  granularity: ONE ITEM PER PHYSICAL COMPONENT, never one item per element-type GROUP. A tread
+  = one item (`TREAD` or `LANDING`), a riser = one item (`RISER` — one `RiserModel` already IS
+  one physical riser even when it fans into several winder panels), a stringer SEGMENT = one
+  item (`STRINGER` — a 14-tread straight flight's stringer is genuinely ONE board, hence ONE
+  item; a winder's real segmentation is respected because it comes straight from
+  `StringerConstructionGeometry`), a cleat/housing = one item per tread
+  (`STRINGER_CLEAT`/`STRINGER_HOUSING`, only created when the geometry layer actually produced
+  one — respects `config.stringerCleatsEnabled`), a post = one item (`POST`). This maximizes
+  traceability: every item's `sourceElementId` is one unambiguous id
+  (`tread:step-3`, `stringer:outer:outer-seg-0`, `stringer:outer:outer-seg-0:cleat-3`,
+  `post:post-start`) — grouping/rollup for a human-readable report is a UI/export concern (see
+  `export/toTextReport.js`), never baked into this core model.
+  - **NET vs STOCK, everywhere**: `nominalDimensions`/`netVolume`/`netArea` are the actual
+    finished geometry (tread outline via `pathUtils.js`'s `signedPolygonArea`, stringer contour
+    via the same on `StringerConstructionGeometry.outerContour`); `calculatedDimensions`/
+    `stockVolume`/`stockArea` are the rectangular raw-material blank that must be purchased —
+    always ≥ NET, computed by the new `src/takeoff/stockGeometry.js` (`boundingRectAlong` for a
+    tread, rotated into its own walking direction so a winder's stock size isn't inflated by an
+    arbitrary global axis; `boundingRectUV` for a stringer board's length along its own local
+    u-axis). A stringer board's STOCK *width* deliberately reads the design parameter
+    `boardWidthMm` directly rather than the contour's own v-range, because that v-range is
+    WORLD ELEVATION, not true perpendicular-to-pitch width (an inherited convention from
+    `stringerConstructionGeometry.js`, documented in the item's own `notes`, not fixed here —
+    fixing it is a geometry-architecture change explicitly out of scope for this stage).
+  - **Housings are informational, never a separate board** (`materialId: null`, always
+    unpriced) — `netVolume` reports material *removed*, not a purchase quantity.
+  - **INVALID items**: if a stringer segment's own `StringerConstructionGeometry.diagnostics`
+    contains an ERROR (self-intersection, etc.), that segment's `STRINGER` item gets
+    `status: 'INVALID'` with every dimension/volume field `null` — never an invented number —
+    and no cleat/housing items are generated off of it.
 - **`src/takeoff/wasteFactors.js`** — the waste/reserve fraction per element type ("odpady" /
   "zapas materiałowy"), a MANUFACTURING_ASSUMPTION-style figure (same category as
-  `src/rules/sets/manufacturingAssumptions.js`), fully overridable per call — never hardcoded
-  into the solver above.
-- **`src/takeoff/pricing.js`** (`applyPricing`, `DEFAULT_PRICE_CATALOG`) — COST, joined onto
-  quantities by `itemId` afterwards. `calculatedCost`/`unitPrice` are `null` until this runs;
-  changing a price catalog never touches quantities (proven by
-  `pricing.test.js`), and an item missing from the catalog stays honestly unpriced rather than
-  guessed.
-- **`src/takeoff/index.js`** — the facade (`buildTakeoff` for quantities-only,
-  `buildPricedTakeoff` for quantities+cost in one call), plus **`src/takeoff/export/`**:
-  `toCSV.js`/`toJSON.js` (ready now) and `toTextReport.js` (the intended PDF export point — its
-  plain-text lines are exactly what a PDF layout library would consume; none is wired in, per
-  the project's no-new-dependency-without-a-concrete-need stance).
+  `src/rules/sets/manufacturingAssumptions.js`), overridable per call and optionally per
+  `(elementType, materialId)` pair — never hardcoded into the solver above.
+- **`src/takeoff/materialCatalog.js`** — a deliberately thin material catalog (species,
+  available thicknesses/widths/lengths per `materialId`) — explicitly not stock-optimization or
+  an ERP; nothing here rounds a computed STOCK size up to an available board yet.
+- **`src/takeoff/pricing.js`** (`applyPricing`, `DEFAULT_PRICE_LIST`) — COST, joined onto
+  quantities by **`materialId`** (not `itemId` — the same price entry prices every tread, every
+  cleat, etc. made of that material) afterwards, multiplying `wasteAdjustedQuantity` (STOCK ×
+  `(1 + wasteFactor)`, computed once in `takeoffTypes.js`'s `createTakeoffItem`).
+  `calculatedCost`/`unitPrice` are `null` until this runs; changing a price list never touches
+  quantities (proven by `pricing.test.js`), and an item whose material has no matching entry
+  (or whose `materialId` is `null`, e.g. a housing) stays honestly unpriced rather than guessed.
+- **`src/takeoff/validationGate.js`** (`runTakeoffValidationGate`, `GATE_STATUS`) —
+  "Material Takeoff must NOT silently calculate from invalid construction geometry." Runs the
+  EXISTING `StaircaseValidator.validateModels()` (never reimplemented) plus every
+  `StringerConstructionGeometry` segment's own `diagnostics` (a source the Validator itself
+  doesn't see yet). Any ERROR anywhere → `GATE_STATUS.BLOCKED` (the facade returns `items: []`,
+  never a partial/misleading result); WARNING-only → `GATE_STATUS.WARNING` (items are still
+  computed); otherwise `GATE_STATUS.OK`. Deliberately literal/simple — a documented limitation,
+  not a refinement to make now, is that it does not yet distinguish "geometry-breaking" errors
+  from "legal/ergonomic non-compliance" errors.
+- **`src/takeoff/index.js`** — the facade: `buildMaterialTakeoff(models, options)` (quantities +
+  gate) and `buildPricedMaterialTakeoff(models, options)` (+ cost), both taking the SAME full
+  shape `buildStaircase.js` already returns (`fullConfig`/`derived`/`planLayout`/
+  `treadModels`/`riserModels`/`stringerModels`/`stringerConstruction`/`postModels`) — no second
+  geometry solve, exactly like `main.js`'s Validator wiring. Plus **`src/takeoff/export/`**:
+  `toCSV.js` (fixed columns: Element/ID/Material/Quantity/Unit/Length/Width/Thickness/Net
+  volume/Stock length/Stock width/Waste %/Status/Cost/Currency/Notes), `toJSON.js` (ready now),
+  and `toTextReport.js` (the intended PDF export point; an INVALID/UNSUPPORTED item is reported
+  as "BRAK WYLICZONEJ ILOŚCI" with its diagnostics, never a fabricated number).
 
-Every `TakeoffItem` (`src/takeoff/takeoffTypes.js`) always carries `type`, `dimensions`,
-`quantity`, `netVolume`/`grossVolume`, `material`, `wasteFactor`, and the (possibly still-null)
-cost fields — exactly the fields requested. **Not yet wired into the UI** — same deliberate
-staging as the Validator was before this stage; `buildStaircase.js` already returns everything
-`computeMaterialTakeoff` needs, so wiring it in later needs no new plumbing.
-Tests: [src/takeoff/__tests__/materialTakeoff.test.js](src/takeoff/__tests__/materialTakeoff.test.js),
+**Not yet wired into the UI** — same deliberate staging as the Validator was before its own UI
+stage; wiring it in later needs no new plumbing.
+Tests: [src/takeoff/__tests__/materialTakeoff.test.js](src/takeoff/__tests__/materialTakeoff.test.js)
+(scenarios A/B/C/D/E/G/H/I/J/K plus waste/posts/risers),
 [src/takeoff/__tests__/pricing.test.js](src/takeoff/__tests__/pricing.test.js),
 [src/takeoff/__tests__/export.test.js](src/takeoff/__tests__/export.test.js),
-[src/takeoff/__tests__/index.test.js](src/takeoff/__tests__/index.test.js).
+[src/takeoff/__tests__/index.test.js](src/takeoff/__tests__/index.test.js) (validation-gate
+scenarios K/L).
+
+## 3D generator traceability + Debug Mode (implemented)
+
+The 3D generator was already architecturally forbidden from reinventing geometry (`MODEL →
+SOLVER → RENDERER → THREE.JS`, enforced since the Tread/Riser/Post/Stringer split — see
+above) — this stage adds two things on top of that, without touching any solver:
+
+- **Traceability**: every rendered mesh (`treadRenderer.js`/`riserRenderer.js`/
+  `stringerRenderer.js`/`postRenderer.js`) now carries `mesh.userData` built by
+  [src/scene/traceability.js](src/scene/traceability.js) — `elementType`
+  (`'tread'|'riser'|'stringer'|'post'`), `stepId` (e.g. `'step-7'`, `null` for posts — they
+  aren't tied to one tread), `stringerId` (`'outer'|'inner'`, `null` otherwise), and a globally
+  unique `geometrySourceId` (e.g. `'stringer:outer:outer-seg-2:bearing-7'`) — read straight off
+  the already-solved model (`StringerTreadBearing.treadIndex`, `StringerSegment.id`, etc.),
+  never invented. `stringerRenderer.js`/`riserRenderer.js` each gained an internal
+  `build*MeshEntries()` that pairs geometry with this metadata; the old `build*MeshGeometries()`
+  (used by existing tests) is now a thin projection over it — one implementation, not two.
+  [src/scene/elementInspector.js](src/scene/elementInspector.js)'s `resolveTraceability()` is
+  the reverse lookup (walks up the Object3D parent chain to find it). **Wired into the UI**:
+  clicking any traceable mesh in the 3D view (`main.js`'s `renderer.domElement` click listener,
+  `THREE.Raycaster` against `currentRoot` only — never the debug overlay/ceiling/grid) shows its
+  raw traceability in a new `#element-inspector-panel` (`createElementInspectorPanel()`/
+  `updateElementInspectorPanel()` in `src/ui/ui.js`) and, when the element has a `stepId`,
+  selects that step exactly like clicking it in the 2D plan would — the concrete answer to
+  "point at a 3D element, get back to its 2D source".
+- **Debug Mode**: [src/scene/debugOverlay.js](src/scene/debugOverlay.js)'s `buildDebugOverlay()`
+  is a pure visualization layer (own `THREE.Group`, toggled via `viewState.showDebug` — "Debug
+  mode" in the Widok 3D folder) showing, all read directly off already-solved models: stringer
+  **reference lines** (outer/inner, at floor level), tread **construction points** (every
+  final `frontEdge`/`backEdge` corner), **intersections** (turn corners + stringer segment
+  joints), **normals** (each tread's own walking direction, as an arrow), and **bearing
+  positions** (`StringerTreadBearing`'s `[finalUStart, finalUEnd]` projected onto its segment,
+  at its own `bearingElevation`). It never computes new geometry — every point/line/arrow is a
+  model value already computed by a solver, merely drawn.
+
+Tests: [src/geometry/__tests__/traceability.test.js](src/geometry/__tests__/traceability.test.js),
+[src/scene/__tests__/elementInspector.test.js](src/scene/__tests__/elementInspector.test.js),
+[src/scene/__tests__/debugOverlay.test.js](src/scene/__tests__/debugOverlay.test.js).
 
 ## Constraints & Technical Validation (implemented)
 

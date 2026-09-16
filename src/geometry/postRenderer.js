@@ -2,6 +2,7 @@
 // not decide positions, only builds a box mesh at an already-decided position/size.
 
 import * as THREE from 'three';
+import { traceability } from '../scene/traceability.js';
 
 function boxMeshFor(model) {
   const height = model.elevation.top - model.elevation.bottom;
@@ -22,6 +23,9 @@ export function renderPosts(postModels, material) {
     const mesh = boxMeshFor(model);
     mesh.material = material;
     mesh.name = model.kind === 'corner' ? `Post_Corner_${cornerIndex++}` : MESH_NAME_BY_KIND[model.kind];
+    // Posts aren't tied to one tread (stepId: null) — a corner post sits at a turn, a newel at
+    // the flight's very start/end, neither "belongs to" a single step the way a bearing does.
+    mesh.userData = traceability({ elementType: 'post', geometrySourceId: `post:${model.postId}` });
     group.add(mesh);
   }
   return group;

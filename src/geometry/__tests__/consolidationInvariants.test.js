@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { createDefaultConfig, deriveStairData } from '../../config/schema.js';
 import { buildPlanLayout } from '../planLayout.js';
 import { buildStringerModel } from '../stringerSolver.js';
-import { buildStringerMeshGeometries } from '../stringerRenderer.js';
+import { buildStringerConstructionGeometry } from '../stringerConstructionGeometry.js';
+import { renderStringers } from '../stringerRenderer.js';
 import { checkParallelAndSpaced } from '../stringerModel.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,14 +75,30 @@ test('invariant 4-5: a manual edge edit moves bearing geometry but leaves the re
 });
 
 // --- 6: 2D solver output and the 3D renderer agree on the same final geometry ---
-
-test('invariant 6: the 3D renderer produces exactly one panel per StringerSupport bearing (no independent geometry)', () => {
+//
+// UPDATED for the stringer construction-geometry stage (see stringerConstructionGeometry.js):
+// the renderer used to produce exactly one rectangular panel PER TREAD BEARING (a stack of
+// independent boxes with a sawtooth bottom edge — the exact defect that stage fixed). It now
+// produces exactly ONE continuous board mesh per StringerSegment (plus separate cleat/housing
+// sub-meshes, one per tread) — so the invariant this test protects is now "board mesh count
+// equals segment count", not "panel count equals bearing count". This is a deliberate,
+// documented change to the invariant itself, not a relaxation of it: the NEW invariant is
+// exactly what "the renderer must never reinvent geometry, only consume the construction
+// model's own segment count" means for the new architecture.
+test('invariant 6: the 3D renderer produces exactly one continuous board mesh per StringerSegment (never per bearing)', () => {
   const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, treadsLegB: 3, windersPerTurn: 5 });
   for (const side of ['outer', 'inner']) {
     const model = buildStringerModel(planLayout, config, side);
-    const expectedPanelCount = model.segments.reduce((n, s) => n + s.treadBearings.length, 0);
-    const geometries = buildStringerMeshGeometries(model, config.hasCornerPost);
-    assert.equal(geometries.length, expectedPanelCount, `${side}: renderer panel count must match the solver's own bearing count exactly`);
+    const constructionGeometries = buildStringerConstructionGeometry(model, config);
+    const group = renderStringers(model, constructionGeometries, {}, `Stringer${side}`);
+    const boardMeshes = group.children.filter((m) => m.name.endsWith('_board'));
+    assert.equal(boardMeshes.length, model.segments.length, `${side}: exactly one board mesh per segment, never one per bearing`);
+
+    // Sub-elements (cleats for 'cut', housings for 'closed') are per-tread, never per-bearing
+    // duplicated, and never counted as if they were the structural board itself.
+    const expectedSubCount = constructionGeometries.reduce((n, g) => n + (g.cleats?.length || 0) + (g.housings?.length || 0), 0);
+    const subMeshes = group.children.filter((m) => !m.name.endsWith('_board'));
+    assert.equal(subMeshes.length, expectedSubCount);
   }
 });
 
@@ -134,7 +151,7 @@ test('invariant 9: the stringer renderer contains no independent path-walking so
 // (i.e. no renderer builds its own plan geometry instead of consuming a model).
 
 test('invariant 9b: tread/riser/post/stringer solvers never import Three.js', () => {
-  for (const file of ['treadSolver.js', 'riserSolver.js', 'postSolver.js', 'stringerSolver.js', 'stringerModel.js']) {
+  for (const file of ['treadSolver.js', 'riserSolver.js', 'postSolver.js', 'stringerSolver.js', 'stringerModel.js', 'stringerConstructionGeometry.js']) {
     const text = readFileSync(path.join(SRC_ROOT, 'geometry', file), 'utf8');
     assert.equal(/from\s+['"]three['"]/.test(text), false, `${file} is a MODEL/SOLVER — it must not import Three.js`);
   }

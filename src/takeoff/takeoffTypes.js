@@ -1,85 +1,146 @@
-// Shape + factory for ONE Material Takeoff line item — pure data, no geometry, no Three.js, no
-// pricing logic. Every quantity on a TakeoffItem is derived from the already-solved
-// constructional model (TreadModel[]/RiserModel[]/StringerModel/PostModel[] — see
-// materialTakeoff.js), never from Three.js meshes and never invented — this file only defines
-// and validates the shape every item must have.
+// MATERIAL TAKEOFF — core data shapes. Pure data, no geometry, no Three.js, no pricing logic.
+//
+// Dependency direction (never the other way around):
+//   StaircaseModel -> solved geometry -> construction models -> MATERIAL TAKEOFF -> cost
+// A MaterialTakeoffItem is ALWAYS derived from an already-solved construction model
+// (TreadModel / RiserModel / StringerModel+StringerConstructionGeometry / PostModel) — never
+// from a THREE.Mesh, a bounding box, or a guess. See materialTakeoff.js for the solver that
+// builds these from those models.
+//
+// NET vs STOCK (see docs — this distinction is load-bearing, not decorative):
+//   NET      = what the finished staircase geometrically contains (the actual polygon/volume).
+//   STOCK    = what raw material must be purchased/prepared to produce that NET geometry —
+//              always a plain, cuttable rectangular (or rectangular-prism) size, always >= NET.
+// `nominalDimensions` holds the NET, finished dimensions; `calculatedDimensions` holds the
+// derived STOCK/purchase dimensions — matching the task's own naming exactly.
+
+export const ELEMENT_TYPES = Object.freeze({
+  TREAD: 'TREAD',
+  RISER: 'RISER',
+  STRINGER: 'STRINGER',
+  STRINGER_HOUSING: 'STRINGER_HOUSING',
+  STRINGER_CLEAT: 'STRINGER_CLEAT',
+  LANDING: 'LANDING',
+  POST: 'POST',
+  SUPPORT: 'SUPPORT', // reserved — no solved model produces this yet; never fabricated
+  OTHER: 'OTHER', // reserved — catch-all for a future element type, never fabricated today
+});
+
+// A takeoff item's own validity — distinct from a Diagnostic's severity, because an item can
+// legitimately carry WARNING-level diagnostics (see the validation gate in index.js) while
+// still being OK to quantify; UNSUPPORTED/INVALID specifically mean "no trustworthy quantity
+// exists", which is a stronger statement than "there is something to warn about".
+export const TAKEOFF_ITEM_STATUS = Object.freeze({
+  OK: 'OK', // quantities were computed from valid geometry
+  UNSUPPORTED: 'UNSUPPORTED', // this component exists conceptually but no model can quantify it yet
+  INVALID: 'INVALID', // the source geometry itself is invalid (self-intersecting, degenerate, etc.)
+});
 
 /**
- * @typedef {Object} TakeoffDimensions
- * Shape varies by item type (see materialTakeoff.js), but always has at least one length-like
- * field and a thickness — e.g. { avgWidthMm, avgDepthMm, thicknessMm } for a tread group, or
- * { totalLengthMm, heightMm, thicknessMm, boardCount } for a stringer.
- */
-
-/**
- * @typedef {Object} TakeoffItem
- * @property {string} itemId        Stable id, e.g. "tread-straight", "stringer-outer", "riser-board".
- * @property {string} type          Category: 'tread' | 'stringer' | 'riser' | 'post'.
- * @property {string} subtype       e.g. 'straight' | 'winder' | 'landing' | 'outer' | 'inner' |
- *                                   'newel' | 'corner' | 'riser-board'.
- * @property {string} label         Human-readable Polish label, safe to show directly in a report.
- * @property {TakeoffDimensions} dimensions
- * @property {number} quantity      Discrete piece count (the purchase unit count).
- * @property {string} quantityUnit  'szt' (pieces) — the only unit quantity currently uses;
- *                                   length/area/volume are separate fields below.
- * @property {number} netArea       m², total surface area actually built (0 if not area-relevant).
- * @property {number} netVolume     m³, total actual (as-built) volume.
- * @property {string} material      e.g. config.timberGrade, or a generic material name (riser
- *                                   boards are panel material, not structural timber).
- * @property {number} wasteFactor   Fraction (e.g. 0.1 = 10%) — see wasteFactors.js; a
- *                                   MANUFACTURING_ASSUMPTION-style figure, not a physical constant.
- * @property {number} grossArea     netArea * (1 + wasteFactor) — what you'd actually need to buy.
- * @property {number} grossVolume   netVolume * (1 + wasteFactor).
- * @property {number} wasteArea     grossArea - netArea ("odpady", m²).
- * @property {number} wasteVolume   grossVolume - netVolume ("odpady", m³).
- * @property {boolean} optional     True for config-conditional elements (riser boards only when
- *                                   hasRiserBoards, corner posts only when hasCornerPost) — an
- *                                   item that doesn't apply to the current config simply isn't
- *                                   produced at all, rather than appearing with quantity 0.
- * @property {number|null} unitPrice      Filled in by pricing.js's applyPricing() — null until
- *                                         a price has actually been applied (see pricing.js —
- *                                         cost is a SEPARATE data layer from these quantities).
- * @property {string|null} priceUnit      'volume' | 'area' | 'piece' — which measure unitPrice multiplies.
+ * @typedef {Object} MaterialTakeoffItem
+ * @property {string} itemId                Stable id within one takeoff run, e.g. "stringer-outer-outer-seg-0".
+ * @property {keyof ELEMENT_TYPES} elementType
+ * @property {string} sourceElementId       Traceability — the SAME id scheme as
+ *                                            src/scene/traceability.js's geometrySourceId
+ *                                            (e.g. "tread:step-3", "stringer:outer:outer-seg-0",
+ *                                            "riser:step-3:panel-1", "post:post-start") — lets a
+ *                                            future UI select a takeoff line and highlight the
+ *                                            corresponding 2D/3D element (not implemented here).
+ * @property {string|null} constructionType 'cut' | 'closed' | null (not construction-type-specific)
+ * @property {string} material              Human-readable material label (e.g. "C24", "Sklejka/płyta MDF")
+ * @property {string} materialId            Stable catalog key (e.g. 'timber-c24') — see materialCatalog.js;
+ *                                            pricing/catalog lookups key on THIS, never on `material` free text.
+ * @property {number} quantity              Discrete piece count (the purchase unit count).
+ * @property {string} unit                  'szt' — the only unit `quantity` currently uses.
+ * @property {Object} nominalDimensions     NET/finished dimensions — shape varies by elementType
+ *                                            (e.g. {lengthMm, widthMm, thicknessMm} for a tread,
+ *                                            {lengthMm, boardWidthMm, thicknessMm} for a stringer).
+ * @property {Object} calculatedDimensions  STOCK/purchase dimensions — same shape family as
+ *                                            nominalDimensions, always >= it in every dimension.
+ * @property {number|null} netVolume        m³ — the actual finished/net volume (null if status != OK).
+ * @property {number|null} netArea          m² — the actual finished/net surface area, 0 if not
+ *                                            area-relevant for this elementType, null if status != OK.
+ * @property {number|null} stockVolume      m³ — required rough-stock volume (>= netVolume).
+ * @property {number|null} stockArea        m² — required rough-stock area (>= netArea).
+ * @property {number} wasteFactor           Fraction (e.g. 0.1 = 10%) — see wasteFactors.js; a
+ *                                            purchasing/manufacturing assumption, never a physical property.
+ * @property {number|null} wasteAdjustedQuantity  stockVolume or stockArea (see `wasteAdjustedUnit`)
+ *                                            multiplied by (1 + wasteFactor) — the actual amount
+ *                                            to purchase. null if status != OK.
+ * @property {'m3'|'m2'|null} wasteAdjustedUnit   Which measure `wasteAdjustedQuantity` is in.
+ * @property {number|null} unitPrice        Filled in by pricing.js's applyPricing() — null until priced.
+ * @property {string|null} priceUnit        'volume' | 'area' | 'piece'.
  * @property {string|null} currency
- * @property {number|null} calculatedCost
+ * @property {number|null} calculatedCost   quantity/measure x unitPrice — see pricing.js.
+ * @property {boolean} optional             True for config-conditional elements (riser boards,
+ *                                            corner posts, cleats, housings) — absent entirely
+ *                                            when the config disables them, never quantity 0.
+ * @property {keyof TAKEOFF_ITEM_STATUS} status
+ * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics  Any per-item
+ *                                            validity issues (populated for UNSUPPORTED/INVALID,
+ *                                            or carrying a WARNING even when status is OK).
+ * @property {string[]} notes               Human-readable caveats (e.g. "purchasing
+ *                                            approximation: winder bounding rectangle").
  */
 
-const REQUIRED_FIELDS = ['itemId', 'type', 'subtype', 'label', 'dimensions', 'quantity', 'quantityUnit', 'netArea', 'netVolume', 'material', 'wasteFactor', 'optional'];
+const REQUIRED_FIELDS = ['itemId', 'elementType', 'sourceElementId', 'material', 'materialId', 'quantity', 'unit', 'nominalDimensions', 'calculatedDimensions', 'wasteFactor', 'optional', 'status'];
 
 /**
- * @param {Partial<TakeoffItem>} fields
- * @returns {TakeoffItem}
+ * @param {Partial<MaterialTakeoffItem>} fields
+ * @returns {MaterialTakeoffItem}
  */
 export function createTakeoffItem(fields) {
   for (const key of REQUIRED_FIELDS) {
     if (fields[key] === undefined) throw new Error(`createTakeoffItem: missing required field "${key}"`);
   }
-  if (!(fields.wasteFactor >= 0)) throw new Error(`createTakeoffItem: wasteFactor must be >= 0, got ${fields.wasteFactor}`);
+  if (!ELEMENT_TYPES[fields.elementType]) throw new Error(`createTakeoffItem: unknown elementType "${fields.elementType}"`);
+  if (!TAKEOFF_ITEM_STATUS[fields.status]) throw new Error(`createTakeoffItem: unknown status "${fields.status}"`);
+  if (fields.status === TAKEOFF_ITEM_STATUS.OK && !(fields.wasteFactor >= 0)) {
+    throw new Error(`createTakeoffItem: wasteFactor must be >= 0 for an OK item, got ${fields.wasteFactor}`);
+  }
 
-  const grossArea = fields.netArea * (1 + fields.wasteFactor);
-  const grossVolume = fields.netVolume * (1 + fields.wasteFactor);
+  const netVolume = fields.netVolume ?? null;
+  const netArea = fields.netArea ?? null;
+  const stockVolume = fields.stockVolume ?? null;
+  const stockArea = fields.stockArea ?? null;
+
+  let wasteAdjustedQuantity = null;
+  let wasteAdjustedUnit = null;
+  if (fields.status === TAKEOFF_ITEM_STATUS.OK) {
+    if (stockVolume !== null && stockVolume > 0) {
+      wasteAdjustedQuantity = stockVolume * (1 + fields.wasteFactor);
+      wasteAdjustedUnit = 'm3';
+    } else if (stockArea !== null && stockArea > 0) {
+      wasteAdjustedQuantity = stockArea * (1 + fields.wasteFactor);
+      wasteAdjustedUnit = 'm2';
+    }
+  }
 
   return {
     itemId: fields.itemId,
-    type: fields.type,
-    subtype: fields.subtype,
-    label: fields.label,
-    dimensions: fields.dimensions,
-    quantity: fields.quantity,
-    quantityUnit: fields.quantityUnit,
-    netArea: fields.netArea,
-    netVolume: fields.netVolume,
+    elementType: fields.elementType,
+    sourceElementId: fields.sourceElementId,
+    constructionType: fields.constructionType ?? null,
     material: fields.material,
+    materialId: fields.materialId,
+    quantity: fields.quantity,
+    unit: fields.unit,
+    nominalDimensions: fields.nominalDimensions,
+    calculatedDimensions: fields.calculatedDimensions,
+    netVolume,
+    netArea,
+    stockVolume,
+    stockArea,
     wasteFactor: fields.wasteFactor,
-    grossArea,
-    grossVolume,
-    wasteArea: grossArea - fields.netArea,
-    wasteVolume: grossVolume - fields.netVolume,
-    optional: fields.optional,
-    // Pricing is applied later, by a different layer (pricing.js) — never guessed here.
+    wasteAdjustedQuantity,
+    wasteAdjustedUnit,
     unitPrice: null,
     priceUnit: null,
     currency: null,
     calculatedCost: null,
+    optional: fields.optional,
+    status: fields.status,
+    diagnostics: fields.diagnostics ?? [],
+    notes: fields.notes ?? [],
   };
 }

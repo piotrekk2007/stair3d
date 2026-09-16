@@ -1,66 +1,80 @@
 // PRICING — a data layer completely SEPARATE from src/takeoff/materialTakeoff.js's quantities.
 // A TakeoffItem coming out of computeMaterialTakeoff() always has calculatedCost=null; this
-// file is the ONLY place that fills it in, by joining items with a PriceCatalog (itemId ->
-// {unit, unitPrice, currency}). Changing a price means editing/replacing the catalog passed
-// here — it never requires touching materialTakeoff.js, and no geometry change ever requires
-// touching a price. This mirrors the same "swappable layer" principle already used for
-// technical rules/profiles (src/rules/profiles/) and waste factors (wasteFactors.js).
+// file is the ONLY place that fills it in, by joining items with a price list keyed by
+// MATERIAL (materialId + unit), NOT by itemId — the same staircase geometry must work with any
+// price list, and the same price list must work across every item made of that material,
+// regardless of which specific tread/stringer/post it prices.
 //
-// DEFAULT_PRICE_CATALOG below is an EXAMPLE catalog (illustrative PLN figures) — a real
-// deployment would replace it with the workshop's own current price list, per material/element,
-// without changing any other file in src/takeoff/ or src/geometry/.
+// Changing a price means editing/replacing the price list passed here — it never requires
+// touching materialTakeoff.js, and no geometry change ever requires touching a price.
 
 export const PRICE_UNITS = Object.freeze({
-  VOLUME: 'volume', // unitPrice is per m³ — multiplies item.grossVolume
-  AREA: 'area', // unitPrice is per m² — multiplies item.grossArea
+  VOLUME: 'volume', // unitPrice is per m³ — multiplies item.wasteAdjustedQuantity when its unit is 'm3'
+  AREA: 'area', // unitPrice is per m² — multiplies item.wasteAdjustedQuantity when its unit is 'm2'
   PIECE: 'piece', // unitPrice is per szt — multiplies item.quantity
 });
 
-export const DEFAULT_PRICE_CATALOG = Object.freeze({
-  'tread-straight': { unit: PRICE_UNITS.VOLUME, unitPrice: 4200, currency: 'PLN' },
-  'tread-winder': { unit: PRICE_UNITS.VOLUME, unitPrice: 4600, currency: 'PLN' }, // more waste cutting irregular shapes
-  'tread-landing': { unit: PRICE_UNITS.VOLUME, unitPrice: 3800, currency: 'PLN' },
-  'stringer-outer': { unit: PRICE_UNITS.VOLUME, unitPrice: 3600, currency: 'PLN' },
-  'stringer-inner': { unit: PRICE_UNITS.VOLUME, unitPrice: 3600, currency: 'PLN' },
-  'riser-board': { unit: PRICE_UNITS.AREA, unitPrice: 90, currency: 'PLN' },
-  'post-newel': { unit: PRICE_UNITS.VOLUME, unitPrice: 5200, currency: 'PLN' }, // visible element, better-grade stock
-  'post-corner': { unit: PRICE_UNITS.VOLUME, unitPrice: 4800, currency: 'PLN' },
-});
+/**
+ * @typedef {Object} MaterialPrice
+ * @property {string} materialId    Matches TakeoffItem.materialId / materialCatalog.js entries.
+ * @property {number} price
+ * @property {string} currency      e.g. 'PLN' — see CURRENCY note below for future multi-currency support.
+ * @property {keyof PRICE_UNITS} unit
+ * @property {string} [validFrom]   ISO date string — informational, not enforced.
+ * @property {string} [source]      Free text — where this price came from.
+ */
+
+// Illustrative example price list (PLN) — a real deployment replaces this with the workshop's
+// own current price list, keyed by materialId, without touching any other file in src/takeoff/.
+export const DEFAULT_PRICE_LIST = Object.freeze([
+  { materialId: 'timber-c24', price: 4200, currency: 'PLN', unit: PRICE_UNITS.VOLUME, source: 'Illustrative example — not a real supplier quote.' },
+  { materialId: 'sheet-plywood-mdf', price: 90, currency: 'PLN', unit: PRICE_UNITS.AREA, source: 'Illustrative example — not a real supplier quote.' },
+]);
+
+function indexByMaterialId(priceList) {
+  const map = new Map();
+  for (const entry of priceList) map.set(entry.materialId, entry);
+  return map;
+}
 
 function measureFor(item, unit) {
-  if (unit === PRICE_UNITS.VOLUME) return item.grossVolume;
-  if (unit === PRICE_UNITS.AREA) return item.grossArea;
+  if (unit === PRICE_UNITS.VOLUME) return item.wasteAdjustedUnit === 'm3' ? item.wasteAdjustedQuantity : null;
+  if (unit === PRICE_UNITS.AREA) return item.wasteAdjustedUnit === 'm2' ? item.wasteAdjustedQuantity : null;
   if (unit === PRICE_UNITS.PIECE) return item.quantity;
   throw new Error(`applyPricing: unknown price unit "${unit}"`);
 }
 
 /**
- * Joins TakeoffItem[] with a price catalog — pure, returns NEW items, never mutates its input.
- * An item with no entry in the catalog is returned unchanged (cost fields stay null) rather
- * than guessing a price — a report can distinguish "priced" from "not yet priced" this way.
+ * Joins TakeoffItem[] with a price list by `materialId` — pure, returns NEW items, never
+ * mutates its input. An item whose material has no price list entry, or whose status isn't OK,
+ * or whose measure doesn't match the price's unit (e.g. a volume price for an area-only item),
+ * stays honestly unpriced (calculatedCost: null) rather than guessed.
  *
- * @param {import('./takeoffTypes.js').TakeoffItem[]} items
- * @param {Record<string, {unit: string, unitPrice: number, currency: string}>} [priceCatalog]
- * @returns {import('./takeoffTypes.js').TakeoffItem[]}
+ * @param {import('./takeoffTypes.js').MaterialTakeoffItem[]} items
+ * @param {MaterialPrice[]} [priceList]
+ * @returns {import('./takeoffTypes.js').MaterialTakeoffItem[]}
  */
-export function applyPricing(items, priceCatalog = DEFAULT_PRICE_CATALOG) {
+export function applyPricing(items, priceList = DEFAULT_PRICE_LIST) {
+  const byMaterial = indexByMaterialId(priceList);
   return items.map((item) => {
-    const price = priceCatalog[item.itemId];
+    if (item.status !== 'OK') return { ...item };
+    const price = byMaterial.get(item.materialId);
     if (!price) return { ...item };
     const measure = measureFor(item, price.unit);
+    if (measure === null) return { ...item };
     return {
       ...item,
-      unitPrice: price.unitPrice,
+      unitPrice: price.price,
       priceUnit: price.unit,
       currency: price.currency,
-      calculatedCost: Math.round(measure * price.unitPrice * 100) / 100,
+      calculatedCost: Math.round(measure * price.price * 100) / 100,
     };
   });
 }
 
 /**
- * @param {import('./takeoffTypes.js').TakeoffItem[]} items
- * @returns {number}  Sum of calculatedCost across every priced item (unpriced items contribute 0).
+ * @param {import('./takeoffTypes.js').MaterialTakeoffItem[]} items
+ * @returns {number} Sum of calculatedCost across every priced item (unpriced items contribute 0).
  */
 export function totalCost(items) {
   return items.reduce((sum, item) => sum + (item.calculatedCost || 0), 0);

@@ -1,4 +1,5 @@
 import GUI from 'lil-gui';
+import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 
 // Dopina przycisk kłódki do wiersza kontrolki lil-gui — realizuje wymaganie 13 (blokowanie
 // wybranych parametrów). Blokada to WYŁĄCZNIE wyłączenie kontrolki w UI (config.lockedFields,
@@ -96,10 +97,16 @@ export function createUI({
   lockable(winder.add(config, 'minInnerWidth', 80, 200, 5).name('Min. szer. przy duszy [mm]'), 'minInnerWidth');
 
   const build = gui.addFolder('Konstrukcja');
+  const stringerConstructionOptions = Object.fromEntries(Object.entries(CONSTRUCTION_TYPE_LABELS_PL).map(([value, label]) => [label, value]));
+  live(build.add(config, 'stringerConstructionType', stringerConstructionOptions)).name('Typ wangi');
   lockable(build.add(config, 'treadThickness', 20, 60, 1).name('Grubość stopnia [mm]'), 'treadThickness');
   lockable(build.add(config, 'nosing', 0, 40, 1).name('Nosek [mm]'), 'nosing');
   lockable(build.add(config, 'stringerHeight', 150, 450, 10).name('Wysokość policzka [mm]'), 'stringerHeight');
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
+  lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad linią (wpuszczana) [mm]'), 'stringerTopMarginMm');
+  lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
+  lockable(build.add(config, 'stringerCleatThicknessMm', 10, 40, 5).name('Grubość klocka (nakładana) [mm]'), 'stringerCleatThicknessMm');
+  lockable(build.add(config, 'stringerCleatHeightMm', 20, 80, 5).name('Wysokość klocka (nakładana) [mm]'), 'stringerCleatHeightMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');
@@ -118,6 +125,7 @@ export function createUI({
   view.add(viewState, 'showDimensions').name('Pokaż wymiary').onChange((v) => onViewChange('showDimensions', v));
   view.add(viewState, 'showStringerLengths').name('Długości wang').onChange((v) => onViewChange('showStringerLengths', v));
   view.add(viewState, 'showWinderBlanks').name('Formatki zabiegowe').onChange((v) => onViewChange('showWinderBlanks', v));
+  view.add(viewState, 'showDebug').name('Debug mode (linie/punkty/łoża)').onChange((v) => onViewChange('showDebug', v));
 
   const plan2d = gui.addFolder('Plan 2D');
   if (onTogglePlan2D) {
@@ -315,6 +323,42 @@ export function updateValidatorPanel(panel, diagnostics) {
       `;
     })
     .join('');
+}
+
+// --- Panel inspektora elementu 3D (traceability — src/scene/traceability.js/elementInspector.js) ---
+// Kliknięcie dowolnego traceable elementu w 3D (stopień/podstopień/panel wangi/słup) pokazuje
+// tu jego surowe dane źródłowe: typ elementu, ID stopnia, ID wangi, geometrySourceId — czysto
+// prezentacyjne, żadna logika rozpoznawania kliknięcia nie żyje w tym pliku (patrz main.js).
+const ELEMENT_TYPE_LABEL_PL = { tread: 'Stopień', riser: 'Podstopień', stringer: 'Panel wangi', post: 'Słup' };
+
+export function createElementInspectorPanel() {
+  const panel = document.createElement('div');
+  panel.id = 'element-inspector-panel';
+  panel.hidden = true;
+  document.body.appendChild(panel);
+  return panel;
+}
+
+/**
+ * @param {HTMLElement} panel
+ * @param {import('../diagnostics/diagnostic.js').Diagnostic|import('../scene/traceability.js').traceability|null} traceabilityData
+ *   null hides the panel (e.g. the user clicked empty space or a non-traceable object like the grid).
+ */
+export function updateElementInspectorPanel(panel, traceabilityData) {
+  if (!traceabilityData) {
+    panel.hidden = true;
+    panel.innerHTML = '';
+    return;
+  }
+  panel.hidden = false;
+  const { elementType, stepId, stringerId, geometrySourceId } = traceabilityData;
+  const rows = [];
+  rows.push(`<div class="title">${ELEMENT_TYPE_LABEL_PL[elementType] || elementType}</div>`);
+  rows.push(`<div class="row"><span>Element type</span><b>${elementType}</b></div>`);
+  if (stepId) rows.push(`<div class="row"><span>Step ID</span><b>${stepId}</b></div>`);
+  if (stringerId) rows.push(`<div class="row"><span>Stringer ID</span><b>${stringerId}</b></div>`);
+  rows.push(`<div class="row"><span>Geometry source ID</span><b>${geometrySourceId}</b></div>`);
+  panel.innerHTML = rows.join('');
 }
 
 export function updateStepInfoPanel(panel, tread, config, overrides) {

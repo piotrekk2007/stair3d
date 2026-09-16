@@ -1,58 +1,77 @@
-// THE Material Takeoff facade (src/takeoff/index.js) — mirrors src/validator/
-// StaircaseValidator.js's shape for the same reason: one small, documented entry point
-// composing layers that stay independently swappable. Three layers, on purpose, never merged
-// into one function:
+// THE Material Takeoff facade — mirrors src/validator/StaircaseValidator.js's shape on
+// purpose: one small, documented entry point composing layers that stay independently
+// swappable. Four layers, never merged into one function:
 //
-//   1. src/takeoff/materialTakeoff.js — QUANTITIES, derived from the constructional model
-//      (TreadModel[]/RiserModel[]/StringerModel/PostModel[]). Never touches Three.js, never
-//      computes a cost.
-//   2. src/takeoff/wasteFactors.js — the waste/reserve assumption per element type ("odpady" /
+//   1. src/takeoff/validationGate.js — "Material Takeoff must NOT silently calculate from
+//      invalid construction geometry." Runs the EXISTING Staircase Validator (never
+//      reimplemented) before any quantity is computed.
+//   2. src/takeoff/materialTakeoff.js — QUANTITIES, derived from the constructional model
+//      (TreadModel[]/RiserModel[]/StringerModel+StringerConstructionGeometry/PostModel[]).
+//      Never touches Three.js, never computes a cost.
+//   3. src/takeoff/wasteFactors.js — the waste/reserve assumption per element type ("odpady" /
 //      "zapas materiałowy") — a manufacturing assumption, swappable independently of both
 //      geometry and price.
-//   3. src/takeoff/pricing.js — COST, joined onto quantities by itemId. A price change is an
-//      edit to a price catalog, never a change to this file or to materialTakeoff.js.
+//   4. src/takeoff/pricing.js — COST, joined onto quantities by materialId. A price change is
+//      an edit to a price list, never a change to this file or to materialTakeoff.js.
 //
-// src/takeoff/export/{toCSV,toJSON,toTextReport}.js consume the same TakeoffItem[] shape
-// (src/takeoff/takeoffTypes.js) regardless of which stage produced it — CSV/JSON are ready now;
-// toTextReport.js's plain-text lines are the intended PDF export point (see that file's header
-// for why no PDF library is wired in yet).
+// src/takeoff/export/{toCSV,toJSON,toTextReport}.js consume the same MaterialTakeoffItem[]
+// shape (src/takeoff/takeoffTypes.js) regardless of which stage produced it.
 
 import { computeMaterialTakeoff } from './materialTakeoff.js';
-import { applyPricing, totalCost, DEFAULT_PRICE_CATALOG } from './pricing.js';
+import { applyPricing, totalCost, DEFAULT_PRICE_LIST } from './pricing.js';
+import { runTakeoffValidationGate, GATE_STATUS } from './validationGate.js';
 import { takeoffToCSV } from './export/toCSV.js';
 import { takeoffToJSON } from './export/toJSON.js';
 import { takeoffToTextReport } from './export/toTextReport.js';
 
 /**
- * @typedef {import('./takeoffTypes.js').TakeoffItem} TakeoffItem
+ * @typedef {import('./takeoffTypes.js').MaterialTakeoffItem} MaterialTakeoffItem
  */
 
 /**
- * Quantities only — no cost. Use this directly when you want to apply pricing yourself, or
- * inspect/export quantities independent of any price catalog.
- *
- * @param {Object} models  { treadModels, riserModels, stringerModels, postModels }
- * @param {Object} config  Full config (post riserHeight merge)
- * @param {{wasteFactors?: Object}} [options]
- * @returns {TakeoffItem[]}
+ * @typedef {Object} MaterialTakeoffResult
+ * @property {keyof GATE_STATUS} status  BLOCKED -> items is always []. WARNING -> items were
+ *   computed despite non-fatal validation findings. OK -> no findings at all.
+ * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics  Every gate
+ *   finding (Staircase Validator + stringer construction geometry diagnostics), regardless of
+ *   status.
+ * @property {MaterialTakeoffItem[]} items
  */
-export function buildTakeoff(models, config, options = {}) {
-  return computeMaterialTakeoff(models, config, options);
+
+/**
+ * Quantities only — no cost. Runs the validation gate FIRST: an ERROR-level finding blocks the
+ * takeoff (`status: 'BLOCKED'`, `items: []`) rather than computing a misleading quantity from
+ * invalid geometry. Use this directly when you want to apply pricing yourself.
+ *
+ * @param {Object} models  The same shape buildStaircase() returns: { fullConfig|config,
+ *   derived, planLayout, treadModels, riserModels, stringerModels, stringerConstruction,
+ *   postModels }.
+ * @param {{wasteFactors?: Object, profileId?: string}} [options]
+ * @returns {MaterialTakeoffResult}
+ */
+export function buildMaterialTakeoff(models, options = {}) {
+  const gate = runTakeoffValidationGate(models, { profileId: options.profileId });
+  if (gate.status === GATE_STATUS.BLOCKED) {
+    return { status: gate.status, diagnostics: gate.diagnostics, items: [] };
+  }
+  const config = models.fullConfig ?? models.config;
+  const items = computeMaterialTakeoff(models, config, { wasteFactors: options.wasteFactors });
+  return { status: gate.status, diagnostics: gate.diagnostics, items };
 }
 
 /**
  * Quantities + cost in one call — the common case for a UI/report that wants a fully-priced
- * bill of materials immediately.
+ * bill of materials immediately. Same validation-gate behavior as `buildMaterialTakeoff`.
  *
  * @param {Object} models
- * @param {Object} config
- * @param {{wasteFactors?: Object, priceCatalog?: Object}} [options]
- * @returns {{ items: TakeoffItem[], totalCost: number }}
+ * @param {{wasteFactors?: Object, priceList?: import('./pricing.js').MaterialPrice[], profileId?: string}} [options]
+ * @returns {MaterialTakeoffResult & { totalCost: number }}
  */
-export function buildPricedTakeoff(models, config, options = {}) {
-  const items = computeMaterialTakeoff(models, config, options);
-  const priced = applyPricing(items, options.priceCatalog || DEFAULT_PRICE_CATALOG);
-  return { items: priced, totalCost: totalCost(priced) };
+export function buildPricedMaterialTakeoff(models, options = {}) {
+  const takeoff = buildMaterialTakeoff(models, options);
+  if (takeoff.status === GATE_STATUS.BLOCKED) return { ...takeoff, totalCost: 0 };
+  const priced = applyPricing(takeoff.items, options.priceList || DEFAULT_PRICE_LIST);
+  return { ...takeoff, items: priced, totalCost: totalCost(priced) };
 }
 
-export { applyPricing, totalCost, DEFAULT_PRICE_CATALOG, takeoffToCSV, takeoffToJSON, takeoffToTextReport };
+export { applyPricing, totalCost, DEFAULT_PRICE_LIST, GATE_STATUS, runTakeoffValidationGate, takeoffToCSV, takeoffToJSON, takeoffToTextReport };

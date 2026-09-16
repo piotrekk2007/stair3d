@@ -178,6 +178,39 @@ html, body {
   opacity: 1;
 }
 
+/* --- Panel inspektora elementu 3D (traceability) --- */
+#element-inspector-panel {
+  position: absolute;
+  bottom: 220px;
+  left: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #ff9800;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  min-width: 240px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 22;
+}
+
+#element-inspector-panel .title {
+  font-weight: 700;
+  color: #ff9800;
+  margin-bottom: 4px;
+}
+
+#element-inspector-panel .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+#element-inspector-panel .row b {
+  font-family: monospace;
+  font-size: 12px;
+}
+
 /* --- Panel szczegółów zaznaczonego stopnia (wymaganie 9) --- */
 #step-info-panel {
   position: absolute;

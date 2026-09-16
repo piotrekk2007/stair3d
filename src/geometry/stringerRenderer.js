@@ -1,150 +1,147 @@
-// THE ONLY Three.js mesh builder for stringers (wangi). Consumes a StringerModel (see
-// stringerModel.js/stringerSolver.js) — it never recomputes geometry, never decides where a
-// board sits, never guesses a normal. Every geometric decision already happened in
-// stringerSolver.js; this file only turns that decision into triangles.
+// THE ONLY Three.js mesh builder for stringers (wangi). Consumes an ALREADY-BUILT
+// StringerModel (stringerSolver.js) AND its StringerSegmentConstructionGeometry[]
+// (stringerConstructionGeometry.js) — it never recomputes geometry, never decides the board's
+// contour, never guesses a normal. Every geometric decision already happened in those two
+// solver files; this file only turns their decisions into triangles. See
+// stringerConstructionGeometry.js's header for why a continuous board contour replaced the
+// old per-bearing-rectangle approach, and docs/architecture/STRINGER_CONSTRUCTION_MODEL.md for
+// the full technical comparison.
 //
-// This replaces stringerGeometry.js (removed in this consolidation pass — see
-// .claude/RULES.md rule 8: one canonical implementation per geometric concept). What
-// stringerGeometry.js used to do, and where it now lives:
-//
-//   - Per-tread flat panel from raw chain points  -> StringerSupport (kind: 'tread-bearing'),
-//     one THREE panel per bearing, spanning [finalUStart, finalUEnd] along the segment's own
-//     straight referenceLine (never recomputed per-panel — see buildBearingPanel below).
-//   - computeNormal() centroid/inheritance heuristic -> GONE. Every bearing on one
-//     StringerSegment shares that segment's single, already-known `direction` — there is
-//     nothing left to infer, so there is nothing left to get wrong.
-//   - extendToCloseCorner() (lap-joint extension when hasCornerPost is false) ->
-//     extendBearingsAtOpenCorners() below, driven by real geometric adjacency between
-//     consecutive StringerSegments (see its own comment for why that is equivalent).
-//   - Winder-fan riser normal blending -> N/A here (that lives in riserSolver.js/
-//     riserRenderer.js; a stringer segment is always straight by construction, so it never
-//     needs a blended normal — only the recess amount, already computed as
-//     StringerSupport.riserRecess).
-//
-// buildStringerMeshGeometries()/renderStringers() take an ALREADY-BUILT StringerModel — this
-// module never calls stringerSolver.js itself (see buildStaircase.js, the orchestrator that
-// builds every *Model first, then renders each one).
+// buildStaircase.js builds BOTH the StringerModel and the construction geometry, then calls
+// renderStringers() with both — this module never calls either solver itself.
 
 import * as THREE from 'three';
 import { buildPrism, planToWorld } from './geometryUtils.js';
 import { rotate90CW } from './planLayout.js';
-import { pointsEqual } from './pathUtils.js';
+import { traceability } from '../scene/traceability.js';
 
 // A board's thickness must extrude TOWARD the stair's interior (rule 5/RULES.md: the visible,
 // outward face sits flush with the tread edge) — never away from it. "Interior" from the
 // OUTER board's own straight-ahead direction is rotate90CW(direction) (the SAME canonical
 // "kierunek poprzeczny" convention as planLayout.js's frame chaining: right = rotate90CW(fwd)
 // always points from outer toward inner/dusza). From the INNER board it is the opposite
-// rotation. One shared definition, reused here instead of re-derived — see item 3 of the
-// consolidation pass (".claude/RULES.md" companion doc on unifying direction primitives).
+// rotation. One shared definition, reused here instead of re-derived.
 function inwardDirection(direction, side) {
   const cw = rotate90CW(direction);
   return side === 'outer' ? cw : { x: -cw.x, y: -cw.y };
 }
 
-// Builds one flat rectangular panel for a single StringerSupport bearing: spans
-// [uStart, uEnd] along the segment's OWN straight referenceLine (so it is geometrically
-// impossible for the panel to be crooked or rotated — it is defined entirely in terms of a
-// line that was already asserted straight by stringerModel.js), at
-// [bearingElevation - segment.width, bearingElevation], extruded inward by segment.thickness.
-function buildBearingPanel(segment, uStart, uEnd, bearingElevation, side) {
+// Builds a world-space toWorld(u,v)->Vector3 function for one segment's own straight
+// referenceLine — u = distance along it from its start, v = world elevation. Every mesh for
+// this segment (the board itself, its cleats, its housing indicators) is built through this
+// SAME function, so they can never drift apart or rotate independently of one another.
+function localFrameFor(segment) {
   const ref = segment.referenceLine;
-  const segLen = uEnd - uStart;
-  if (segLen <= 0) return null;
-  const zTop = bearingElevation;
-  const zBottom = bearingElevation - segment.width;
-  if (zTop <= zBottom) return null;
-
-  const p0 = { x: ref.start.x + ref.direction.x * uStart, y: ref.start.y + ref.direction.y * uStart };
-
-  const toWorld = (u, v) => {
-    const px = p0.x + ref.direction.x * u;
-    const py = p0.y + ref.direction.y * u;
-    return planToWorld(px, py, v);
-  };
-
-  const pts2D = [
-    { u: 0, v: zBottom },
-    { u: segLen, v: zBottom },
-    { u: segLen, v: zTop },
-    { u: 0, v: zTop },
-  ];
-
-  const normal = inwardDirection(ref.direction, side);
-  const extrudeDir = new THREE.Vector3(normal.x, 0, -normal.y);
-  return buildPrism(pts2D, toWorld, extrudeDir, segment.thickness);
+  return (u, v) => planToWorld(ref.start.x + ref.direction.x * u, ref.start.y + ref.direction.y * u, v);
 }
 
-// When there is no corner post (config.hasCornerPost === false), two stringer segments that
-// meet at a real corner (their reference lines share an endpoint) would otherwise leave a
-// visible notch at the joint once thickness is extruded, because each board's own extrusion
-// direction differs on either side of the corner. stringerGeometry.js's old
-// extendToCloseCorner() fixed this by extending each board past the corner by its own
-// thickness, so they physically overlap at the joint (a simple lap-joint equivalent).
-//
-// Here the SAME fix is expressed generically: any two segments that are adjacent in the
-// model's `segments` array (which is built in physical/tread order — see stringerSolver.js)
-// AND whose facing endpoints coincide are, by construction, exactly the turn corners that
-// need this (a winder's outer bend, a landing's outer or inner corner) — there is no other
-// reason two stringer segments would share an endpoint. This is checked once per stringer,
-// not per rendered panel, and returns which segment INDEX needs extension at which end.
-function computeOpenCornerExtensions(segments, hasCornerPost) {
-  const extendEndOf = new Set(); // segment index whose LAST bearing should extend past uEnd
-  const extendStartOf = new Set(); // segment index whose FIRST bearing should extend before uStart
-  if (hasCornerPost) return { extendEndOf, extendStartOf };
+function extrude(pts2D, toWorld, direction, depth) {
+  const extrudeDir = new THREE.Vector3(direction.x, 0, -direction.y);
+  return buildPrism(pts2D, toWorld, extrudeDir, depth);
+}
 
-  for (let i = 0; i < segments.length - 1; i++) {
-    const a = segments[i].referenceLine;
-    const b = segments[i + 1].referenceLine;
-    if (pointsEqual(a.end, b.start)) {
-      extendEndOf.add(i);
-      extendStartOf.add(i + 1);
-    }
-  }
-  return { extendEndOf, extendStartOf };
+function rect(uStart, uEnd, vBottom, vTop) {
+  return [
+    { u: uStart, v: vBottom },
+    { u: uEnd, v: vBottom },
+    { u: uEnd, v: vTop },
+    { u: uStart, v: vTop },
+  ];
+}
+
+// Darkens a material's color for the housing-recess visual indicator — NOT a true boolean
+// subtraction (Three.js has no built-in CSG and this project adds no new dependency without a
+// concrete need — see .claude/RULES.md rule 11): the housing's real position/size/depth all
+// come straight from StringerConstructionGeometry.housings, only its RENDERING as "a slightly
+// recessed, slightly darker box" instead of an actually-subtracted volume is a simplification,
+// documented here rather than left silent.
+function housingIndicatorMaterial(material) {
+  if (!material?.color?.clone) return material;
+  const clone = material.clone();
+  clone.color = material.color.clone().multiplyScalar(0.7);
+  return clone;
+}
+
+function buildBoardMesh(segment, geo, side, material) {
+  if (geo.outerContour.length === 0) return null;
+  const toWorld = localFrameFor(segment);
+  const direction = inwardDirection(segment.referenceLine.direction, side);
+  const geometry = extrude(geo.outerContour, toWorld, direction, geo.thicknessMm);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData = traceability({ elementType: 'stringer', stringerId: side, geometrySourceId: `stringer:${side}:${geo.segmentId}` });
+  return mesh;
+}
+
+function buildCleatMeshes(segment, geo, side, material) {
+  if (!geo.cleats) return [];
+  const toWorld = localFrameFor(segment);
+  const direction = inwardDirection(segment.referenceLine.direction, side);
+  return geo.cleats.map((cleat) => {
+    const pts2D = rect(cleat.uStart, cleat.uEnd, cleat.topV - cleat.height, cleat.topV);
+    const geometry = extrude(pts2D, toWorld, direction, cleat.thickness);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData = traceability({
+      elementType: 'stringer',
+      stepId: `step-${cleat.treadIndex}`,
+      stringerId: side,
+      geometrySourceId: `stringer:${side}:${geo.segmentId}:cleat-${cleat.treadIndex}`,
+    });
+    return mesh;
+  });
+}
+
+function buildHousingIndicatorMeshes(segment, geo, side, material) {
+  if (!geo.housings) return [];
+  const toWorld = localFrameFor(segment);
+  const direction = inwardDirection(segment.referenceLine.direction, side);
+  const indicatorMaterial = housingIndicatorMaterial(material);
+  // Recessed by half the housing depth from the inner face — a visual cue only (see
+  // housingIndicatorMaterial's comment); the ANALYTICAL depth (geo.housings[].depth) is what a
+  // future manufacturing/CNC layer would actually read, not this rendered offset.
+  return geo.housings.map((housing) => {
+    const pts2D = rect(housing.uStart, housing.uEnd, housing.bottomV, housing.topV);
+    const geometry = extrude(pts2D, toWorld, direction, housing.depth * 0.5);
+    const mesh = new THREE.Mesh(geometry, indicatorMaterial);
+    mesh.position.addScaledVector(new THREE.Vector3(direction.x, 0, -direction.y), segment.thickness);
+    mesh.userData = traceability({
+      elementType: 'stringer',
+      stepId: `step-${housing.treadIndex}`,
+      stringerId: side,
+      geometrySourceId: `stringer:${side}:${geo.segmentId}:housing-${housing.treadIndex}`,
+    });
+    return mesh;
+  });
 }
 
 /**
- * @param {import('./stringerModel.js').StringerModel} model  Already built by
- *   stringerSolver.js's buildStringerModel() — this function NEVER calls the solver itself
- *   (see buildStaircase.js, which builds the model and passes it in explicitly).
- * @param {boolean} hasCornerPost
+ * @param {import('./stringerModel.js').StringerModel} model
+ * @param {import('./stringerModel.js').StringerSegmentConstructionGeometry[]} constructionGeometries
+ *   Same length/order as model.segments — see stringerConstructionGeometry.js's
+ *   buildStringerConstructionGeometry(), which builds exactly one entry per segment.
+ * @param {THREE.Material} material
+ * @param {string} groupName
  */
-export function buildStringerMeshGeometries(model, hasCornerPost) {
-  const { extendEndOf, extendStartOf } = computeOpenCornerExtensions(model.segments, hasCornerPost);
-  const side = model.side;
-
-  const geometries = [];
-  model.segments.forEach((segment, segIdx) => {
-    const bearings = segment.treadBearings;
-    bearings.forEach((bearing, i) => {
-      let uStart = bearing.finalUStart;
-      let uEnd = bearing.finalUEnd;
-
-      // Recess for a riser board bites into the bearing's OWN front, and only when this
-      // bearing actually owns the tread's true front boundary (see stringerSolver.js —
-      // a `partial` bearing's non-owning half must not be recessed a second time).
-      if (bearing.ownsStart && bearing.riserRecess > 0) {
-        uStart = Math.min(uEnd, uStart + bearing.riserRecess);
-      }
-
-      if (i === 0 && extendStartOf.has(segIdx)) uStart -= segment.thickness;
-      if (i === bearings.length - 1 && extendEndOf.has(segIdx)) uEnd += segment.thickness;
-
-      const geo = buildBearingPanel(segment, uStart, uEnd, bearing.bearingElevation, side);
-      if (geo) geometries.push(geo);
-    });
-  });
-  return geometries;
-}
-
-export function renderStringers(model, hasCornerPost, material, groupName) {
+export function renderStringers(model, constructionGeometries, material, groupName) {
   const group = new THREE.Group();
   group.name = groupName;
-  buildStringerMeshGeometries(model, hasCornerPost).forEach((geo, i) => {
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.name = `${groupName}_${i}`;
-    group.add(mesh);
+  const side = model.side;
+
+  model.segments.forEach((segment, i) => {
+    const geo = constructionGeometries[i];
+    const board = buildBoardMesh(segment, geo, side, material);
+    if (board) {
+      board.name = `${groupName}_${i}_board`;
+      group.add(board);
+    }
+    buildCleatMeshes(segment, geo, side, material).forEach((mesh, j) => {
+      mesh.name = `${groupName}_${i}_cleat_${j}`;
+      group.add(mesh);
+    });
+    buildHousingIndicatorMeshes(segment, geo, side, material).forEach((mesh, j) => {
+      mesh.name = `${groupName}_${i}_housing_${j}`;
+      group.add(mesh);
+    });
   });
+
   return group;
 }

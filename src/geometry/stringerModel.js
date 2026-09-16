@@ -28,7 +28,17 @@ import { GEOMETRY_EPS } from './tolerances.js';
 
 export const CONSTRUCTION_TYPES = Object.freeze({
   CLOSED: 'closed', // housed string — treads let into stopped/through housings, hidden end grain
-  CUT: 'cut', // open/notched string — tread ends sit on top of a notch, visible end grain
+  CUT: 'cut', // open/notched (overlay/open-cleated) string — tread ends sit on top of a notch, visible end grain
+});
+
+// User-facing Polish terminology for the two construction types — kept alongside the
+// internal English CONSTRUCTION_TYPES keys (which follow established timber-stair
+// terminology: "cut/open string" vs "closed/housed string" — see
+// docs/architecture/STRINGER_CONSTRUCTION_MODEL.md for sourcing) so the UI can show the
+// term a Polish joiner actually uses without the geometry/solver layer knowing about labels.
+export const CONSTRUCTION_TYPE_LABELS_PL = Object.freeze({
+  [CONSTRUCTION_TYPES.CUT]: 'wanga nakładana',
+  [CONSTRUCTION_TYPES.CLOSED]: 'wanga wpuszczana',
 });
 
 export const CONNECTION_TYPES = Object.freeze({
@@ -134,6 +144,60 @@ export function housingDepthFor(stringerThickness) {
  * @property {StringerConnection[]} intermediateSupports
  * @property {StringerMaterial} material
  * @property {StringerManufacturing} manufacturing
+ */
+
+/**
+ * @typedef {Object} StringerPitchLine  The straight line struck through a segment's first and
+ *   last tread-bearing points — the traditional carpentry method (a chalk-line/margin-line) for
+ *   laying out a stringer's parallel top/bottom edges. See stringerConstructionGeometry.js.
+ * @property {{u:number,v:number}} start
+ * @property {{u:number,v:number}} end
+ * @property {number} slope   dv/du
+ */
+
+/**
+ * @typedef {Object} StringerCleat  Overlay/'cut' only — a small support block glued/screwed
+ *   under a tread's horizontal seat, modelled SEPARATELY from the structural board (never
+ *   merged into the board's own outer contour).
+ * @property {number} treadIndex
+ * @property {number} uStart
+ * @property {number} uEnd
+ * @property {number} topV     World elevation of the cleat's top face (= the seat it supports)
+ * @property {number} height   mm
+ * @property {number} thickness  mm
+ */
+
+/**
+ * @typedef {Object} StringerHousing  Closed/'housed' only — a recess cut into the board's inner
+ *   face for one tread; never changes the board's own outer silhouette.
+ * @property {number} treadIndex
+ * @property {number} uStart
+ * @property {number} uEnd
+ * @property {number} topV
+ * @property {number} bottomV   topV - housingDepth
+ * @property {number} depth     mm
+ */
+
+/**
+ * @typedef {Object} StringerSegmentConstructionGeometry  ONE per StringerSegment — the actual
+ *   physical board contour, derived FROM that segment's already-solved StringerModel data
+ *   (never re-derived from planLayout). This is what makes a stringer look like a real,
+ *   continuous timber board instead of a stack of independent tread-bearing rectangles.
+ * @property {string} segmentId          Same id as the source StringerSegment.
+ * @property {keyof CONSTRUCTION_TYPES} constructionType
+ * @property {StringerPitchLine} pitchLine
+ * @property {{u:number,v:number}[]} outerContour  ONE closed, simple polygon — the board's
+ *   entire physical silhouette in the segment's own (u = distance along referenceLine,
+ *   v = world elevation) plane. 'cut': top edge steps to match each tread-bearing region
+ *   (the classic notched/"sawtooth" top of an open string — a REAL feature, not a defect),
+ *   bottom edge is the single straight pitch-line-parallel line. 'closed': a plain
+ *   parallelogram — both edges straight and parallel to the pitch line.
+ * @property {StringerCleat[]} [cleats]      'cut' only.
+ * @property {StringerHousing[]} [housings]  'closed' only.
+ * @property {number} boardWidthMm       config.stringerHeight
+ * @property {number} thicknessMm        config.stringerThickness
+ * @property {number} minRemainingSectionMm  Diagnostic: thinnest surviving board material.
+ * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics
  */
 
 // Throws if `segment.referenceLine` is not, in fact, a straight line consistent with its own

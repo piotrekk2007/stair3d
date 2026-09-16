@@ -31,6 +31,31 @@ export const RULE_TYPES = Object.freeze({
   MANUFACTURING_ASSUMPTION: 'MANUFACTURING_ASSUMPTION', // workshop/production constraint, not a design law
   USER_DEFINED_COMPANY_STANDARD: 'USER_DEFINED_COMPANY_STANDARD', // company-wide policy, freely editable, no external source
   USER_DESIGN_PREFERENCE: 'USER_DESIGN_PREFERENCE', // ONE project/client's own narrowing choice, not a company-wide policy
+  SOFTWARE_DESIGN_CHOICE: 'SOFTWARE_DESIGN_CHOICE', // an algorithmic/implementation decision made BY Stair3D itself —
+  // not sourced from any law, standard, trade body, or company policy. Exists specifically so a
+  // rule set can say "this is simply how our code works" instead of dressing an implementation
+  // detail up as INDUSTRY_BEST_PRACTICE or MANUFACTURING_ASSUMPTION when no external authority
+  // actually endorses it (see docs/STRINGER_CONSTRUCTION_SPEC.md for the case that required this).
+});
+
+// Whether a rule's claim has actually been checked against a source, is an unconfirmed
+// judgment call, or is deliberately left to the user/company to set — a DIFFERENT axis from
+// `ruleType` (which says WHOSE authority a rule claims) and from `needsVerification` (a
+// narrower "the exact figure/clause is unconfirmed" flag on LEGAL/ENGINEERING rules). Optional;
+// rules that predate this field simply don't set it.
+export const RULE_STATUS = Object.freeze({
+  CONFIRMED: 'CONFIRMED', // checked against the cited source; the source really does say this
+  ASSUMPTION: 'ASSUMPTION', // a judgment call made without a directly-supporting source
+  CONFIGURABLE: 'CONFIGURABLE', // deliberately exposed as a user/company-adjustable parameter,
+  // precisely because no single authoritative value exists — see config/schema.js.
+});
+
+// Which stringer construction type a rule applies to — 'both' for rules independent of the
+// choice, null/omitted for rules that aren't stringer-construction-specific at all.
+export const CONSTRUCTION_TYPE_SCOPES = Object.freeze({
+  CUT: 'cut',
+  CLOSED: 'closed',
+  BOTH: 'both',
 });
 
 export const SEVERITIES = Object.freeze({
@@ -106,6 +131,15 @@ export function ruleAppliesToContext(rule, context) {
  *                                       against a primary source during this research pass —
  *                                       must never be used with blocksGeneration:true until cleared.
  * @property {string} [notes]           Caveats, scope limits, or relationship to other rules
+ * @property {keyof RULE_STATUS} [status]  CONFIRMED/ASSUMPTION/CONFIGURABLE — see RULE_STATUS.
+ *                                       Optional; older rules predate this field.
+ * @property {keyof CONSTRUCTION_TYPE_SCOPES|null} [constructionType]  Which stringer
+ *                                       construction type this rule applies to — 'both' if
+ *                                       independent of the choice. Only meaningful for
+ *                                       stringer-construction rules (category F).
+ * @property {boolean} [affectsGeometry]        Does this rule change what 3D geometry is built?
+ * @property {boolean} [affectsValidation]      Does this rule drive a Validator/constraint check?
+ * @property {boolean} [affectsMaterialTakeoff] Will this rule matter once Material Takeoff exists?
  */
 
 // Fails loudly if a rule set author forgets a required field or mixes rule types with the
@@ -121,6 +155,12 @@ export function assertValidRule(rule) {
   if (!SEVERITIES[rule.severity]) throw new Error(`Rule ${rule.ruleId}: unknown severity "${rule.severity}"`);
   if (rule.needsVerification && rule.blocksGeneration) {
     throw new Error(`Rule ${rule.ruleId}: a rule pending verification must not block generation`);
+  }
+  if (rule.status !== undefined && !RULE_STATUS[rule.status]) {
+    throw new Error(`Rule ${rule.ruleId}: unknown status "${rule.status}"`);
+  }
+  if (rule.constructionType !== undefined && rule.constructionType !== null && !Object.values(CONSTRUCTION_TYPE_SCOPES).includes(rule.constructionType)) {
+    throw new Error(`Rule ${rule.ruleId}: unknown constructionType "${rule.constructionType}"`);
   }
   return rule;
 }

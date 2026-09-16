@@ -1,8 +1,9 @@
-// JSON export — the most direct serialization of TakeoffItem[]; no transformation, since the
-// shape (src/takeoff/takeoffTypes.js) is already meant to be consumed programmatically.
+// JSON export — the most direct serialization of MaterialTakeoffItem[]; no transformation,
+// since the shape (src/takeoff/takeoffTypes.js) is already meant to be consumed
+// programmatically.
 
 /**
- * @param {import('../takeoffTypes.js').TakeoffItem[]} items
+ * @param {import('../takeoffTypes.js').MaterialTakeoffItem[]} items
  * @param {{pretty?: boolean}} [options]
  * @returns {string}
  */

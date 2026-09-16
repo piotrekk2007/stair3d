@@ -5,6 +5,7 @@ import { renderTreads } from './treadRenderer.js';
 import { buildRiserModels } from './riserSolver.js';
 import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
+import { buildStringerConstructionGeometry } from './stringerConstructionGeometry.js';
 import { renderStringers } from './stringerRenderer.js';
 import { buildPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
@@ -37,14 +38,21 @@ export function buildStaircase(config) {
   const treadModels = buildTreadModels(planLayout, fullConfig);
   const riserModels = buildRiserModels(planLayout, fullConfig);
   const stringerModels = buildStringerModelsForFlight(planLayout, fullConfig);
+  // Construction geometry (the real, continuous board contour — see
+  // stringerConstructionGeometry.js) is a SEPARATE solver step on top of the analytical
+  // StringerModel, never merged into it and never computed inside the renderer.
+  const stringerConstruction = {
+    outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
+    inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
+  };
   const postModels = buildPostModels(planLayout, fullConfig);
 
   const root = new THREE.Group();
   root.name = 'Staircase';
 
   root.add(renderTreads(treadModels, treadMaterial));
-  root.add(renderStringers(stringerModels.outer, fullConfig.hasCornerPost, stringerMaterial, 'StringerOuter'));
-  root.add(renderStringers(stringerModels.inner, fullConfig.hasCornerPost, stringerMaterial, 'StringerInner'));
+  root.add(renderStringers(stringerModels.outer, stringerConstruction.outer, stringerMaterial, 'StringerOuter'));
+  root.add(renderStringers(stringerModels.inner, stringerConstruction.inner, stringerMaterial, 'StringerInner'));
 
   const postsGroup = renderPosts(postModels, postMaterial);
   root.add(postsGroup);
@@ -62,5 +70,5 @@ export function buildStaircase(config) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, postModels };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels };
 }

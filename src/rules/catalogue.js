@@ -9,6 +9,7 @@ import { bwfIndustryGuidance } from './sets/bwfIndustryGuidance.js';
 import { generalErgonomics } from './sets/generalErgonomics.js';
 import { manufacturingAssumptions } from './sets/manufacturingAssumptions.js';
 import { validationMeta } from './sets/validationMeta.js';
+import { stringerConstructionAssumptions } from './sets/stringerConstructionAssumptions.js';
 
 // Each entry is independently addable/removable here without touching any other set —
 // this array IS the "independent change" seam requested for the architecture.
@@ -19,6 +20,7 @@ export const RULE_SETS = Object.freeze({
   generalErgonomics,
   manufacturingAssumptions,
   validationMeta,
+  stringerConstructionAssumptions,
 });
 
 export function getFullCatalogue() {
@@ -43,4 +45,12 @@ export function getRuleById(ruleId) {
 
 export function getRulesNeedingVerification() {
   return getFullCatalogue().filter((r) => r.needsVerification === true);
+}
+
+export function getRulesByStatus(status) {
+  return getFullCatalogue().filter((r) => r.status === status);
+}
+
+export function getRulesByConstructionType(constructionType) {
+  return getFullCatalogue().filter((r) => r.constructionType === constructionType || r.constructionType === 'both');
 }

@@ -1,27 +1,35 @@
 // Default material waste/reserve factors ("odpady" / "zapas materiałowy") — a
-// MANUFACTURING_ASSUMPTION-style figure (same category as src/rules/sets/manufacturingAssumptions.js
-// in the technical-rules layer), NOT a physical constant or a building-code number. It lives in
-// its own file, as plain overridable data, so a company can tune its own cutting-waste
-// experience without touching materialTakeoff.js's geometry-derived quantities — exactly the
-// same "swappable data layer, never hardcoded into the solver" principle requested for pricing.
+// MANUFACTURING_ASSUMPTION-style figure (same category as
+// src/rules/sets/manufacturingAssumptions.js in the technical-rules layer), NOT a physical
+// constant or a building-code number. This is a PURCHASING/MANUFACTURING assumption, not a
+// property of the material itself — documented explicitly, never presented as "recommended".
 //
-// Values are fractions added on top of the NET (as-built) quantity to get the GROSS (purchase)
-// quantity — e.g. 0.10 means "buy 10% more than what ends up in the finished staircase".
+// Supports waste factor per ELEMENT TYPE (the default) and, when given, a more specific
+// override per (elementType, materialId) pair — e.g. a company might waste more offcutting an
+// expensive hardwood tread than a cheap softwood one, even though both are "TREAD" items.
 
 export const DEFAULT_WASTE_FACTORS = Object.freeze({
-  tread: 0.1, // cutting treads from wider boards/panels — edge trim, knot avoidance
-  stringer: 0.15, // long structural boards — cutting to length, avoiding defects, housing waste
-  riser: 0.08, // sheet material (plywood/MDF) — panel layout offcuts
-  post: 0.05, // short, simple square-section pieces — least waste-prone
+  TREAD: 0.1, // cutting treads from wider boards/panels — edge trim, knot avoidance
+  LANDING: 0.1, // same panel-cutting logic as a tread
+  STRINGER: 0.15, // long structural boards — cutting to length, avoiding defects, housing waste
+  STRINGER_CLEAT: 0.1, // small offcuts from scrap-length stock — typically low waste
+  RISER: 0.08, // sheet material (plywood/MDF) — panel layout offcuts
+  POST: 0.05, // short, simple square-section pieces — least waste-prone
 });
 
 /**
- * @param {string} itemType  'tread' | 'stringer' | 'riser' | 'post'
- * @param {Object} [overrides]  Partial override of DEFAULT_WASTE_FACTORS
+ * @param {keyof import('./takeoffTypes.js').ELEMENT_TYPES} elementType
+ * @param {string} [materialId]
+ * @param {Object} [overrides]  Keys are either an elementType ('TREAD') for a broad override,
+ *   or `${elementType}:${materialId}` (e.g. 'TREAD:timber-oak') for a material-specific one.
+ *   The material-specific key wins when both are present.
  * @returns {number}
  */
-export function wasteFactorFor(itemType, overrides = {}) {
-  const value = overrides[itemType] ?? DEFAULT_WASTE_FACTORS[itemType];
-  if (value === undefined) throw new Error(`wasteFactorFor: no waste factor defined for item type "${itemType}"`);
+export function wasteFactorFor(elementType, materialId, overrides = {}) {
+  const specificKey = `${elementType}:${materialId}`;
+  if (overrides[specificKey] !== undefined) return overrides[specificKey];
+  if (overrides[elementType] !== undefined) return overrides[elementType];
+  const value = DEFAULT_WASTE_FACTORS[elementType];
+  if (value === undefined) throw new Error(`wasteFactorFor: no waste factor defined for element type "${elementType}"`);
   return value;
 }

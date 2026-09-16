@@ -1,9 +1,23 @@
+import * as THREE from 'three';
 import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase } from './geometry/buildStaircase.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
-import { createUI, createInfoPanel, updateInfoPanel, createStepInfoPanel, updateStepInfoPanel, createValidatorPanel, updateValidatorPanel, refreshUI } from './ui/ui.js';
+import { buildDebugOverlay } from './scene/debugOverlay.js';
+import { resolveTraceability } from './scene/elementInspector.js';
+import {
+  createUI,
+  createInfoPanel,
+  updateInfoPanel,
+  createStepInfoPanel,
+  updateStepInfoPanel,
+  createValidatorPanel,
+  updateValidatorPanel,
+  createElementInspectorPanel,
+  updateElementInspectorPanel,
+  refreshUI,
+} from './ui/ui.js';
 import { validateModels } from './validator/StaircaseValidator.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
@@ -19,7 +33,7 @@ const viewport = document.createElement('div');
 viewport.id = 'viewport';
 app.appendChild(viewport);
 
-const { scene } = createScene(viewport);
+const { scene, camera, renderer } = createScene(viewport);
 
 const config = createDefaultConfig();
 const viewState = {
@@ -27,6 +41,10 @@ const viewState = {
   showDimensions: true,
   showStringerLengths: false,
   showWinderBlanks: false,
+  // Debug mode (src/scene/debugOverlay.js): reference lines, construction points,
+  // intersections, normals, bearing positions — pure visualization of already-solved model
+  // data, never a second geometry computation.
+  showDebug: false,
   plan2dShowWinderBlanks: true,
   plan2dEditMode: false,
   // Warstwy linii konstrukcyjnych na planie 2D (wymaganie 5 i 7) — czysto wizualne, nie
@@ -83,6 +101,7 @@ let currentCeiling = null;
 let currentDimLabels = null;
 let currentStringerLengthLabels = null;
 let currentWinderBlankLabels = null;
+let currentDebugOverlay = null;
 let currentPlanLayout = null;
 let currentDerived = null;
 let currentPlan2DSVG = '';
@@ -112,6 +131,10 @@ function rebuild() {
     scene.remove(currentWinderBlankLabels);
     disposeGroup(currentWinderBlankLabels);
   }
+  if (currentDebugOverlay) {
+    scene.remove(currentDebugOverlay);
+    disposeGroup(currentDebugOverlay);
+  }
 
   // Kolejność zgodna z wymaganiem 11: solver 2D (planLayout) -> wangi -> podstopnie -> 3D.
   // buildStaircase.js woła buildPlanLayout() jako pierwszy krok, potem buildStringerGeometries,
@@ -135,6 +158,10 @@ function rebuild() {
   currentWinderBlankLabels = buildWinderBlankLabels(planLayout, config, derived);
   currentWinderBlankLabels.visible = viewState.showWinderBlanks;
   scene.add(currentWinderBlankLabels);
+
+  currentDebugOverlay = buildDebugOverlay({ planLayout, treadModels, stringerModels });
+  currentDebugOverlay.visible = viewState.showDebug;
+  scene.add(currentDebugOverlay);
 
   // Zaznaczenie wskazuje na konkretny stopień (obiekt logiczny) po jego indeksie — jeśli
   // liczba stopni się zmieniła i stary indeks już nie istnieje, zaznaczenie znika zamiast
@@ -220,6 +247,7 @@ function handleViewChange(key, value) {
   if (key === 'showDimensions' && currentDimLabels) currentDimLabels.visible = value;
   if (key === 'showStringerLengths' && currentStringerLengthLabels) currentStringerLengthLabels.visible = value;
   if (key === 'showWinderBlanks' && currentWinderBlankLabels) currentWinderBlankLabels.visible = value;
+  if (key === 'showDebug' && currentDebugOverlay) currentDebugOverlay.visible = value;
   if (key === 'plan2dShowWinderBlanks') regeneratePlan2D();
   if (key === 'plan2dEditMode') regeneratePlan2D();
   if (key === 'plan2dLayers') regeneratePlan2D();
@@ -289,6 +317,33 @@ document.body.appendChild(fileInput);
 const infoPanel = createInfoPanel();
 const stepInfoPanel = createStepInfoPanel();
 const validatorPanel = createValidatorPanel();
+const elementInspectorPanel = createElementInspectorPanel();
+
+// Click-to-inspect (traceability): raycast against whatever buildStaircase() actually rendered
+// (currentRoot only — never the debug overlay, ceiling, grid, or dimension labels, none of
+// which are traceable elements), resolve the hit mesh's userData via elementInspector.js, and
+// show it in the inspector panel. If the hit element has a stepId, also select that step the
+// SAME way clicking it in the 2D plan would (regeneratePlan2D + updateStepInfoPanel) — this is
+// the "point at a 3D element, get back to its 2D source" requirement.
+const raycaster = new THREE.Raycaster();
+const pointerNdc = new THREE.Vector2();
+renderer.domElement.addEventListener('click', (event) => {
+  if (!currentRoot) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointerNdc, camera);
+  const hits = raycaster.intersectObject(currentRoot, true);
+  const traceabilityData = hits.length > 0 ? resolveTraceability(hits[0].object) : null;
+  updateElementInspectorPanel(elementInspectorPanel, traceabilityData);
+
+  if (traceabilityData?.stepId) {
+    const index = Number(traceabilityData.stepId.replace('step-', ''));
+    selectedStepIndex = Number.isInteger(index) ? index : selectedStepIndex;
+    regeneratePlan2D();
+    updateStepInfoPanel(stepInfoPanel, currentPlanLayout?.treads.find((t) => t.index === selectedStepIndex), { ...config, riserHeight: currentDerived?.riserHeight }, config.manualEdgeOverrides);
+  }
+});
 
 const plan2dPanel = document.createElement('div');
 plan2dPanel.id = 'plan2d-panel';

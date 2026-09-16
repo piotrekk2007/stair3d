@@ -1,187 +1,293 @@
 // MATERIAL TAKEOFF LAYER — computes a bill-of-quantities from the already-solved constructional
-// model (TreadModel[]/RiserModel[]/StringerModel/PostModel[]). Pure data in, pure data out:
-// zero Three.js, zero geometry solving of its own (every quantity comes from a model another
-// layer already built — see src/geometry/treadSolver.js/riserSolver.js/stringerSolver.js/
-// postSolver.js), and zero cost calculation (see pricing.js — a deliberately separate layer,
-// so a price change never touches these quantities and a geometry change never touches prices).
+// model. Pure data in, pure data out: zero Three.js, zero geometry solving of its own, zero
+// cost calculation (see pricing.js — a deliberately separate layer).
 //
-// Grouping: one TakeoffItem per (element type, subtype) — e.g. "tread-straight" aggregates
-// every straight tread into one purchasable line, rather than one line per individual tread.
-// Winder treads are still aggregated (their dimensions genuinely vary tread-to-tread — see
-// planLayout.js), so a winder group's `dimensions` reports AVERAGES with `netArea`/`netVolume`
-// summed from the real, individual per-tread polygon area (never a nominal formula) — the
-// averages are honest approximations for a cutlist, the totals are exact.
+// Dependency direction (never inverted):
+//   StaircaseModel -> solved geometry -> construction models -> MATERIAL TAKEOFF -> cost
+// Every quantity here comes from TreadModel / RiserModel / StringerModel +
+// StringerConstructionGeometry / PostModel — never from a THREE.Mesh, a bounding box measured
+// off rendered geometry, or an invented number.
+//
+// GRANULARITY — one item per PHYSICAL COMPONENT, not per element-type group: one tread = one
+// item, one riser = one item (even a multi-panel winder fan — RiserModel already represents
+// exactly one physical riser per stepId), one stringer SEGMENT = one item (a 14-step straight
+// flight's stringer is ONE segment, hence ONE item — never one item per tread bearing), one
+// post = one item, one cleat/housing = one item per tread. This maximizes traceability
+// (sourceElementId is always unambiguous) — grouping/rollup for display is a UI/export concern
+// (see export/*.js), never baked into this core model.
 
 import { signedPolygonArea } from '../geometry/pathUtils.js';
-import { createTakeoffItem } from './takeoffTypes.js';
+import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
+import { boundingRectAlong, boundingRectUV } from './stockGeometry.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
 
-const TREAD_LABELS = Object.freeze({
-  straight: 'Stopnie proste',
-  winder: 'Stopnie zabiegowe',
-  landing: 'Podesty',
-});
+const TIMBER_MATERIAL_ID = (grade) => `timber-${(grade || 'c24').toLowerCase()}`;
+const RISER_MATERIAL_ID = 'sheet-plywood-mdf';
+const RISER_MATERIAL_LABEL = 'Sklejka/płyta MDF';
 
-// --- Treads (also covers "podesty" — a landing tread IS a tread of type 'landing') -----------
+// --- Treads (also covers "podesty" — a landing tread is elementType LANDING) -----------------
 
-function buildTreadItems(treadModels, config, wasteFactors) {
-  const groups = new Map(); // type -> { count, areaMm2, volumeMm3, widthSumMm, depthSumMm, thicknessMm }
-  for (const t of treadModels) {
-    const areaMm2 = Math.abs(signedPolygonArea(t.outline));
-    const volumeMm3 = areaMm2 * t.thickness;
-    const avgWidthMm = (t.widths.atFront + t.widths.atBack) / 2;
-    const avgDepthMm = avgWidthMm > 0 ? areaMm2 / avgWidthMm : 0;
+function buildTreadItem(t, config, wasteFactors) {
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  const netAreaMm2 = Math.abs(signedPolygonArea(t.outline));
+  const netVolumeMm3 = netAreaMm2 * t.thickness;
+  const { lengthMm, widthMm } = boundingRectAlong(t.outline, t.direction);
+  const stockAreaMm2 = lengthMm * widthMm;
+  const stockVolumeMm3 = stockAreaMm2 * t.thickness;
+  const elementType = t.type === 'landing' ? ELEMENT_TYPES.LANDING : ELEMENT_TYPES.TREAD;
 
-    const g = groups.get(t.type) || { count: 0, areaMm2: 0, volumeMm3: 0, widthSumMm: 0, depthSumMm: 0, thicknessMm: t.thickness };
-    g.count += 1;
-    g.areaMm2 += areaMm2;
-    g.volumeMm3 += volumeMm3;
-    g.widthSumMm += avgWidthMm;
-    g.depthSumMm += avgDepthMm;
-    groups.set(t.type, g);
+  const notes = [];
+  if (t.type === 'winder') {
+    notes.push('Wymiar zakupowy (stock) to prostokąt otaczający kontur zabiegowego stopnia, zorientowany wzdłuż kierunku wchodzenia — świadome przybliżenie zakupowe, nie rzeczywisty kształt.');
   }
 
-  const items = [];
-  for (const [type, g] of groups) {
-    items.push(
-      createTakeoffItem({
-        itemId: `tread-${type}`,
-        type: 'tread',
-        subtype: type,
-        label: TREAD_LABELS[type] || `Stopnie (${type})`,
-        dimensions: {
-          avgWidthMm: g.widthSumMm / g.count,
-          avgDepthMm: g.depthSumMm / g.count,
-          thicknessMm: g.thicknessMm,
-        },
-        quantity: g.count,
-        quantityUnit: 'szt',
-        netArea: g.areaMm2 * MM2_TO_M2,
-        netVolume: g.volumeMm3 * MM3_TO_M3,
-        material: config.timberGrade,
-        wasteFactor: wasteFactorFor('tread', wasteFactors),
-        optional: false,
-      })
-    );
-  }
-  return items;
+  return createTakeoffItem({
+    itemId: `tread-${t.stepId}`,
+    elementType,
+    sourceElementId: `tread:${t.stepId}`,
+    material: config.timberGrade,
+    materialId,
+    quantity: 1,
+    unit: 'szt',
+    nominalDimensions: { footprintAreaMm2: netAreaMm2, thicknessMm: t.thickness },
+    calculatedDimensions: { lengthMm, widthMm, thicknessMm: t.thickness },
+    netVolume: netVolumeMm3 * MM3_TO_M3,
+    netArea: netAreaMm2 * MM2_TO_M2,
+    stockVolume: stockVolumeMm3 * MM3_TO_M3,
+    stockArea: stockAreaMm2 * MM2_TO_M2,
+    wasteFactor: wasteFactorFor(elementType, materialId, wasteFactors),
+    optional: false,
+    status: TAKEOFF_ITEM_STATUS.OK,
+    notes,
+  });
 }
 
-// --- Stringers (wangi) -------------------------------------------------------------------------
+function buildTreadItems(treadModels, config, wasteFactors) {
+  return treadModels.map((t) => buildTreadItem(t, config, wasteFactors));
+}
 
-const STRINGER_LABELS = Object.freeze({ outer: 'Wanga zewnętrzna', inner: 'Wanga wewnętrzna' });
+// --- Risers (podstopnie) — one item per RiserModel (per stepId), including multi-panel winder fans ---
 
-function buildStringerItems(stringerModels, config, wasteFactors) {
-  return ['outer', 'inner'].map((side) => {
-    const model = stringerModels[side];
-    const totalLengthMm = model.segments.reduce((sum, seg) => sum + seg.referenceLine.length, 0);
-    const areaMm2 = totalLengthMm * config.stringerHeight; // face area: length x board height
-    const volumeMm3 = areaMm2 * config.stringerThickness;
+function buildRiserItem(riser, config, wasteFactors) {
+  const heightMm = riser.elevation.top - riser.elevation.bottom;
+  let netAreaMm2 = 0;
+  for (const panel of riser.panels) netAreaMm2 += panel.width * heightMm;
+  const netVolumeMm3 = netAreaMm2 * riser.thickness;
 
+  // Each fan panel is already a flat rectangle (riserSolver.js) — stock == net at the
+  // per-panel level (no shape waste beyond ordinary sheet-layout loss, which wasteFactor
+  // already captures separately); a multi-panel riser's STOCK is simply the sum of its panels.
+  const notes = riser.panels.length > 1 ? [`Podstopień wielopanelowy (wachlarz, ${riser.panels.length} paneli) — każdy panel jest już płaskim prostokątem; stock = net na poziomie panelu.`] : [];
+
+  return createTakeoffItem({
+    itemId: `riser-${riser.stepId}`,
+    elementType: ELEMENT_TYPES.RISER,
+    sourceElementId: `riser:${riser.stepId}`,
+    material: RISER_MATERIAL_LABEL,
+    materialId: RISER_MATERIAL_ID,
+    quantity: 1,
+    unit: 'szt',
+    nominalDimensions: { panelCount: riser.panels.length, heightMm, thicknessMm: riser.thickness },
+    calculatedDimensions: { panelCount: riser.panels.length, heightMm, thicknessMm: riser.thickness, totalWidthMm: riser.panels.reduce((s, p) => s + p.width, 0) },
+    netVolume: netVolumeMm3 * MM3_TO_M3,
+    netArea: netAreaMm2 * MM2_TO_M2,
+    // Sheet material (plywood/MDF) is purchased and priced by AREA, never volume — stockVolume
+    // stays null so createTakeoffItem's wasteAdjustedQuantity picks the area path (see
+    // materialCatalog.js's note on RISER_MATERIAL_ID).
+    stockVolume: null,
+    stockArea: netAreaMm2 * MM2_TO_M2,
+    wasteFactor: wasteFactorFor(ELEMENT_TYPES.RISER, RISER_MATERIAL_ID, wasteFactors),
+    optional: true, // conditional on config.hasRiserBoards
+    status: TAKEOFF_ITEM_STATUS.OK,
+    notes,
+  });
+}
+
+function buildRiserItems(riserModels, config, wasteFactors) {
+  if (!config.hasRiserBoards || !riserModels || riserModels.length === 0) return [];
+  return riserModels.map((r) => buildRiserItem(r, config, wasteFactors));
+}
+
+// --- Stringers (wangi) — one item per physical board (= one StringerConstructionGeometry segment) ---
+
+function invalidStringerItem(side, segment, geo, config, materialId) {
+  return createTakeoffItem({
+    itemId: `stringer-${side}-${segment.id}`,
+    elementType: ELEMENT_TYPES.STRINGER,
+    sourceElementId: `stringer:${side}:${segment.id}`,
+    constructionType: segment.constructionType,
+    material: config.timberGrade,
+    materialId,
+    quantity: 1,
+    unit: 'szt',
+    nominalDimensions: {},
+    calculatedDimensions: {},
+    wasteFactor: 0,
+    optional: false,
+    status: TAKEOFF_ITEM_STATUS.INVALID,
+    diagnostics: geo.diagnostics,
+    notes: ['Geometria wangi jest nieprawidłowa (patrz diagnostics) — ilość i wymiary NIE zostały wyliczone, aby uniknąć wprowadzającej w błąd liczby.'],
+  });
+}
+
+function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  if (segment.treadBearings.length === 0) return null; // no physical board needed — nothing to take off
+  if (geo.diagnostics.some((d) => d.severity === 'ERROR')) return invalidStringerItem(side, segment, geo, config, materialId);
+
+  // NET: the actual polygon area of the solved contour (already accounts for the notched top
+  // on a 'cut' board, and for nothing extra on a 'closed' board — see stringerConstructionGeometry.js).
+  const netAreaMm2 = Math.abs(signedPolygonArea(geo.outerContour.map((p) => ({ x: p.u, y: p.v }))));
+  const netVolumeMm3 = netAreaMm2 * geo.thicknessMm;
+
+  // STOCK: the plain rectangular board this would actually be cut FROM — length spans the
+  // contour's own u-range (the board's physical length, unaffected by the vertical-elevation
+  // convention noted below); WIDTH is the DESIGN parameter (boardWidthMm), never re-derived
+  // from the contour's v-range, because v is WORLD ELEVATION (see note), not true
+  // perpendicular-to-pitch board width — re-deriving it from v would conflate slope-driven
+  // elevation gain with cross-sectional board width.
+  const { lengthMm } = boundingRectUV(geo.outerContour);
+  const stockAreaMm2 = lengthMm * geo.boardWidthMm;
+  const stockVolumeMm3 = stockAreaMm2 * geo.thicknessMm;
+
+  const notes = [
+    'UWAGA (odziedziczona konwencja modelu geometrii, nieskorygowana w tym etapie): "v" w konturze wangi to ŚWIATOWA WYSOKOŚĆ (pionowa), nie odległość prostopadła do linii pochylenia — realna "szerokość deski mierzona prostopadle" różni się od tej pionowej przez czynnik cos(kąta biegu). Wymiar STOCK.widthMm celowo bierze wprost boardWidthMm (parametr projektowy), a NIE różnicę v konturu, żeby uniknąć zafałszowania przez tę konwencję. Patrz docs/STRINGER_CONSTRUCTION_SPEC.md.',
+  ];
+  if (geo.diagnostics.length > 0) notes.push(`Diagnostyka konstrukcyjna: ${geo.diagnostics.map((d) => d.ruleId).join(', ')}`);
+
+  return createTakeoffItem({
+    itemId: `stringer-${side}-${segment.id}`,
+    elementType: ELEMENT_TYPES.STRINGER,
+    sourceElementId: `stringer:${side}:${segment.id}`,
+    constructionType: geo.constructionType,
+    material: config.timberGrade,
+    materialId,
+    quantity: 1,
+    unit: 'szt',
+    nominalDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm, netAreaMm2 },
+    calculatedDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm },
+    netVolume: netVolumeMm3 * MM3_TO_M3,
+    netArea: netAreaMm2 * MM2_TO_M2,
+    stockVolume: stockVolumeMm3 * MM3_TO_M3,
+    stockArea: stockAreaMm2 * MM2_TO_M2,
+    wasteFactor: wasteFactorFor(ELEMENT_TYPES.STRINGER, materialId, wasteFactors),
+    optional: false,
+    status: TAKEOFF_ITEM_STATUS.OK,
+    diagnostics: geo.diagnostics.filter((d) => d.severity === 'WARNING'),
+    notes,
+  });
+}
+
+// Cleats are separate, genuinely distinct physical pieces (small support blocks) — one item
+// PER TREAD, never merged into the board item, and never created when cleats[] is empty
+// (config.stringerCleatsEnabled === false, or constructionType !== 'cut' — see
+// stringerConstructionGeometry.js). "If cleats are disabled: do not create them as hidden or
+// assumed material" — an empty cleats[] on the model produces zero items here, truthfully.
+function buildCleatItems(side, segment, geo, config, wasteFactors) {
+  if (!geo.cleats || geo.cleats.length === 0) return [];
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  return geo.cleats.map((cleat) => {
+    const netVolumeMm3 = (cleat.uEnd - cleat.uStart) * cleat.height * cleat.thickness;
     return createTakeoffItem({
-      itemId: `stringer-${side}`,
-      type: 'stringer',
-      subtype: side,
-      label: STRINGER_LABELS[side],
-      dimensions: {
-        totalLengthMm,
-        heightMm: config.stringerHeight,
-        thicknessMm: config.stringerThickness,
-        boardCount: model.segments.length,
-      },
-      quantity: model.segments.length,
-      quantityUnit: 'szt',
-      netArea: areaMm2 * MM2_TO_M2,
-      netVolume: volumeMm3 * MM3_TO_M3,
+      itemId: `stringer-${side}-${segment.id}-cleat-${cleat.treadIndex}`,
+      elementType: ELEMENT_TYPES.STRINGER_CLEAT,
+      sourceElementId: `stringer:${side}:${segment.id}:cleat-${cleat.treadIndex}`,
+      constructionType: geo.constructionType,
       material: config.timberGrade,
-      wasteFactor: wasteFactorFor('stringer', wasteFactors),
-      optional: false,
+      materialId,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { lengthMm: cleat.uEnd - cleat.uStart, heightMm: cleat.height, thicknessMm: cleat.thickness },
+      calculatedDimensions: { lengthMm: cleat.uEnd - cleat.uStart, heightMm: cleat.height, thicknessMm: cleat.thickness },
+      netVolume: netVolumeMm3 * MM3_TO_M3,
+      netArea: 0,
+      stockVolume: netVolumeMm3 * MM3_TO_M3,
+      stockArea: 0,
+      wasteFactor: wasteFactorFor(ELEMENT_TYPES.STRINGER_CLEAT, materialId, wasteFactors),
+      optional: true,
+      status: TAKEOFF_ITEM_STATUS.OK,
     });
   });
 }
 
-// --- Risers (podstopnie) — optional: only produced when hasRiserBoards is on -------------------
-
-function buildRiserItems(riserModels, config, wasteFactors) {
-  if (!config.hasRiserBoards || !riserModels || riserModels.length === 0) return [];
-
-  let panelCount = 0;
-  let areaMm2 = 0;
-  let volumeMm3 = 0;
-  let widthSumMm = 0;
-  let heightSumMm = 0;
-
-  for (const r of riserModels) {
-    const heightMm = r.elevation.top - r.elevation.bottom;
-    for (const panel of r.panels) {
-      panelCount += 1;
-      const panelAreaMm2 = panel.width * heightMm;
-      areaMm2 += panelAreaMm2;
-      volumeMm3 += panelAreaMm2 * r.thickness;
-      widthSumMm += panel.width;
-      heightSumMm += heightMm;
-    }
-  }
-  if (panelCount === 0) return [];
-
-  return [
-    createTakeoffItem({
-      itemId: 'riser-board',
-      type: 'riser',
-      subtype: 'riser-board',
-      label: 'Podstopnie',
-      dimensions: {
-        avgWidthMm: widthSumMm / panelCount,
-        avgHeightMm: heightSumMm / panelCount,
-        thicknessMm: riserModels[0].thickness,
-      },
-      quantity: panelCount,
-      quantityUnit: 'szt',
-      netArea: areaMm2 * MM2_TO_M2,
-      netVolume: volumeMm3 * MM3_TO_M3,
-      material: 'Sklejka/płyta MDF', // panel material, not structural timber — distinct from treads/stringers/posts
-      wasteFactor: wasteFactorFor('riser', wasteFactors),
-      optional: true, // conditional on config.hasRiserBoards — "opcjonalny element konstrukcyjny"
-    }),
-  ];
+// Housings are informational — a FEATURE of the stringer board, never a separate purchasable
+// item ("do not treat a housing as a separate board"). `netVolume` here reports the material
+// REMOVED by the housing (useful for waste/scrap tracking), never a purchase quantity —
+// materialId is null so pricing.js correctly leaves it unpriced.
+function buildHousingItems(side, segment, geo) {
+  if (!geo.housings || geo.housings.length === 0) return [];
+  return geo.housings.map((housing) => {
+    const removedVolumeMm3 = (housing.uEnd - housing.uStart) * (housing.topV - housing.bottomV) * housing.depth;
+    return createTakeoffItem({
+      itemId: `stringer-${side}-${segment.id}-housing-${housing.treadIndex}`,
+      elementType: ELEMENT_TYPES.STRINGER_HOUSING,
+      sourceElementId: `stringer:${side}:${segment.id}:housing-${housing.treadIndex}`,
+      constructionType: geo.constructionType,
+      material: 'n/a — cecha wangi, nie osobny materiał',
+      materialId: null,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { lengthMm: housing.uEnd - housing.uStart, depthMm: housing.depth },
+      calculatedDimensions: { lengthMm: housing.uEnd - housing.uStart, depthMm: housing.depth },
+      netVolume: removedVolumeMm3 * MM3_TO_M3, // material REMOVED, not purchased
+      netArea: 0,
+      stockVolume: null,
+      stockArea: null,
+      wasteFactor: 0,
+      optional: true,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: ['Informacyjne — wręg jest cechą geometrii wangi, nie osobnym elementem zakupowym. netVolume = materiał usunięty (do śledzenia odpadu), nie ilość do zakupu.'],
+    });
+  });
 }
 
-// --- Posts (słupy) — newel posts always present; corner posts optional -------------------------
+function buildStringerSideItems(side, stringerModel, constructionGeometries, config, wasteFactors) {
+  const items = [];
+  stringerModel.segments.forEach((segment, i) => {
+    const geo = constructionGeometries[i];
+    const board = buildStringerBoardItem(side, segment, geo, config, wasteFactors);
+    if (board) items.push(board);
+    if (board && board.status === TAKEOFF_ITEM_STATUS.OK) {
+      items.push(...buildCleatItems(side, segment, geo, config, wasteFactors));
+      items.push(...buildHousingItems(side, segment, geo));
+    }
+  });
+  return items;
+}
 
-function postGroupItem(itemId, subtype, label, posts, config, wasteFactors, optional) {
-  if (posts.length === 0) return null;
-  const totalVolumeMm3 = posts.reduce((sum, p) => sum + p.size * p.size * (p.elevation.top - p.elevation.bottom), 0);
-  const avgHeightMm = posts.reduce((sum, p) => sum + (p.elevation.top - p.elevation.bottom), 0) / posts.length;
+// --- Posts (słupy) — one item per physical post -------------------------------------------------
 
+function buildPostItem(post, config, wasteFactors) {
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  const heightMm = post.elevation.top - post.elevation.bottom;
+  const netVolumeMm3 = post.size * post.size * heightMm;
+  const label = { start: 'Słupek początkowy', end: 'Słupek końcowy', corner: 'Słup narożny (konstrukcyjny)' }[post.kind] || post.kind;
   return createTakeoffItem({
-    itemId,
-    type: 'post',
-    subtype,
-    label,
-    dimensions: { crossSectionMm: config.postSize, avgHeightMm },
-    quantity: posts.length,
-    quantityUnit: 'szt',
-    netArea: 0,
-    netVolume: totalVolumeMm3 * MM3_TO_M3,
+    itemId: `post-${post.postId}`,
+    elementType: ELEMENT_TYPES.POST,
+    sourceElementId: `post:${post.postId}`,
     material: config.timberGrade,
-    wasteFactor: wasteFactorFor('post', wasteFactors),
-    optional,
+    materialId,
+    quantity: 1,
+    unit: 'szt',
+    nominalDimensions: { crossSectionMm: post.size, heightMm },
+    calculatedDimensions: { crossSectionMm: post.size, heightMm },
+    netVolume: netVolumeMm3 * MM3_TO_M3,
+    netArea: 0,
+    stockVolume: netVolumeMm3 * MM3_TO_M3, // already a plain rectangular prism — net === stock
+    stockArea: 0,
+    wasteFactor: wasteFactorFor(ELEMENT_TYPES.POST, materialId, wasteFactors),
+    optional: post.kind === 'corner', // corner posts are conditional on config.hasCornerPost
+    status: TAKEOFF_ITEM_STATUS.OK,
+    notes: [label],
   });
 }
 
 function buildPostItems(postModels, config, wasteFactors) {
-  const newels = postModels.filter((p) => p.kind === 'start' || p.kind === 'end');
-  const corners = postModels.filter((p) => p.kind === 'corner');
-  return [
-    postGroupItem('post-newel', 'newel', 'Słupki początkowy/końcowy', newels, config, wasteFactors, false),
-    // Corner posts only exist when config.hasCornerPost is on (see postSolver.js) — "opcjonalny
-    // element konstrukcyjny": when the config disables them, postModels simply contains none,
-    // so this item is naturally absent rather than reported with quantity 0.
-    postGroupItem('post-corner', 'corner', 'Słupy narożne (konstrukcyjne)', corners, config, wasteFactors, true),
-  ].filter(Boolean);
+  return postModels.map((p) => buildPostItem(p, config, wasteFactors));
 }
 
 // --- Aggregator ----------------------------------------------------------------------------
@@ -191,18 +297,19 @@ function buildPostItems(postModels, config, wasteFactors) {
  * @param {import('../geometry/treadSolver.js').TreadModel[]} models.treadModels
  * @param {import('../geometry/riserSolver.js').RiserModel[]} models.riserModels
  * @param {{outer, inner}} models.stringerModels
+ * @param {{outer: import('../geometry/stringerModel.js').StringerSegmentConstructionGeometry[], inner: [...]}} models.stringerConstruction
  * @param {import('../geometry/postSolver.js').PostModel[]} models.postModels
- * @param {Object} config  Full config (post riserHeight merge) — read-only, used for material/
- *   thickness/hasRiserBoards, never mutated.
- * @param {{wasteFactors?: Partial<import('./wasteFactors.js').DEFAULT_WASTE_FACTORS>}} [options]
- * @returns {import('./takeoffTypes.js').TakeoffItem[]}  Cost fields are all null — see pricing.js.
+ * @param {Object} config  Full config (post riserHeight merge) — read-only, never mutated.
+ * @param {{wasteFactors?: Object}} [options]
+ * @returns {import('./takeoffTypes.js').MaterialTakeoffItem[]}  Cost fields are all null — see pricing.js.
  */
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, postModels }, config, options = {}) {
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
     ...buildTreadItems(treadModels, config, wasteFactors),
-    ...buildStringerItems(stringerModels, config, wasteFactors),
     ...buildRiserItems(riserModels, config, wasteFactors),
+    ...buildStringerSideItems('outer', stringerModels.outer, stringerConstruction.outer, config, wasteFactors),
+    ...buildStringerSideItems('inner', stringerModels.inner, stringerConstruction.inner, config, wasteFactors),
     ...buildPostItems(postModels, config, wasteFactors),
   ];
 }
