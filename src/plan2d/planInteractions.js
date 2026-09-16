@@ -16,6 +16,54 @@ function snapMm(v) {
   return Math.round(v / SNAP_MM) * SNAP_MM;
 }
 
+// ALIGNMENT SNAP ("smart guides") — while dragging a corner, if it comes within
+// `ALIGN_TOLERANCE_MM` of sharing an X or Y coordinate with any OTHER existing point on the
+// plan, snap to that exact coordinate — so a second corner can be lined up EXACTLY with a
+// first one instead of "by eye". Independent per axis: a point can snap on X, on Y, on both,
+// or on neither. Grid snap (above) still applies afterward on whichever axis didn't align, so
+// the two behaviors compose rather than fight each other.
+const ALIGN_TOLERANCE_MM = 60;
+
+function snapToAlignment(point, referencePoints) {
+  let x = point.x;
+  let y = point.y;
+  let guideX = null;
+  let guideY = null;
+  let bestDx = ALIGN_TOLERANCE_MM;
+  let bestDy = ALIGN_TOLERANCE_MM;
+  for (const ref of referencePoints || []) {
+    const dx = Math.abs(ref.x - point.x);
+    if (dx < bestDx) {
+      bestDx = dx;
+      x = ref.x;
+      guideX = ref.x;
+    }
+    const dy = Math.abs(ref.y - point.y);
+    if (dy < bestDy) {
+      bestDy = dy;
+      y = ref.y;
+      guideY = ref.y;
+    }
+  }
+  return { point: { x, y }, guideX, guideY };
+}
+
+// Combines alignment snap (exact match against another real point, wins when close enough)
+// with grid snap (a coarse fallback on whichever axis alignment didn't already claim) — so a
+// drag that's near another point locks onto it precisely, and one that isn't still lands on a
+// predictable 5mm grid instead of an arbitrary pixel-derived coordinate.
+function snapPoint(raw, referencePoints) {
+  const { point: aligned, guideX, guideY } = snapToAlignment(raw, referencePoints);
+  return {
+    point: {
+      x: guideX !== null ? aligned.x : snapMm(aligned.x),
+      y: guideY !== null ? aligned.y : snapMm(aligned.y),
+    },
+    guideX,
+    guideY,
+  };
+}
+
 function screenToPlanPoint(svg, clientX, clientY) {
   const pt = svg.createSVGPoint();
   pt.x = clientX;
@@ -47,9 +95,32 @@ function midpoint(a, b) {
  * @param {(boundaryIndex: number) => void} opts.onEdgeContextMenu  Right-click on a handle —
  *   caller resets that boundary's override.
  * @param {(stepIndex: number|null) => void} opts.onStepClick  null = clicked empty background.
+ * @param {() => {x:number,y:number}[]} [opts.getSnapPoints]  Optional — every OTHER point on
+ *   the current plan a dragged corner may snap into exact alignment with (see snapPoint above).
+ *   Omit to fall back to grid-only snapping.
+ * @param {(treadIndex: number, overhang: {side, offsetMm}) => void} [opts.onOverhangDragMove]
+ *   Live preview while dragging the new per-tread overhang handle (`.overhang-handle`, see
+ *   plan2dRenderer.js's overhangHandlesXML) — same "preview now, commit on release" contract
+ *   as onEdgeDragMove/onEdgeDragEnd.
+ * @param {(treadIndex: number, overhang) => void} [opts.onOverhangDragEnd]
+ * @param {(treadIndex: number, side: 'inner'|'outer') => void} [opts.onOverhangContextMenu]
+ *   Right-click on an overhang handle — caller resets that tread's overhang on that side.
  */
 export function attachPlanInteractions(opts) {
-  const { panelEl, getViewport, setViewport, getPanelSize, onEdgeDragMove, onEdgeDragEnd, onEdgeContextMenu, onStepClick } = opts;
+  const {
+    panelEl,
+    getViewport,
+    setViewport,
+    getPanelSize,
+    onEdgeDragMove,
+    onEdgeDragEnd,
+    onEdgeContextMenu,
+    onStepClick,
+    getSnapPoints,
+    onOverhangDragMove,
+    onOverhangDragEnd,
+    onOverhangContextMenu,
+  } = opts;
 
   let spacePressed = false;
   let panState = null; // { pointerId, lastX, lastY }
@@ -121,7 +192,33 @@ export function attachPlanInteractions(opts) {
       if (!svg) return;
       handle.setPointerCapture(e.pointerId);
       handle.classList.add('dragging');
-      dragState = { pointerId: e.pointerId, boundaryIndex: Number(handle.dataset.boundary), endpoint: handle.dataset.endpoint, svg, handle, currentPoint: null };
+      dragState = { pointerId: e.pointerId, kind: 'edge', boundaryIndex: Number(handle.dataset.boundary), endpoint: handle.dataset.endpoint, svg, handle, currentPoint: null };
+      e.preventDefault();
+      return;
+    }
+
+    const overhangHandle = e.target.closest('.overhang-handle');
+    if (overhangHandle) {
+      const svg = getSvg();
+      if (!svg) return;
+      overhangHandle.setPointerCapture(e.pointerId);
+      overhangHandle.classList.add('dragging');
+      // anchor/dir describe the ONE-DIMENSIONAL axis this handle can move along (the edge's
+      // own inner<->outer direction) — see plan2dRenderer.js's overhangHandlesXML for how
+      // they're derived (the NOMINAL, pre-overhang midpoint and direction, so the offset this
+      // computes is always an absolute mm value, not relative to wherever the handle currently
+      // happens to be rendered).
+      dragState = {
+        pointerId: e.pointerId,
+        kind: 'overhang',
+        treadIndex: Number(overhangHandle.dataset.tread),
+        side: overhangHandle.dataset.side,
+        anchor: { x: Number(overhangHandle.dataset.anchorX), y: Number(overhangHandle.dataset.anchorY) },
+        dir: { x: Number(overhangHandle.dataset.dirX), y: Number(overhangHandle.dataset.dirY) },
+        svg,
+        handle: overhangHandle,
+        currentOffsetMm: null,
+      };
       e.preventDefault();
       return;
     }
@@ -168,13 +265,35 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
-    if (dragState && e.pointerId === dragState.pointerId) {
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       const raw = screenToPlanPoint(dragState.svg, e.clientX, e.clientY);
-      const p = { x: snapMm(raw.x), y: snapMm(raw.y) };
+      const references = (getSnapPoints ? getSnapPoints() : []).filter((ref) => distance(ref, raw) > 1e-6);
+      const { point: p } = snapPoint(raw, references);
       dragState.currentPoint = p;
       dragState.handle.setAttribute('cx', p.x);
       dragState.handle.setAttribute('cy', -p.y);
       onEdgeDragMove(dragState.boundaryIndex, { movedEndpoint: dragState.endpoint, point: p });
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'overhang') {
+      const raw = screenToPlanPoint(dragState.svg, e.clientX, e.clientY);
+      // Project the raw drag point onto the handle's own 1D axis (dot product with its unit
+      // direction) — this is the ONLY thing that can change here, since an overhang has no
+      // meaningful second degree of freedom. Grid-snapped to the same 5mm step as a corner
+      // drag; alignment snap doesn't apply to a 1D scalar the same way, so it's skipped here.
+      const rawOffsetMm = (raw.x - dragState.anchor.x) * dragState.dir.x + (raw.y - dragState.anchor.y) * dragState.dir.y;
+      const offsetMm = snapMm(rawOffsetMm);
+      dragState.currentOffsetMm = offsetMm;
+      // Preserve the handle's own 45° rotation (set once at render time, pivoting on its own
+      // NOMINAL anchor position) and prepend a translate for the live offset — overwriting
+      // `transform` outright would silently drop the rotation and leave the diamond mis-shapen.
+      const dx = dragState.dir.x * offsetMm;
+      const dy = dragState.dir.y * offsetMm;
+      const anchorSvgX = dragState.anchor.x;
+      const anchorSvgY = -dragState.anchor.y;
+      dragState.handle.setAttribute('transform', `translate(${dx}, ${-dy}) rotate(45 ${anchorSvgX} ${anchorSvgY})`);
+      if (onOverhangDragMove) onOverhangDragMove(dragState.treadIndex, { side: dragState.side, offsetMm });
     }
   });
 
@@ -187,11 +306,19 @@ export function attachPlanInteractions(opts) {
       panelEl.classList.remove('panning');
     }
 
-    if (dragState && e.pointerId === dragState.pointerId) {
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       dragState.handle.classList.remove('dragging');
       const { boundaryIndex, endpoint, currentPoint } = dragState;
       dragState = null;
       if (currentPoint) onEdgeDragEnd(boundaryIndex, { movedEndpoint: endpoint, point: currentPoint });
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'overhang') {
+      dragState.handle.classList.remove('dragging');
+      const { treadIndex, side, currentOffsetMm } = dragState;
+      dragState = null;
+      if (currentOffsetMm !== null && onOverhangDragEnd) onOverhangDragEnd(treadIndex, { side, offsetMm: currentOffsetMm });
       return;
     }
 
@@ -207,8 +334,15 @@ export function attachPlanInteractions(opts) {
 
   panelEl.addEventListener('contextmenu', (e) => {
     const handle = e.target.closest('.edge-handle');
-    if (!handle) return;
-    e.preventDefault();
-    onEdgeContextMenu(Number(handle.dataset.boundary));
+    if (handle) {
+      e.preventDefault();
+      onEdgeContextMenu(Number(handle.dataset.boundary));
+      return;
+    }
+    const overhangHandle = e.target.closest('.overhang-handle');
+    if (overhangHandle && onOverhangContextMenu) {
+      e.preventDefault();
+      onOverhangContextMenu(Number(overhangHandle.dataset.tread), overhangHandle.dataset.side);
+    }
   });
 }

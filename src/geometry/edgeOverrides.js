@@ -1,4 +1,4 @@
-import { pointsEqual, signedPolygonArea } from './pathUtils.js';
+import { pointsEqual, signedPolygonArea, normalizeVector } from './pathUtils.js';
 
 // Każda z (numTreads + 1) granic między stopniami jest adresowana "indeksem granicy":
 // 0 = krawędź czołowa pierwszego stopnia (jego frontEdge), N = krawędź tylna ostatniego
@@ -115,6 +115,61 @@ export function applyManualEdgeOverrides(treads, overrides) {
     if (broken) {
       for (const tread of affected) retargetPoint(tread, newPoint, oldPoint);
       console.warn(`Pominięto ręczną edycję krawędzi ${boundaryIndex}: wynikowy kształt stopnia byłby niepoprawny.`);
+    }
+  }
+
+  return result;
+}
+
+// Przesuwa JEDEN róg stopnia (na krawędzi `edgeKey`, po stronie `sideIdx`) wzdłuż WŁASNEGO
+// lokalnego kierunku tej krawędzi (od zawiasu — drugiego końca tej samej krawędzi — w stronę
+// przesuwanego rogu) o `offsetMm`. To NIE jest projekcja na globalną oś biegu — dla stopnia
+// zabiegowego front/back mają własne, niekoniecznie równoległe kierunki (patrz winderInfo), a
+// ten kierunek zawsze poprawnie odzwierciedla "na zewnątrz od duszy" dla TEJ konkretnej
+// krawędzi. Używa retargetPoint scoped do JEDNEGO stopnia — bez dotykania sąsiada, mimo że ten
+// sam punkt (przed przesunięciem) mógł być z nim współdzielony.
+function shiftEdgeCorner(tread, edgeKey, sideIdx, offsetMm) {
+  const edge = tread[edgeKey];
+  const hinge = edge[1 - sideIdx];
+  const point = edge[sideIdx];
+  const dir = normalizeVector({ x: point.x - hinge.x, y: point.y - hinge.y });
+  const newPoint = { x: point.x + dir.x * offsetMm, y: point.y + dir.y * offsetMm };
+  retargetPoint(tread, point, newPoint);
+  return { oldPoint: point, newPoint };
+}
+
+// Ręczne "wysunięcie" bocznej krawędzi POJEDYNCZEGO stopnia — patrz schema.js/
+// config.manualTreadOverhangs. W przeciwieństwie do applyManualEdgeOverrides powyżej, NIGDY
+// nie dotyka sąsiedniego stopnia: przesuwa WŁASNY front-róg i back-róg danego stopnia po
+// stronie `side`, niezależnie od tego, że przed edycją mogły być identyczne z rogiem sąsiada
+// (współdzielona granica). Wanga (innerChain/outerChain) i tak nigdy nie widzi tej edycji —
+// dokładnie ta sama zasada co przy manualEdgeOverrides (patrz retargetPoint powyżej) — więc
+// stopień może faktycznie wystawać poza wangę bez żadnej dodatkowej logiki po tamtej stronie.
+// Zwraca nową tablicę stopni; nie mutuje `treads` przekazanego na wejściu.
+export function applyTreadOverhangs(treads, overhangs) {
+  const keys = overhangs ? Object.keys(overhangs) : [];
+  if (keys.length === 0) return treads;
+
+  const result = treads.map(cloneTread);
+
+  for (const key of keys) {
+    const treadIndex = Number(key);
+    const overhang = overhangs[key];
+    if (!overhang || !Number.isInteger(treadIndex) || treadIndex < 0 || treadIndex >= result.length) continue;
+
+    const tread = result[treadIndex];
+    if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
+    const sideIdx = overhang.side === 'inner' ? 0 : 1;
+
+    const before = signedArea(tread);
+    const front = shiftEdgeCorner(tread, 'frontEdge', sideIdx, overhang.offsetMm);
+    const back = shiftEdgeCorner(tread, 'backEdge', sideIdx, overhang.offsetMm);
+    const after = signedArea(tread);
+
+    if (Math.abs(after) < 1 || Math.sign(after) !== Math.sign(before)) {
+      retargetPoint(tread, front.newPoint, front.oldPoint);
+      retargetPoint(tread, back.newPoint, back.oldPoint);
+      console.warn(`Pominięto wysunięcie krawędzi stopnia ${treadIndex}: wynikowy kształt byłby niepoprawny.`);
     }
   }
 

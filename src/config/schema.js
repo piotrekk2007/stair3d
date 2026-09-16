@@ -49,6 +49,17 @@ export function createDefaultConfig() {
     // zawsze bierzemy z aktualnej geometrii wzorcowej, więc przetrwa zmianę innych parametrów.
     manualEdgeOverrides: {},
 
+    // Ręczne "wysunięcie" bocznej krawędzi POJEDYNCZEGO stopnia (np. stopień ma wystawać poza
+    // wangę) — CELOWO OSOBNE od manualEdgeOverrides powyżej: tamto porusza punkt WSPÓLNY dla
+    // dwóch sąsiednich stopni (zachowując ciągłość biegu), to porusza WYŁĄCZNIE własny front/
+    // back-róg JEDNEGO stopnia po stronie 'inner'/'outer', nigdy nie dotykając sąsiada — patrz
+    // src/geometry/edgeOverrides.js `applyTreadOverhangs`. Klucz to indeks stopnia. Wartość:
+    // { side: 'inner'|'outer', offsetMm: number } — offsetMm > 0 = dalej od duszy (wystaje),
+    // < 0 = bliżej duszy (cofnięte). Wanga NIGDY tego nie widzi (buduje się z innerChain/
+    // outerChain, tak samo nietkniętych jak przy manualEdgeOverrides) — stopień może więc
+    // faktycznie wystawać poza wangę.
+    manualTreadOverhangs: {},
+
     treadThickness: 40, // mm
     nosing: 25, // mm, wysunięcie noska stopnia
 

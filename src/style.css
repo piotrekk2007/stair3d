@@ -81,6 +81,19 @@ html, body {
   cursor: grabbing;
 }
 
+.overhang-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.overhang-handle:hover {
+  fill: #fff3e0;
+}
+
+.overhang-handle.dragging {
+  cursor: grabbing;
+}
+
 #plan2d-toolbar {
   position: absolute;
   top: 12px;

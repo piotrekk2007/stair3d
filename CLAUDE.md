@@ -263,6 +263,51 @@ browser-verified bug from an earlier pass, fixed in the consolidation pass — s
 Edge dragging still only ever writes to `config.manualEdgeOverrides` (never a Three.js mesh);
 undo history is committed on `pointerup`/`onFinishChange`, not on every live-drag tick.
 
+## Per-tread edge overhang + drag snapping (implemented)
+
+A second, deliberately separate manual-edit mechanism from the shared-corner
+`config.manualEdgeOverrides` above: `config.manualTreadOverhangs` (`src/config/schema.js`) lets
+one tread's own outer or inner edge be shifted sideways (e.g. "let this tread stick out 30mm
+past the wanga") **without moving its neighbor's corner**, even though the two treads start
+from an identical shared point. Keyed by tread index, value `{ side: 'inner'|'outer',
+offsetMm }` (positive = away from the dusza/overhanging, negative = recessed).
+
+- **`src/geometry/edgeOverrides.js`**'s `applyTreadOverhangs(treads, overhangs)` is the new
+  geometric primitive, reusing the existing `retargetPoint()` helper but scoped to a SINGLE
+  tread's `outline`/`frontEdge`/`backEdge` (never a neighbor) — `shiftEdgeCorner()` moves one
+  edge's own corner along that edge's own hinge→corner direction by `offsetMm`. It deliberately
+  never touches `innerChain`/`outerChain` (the only fields `stringerSolver.js` reads), so the
+  wanga's reference line is provably unaffected and a tread can genuinely overhang past it with
+  no stringer-side logic needed — locked in by a test comparing
+  `StringerModel.segments[0].referenceLine` before/after (`deepEqual`). A resulting
+  self-inverting/degenerate tread shape is rejected (reverted, `console.warn`), same pattern as
+  `applyManualEdgeOverrides`. Wired into `buildPlanLayout()` right after
+  `applyManualEdgeOverrides`; the two mechanisms compose without interfering (tested). Because
+  it only edits the fields `TreadModel`'s nominal/final split already tracks, riser boards
+  correctly follow an overhung edge with no additional code (same nominal/final machinery as
+  `manualEdgeOverrides`). Tests:
+  [src/geometry/__tests__/edgeOverrides.test.js](src/geometry/__tests__/edgeOverrides.test.js).
+- **Input**: a new draggable diamond handle per side (`.overhang-handle` in
+  `plan2dRenderer.js`'s `overhangHandlesXML()`, rendered only for the currently-selected tread),
+  colored like the existing edge handles (orange once manually set, teal otherwise). Its
+  drag has exactly one degree of freedom — distance along the edge's own inner↔outer axis —
+  computed in `planInteractions.js` via a dot-product projection of the pointer position onto a
+  `{anchor, dir}` pair the renderer derives from the tread's CURRENT (possibly already-offset)
+  corners, algebraically recovering the pre-offset anchor. `main.js` wires
+  `onOverhangDragMove`/`onOverhangDragEnd` (write `config.manualTreadOverhangs[treadIndex]`,
+  live-preview `rebuild()` vs. committed `rebuild()+commitHistory()` — same pattern as edge
+  drag) and `onOverhangContextMenu` (right-click deletes that tread's entry). Config reset
+  clears both `manualEdgeOverrides` and `manualTreadOverhangs` together.
+- **Snapping**: dragging either an edge handle or an overhang handle now also snaps to
+  alignment with any other boundary point on the plan (`planInteractions.js`'s
+  `snapToAlignment()`/`snapPoint()`, `ALIGN_TOLERANCE_MM = 60`), independently per axis, falling
+  back to the existing grid snap (`snapMm`) on whichever axis didn't align — so two corners can
+  be matched exactly without eyeballing it. `main.js` supplies `getSnapPoints()`, returning
+  every tread's `frontEdge`/`backEdge` inner+outer points; the dragged point itself is filtered
+  out by `planInteractions.js`, not by the supplier. No visual "smart guide" line is drawn yet
+  showing why a point snapped — the snapping itself works, but that visual feedback is a
+  separate, not-yet-requested follow-up.
+
 ## Winder riser fix (implemented)
 
 `planLayout.js`'s `buildTurnLocal` attaches a `tread.winderInfo` object to every winder

@@ -134,6 +134,49 @@ function stepBoundariesXML(planLayout, overrides) {
   return `<g id="step-boundaries-layer">${xml}</g>`;
 }
 
+// One diamond handle per side (inner/outer) of the SELECTED tread only — dragging it shifts
+// THAT tread's own edge on that side, independent of its neighbors (see
+// src/geometry/edgeOverrides.js's applyTreadOverhangs). Positioned at the midpoint between the
+// tread's own front/back corner on that side; `data-anchor-*`/`data-dir-*` encode the NOMINAL
+// (pre-overhang) midpoint and the edge's own unit direction, so planInteractions.js can turn a
+// 2D drag into the single scalar offsetMm this feature actually has (see its own header).
+function overhangHandlesXML(planLayout, overhangs, selectedStepIndex) {
+  if (selectedStepIndex === null || selectedStepIndex === undefined) return '';
+  const tread = planLayout.treads.find((t) => t.index === selectedStepIndex);
+  if (!tread || !tread.frontEdge?.length || !tread.backEdge?.length) return '';
+
+  let xml = '';
+  for (const [side, sideIdx] of [
+    ['inner', 0],
+    ['outer', 1],
+  ]) {
+    const front = tread.frontEdge[sideIdx];
+    const back = tread.backEdge[sideIdx];
+    const frontHinge = tread.frontEdge[1 - sideIdx];
+    const dx = front.x - frontHinge.x;
+    const dy = front.y - frontHinge.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const dir = { x: dx / len, y: dy / len };
+
+    const current = overhangs?.[tread.index]?.side === side ? overhangs[tread.index].offsetMm : 0;
+    const mid = { x: (front.x + back.x) / 2, y: (front.y + back.y) / 2 };
+    // Recover the NOMINAL anchor by undoing the currently-applied offset — see
+    // planInteractions.js's pointerdown handler for why this must be the pre-offset point.
+    const anchor = { x: mid.x - dir.x * current, y: mid.y - dir.y * current };
+
+    const isManual = !!(overhangs && overhangs[tread.index]?.side === side);
+    const color = isManual ? '#e08214' : '#2a9d8f';
+    xml += `
+      <rect class="overhang-handle" data-tread="${tread.index}" data-side="${side}"
+            data-anchor-x="${fmt(anchor.x)}" data-anchor-y="${fmt(anchor.y)}"
+            data-dir-x="${dir.x}" data-dir-y="${dir.y}"
+            x="${fmt(mid.x - 45)}" y="${fmt(-mid.y - 45)}" width="90" height="90"
+            fill="#fff" stroke="${color}" stroke-width="10"
+            transform="rotate(45 ${fmt(mid.x)} ${fmt(-mid.y)})" />`;
+  }
+  return `<g id="overhang-edit-layer">${xml}</g>`;
+}
+
 function editHandlesXML(planLayout, overrides) {
   const treads = planLayout.treads;
   const n = treads.length;
@@ -258,6 +301,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
   const stepBoundariesXMLStr = layers.stepBoundaries || editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
   const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides) : '';
+  const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
     <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
@@ -275,6 +319,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${legendXML}
     ${stepBoundariesXMLStr}
     ${editXML}
+    ${overhangXML}
   </svg>`;
 }
 

@@ -255,8 +255,24 @@ function handleViewChange(key, value) {
 
 function handleResetEdgeOverrides() {
   config.manualEdgeOverrides = {};
+  config.manualTreadOverhangs = {};
   rebuild();
   commitHistory();
+}
+
+// Zbiera wszystkie punkty graniczne (front/back, wewnętrzny+zewnętrzny) obecnego planu, do
+// przyciągania "do wyrównania" podczas przeciągania uchwytu — patrz planInteractions.js
+// snapToAlignment()/snapPoint(), które same odfiltrowują punkt aktualnie przeciągany.
+function getSnapPoints() {
+  if (!currentPlanLayout) return [];
+  const points = [];
+  for (const tread of currentPlanLayout.treads) {
+    for (const edge of [tread.frontEdge, tread.backEdge]) {
+      if (!edge) continue;
+      for (const p of edge) points.push(p);
+    }
+  }
+  return points;
 }
 
 function handleReset() {
@@ -419,6 +435,23 @@ attachPlanInteractions({
   onEdgeContextMenu: (boundaryIndex) => {
     if (config.manualEdgeOverrides[boundaryIndex]) {
       delete config.manualEdgeOverrides[boundaryIndex];
+      rebuild();
+      commitHistory();
+    }
+  },
+  getSnapPoints,
+  onOverhangDragMove: (treadIndex, overhang) => {
+    config.manualTreadOverhangs[treadIndex] = overhang;
+    rebuild(); // podgląd na żywo — BEZ wpisu do historii
+  },
+  onOverhangDragEnd: (treadIndex, overhang) => {
+    config.manualTreadOverhangs[treadIndex] = overhang;
+    rebuild();
+    commitHistory();
+  },
+  onOverhangContextMenu: (treadIndex, side) => {
+    if (config.manualTreadOverhangs[treadIndex]?.side === side) {
+      delete config.manualTreadOverhangs[treadIndex];
       rebuild();
       commitHistory();
     }

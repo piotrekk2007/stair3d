@@ -1,5 +1,5 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
-import { applyManualEdgeOverrides } from './edgeOverrides.js';
+import { applyManualEdgeOverrides, applyTreadOverhangs } from './edgeOverrides.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
 // Metoda zabiegu: PROPORCJONALNA (linia podziału) — punkty podziału na linii biegu są
@@ -25,6 +25,12 @@ export function buildPlanLayout(config) {
   // poprawioną geometrię bez własnej wiedzy o istnieniu edycji. Patrz edgeOverrides.js.
   if (config.manualEdgeOverrides && Object.keys(config.manualEdgeOverrides).length > 0) {
     layout.treads = applyManualEdgeOverrides(layout.treads, config.manualEdgeOverrides);
+  }
+  // Stosowane PO manualEdgeOverrides (a nie zamiast) — kolejność nie ma tu znaczenia
+  // geometrycznego (obie edycje operują na rozłącznych aspektach: wspólny róg vs własny,
+  // niedzielony róg jednego stopnia), ale trzyma obie ręczne edycje razem, w jednym miejscu.
+  if (config.manualTreadOverhangs && Object.keys(config.manualTreadOverhangs).length > 0) {
+    layout.treads = applyTreadOverhangs(layout.treads, config.manualTreadOverhangs);
   }
 
   return layout;
