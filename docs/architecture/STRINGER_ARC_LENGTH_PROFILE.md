@@ -309,3 +309,29 @@ differ, they simply may not cross past each other. Since a `LAP_JOINT` pair is a
 continuous (§3), the clamp is a no-op there (locked in by a dedicated test). Re-checks the
 self-intersection diagnostic after clamping, since changing a boundary point can (rarely) fix or
 introduce one.
+
+## 16. Addendum 5 — the very first segment's own bottom extended below the floor
+
+A further report, with a hand-drawn diagram: the stringer's bottom, at the very start of the
+flight, extended into a long pointed spike below floor level.
+
+Root cause: unlike a joint (§15), the very FIRST segment of a run has no preceding segment for
+`clampCrossSegmentOvershoot` to compare against. Reaching its own `u=0` boundary extrapolates
+its local pitch slope backward from the first real bearing, then offsets the result down by the
+full board width. Near the very bottom of a flight, the first tread's own elevation (one riser
+height) is often smaller than the board's own width, so the offset point naturally lands below
+the floor (`v < 0`) — measured: `v = -238.7` for a typical config.
+
+**First attempt (wrong)**: simply snapping that one point's `v` up to `0` in place. This left its
+`u` unchanged, swinging the bottom edge across the region occupied by the top edge's own notch
+pattern — introducing a genuine self-intersection (confirmed and caught by the existing
+diagnostic re-check).
+
+**Correct fix**: `trimToFloor()` finds where the bottom (or, symmetrically, top) boundary's own
+first segment actually crosses `v=0` by interpolating along its own real direction, and uses
+that point instead — this is what "cut flush with the floor" means geometrically: the board is
+trimmed along its own line, not snapped vertically. `clampFirstSegmentToFloor()` applies this
+only to `orderedGeometries[0]` (later segments are already well above the floor and are
+provably untouched — locked in by a dedicated test); re-checks self-intersection afterward, same
+as §15. Verified visually against the live app: the board's bottom now sits flush with the
+floor plane instead of extending through it.

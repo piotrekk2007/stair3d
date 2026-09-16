@@ -178,7 +178,21 @@ below where it belongs (reported: one board's end visibly stretched/drooping pas
 post-jointed neighbour's own end already sits). `clampCrossSegmentOvershoot()` now clamps each
 segment's own boundary so it never crosses past the immediately preceding segment's own
 corresponding boundary — a sanity bound, not a continuity requirement, so a `LAP_JOINT` pair
-(already exactly continuous) is untouched. See §15 of the same doc. Tests:
+(already exactly continuous) is untouched. See §15 of the same doc.
+
+**Fifth follow-up: the very first segment's own bottom extended below the floor.** Unlike a
+joint, the very first segment of a run has no preceding segment to clamp against — reaching its
+own start boundary extrapolates its local pitch slope backward past the first real bearing,
+then offsets the result down by the full board width; near the bottom of a flight, the first
+tread's own elevation (one riser height) is often smaller than the board's own width, so the
+result naturally lands below the floor (measured: `v = -238.7`). Simply snapping that point's
+elevation up to 0 in place was tried and rejected — it left the point's plan position
+unchanged, swinging the bottom edge across the top edge's own notch pattern and introducing a
+genuine self-intersection. `trimToFloor()` instead finds where the boundary's own first segment
+actually crosses `v=0` by interpolating along its real direction — a true "cut flush with the
+floor," not a vertical snap — applied only to the very first segment of a run
+(`clampFirstSegmentToFloor()`); later, already-elevated segments are untouched. See §16 of the
+same doc. Tests:
 [src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
 [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
 

@@ -202,21 +202,25 @@ test('G. changed stringer width (board depth) changes the bottom edge by exactly
   // — asserting a raw vertical delta here would silently re-introduce the bug this refactor
   // fixes (see stringerConstructionGeometry.js's file header on "measured perpendicular, not
   // raw world elevation").
-  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 220 });
-  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 380 });
+  // Board widths chosen small enough that the offset bottom corner near the first tread stays
+  // above the floor (v >= 0) — clampFirstSegmentToFloor (a separate, deliberate behavior; see
+  // its own tests) would otherwise trim that corner flush with the floor instead of keeping it
+  // at a pure perpendicular offset, which is specifically what this test checks.
+  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 80 });
+  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 100 });
   const geoNarrow = buildStringerConstructionGeometry(buildStringerModel(narrow.planLayout, narrow.config, 'outer'), narrow.config)[0];
   const geoWide = buildStringerConstructionGeometry(buildStringerModel(wide.planLayout, wide.config, 'outer'), wide.config)[0];
 
-  assert.equal(geoNarrow.boardWidthMm, 220);
-  assert.equal(geoWide.boardWidthMm, 380);
+  assert.equal(geoNarrow.boardWidthMm, 80);
+  assert.equal(geoWide.boardWidthMm, 100);
 
   // Every bearing's front corner sits exactly ON the (pre-offset) pitch profile by
   // construction, so its perpendicular distance to the offset bottom line must equal the
   // configured board width exactly, for both widths.
   const knotNarrow = geoNarrow.pitchProfile[0];
   const knotWide = geoWide.pitchProfile[0];
-  assert.ok(Math.abs(distancePointToPolyline(knotNarrow, geoNarrow.bottomProfile) - 220) < 1e-6);
-  assert.ok(Math.abs(distancePointToPolyline(knotWide, geoWide.bottomProfile) - 380) < 1e-6);
+  assert.ok(Math.abs(distancePointToPolyline(knotNarrow, geoNarrow.bottomProfile) - 80) < 1e-6);
+  assert.ok(Math.abs(distancePointToPolyline(knotWide, geoWide.bottomProfile) - 100) < 1e-6);
 });
 
 // --- H. Changed board thickness -------------------------------------------------------------
@@ -467,6 +471,44 @@ test('overshoot bug fix: clamping does not touch a lap-jointed pair (already exa
     const prevEnd = geometries[i - 1].bottomProfile[geometries[i - 1].bottomProfile.length - 1];
     const currStart = geometries[i].bottomProfile[0];
     assert.ok(Math.abs(currStart.v - prevEnd.v) < 1e-6, 'a lap-jointed pair must remain exactly continuous, not merely clamped');
+  }
+});
+
+// --- Sixth reported bug: the very first segment's own bottom-start extended below the floor ----
+//
+// Reaching the FIRST segment's own u=0 boundary (no preceding segment to clamp against)
+// extrapolates its local pitch slope backward from the first real bearing, then offsets the
+// result down by the full board width. Near the very bottom of a flight the first tread's own
+// elevation (one riser height) is often smaller than the board's own width, so the offset point
+// naturally lands below the floor (v < 0) — reported as the stringer's bottom visibly extending
+// through the floor into a long pointed spike.
+
+test('floor bug fix: the very first segment of a stringer never extends below the floor (v < 0)', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionType: 'cut', hasRiserBoards: true, hasCornerPost: true });
+  for (const side of ['outer', 'inner']) {
+    const model = buildStringerModel(planLayout, config, side);
+    const geometries = buildStringerConstructionGeometry(model, config);
+    const first = geometries[0];
+    const minV = Math.min(...first.outerContour.map((p) => p.v));
+    assert.ok(minV >= -1e-6, `${side}/${first.segmentId}: outer contour dips to v=${minV}, below the floor`);
+    assert.equal(first.diagnostics.some((d) => d.ruleId === 'STRINGER-CONTOUR-SELF-INTERSECTION'), false, 'trimming to the floor must not introduce a self-intersection');
+  }
+});
+
+test('floor bug fix: trimming to the floor cuts the board off along its own line (not a vertical snap that crosses the notch pattern)', () => {
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: true, stringerHeight: 380 });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  assert.ok(geo.bottomProfile[0].v === 0 || geo.bottomProfile[0].v > 0, 'must not remain below the floor');
+  assert.ok(isSimplePolygon(geo.outerContour), 'trimming to the floor must produce a simple, non-self-intersecting polygon');
+});
+
+test('floor bug fix: only the very first segment is trimmed — a later, already-elevated segment is untouched', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER);
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  for (let i = 1; i < geometries.length; i++) {
+    assert.ok(Math.min(...geometries[i].outerContour.map((p) => p.v)) > 0, `${geometries[i].segmentId} should be well above the floor already, no trim needed`);
   }
 });
 

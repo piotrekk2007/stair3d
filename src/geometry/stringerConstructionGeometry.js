@@ -514,6 +514,30 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
 // the immediately preceding segment's own corresponding boundary — a sanity bound, not a
 // continuity requirement: the two sides may still legitimately differ (the post covers that),
 // they just may not cross past each other.
+// Re-checks the self-intersection diagnostic on `geo` after a post-hoc boundary clamp changed
+// its outerContour — shared by every clamp below, since moving a boundary point can (rarely)
+// fix or introduce a self-intersection. The min-section/support-containment numbers describe
+// the tread supports themselves, which no boundary clamp here ever touches, so they are left
+// exactly as originally computed.
+function recheckSelfIntersection(geo) {
+  const wasFlagged = geo.diagnostics.some((d) => d.ruleId === 'STRINGER-CONTOUR-SELF-INTERSECTION');
+  const isNowSelfIntersecting = hasSelfIntersection(geo.outerContour);
+  if (wasFlagged && !isNowSelfIntersecting) {
+    geo.diagnostics = geo.diagnostics.filter((d) => d.ruleId !== 'STRINGER-CONTOUR-SELF-INTERSECTION');
+  } else if (!wasFlagged && isNowSelfIntersecting) {
+    geo.diagnostics.push(
+      createDiagnostic({
+        ruleId: 'STRINGER-CONTOUR-SELF-INTERSECTION',
+        severity: 'ERROR',
+        elementType: 'stringer',
+        elementId: geo.segmentId,
+        parameter: 'outerContour',
+        message: `Kontur wangi (${geo.segmentId}) jest samoprzecinający się — geometria nieprawidłowa.`,
+      })
+    );
+  }
+}
+
 function clampCrossSegmentOvershoot(orderedGeometries) {
   for (let i = 1; i < orderedGeometries.length; i++) {
     const prev = orderedGeometries[i - 1];
@@ -540,28 +564,55 @@ function clampCrossSegmentOvershoot(orderedGeometries) {
     // outerContour's bottom (and, for closed, top) points are the SAME object references as
     // bottomProfile/topProfile (see buildGroupConstructionGeometry: `bottomPolyline.slice().
     // reverse()` copies the ARRAY, not the points) — mutating the point above already updated
-    // outerContour too. Only the self-intersection diagnostic can change as a result; the
-    // min-section/support-containment numbers were computed from the pre-clamp profile and
-    // describe the tread supports themselves, which this clamp never touches.
-    if (changed) {
-      const wasFlagged = curr.diagnostics.some((d) => d.ruleId === 'STRINGER-CONTOUR-SELF-INTERSECTION');
-      const isNowSelfIntersecting = hasSelfIntersection(curr.outerContour);
-      if (wasFlagged && !isNowSelfIntersecting) {
-        curr.diagnostics = curr.diagnostics.filter((d) => d.ruleId !== 'STRINGER-CONTOUR-SELF-INTERSECTION');
-      } else if (!wasFlagged && isNowSelfIntersecting) {
-        curr.diagnostics.push(
-          createDiagnostic({
-            ruleId: 'STRINGER-CONTOUR-SELF-INTERSECTION',
-            severity: 'ERROR',
-            elementType: 'stringer',
-            elementId: curr.segmentId,
-            parameter: 'outerContour',
-            message: `Kontur wangi (${curr.segmentId}) jest samoprzecinający się — geometria nieprawidłowa.`,
-          })
-        );
-      }
-    }
+    // outerContour too.
+    if (changed) recheckSelfIntersection(curr);
   }
+}
+
+// Finds where segment ab (the bottom/top boundary's own first two points) crosses v=0, and
+// returns that point — NOT simply projecting the first point vertically up to v=0, which would
+// leave its `u` unchanged and can swing the boundary across the OTHER edge's own notch
+// pattern (a real, observed self-intersection). Trimming along the line's own true direction is
+// what "cut flush with the floor" actually means geometrically.
+function trimToFloor(a, b) {
+  const t = (0 - a.v) / (b.v - a.v);
+  return { u: a.u + (b.u - a.u) * t, v: 0 };
+}
+
+// The very FIRST segment of a stringer run (the one starting at the bottom of the flight, no
+// preceding segment for clampCrossSegmentOvershoot to compare against) can have its own
+// bottom-start boundary land BELOW the actual floor (v < 0): reaching that segment's own u=0
+// extrapolates its local pitch slope backward from the first real bearing, then offsets that
+// extrapolated point down by the full board width — and near the very bottom of a flight, the
+// first tread's own elevation (one riser height) is often smaller than the board's own width,
+// so the offset point naturally lands below the floor plane. A real board is physically cut
+// off flush with the floor there, never extending through it — v=0 IS a real, meaningful floor
+// reference here (bearingElevation is measured the same way: tread index 0 sits at exactly one
+// riserHeight above v=0 — see stringerSolver.js). This trims ONLY the very first segment's own
+// starting boundary (bottom, and — symmetrically, though not the reported case — top) to where
+// it actually crosses v=0; every other, already-elevated segment is far above 0 and unaffected.
+function clampFirstSegmentToFloor(orderedGeometries) {
+  const first = orderedGeometries[0];
+  if (!first || !first.bottomProfile || first.bottomProfile.length < 2) return;
+  let changed = false;
+
+  if (first.bottomProfile[0].v < 0) {
+    const trimmed = trimToFloor(first.bottomProfile[0], first.bottomProfile[1]);
+    const oc = first.outerContour;
+    if (oc.length > 0 && oc[oc.length - 1] === first.bottomProfile[0]) oc[oc.length - 1] = trimmed;
+    first.bottomProfile[0] = trimmed;
+    changed = true;
+  }
+
+  if (first.topProfile && first.topProfile.length >= 2 && first.topProfile[0].v < 0) {
+    const trimmed = trimToFloor(first.topProfile[0], first.topProfile[1]);
+    const oc = first.outerContour;
+    if (oc.length > 0 && oc[0] === first.topProfile[0]) oc[0] = trimmed;
+    first.topProfile[0] = trimmed;
+    changed = true;
+  }
+
+  if (changed) recheckSelfIntersection(first);
 }
 
 export function buildStringerConstructionGeometry(model, config) {
@@ -575,5 +626,6 @@ export function buildStringerConstructionGeometry(model, config) {
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampCrossSegmentOvershoot(ordered);
+  clampFirstSegmentToFloor(ordered);
   return ordered;
 }
