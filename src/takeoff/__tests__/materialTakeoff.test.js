@@ -87,7 +87,11 @@ test('scenario A (straight): one STRINGER item per side, quantity 1 (a straight 
     assert.equal(s.status, TAKEOFF_ITEM_STATUS.OK);
     assert.equal(s.quantity, 1);
     assert.ok(s.netVolume > 0);
-    assert.ok(s.stockVolume >= s.netVolume);
+    // For a straight flight, STOCK (length x boardWidth x thickness) and NET (shoelace area of
+    // the parallelogram contour x thickness) are two independently-computed paths to the same
+    // mathematical quantity — a relative floating-point epsilon accounts for that, rather than
+    // a strict >= which a few ULPs of rounding can trip.
+    assert.ok(s.stockVolume >= s.netVolume - 1e-9 * Math.max(1, s.netVolume));
   }
 });
 

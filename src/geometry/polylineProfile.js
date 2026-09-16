@@ -5,7 +5,7 @@
 // Pure math, no stair-domain knowledge, no Three.js — reusable wherever a piecewise-linear
 // profile in a flat (u,v) plane needs simplifying, offsetting, or measuring.
 
-import { COLLINEAR_EPS } from './tolerances.js';
+import { COLLINEAR_EPS, INTERSECTION_EPS } from './tolerances.js';
 
 // Removes points that are collinear (within COLLINEAR_EPS, the same corner-detection
 // tolerance pathUtils.js's isCollinear() uses on raw plan coordinates — (u,v) points here are
@@ -30,13 +30,27 @@ export function simplifyCollinear(points, eps = COLLINEAR_EPS) {
 // Infinite-line intersection in the (u,v) plane. Returns null for (near-)parallel lines —
 // callers fall back to the nearer segment's own endpoint, which is exactly correct when the
 // two adjacent offset segments are actually the same line (the common straight-flight case).
+//
+// The parallel test is DIMENSIONLESS (denom normalized by both segments' own lengths, giving
+// sin(angle-between-them) — same convention as tolerances.js's INTERSECTION_EPS), not a raw
+// absolute threshold on the cross product itself. A raw absolute threshold is wrong here: two
+// segments spanning thousands of mm that are collinear to floating-point precision still
+// produce a cross product many orders of magnitude above a tiny absolute epsilon (their
+// components alone are ~10^3), while genuinely being sin(angle) ~= 1e-13. Using an absolute
+// threshold let a near-zero-but-nonzero denominator through, producing a miter "intersection"
+// thousands of mm away from either segment — a real, observed bug (see
+// docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md) where slicing a profile at a point exactly
+// on an existing knot (via floating-point extrapolation) created two segments that were
+// collinear but not bit-identical in slope.
 function lineLineIntersect(a1, a2, b1, b2) {
   const d1u = a2.u - a1.u;
   const d1v = a2.v - a1.v;
   const d2u = b2.u - b1.u;
   const d2v = b2.v - b1.v;
+  const len1 = Math.hypot(d1u, d1v) || 1;
+  const len2 = Math.hypot(d2u, d2v) || 1;
   const denom = d1u * d2v - d1v * d2u;
-  if (Math.abs(denom) < 1e-9) return null;
+  if (Math.abs(denom) / (len1 * len2) < INTERSECTION_EPS) return null;
   const t = ((b1.u - a1.u) * d2v - (b1.v - a1.v) * d2u) / denom;
   return { u: a1.u + d1u * t, v: a1.v + d1v * t };
 }
@@ -112,6 +126,53 @@ export function profileLength(points) {
     length += Math.hypot(points[i + 1].u - points[i].u, points[i + 1].v - points[i].v);
   }
   return length;
+}
+
+// Returns the portion of a u-monotonic profile between uStart and uEnd (inclusive), with the
+// two boundary values properly INTERPOLATED (via valueAtU) rather than snapped to the nearest
+// existing knot — used to cut a profile that was solved across several joined physical boards
+// back down to one board's own local span. See stringerConstructionGeometry.js's group-level
+// profile: adjacent lap-jointed segments must share one continuous solved profile so their
+// edges actually meet at the joint, then each segment still needs its OWN slice of it (in its
+// own local u) to build its own outerContour.
+export function slicePolylineByU(polyline, uStart, uEnd) {
+  const startV = valueAtU(polyline, uStart);
+  const endV = valueAtU(polyline, uEnd);
+  // Only a TRUE interior vertex (index 1..length-2 — an actual kink between two of the
+  // polyline's own segments) can ever be a genuine interior point of the slice. The
+  // polyline's own first/last points are just where its line begins/ends — if uStart/uEnd
+  // extend past them, valueAtU already extrapolates the correct value at the boundary; naively
+  // re-including polyline[0]/polyline[last] as "interior" (they do satisfy `p.u > uStart &&
+  // p.u < uEnd` whenever the slice is wider than the polyline itself) would insert a knot that
+  // isn't a real kink and, worse, need not even be u-ordered relative to the boundary we just
+  // computed (a real, observed bug — see sliceOffsetProfile's header).
+  const interior = polyline.slice(1, -1).filter((p) => p.u > uStart && p.u < uEnd);
+  return [{ u: uStart, v: startV }, ...interior, { u: uEnd, v: endV }];
+}
+
+// Same idea as slicePolylineByU, but for a polyline that was produced by offsetting some
+// OTHER (reference) polyline along its own local normal — offsetPolylineByNormal shifts every
+// point's u slightly as well as its v (see its own header), so a knot that WAS the reference's
+// own endpoint can end up with a shifted u that falls strictly inside [uStart,uEnd], and would
+// be wrongly kept as a spurious "interior" point by slicePolylineByU's own u-based test. This
+// version decides which points are interior from the REFERENCE polyline's own (un-shifted) u
+// values — `offsetPolyline` and `referenceKnots` must have the same length and correspond
+// index-for-index (true for every offsetPolylineByNormal output) — and only pulls the matching
+// offset points for those; the two boundary values still come from interpolating/extrapolating
+// the OFFSET polyline itself at the exact uStart/uEnd.
+export function sliceOffsetProfile(offsetPolyline, referenceKnots, uStart, uEnd) {
+  const startV = valueAtU(offsetPolyline, uStart);
+  const endV = valueAtU(offsetPolyline, uEnd);
+  const interior = [];
+  // Indices 0 and length-1 are the REFERENCE's own overall endpoints, never a genuine interior
+  // kink (see slicePolylineByU's header for why: they're just where the line begins/ends, and
+  // after offsetting can shift to a u that isn't even ordered relative to the boundary point
+  // above — a real, observed bug when a slice's own [uStart,uEnd] extends past the reference's
+  // own domain, e.g. a riser-recess-shifted first bearing).
+  for (let i = 1; i < referenceKnots.length - 1; i++) {
+    if (referenceKnots[i].u > uStart && referenceKnots[i].u < uEnd) interior.push(offsetPolyline[i]);
+  }
+  return [{ u: uStart, v: startV }, ...interior, { u: uEnd, v: endV }];
 }
 
 // Interpolates (or, past either end, extrapolates along the nearest segment's own slope) the

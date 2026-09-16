@@ -186,4 +186,74 @@ proving the reported bug is fixed: every winder bearing is contained in its boar
 (no `STRINGER-TREAD-SUPPORT` errors on a realistic winder config), and the pitch profile passes
 through every real bearing position (perpendicular distance ~0), not just the first and last.
 
-All 245 project tests pass; `npx vite build` succeeds.
+## 12. Addendum — a second, more visible bug found by inspecting the actual 3D render
+
+The fix above (§1-§9) was verified with unit and geometry tests, but a visual check of the
+actual running app (a 'cut' L-winder, screenshot comparison against a hand-drawn expected
+shape) still showed the board disconnecting from the treads at the turn — worse than the
+original symptom in some views. Root cause: each `StringerSegment` was still solved in total
+isolation. Two segments joined by a `LAP_JOINT` (board ends butted directly together, no post —
+see `stringerModel.js`'s `CONNECTION_TYPES`) each fit their pitch profile from ONLY their own
+bearings (§2's fix, correctly applied — but only *within* one segment). Their independently
+offset bottom (and, for a closed board, top) edges generally do **not** land on the same
+elevation at the shared corner point, even though each segment's own contour is perfectly valid
+alone. Measured on a real L-winder: the outer stringer (which, per `stringerSolver.js`'s own
+comment, is **always** a lap joint — a corner post only ever interrupts the inner stringer) had
+a **54mm** jump in its bottom edge's elevation exactly at the turn. This is precisely what a
+render of the board "hanging in the air" at a corner looks like.
+
+**Fix**: `groupSegmentsByLapJoint()` groups consecutive segments that share a `LAP_JOINT` (never
+a `CORNER_POST` — a post genuinely interrupts the run, and forcing continuity there is neither
+necessary nor how a real post-jointed corner is built) and solves ONE pitch profile across the
+whole group, using each segment's own `referenceLine.length` as a cumulative offset — an
+"unfold" of the group's own physically-joined reference lines into one continuous
+distance-traveled parameter. The group's offset top/bottom edges are then sliced back into each
+segment's own local `(u,v)` via `sliceOffsetProfile()`/`slicePolylineByU()` — so a segment's
+own contour, diagnostics, and debug data look exactly as before, except that adjacent lap-joint
+segments' edges now provably meet (locked in by
+`stringerConstructionGeometry.test.js`'s "joint bug fix" tests: outer stringer gap is now
+`0.000mm`, `CORNER_POST` joints are explicitly left independent).
+
+**A further numerical bug surfaced by this fix**: slicing a profile whose own first knot had
+been shifted forward (e.g. by a riser-recess offset on the very first bearing) exposed two bugs
+in `polylineProfile.js`:
+1. `lineLineIntersect`'s parallel-line test used an **absolute** threshold on the raw cross
+   product. Two segments that are collinear only up to floating-point noise (sin(angle) ~1e-16)
+   still produce a cross product far above a tiny absolute epsilon when their own coordinates
+   are ~10³ in magnitude — so the "intersection" was computed anyway, landing a mitered offset
+   point thousands of mm away. Fixed by normalizing the test to a dimensionless
+   sin(angle-between-segments), matching `tolerances.js`'s own `INTERSECTION_EPS` convention.
+2. `slicePolylineByU`/`sliceOffsetProfile` treated a reference polyline's own first/last point
+   as a candidate "interior" knot whenever the requested slice range extended past it (a
+   riser-recess-shifted first bearing does exactly this). That endpoint is not a real kink —
+   after offsetting it can land at a `u` that isn't even ordered relative to the boundary point
+   just computed, producing a non-monotonic, self-crossing contour. Fixed by excluding a
+   reference polyline's own index 0 and length-1 from ever being treated as interior.
+
+Both are locked in by dedicated regression tests in `polylineProfile.test.js`.
+
+All 251 project tests pass; `npx vite build` succeeds; the fix was additionally confirmed by
+loading the actual dev server and comparing the rendered 'cut' L-winder stringer against the
+expected shape.
+
+## 13. Addendum 2 — the notch's riser face must be a plumb VERTICAL cut, never diagonal
+
+A further visual check (with riser boards enabled) found the comb's rising edges drawn as
+diagonal lines instead of plumb vertical cuts — screenshot comparison showed the "riser face"
+of each notch sloping across the full width of a riser-board recess instead of stepping
+straight down.
+
+Root cause: `buildOverlayTop()` builds two points per bearing — its own flat front and back
+corner, both at the tread's own (flat) elevation — and the polygon's edge from one bearing's
+back corner straight to the next bearing's front corner is what actually forms the "riser
+face." With riser boards enabled, `effectiveBearings()` shifts every tread's OWN front corner
+forward by `riserRecess` (room for the riser board's thickness), so a bearing's raw back corner
+and the next bearing's shifted front corner no longer share the same `u` — the connecting edge
+then spans both that horizontal gap and the full riser height in one diagonal stroke.
+
+Fix: when a gap exists, `buildOverlayTop()` now inserts an explicit ledge point at the CURRENT
+tread's own elevation across the gap (the physical shoulder the riser board's edge sits
+against), so the polygon reads as an L — a short flat ledge, then a true vertical rise at the
+next tread's own front corner — rather than one diagonal line. Verified: every rising edge in
+the profile now has zero horizontal travel (locked in by a dedicated regression test), checked
+against the exact config the live app uses.

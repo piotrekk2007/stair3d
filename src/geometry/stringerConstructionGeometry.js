@@ -60,8 +60,8 @@
 // file never touches Three.js.
 
 import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
-import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU } from './polylineProfile.js';
-import { CONSTRUCTION_TYPES, housingDepthFor } from './stringerModel.js';
+import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU, slicePolylineByU, sliceOffsetProfile } from './polylineProfile.js';
+import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthFor } from './stringerModel.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 
@@ -105,6 +105,33 @@ function effectiveBearings(segment, extendStart, extendEnd) {
   });
 }
 
+// --- Grouping segments that must share ONE continuous profile ---------------------------------
+//
+// stringerSolver.js already tells us exactly which adjacent segments are joined by a LAP_JOINT
+// (board ends butted directly together, no post — see StringerModel.segmentJoints) versus a
+// CORNER_POST (a newel physically interrupts the run, so the two boards' own profiles never
+// need to meet: the post's own face covers whatever the two board ends do at their own
+// elevations). Building each segment's pitch/offset profile in total isolation is only correct
+// within one board — across a LAP_JOINT it produces a real, physical discontinuity: each side's
+// profile is fit only from ITS OWN bearings, so their independently-offset bottom (or, for a
+// closed board, top) edges generally do NOT meet at the shared corner point, however well each
+// one behaves on its own. A CORNER_POST joint needs no such fix (verified: forcing continuity
+// there is unnecessary and not how a real post-jointed corner is built).
+function groupSegmentsByLapJoint(segments, segmentJoints) {
+  const lapJointBefore = new Set(segmentJoints.filter((j) => j.type === CONNECTION_TYPES.LAP_JOINT).map((j) => j.beforeSegmentId));
+  const groups = [];
+  let current = [];
+  for (const seg of segments) {
+    current.push(seg);
+    if (!lapJointBefore.has(seg.id)) {
+      groups.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
 // --- Unfolded (u,Z) profile through every bearing (see file header) --------------------------
 //
 // One knot per bearing at its own FRONT corner (uStart, bearingElevation) — the traditional
@@ -115,20 +142,39 @@ function effectiveBearings(segment, extendStart, extendEnd) {
 // final bearing's own back corner (u), rather than using that bearing's flat elevation there —
 // using the flat elevation would introduce an artificial kink at the very last tread even on a
 // perfectly uniform straight flight (verified against this file's own straight-flight tests).
-function buildPitchKnots(effective) {
-  const front = effective.map((b) => ({ u: b.uStart, v: b.bearingElevation }));
-  const last = effective[effective.length - 1];
-  const lastKnot = front[front.length - 1];
+//
+// Built across a WHOLE lap-joint group at once (see groupSegmentsByLapJoint): `effectiveByGroup`
+// is one array of effective bearings PER SEGMENT in the group, and each segment's own u is
+// shifted by its own cumulative offset (the sum of the PRECEDING segments' own
+// `referenceLine.length` in the group) — an "unfold" of the group's own physically-joined
+// reference lines into one continuous distance-traveled parameter, exactly so a board that
+// bends at a real (postless) corner still gets ONE solved profile instead of two that don't
+// meet. A single-segment group (the ordinary case — most corners in this codebase have a post)
+// degenerates to exactly the old per-segment behavior, offset 0.
+function buildPitchKnots(effectiveByGroup, segmentLengths) {
+  const knots = [];
+  const offsets = [];
+  let offset = 0;
+  for (let i = 0; i < effectiveByGroup.length; i++) {
+    offsets.push(offset);
+    for (const b of effectiveByGroup[i]) knots.push({ u: offset + b.uStart, v: b.bearingElevation });
+    offset += segmentLengths[i];
+  }
+  const lastSegBearings = effectiveByGroup[effectiveByGroup.length - 1];
+  const last = lastSegBearings[lastSegBearings.length - 1];
+  const lastOffset = offsets[offsets.length - 1];
+  const lastKnot = knots[knots.length - 1];
   let closingV;
-  if (front.length >= 2) {
-    const prev = front[front.length - 2];
+  if (knots.length >= 2) {
+    const prev = knots[knots.length - 2];
     const du = lastKnot.u - prev.u;
     const slope = du !== 0 ? (lastKnot.v - prev.v) / du : 0;
-    closingV = lastKnot.v + slope * (last.uEnd - lastKnot.u);
+    closingV = lastKnot.v + slope * (lastOffset + last.uEnd - lastKnot.u);
   } else {
-    closingV = lastKnot.v; // a single-bearing run has no local slope to extrapolate — flat is the only option
+    closingV = lastKnot.v; // a single-bearing group has no local slope to extrapolate — flat is the only option
   }
-  return simplifyCollinear([...front, { u: last.uEnd, v: closingV }]);
+  const allKnots = simplifyCollinear([...knots, { u: lastOffset + last.uEnd, v: closingV }]);
+  return { knots: allKnots, offsets };
 }
 
 function computePitchLineFromKnots(knots) {
@@ -142,12 +188,28 @@ function computePitchLineFromKnots(knots) {
 // --- CUT (overlay/open-cleated) --------------------------------------------------------------
 
 // Top edge unchanged from before this refactor — it already used every bearing's own position.
+// A tread's own bearing is flat (its front and back corner share one elevation) — the RISE to
+// the next tread must therefore happen as a genuinely VERTICAL cut (constant u), never as a
+// single diagonal line drawn straight from one bearing's back corner to the next bearing's
+// front corner. Those two corners only coincide (u AND giving a naturally-vertical polygon
+// edge) when there is no riser-board recess; `effectiveBearings()` shifts a riser-board tread's
+// OWN front corner forward by `riserRecess`, opening a small horizontal gap between this
+// bearing's raw back corner and the next one's (shifted) front corner. Left unfixed, the
+// polygon's own edge across that gap is a straight line spanning BOTH the horizontal gap and
+// the full riser height at once — a visibly slanted "riser face" instead of a plumb-cut one.
+// The correct notch shape is an L: a short flat ledge at THIS tread's own elevation across the
+// gap (the physical shoulder the riser board's edge sits against), then a true vertical rise at
+// the next tread's own front corner.
 function buildOverlayTop(effective) {
   const top = [];
-  for (const b of effective) {
+  effective.forEach((b, i) => {
     top.push({ u: b.uStart, v: b.bearingElevation });
     top.push({ u: b.uEnd, v: b.bearingElevation });
-  }
+    const next = effective[i + 1];
+    if (next && next.uStart > b.uEnd) {
+      top.push({ u: next.uStart, v: b.bearingElevation });
+    }
+  });
   return top;
 }
 
@@ -271,108 +333,145 @@ function hasSelfIntersection(polygon) {
   return false;
 }
 
-// --- Per-segment builder -----------------------------------------------------------------------
-
-function buildSegmentConstructionGeometry(segment, { config, extendStart, extendEnd }) {
-  const diagnostics = [];
-  if (segment.treadBearings.length === 0) {
-    return {
-      segmentId: segment.id,
-      constructionType: segment.constructionType,
-      pitchLine: null,
-      pitchProfile: [],
-      outerContour: [],
-      boardWidthMm: segment.width,
-      thicknessMm: segment.thickness,
-      minRemainingSectionMm: null,
-      diagnostics,
-    };
-  }
-
-  const effective = effectiveBearings(segment, extendStart, extendEnd);
-  const pitchKnots = buildPitchKnots(effective);
-  const pitchLine = computePitchLineFromKnots(pitchKnots);
-  const constructionType = segment.constructionType;
-  const boardWidth = segment.width;
-
-  let outerContour;
-  let cleats;
-  let housings;
-  let bottomPolyline;
-  let topPolyline = null;
-
-  if (constructionType === CONSTRUCTION_TYPES.CUT) {
-    bottomPolyline = offsetPolylineByNormal(pitchKnots, boardWidth, 'down');
-    const top = buildOverlayTop(effective);
-    outerContour = [...top, ...bottomPolyline.slice().reverse()];
-    // Cleats are an optional support method, not a universal feature of a cut string — see
-    // STAIR3D-STRINGER-CLEATS-OPTIONALITY (docs/STRINGER_CONSTRUCTION_SPEC.md §I). When
-    // disabled, the tread rests on the notch alone: an empty array, never a hidden assumption.
-    cleats = config.stringerCleatsEnabled === false ? [] : buildCleats(effective, config);
-    diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
-  } else {
-    const topMarginMm = config.stringerTopMarginMm ?? 0;
-    topPolyline = offsetPolylineByNormal(pitchKnots, topMarginMm, 'up');
-    bottomPolyline = offsetPolylineByNormal(pitchKnots, boardWidth - topMarginMm, 'down');
-    outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
-    housings = buildHousings(effective, config);
-    diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
-  }
-
-  const minRemainingSectionMm =
-    constructionType === CONSTRUCTION_TYPES.CLOSED
-      ? config.stringerThickness - housingDepthFor(config.stringerThickness)
-      : computeMinRemainingSectionCut(effective, bottomPolyline);
-  const minRequired = config.stringerMinRemainingSectionMm ?? 0;
-  if (minRemainingSectionMm < minRequired) {
-    diagnostics.push(
-      createDiagnostic({
-        ruleId: 'STRINGER-MIN-SECTION',
-        severity: 'WARNING',
-        elementType: 'stringer',
-        elementId: segment.id,
-        parameter: 'minRemainingSectionMm',
-        value: Math.round(minRemainingSectionMm * 10) / 10,
-        expected: `>= ${minRequired}`,
-        unit: 'mm',
-        message: `Wanga (${segment.id}) ma za mało materiału w najcieńszym miejscu — ryzyko osłabienia konstrukcji.`,
-      })
-    );
-  }
-
-  if (hasSelfIntersection(outerContour)) {
-    diagnostics.push(
-      createDiagnostic({
-        ruleId: 'STRINGER-CONTOUR-SELF-INTERSECTION',
-        severity: 'ERROR',
-        elementType: 'stringer',
-        elementId: segment.id,
-        parameter: 'outerContour',
-        message: `Kontur wangi (${segment.id}) jest samoprzecinający się — geometria nieprawidłowa.`,
-      })
-    );
-  }
-
+// Builds ONE result for a segment with no tread bearings at all (a real, if unusual, case —
+// see stringerSolver.js) — nothing to solve, nothing to take off.
+function emptySegmentGeometry(segment) {
   return {
     segmentId: segment.id,
-    constructionType,
-    pitchLine,
-    // DEBUG DATA (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14) — the full solved
-    // (u,Z) profile and its top/bottom envelope, exposed so a future debug view can show
-    // exactly why the contour has its shape without recomputing anything. Not consumed by
-    // stringerRenderer.js (it only reads outerContour/cleats/housings), so adding fields here
-    // is safe and additive.
-    pitchProfile: pitchKnots,
-    topProfile: topPolyline,
-    bottomProfile: bottomPolyline,
-    outerContour,
-    cleats,
-    housings,
-    boardWidthMm: boardWidth,
+    constructionType: segment.constructionType,
+    pitchLine: null,
+    pitchProfile: [],
+    topProfile: null,
+    bottomProfile: null,
+    outerContour: [],
+    boardWidthMm: segment.width,
     thicknessMm: segment.thickness,
-    minRemainingSectionMm,
-    diagnostics,
+    minRemainingSectionMm: null,
+    diagnostics: [],
   };
+}
+
+// --- Group builder -------------------------------------------------------------------------
+//
+// Solves ONE continuous profile for every segment in a lap-joint group (see
+// groupSegmentsByLapJoint), then slices it back into each segment's own LOCAL (u,v) — so a
+// segment's own outerContour/pitchProfile/diagnostics look exactly like a single-segment
+// result would, but a board that spans a postless corner now has edges that actually meet
+// there, instead of two independently-fit profiles that happen to disagree at the join.
+function buildGroupConstructionGeometry(group, extendInfo, config) {
+  const withBearings = group.filter((s) => s.treadBearings.length > 0);
+  if (withBearings.length === 0) return group.map(emptySegmentGeometry);
+
+  const effectiveByGroup = withBearings.map((s) => effectiveBearings(s, extendInfo.get(s.id).extendStart, extendInfo.get(s.id).extendEnd));
+  const segmentLengths = withBearings.map((s) => s.referenceLine.length);
+  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths);
+  const constructionType = withBearings[0].constructionType;
+  const boardWidth = withBearings[0].width;
+
+  let groupBottom;
+  let groupTop = null;
+  if (constructionType === CONSTRUCTION_TYPES.CUT) {
+    groupBottom = offsetPolylineByNormal(groupKnots, boardWidth, 'down');
+  } else {
+    const topMarginMm = config.stringerTopMarginMm ?? 0;
+    groupTop = offsetPolylineByNormal(groupKnots, topMarginMm, 'up');
+    groupBottom = offsetPolylineByNormal(groupKnots, boardWidth - topMarginMm, 'down');
+  }
+
+  const bySegmentId = new Map();
+  withBearings.forEach((segment, i) => {
+    const effective = effectiveByGroup[i];
+    const segStart = offsets[i];
+    const segEnd = segStart + segmentLengths[i];
+    // Slice the GROUP's solved profile/edges down to this segment's own span, then shift back
+    // to this segment's own local u=0 origin — from here on, every calculation is exactly what
+    // the old single-segment version did, just fed a profile that is now actually continuous
+    // across the join.
+    const toLocal = (p) => ({ u: p.u - segStart, v: p.v });
+    const pitchProfile = slicePolylineByU(groupKnots, segStart, segEnd).map(toLocal);
+    // groupBottom/groupTop are OFFSETS of groupKnots (see offsetPolylineByNormal) — their own
+    // u values are shifted slightly off of groupKnots' own, so which points are genuinely
+    // "interior" to this segment's span must be decided from groupKnots (the reference), not
+    // from the offset line's own shifted u — see sliceOffsetProfile's own header.
+    const bottomPolyline = sliceOffsetProfile(groupBottom, groupKnots, segStart, segEnd).map(toLocal);
+    const topPolyline = groupTop ? sliceOffsetProfile(groupTop, groupKnots, segStart, segEnd).map(toLocal) : null;
+    const pitchLine = computePitchLineFromKnots(pitchProfile);
+
+    const diagnostics = [];
+    let outerContour;
+    let cleats;
+    let housings;
+    if (constructionType === CONSTRUCTION_TYPES.CUT) {
+      const top = buildOverlayTop(effective);
+      outerContour = [...top, ...bottomPolyline.slice().reverse()];
+      // Cleats are an optional support method, not a universal feature of a cut string — see
+      // STAIR3D-STRINGER-CLEATS-OPTIONALITY (docs/STRINGER_CONSTRUCTION_SPEC.md §I). When
+      // disabled, the tread rests on the notch alone: an empty array, never a hidden assumption.
+      cleats = config.stringerCleatsEnabled === false ? [] : buildCleats(effective, config);
+      diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
+    } else {
+      outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
+      housings = buildHousings(effective, config);
+      diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
+    }
+
+    const minRemainingSectionMm =
+      constructionType === CONSTRUCTION_TYPES.CLOSED
+        ? config.stringerThickness - housingDepthFor(config.stringerThickness)
+        : computeMinRemainingSectionCut(effective, bottomPolyline);
+    const minRequired = config.stringerMinRemainingSectionMm ?? 0;
+    if (minRemainingSectionMm < minRequired) {
+      diagnostics.push(
+        createDiagnostic({
+          ruleId: 'STRINGER-MIN-SECTION',
+          severity: 'WARNING',
+          elementType: 'stringer',
+          elementId: segment.id,
+          parameter: 'minRemainingSectionMm',
+          value: Math.round(minRemainingSectionMm * 10) / 10,
+          expected: `>= ${minRequired}`,
+          unit: 'mm',
+          message: `Wanga (${segment.id}) ma za mało materiału w najcieńszym miejscu — ryzyko osłabienia konstrukcji.`,
+        })
+      );
+    }
+
+    if (hasSelfIntersection(outerContour)) {
+      diagnostics.push(
+        createDiagnostic({
+          ruleId: 'STRINGER-CONTOUR-SELF-INTERSECTION',
+          severity: 'ERROR',
+          elementType: 'stringer',
+          elementId: segment.id,
+          parameter: 'outerContour',
+          message: `Kontur wangi (${segment.id}) jest samoprzecinający się — geometria nieprawidłowa.`,
+        })
+      );
+    }
+
+    bySegmentId.set(segment.id, {
+      segmentId: segment.id,
+      constructionType,
+      pitchLine,
+      // DEBUG DATA (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14) — the full solved
+      // (u,Z) profile and its top/bottom envelope, exposed so a future debug view can show
+      // exactly why the contour has its shape without recomputing anything. Not consumed by
+      // stringerRenderer.js (it only reads outerContour/cleats/housings), so adding fields here
+      // is safe and additive.
+      pitchProfile,
+      topProfile: topPolyline,
+      bottomProfile: bottomPolyline,
+      outerContour,
+      cleats,
+      housings,
+      boardWidthMm: boardWidth,
+      thicknessMm: segment.thickness,
+      minRemainingSectionMm,
+      diagnostics,
+    });
+  });
+
+  return group.map((s) => bySegmentId.get(s.id) ?? emptySegmentGeometry(s));
 }
 
 /**
@@ -385,11 +484,12 @@ function buildSegmentConstructionGeometry(segment, { config, extendStart, extend
  */
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model.segments, config.hasCornerPost);
-  return model.segments.map((segment, segIdx) =>
-    buildSegmentConstructionGeometry(segment, {
-      config,
-      extendStart: extendStartOf.has(segIdx),
-      extendEnd: extendEndOf.has(segIdx),
-    })
+  const extendInfo = new Map(
+    model.segments.map((segment, segIdx) => [segment.id, { extendStart: extendStartOf.has(segIdx), extendEnd: extendEndOf.has(segIdx) }])
   );
+  const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
+  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config));
+  // Preserve the model's own segment order regardless of grouping.
+  const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
+  return model.segments.map((s) => bySegmentId.get(s.id));
 }

@@ -120,7 +120,40 @@ rendered without real support. `src/takeoff/materialTakeoff.js`'s stringer STOCK
 also fixed in the same pass: it must be the pitch profile's true arc length (a raked board's
 real 3D length, `profileLength()`), not the bounding box of the now-sheared offset contour nor
 even the profile's own horizontal u-extent. `stringerRenderer.js` was **not** touched — it
-still only extrudes whatever this file hands it. Tests:
+still only extrudes whatever this file hands it.
+
+**Follow-up (same stage): adjacent segments at a postless corner now actually meet.** A visual
+check of the real running app (loaded via the dev server, compared against a hand-drawn expected
+shape) found the fix above wasn't the whole story: each `StringerSegment` was still solved in
+total isolation, so two segments joined by a `LAP_JOINT` (no corner post — per
+`stringerSolver.js`'s own comment, the OUTER stringer's turn is **always** a lap joint, never
+interrupted by a post) each fit their profile from only their own bearings — their
+independently-offset bottom/top edges generally don't land on the same elevation at the shared
+corner (measured: a real 54mm jump on the outer stringer of an L-winder), which is exactly what
+a board "hanging in the air" at a turn looks like. `groupSegmentsByLapJoint()` now groups
+lap-jointed segments (never `CORNER_POST` ones — a post genuinely doesn't need this) and solves
+ONE profile across the whole group, sliced back into each segment's own local `(u,v)` via two
+new primitives, `sliceOffsetProfile()`/`slicePolylineByU()`. Fixing this also surfaced two real
+numerical bugs in `polylineProfile.js` itself: `lineLineIntersect`'s parallel-line test used an
+*absolute* threshold on a raw cross product (now a dimensionless sin(angle), matching
+`tolerances.js`'s `INTERSECTION_EPS` convention) — an absolute threshold let two segments that
+were collinear only up to floating-point noise be treated as "not parallel", computing a miter
+intersection thousands of mm away; and the slice helpers were reinserting a reference
+polyline's own first/last point as a spurious "interior" knot whenever the slice range extended
+past it, producing a non-monotonic self-crossing contour. See
+[docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md](docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md)
+§12 for the full account.
+
+**Second follow-up: the notch's riser face must be a plumb vertical cut, never diagonal.** With
+riser boards enabled, `effectiveBearings()` shifts every tread's own front corner forward by
+`riserRecess` (room for the riser board's thickness) — so a bearing's raw back corner and the
+next bearing's shifted front corner no longer share the same `u`, and `buildOverlayTop()`'s old
+single straight edge between them spanned both that horizontal gap and the full riser height at
+once, drawing a visibly diagonal "riser face" instead of a plumb cut. Fixed by inserting an
+explicit ledge point at the current tread's own elevation across the gap, so the profile reads
+as an L (a short flat ledge, then a true vertical rise) — locked in by a test asserting every
+rising edge has zero horizontal travel, and confirmed against the live app's own config. See
+§13 of the same doc. Tests:
 [src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
 [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
 

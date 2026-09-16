@@ -320,6 +320,94 @@ test('winder bug fix: the pitch profile passes through every real bearing positi
   }
 });
 
+// --- Second reported bug: adjacent segments at a postless corner must actually MEET -------------
+//
+// Fixing the within-segment pitch line (above) was not the whole story: each StringerSegment
+// was still solved in total isolation, so two segments joined by a LAP_JOINT (no corner post —
+// see stringerModel.js's CONNECTION_TYPES and stringerSolver.js's own comment that the OUTER
+// stringer's turn is ALWAYS a lap joint, never interrupted by a post) each fit their OWN
+// profile from ONLY their own bearings. Their independently-offset bottom (and, for a closed
+// board, top) edges generally do NOT land on the same elevation at the shared corner point —
+// a real, measured ~54mm jump for the outer stringer of a typical L-winder — even though each
+// segment's own contour was perfectly valid in isolation. This is exactly what a screenshot of
+// the rendered result shows as the board appearing to "hang in the air" disconnected from the
+// treads right at the turn.
+
+test('joint bug fix: the OUTER stringer (always a lap joint, never a corner post) has NO elevation jump across a segment boundary', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER); // hasCornerPost defaults to true, irrelevant for the outer side
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  assert.ok(geometries.length > 1, 'expected more than one physical board for this to be a meaningful test');
+  for (let i = 0; i < geometries.length - 1; i++) {
+    const a = geometries[i];
+    const b = geometries[i + 1];
+    if (!a.bottomProfile || !b.bottomProfile) continue;
+    const aEnd = a.bottomProfile[a.bottomProfile.length - 1];
+    const bStart = b.bottomProfile[0];
+    assert.ok(Math.abs(aEnd.v - bStart.v) < 1e-6, `${a.segmentId} ends at v=${aEnd.v}, but ${b.segmentId} starts at v=${bStart.v} — a real gap in the board's underside at the joint`);
+  }
+});
+
+test('joint bug fix: a lap-jointed INNER stringer (hasCornerPost: false) also gets a continuous profile across the joint', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, hasCornerPost: false });
+  const model = buildStringerModel(planLayout, config, 'inner');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  assert.ok(geometries.length > 1);
+  for (let i = 0; i < geometries.length - 1; i++) {
+    const a = geometries[i];
+    const b = geometries[i + 1];
+    if (!a.bottomProfile || !b.bottomProfile) continue;
+    const aEnd = a.bottomProfile[a.bottomProfile.length - 1];
+    const bStart = b.bottomProfile[0];
+    assert.ok(Math.abs(aEnd.v - bStart.v) < 1e-6, `${a.segmentId}/${b.segmentId}: gap of ${(aEnd.v - bStart.v).toFixed(1)}mm at the lap joint`);
+  }
+});
+
+test('joint bug fix: a CORNER_POST joint (inner stringer, hasCornerPost: true) is UNCHANGED — the post covers the seam, continuity is not required', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, hasCornerPost: true });
+  const model = buildStringerModel(planLayout, config, 'inner');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  // Each segment must still be independently valid (no self-intersection, positive section) —
+  // grouping must never have been applied across a real post.
+  for (const geo of geometries) {
+    assert.equal(geo.diagnostics.some((d) => d.ruleId === 'STRINGER-CONTOUR-SELF-INTERSECTION'), false);
+  }
+});
+
+// --- Third reported bug: the notch's riser face must be a true vertical cut, never diagonal -----
+//
+// With riser boards enabled, `effectiveBearings()` shifts every tread's own front corner
+// forward by `riserRecess` (room for the riser board's thickness), opening a small horizontal
+// gap between one bearing's raw back corner and the next bearing's (shifted) front corner.
+// `buildOverlayTop` used to connect those two corners with one straight polygon edge — which,
+// spanning both that horizontal gap AND the full riser height at once, is a visibly SLANTED
+// "riser face" instead of a plumb vertical cut (see the reported screenshot: the diagonal line
+// running from the top of one step down to the next, instead of straight down then a short
+// ledge).
+
+test('notch bug fix: with riser-board recess enabled, the riser face of every notch is a true VERTICAL cut, not diagonal', () => {
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: true });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  const bearings = model.segments[0].treadBearings;
+  assert.ok(bearings.some((b) => b.riserRecess > 0), 'this scenario must actually exercise a nonzero riser recess for the test to mean anything');
+
+  // Walk the top edge (everything before the two bottom corners) and find every place the
+  // polygon rises in elevation — that edge must have ZERO horizontal (u) travel.
+  const bottomPointCount = 2;
+  const top = geo.outerContour.slice(0, geo.outerContour.length - bottomPointCount);
+  let foundRise = false;
+  for (let i = 0; i < top.length - 1; i++) {
+    const a = top[i];
+    const b = top[i + 1];
+    if (b.v > a.v + 1e-6) {
+      foundRise = true;
+      assert.ok(Math.abs(b.u - a.u) < 1e-6, `riser face at index ${i} is diagonal: (${a.u},${a.v}) -> (${b.u},${b.v})`);
+    }
+  }
+  assert.ok(foundRise, 'expected at least one rising (riser) edge in the notch profile');
+});
+
 // --- Cleats are an optional support method, not a mandatory feature of 'cut' ---------------------
 
 test('stringerCleatsEnabled: false produces an empty cleats array, never a hidden assumption; contour/pitchLine are unaffected', () => {
