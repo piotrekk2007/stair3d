@@ -14,39 +14,56 @@
 // housed string is a plain rectangular board on both edges. This file builds that continuous
 // contour instead.
 //
-// --- The method: the pitch line -------------------------------------------------------------
+// --- The method: an unfolded (S,Z) profile through EVERY bearing, not just the first/last ---
 //
-// Every StringerTreadBearing's `bearingElevation` is an EXACT affine function of tread index
-// (`(index+1)*riserHeight - treadThickness` — see stringerSolver.js; never touched by manual
-// edits, which only move `finalUStart`/`finalUEnd`). For a straight flight this means the
-// (u, elevation) points of every bearing in one segment are already collinear. The "pitch
-// line" here is struck through the FIRST and LAST bearing's own corner points — the same
-// two-point method a joiner uses to strike a chalk line for a stringer layout (an established
-// general construction principle, not a number invented for this codebase — see
-// docs/architecture/STRINGER_CONSTRUCTION_MODEL.md). For a winder segment (going varies
-// tread-to-tread) intermediate bearings may deviate slightly from this line; `minRemainingSectionMm`
-// below is exactly the diagnostic that catches when that deviation threatens the board.
+// An earlier version of this file struck a single straight "pitch line" through only the
+// FIRST and LAST tread bearing of a segment (the traditional two-point carpenter's method —
+// exact for a uniform straight flight, since every bearing is collinear with it anyway). On a
+// winder, tread widths (and therefore the u-spacing between consecutive bearings) vary
+// sharply while riser height stays constant, so intermediate bearings can sit 100-250mm away
+// from that 2-point line — see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md for a real
+// measured example. The board's lower (and, for a closed string, upper) edge would then run in
+// clean air past several treads, or cut through them, instead of tracking the stair.
+//
+// The fix: build a PROFILE KNOT for every bearing — (u, Z) = (the bearing's own front corner
+// position along the board, its bearingElevation) — plus one closing knot at the last
+// bearing's own back corner, extrapolated along the local slope so the very last tread isn't
+// forced back to a flat corner (see buildPitchKnots below). For a uniform flight this is,
+// after collinearity simplification, EXACTLY the old 2-point line (same output, proven by the
+// existing straight-flight tests). For a winder it becomes a genuinely kinked polyline that
+// passes through every real bearing position. The board's structural top/bottom edges are then
+// solved as OFFSETS of this polyline along its own LOCAL NORMAL (see polylineProfile.js) —
+// never as a raw vertical (world-elevation) shift, which is only correct where the profile is
+// horizontal and otherwise both moves the edge the wrong distance and, worse, is what made
+// "distance to the bottom edge" an inaccurate proxy for actual remaining timber section.
 //
 // --- Two construction types, two different contours ------------------------------------------
 //
 //   CUT (overlay/open-cleated, "wanga nakładana"): the TOP edge steps to match each tread's own
 //   bearing region (the classic notched/sawtooth top of an open string — a REAL, correct
-//   feature of this construction type, not a defect); the BOTTOM edge is the single straight
-//   pitch-line-parallel line. A separate `cleats[]` array — small support blocks under each
-//   tread's seat — is reported alongside, never merged into the board's own outer contour (see
-//   requirement: "represent separately: structural board vs tread support/cleat geometry").
+//   feature of this construction type, not a defect) — this part is UNCHANGED by this
+//   refactor, since it already used every bearing's own position. The BOTTOM edge is the
+//   knot-profile offset down by `boardWidth`. A separate `cleats[]` array — small support
+//   blocks under each tread's seat — is reported alongside, never merged into the board's own
+//   outer contour.
 //
-//   CLOSED (housed/recessed, "wanga wpuszczana"): the outer contour is a PLAIN PARALLELOGRAM —
-//   both edges straight, parallel to the pitch line, the top offset above it by
-//   `config.stringerTopMarginMm`. Tread locations are `housings[]` — recesses cut into the
-//   board's INNER FACE, which never change the outer silhouette.
+//   CLOSED (housed/recessed, "wanga wpuszczana"): the outer contour's top and bottom are BOTH
+//   the knot-profile, offset up by `stringerTopMarginMm` and down by
+//   `boardWidth - stringerTopMarginMm` respectively — continuous and non-stepped even through
+//   a winder, per the construction type's own definition (an outer silhouette that never
+//   sawtooths). Tread locations are `housings[]` — recesses cut into the board's INNER FACE,
+//   which never change the outer silhouette. A new STRINGER-TREAD-SUPPORT diagnostic verifies
+//   every housing's own (u, elevation) is actually contained within this solved envelope,
+//   rather than silently trusting it.
 //
 // stringerRenderer.js consumes this file's output and NEVER computes geometry itself; this
 // file never touches Three.js.
 
 import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
+import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, housingDepthFor } from './stringerModel.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { GEOMETRY_EPS } from './tolerances.js';
 
 function toXY(p) {
   return { x: p.u, y: p.v };
@@ -88,33 +105,50 @@ function effectiveBearings(segment, extendStart, extendEnd) {
   });
 }
 
-function computePitchLine(effective) {
-  const first = effective[0];
+// --- Unfolded (u,Z) profile through every bearing (see file header) --------------------------
+//
+// One knot per bearing at its own FRONT corner (uStart, bearingElevation) — the traditional
+// carpenter's reference point (the "nosing line" is struck through the point where riser meets
+// tread, consistently on one side, never mixing a tread's front-flat and back-flat corners,
+// which sit at the SAME u but different Z and would fabricate a vertical jump where none
+// exists). The closing knot extrapolates the LAST real segment's own local slope out to the
+// final bearing's own back corner (u), rather than using that bearing's flat elevation there —
+// using the flat elevation would introduce an artificial kink at the very last tread even on a
+// perfectly uniform straight flight (verified against this file's own straight-flight tests).
+function buildPitchKnots(effective) {
+  const front = effective.map((b) => ({ u: b.uStart, v: b.bearingElevation }));
   const last = effective[effective.length - 1];
-  const start = { u: first.uStart, v: first.bearingElevation };
-  const end = { u: last.uEnd, v: last.bearingElevation };
+  const lastKnot = front[front.length - 1];
+  let closingV;
+  if (front.length >= 2) {
+    const prev = front[front.length - 2];
+    const du = lastKnot.u - prev.u;
+    const slope = du !== 0 ? (lastKnot.v - prev.v) / du : 0;
+    closingV = lastKnot.v + slope * (last.uEnd - lastKnot.u);
+  } else {
+    closingV = lastKnot.v; // a single-bearing run has no local slope to extrapolate — flat is the only option
+  }
+  return simplifyCollinear([...front, { u: last.uEnd, v: closingV }]);
+}
+
+function computePitchLineFromKnots(knots) {
+  const start = knots[0];
+  const end = knots[knots.length - 1];
   const du = end.u - start.u;
   const slope = du !== 0 ? (end.v - start.v) / du : 0;
   return { start, end, slope };
 }
 
-function pitchValueAt(pitchLine, u) {
-  return pitchLine.start.v + pitchLine.slope * (u - pitchLine.start.u);
-}
-
 // --- CUT (overlay/open-cleated) --------------------------------------------------------------
 
-function buildOverlayContour(effective, pitchLine, boardWidth) {
+// Top edge unchanged from before this refactor — it already used every bearing's own position.
+function buildOverlayTop(effective) {
   const top = [];
   for (const b of effective) {
     top.push({ u: b.uStart, v: b.bearingElevation });
     top.push({ u: b.uEnd, v: b.bearingElevation });
   }
-  const uStart = effective[0].uStart;
-  const uEnd = effective[effective.length - 1].uEnd;
-  const bottomEnd = { u: uEnd, v: pitchValueAt(pitchLine, uEnd) - boardWidth };
-  const bottomStart = { u: uStart, v: pitchValueAt(pitchLine, uStart) - boardWidth };
-  return [...top, bottomEnd, bottomStart];
+  return top;
 }
 
 function buildCleats(effective, config) {
@@ -131,19 +165,6 @@ function buildCleats(effective, config) {
 }
 
 // --- CLOSED (housed/recessed) -----------------------------------------------------------------
-
-function buildHousedContour(effective, pitchLine, boardWidth, topMarginMm) {
-  const uStart = effective[0].uStart;
-  const uEnd = effective[effective.length - 1].uEnd;
-  const topAtStart = pitchValueAt(pitchLine, uStart) + topMarginMm;
-  const topAtEnd = pitchValueAt(pitchLine, uEnd) + topMarginMm;
-  return [
-    { u: uStart, v: topAtStart },
-    { u: uEnd, v: topAtEnd },
-    { u: uEnd, v: topAtEnd - boardWidth },
-    { u: uStart, v: topAtStart - boardWidth },
-  ];
-}
 
 // Housing height matches the tread's own thickness (a real parametric value already in the
 // model, config.treadThickness) — the slot the tread's end actually sits in — never an
@@ -163,23 +184,74 @@ function buildHousings(effective, config) {
 
 // --- Diagnostics -------------------------------------------------------------------------------
 
-function computeMinRemainingSection(effective, pitchLine, boardWidth, constructionType, config) {
-  if (constructionType === CONSTRUCTION_TYPES.CLOSED) {
-    // Failure mode here is THROUGH the board's thickness (housing routed into the face), not
-    // along its width — a direct, geometry-independent calculation.
-    return config.stringerThickness - housingDepthFor(config.stringerThickness);
-  }
-  // CUT: failure mode is a notch coming too close to the single straight bottom edge — check
-  // every bearing's own two corners against the bottom edge directly below them.
+// PERPENDICULAR distance (not a raw vertical Z gap — see file header) from every bearing
+// corner to the solved bottom contour — the true remaining material thickness at that point.
+function computeMinRemainingSectionCut(effective, bottomPolyline) {
   let min = Infinity;
   for (const b of effective) {
     for (const u of [b.uStart, b.uEnd]) {
-      const bottomV = pitchValueAt(pitchLine, u) - boardWidth;
-      const gap = b.bearingElevation - bottomV;
-      if (gap < min) min = gap;
+      const dist = distancePointToPolyline({ u, v: b.bearingElevation }, bottomPolyline);
+      if (dist < min) min = dist;
     }
   }
-  return Number.isFinite(min) ? min : boardWidth;
+  return min;
+}
+
+// A 'cut' bearing whose corner has crossed THROUGH the bottom edge (perpendicular distance
+// <= 0) has no support at all there, not just thin material — a stronger statement than the
+// WARNING-level STRINGER-MIN-SECTION check, and reported per affected tread rather than only
+// as one aggregate minimum.
+function checkCutSupportFailure(effective, bottomPolyline, segmentId) {
+  const diags = [];
+  for (const b of effective) {
+    const distStart = distancePointToPolyline({ u: b.uStart, v: b.bearingElevation }, bottomPolyline);
+    const distEnd = distancePointToPolyline({ u: b.uEnd, v: b.bearingElevation }, bottomPolyline);
+    if (distStart <= GEOMETRY_EPS || distEnd <= GEOMETRY_EPS) {
+      diags.push(
+        createDiagnostic({
+          ruleId: 'STRINGER-TREAD-SUPPORT',
+          severity: 'ERROR',
+          elementType: 'stringer',
+          elementId: segmentId,
+          parameter: 'treadSupport',
+          value: b.treadIndex,
+          message: `Stopień o indeksie ${b.treadIndex} nie ma podparcia na wandze (${segmentId}) — dolna krawędź przechodzi przez lub nad miejscem oparcia.`,
+        })
+      );
+    }
+  }
+  return diags;
+}
+
+// A 'closed' bearing is recessed INSIDE the board via a housing — this verifies that housing's
+// own elevation actually falls within the solved [bottom,top] envelope at its own position,
+// rather than trusting that a per-bearing housing and a profile-derived envelope agree. This is
+// exactly the check that would have caught the original bug: on the un-fixed 2-point pitch
+// line, an intermediate winder bearing's true elevation could fall OUTSIDE the naive
+// (uStart/uEnd-only) envelope, i.e. a tread the solved board doesn't actually reach.
+function checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segmentId) {
+  const diags = [];
+  for (const b of effective) {
+    for (const u of [b.uStart, b.uEnd]) {
+      const top = valueAtU(topPolyline, u);
+      const bottom = valueAtU(bottomPolyline, u);
+      if (b.bearingElevation > top + GEOMETRY_EPS || b.bearingElevation < bottom - GEOMETRY_EPS) {
+        diags.push(
+          createDiagnostic({
+            ruleId: 'STRINGER-TREAD-SUPPORT',
+            severity: 'ERROR',
+            elementType: 'stringer',
+            elementId: segmentId,
+            parameter: 'treadSupport',
+            value: b.treadIndex,
+            message: `Stopień o indeksie ${b.treadIndex} wykracza poza bryłę wangi (${segmentId}) — brak podparcia w tym miejscu.`,
+          })
+        );
+        break;
+      }
+    }
+  }
+  return diags;
 }
 
 function hasSelfIntersection(polygon) {
@@ -208,6 +280,7 @@ function buildSegmentConstructionGeometry(segment, { config, extendStart, extend
       segmentId: segment.id,
       constructionType: segment.constructionType,
       pitchLine: null,
+      pitchProfile: [],
       outerContour: [],
       boardWidthMm: segment.width,
       thicknessMm: segment.thickness,
@@ -217,25 +290,39 @@ function buildSegmentConstructionGeometry(segment, { config, extendStart, extend
   }
 
   const effective = effectiveBearings(segment, extendStart, extendEnd);
-  const pitchLine = computePitchLine(effective);
+  const pitchKnots = buildPitchKnots(effective);
+  const pitchLine = computePitchLineFromKnots(pitchKnots);
   const constructionType = segment.constructionType;
   const boardWidth = segment.width;
 
   let outerContour;
   let cleats;
   let housings;
+  let bottomPolyline;
+  let topPolyline = null;
+
   if (constructionType === CONSTRUCTION_TYPES.CUT) {
-    outerContour = buildOverlayContour(effective, pitchLine, boardWidth);
+    bottomPolyline = offsetPolylineByNormal(pitchKnots, boardWidth, 'down');
+    const top = buildOverlayTop(effective);
+    outerContour = [...top, ...bottomPolyline.slice().reverse()];
     // Cleats are an optional support method, not a universal feature of a cut string — see
     // STAIR3D-STRINGER-CLEATS-OPTIONALITY (docs/STRINGER_CONSTRUCTION_SPEC.md §I). When
     // disabled, the tread rests on the notch alone: an empty array, never a hidden assumption.
     cleats = config.stringerCleatsEnabled === false ? [] : buildCleats(effective, config);
+    diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
   } else {
-    outerContour = buildHousedContour(effective, pitchLine, boardWidth, config.stringerTopMarginMm ?? 0);
+    const topMarginMm = config.stringerTopMarginMm ?? 0;
+    topPolyline = offsetPolylineByNormal(pitchKnots, topMarginMm, 'up');
+    bottomPolyline = offsetPolylineByNormal(pitchKnots, boardWidth - topMarginMm, 'down');
+    outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
     housings = buildHousings(effective, config);
+    diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
   }
 
-  const minRemainingSectionMm = computeMinRemainingSection(effective, pitchLine, boardWidth, constructionType, config);
+  const minRemainingSectionMm =
+    constructionType === CONSTRUCTION_TYPES.CLOSED
+      ? config.stringerThickness - housingDepthFor(config.stringerThickness)
+      : computeMinRemainingSectionCut(effective, bottomPolyline);
   const minRequired = config.stringerMinRemainingSectionMm ?? 0;
   if (minRemainingSectionMm < minRequired) {
     diagnostics.push(
@@ -270,6 +357,14 @@ function buildSegmentConstructionGeometry(segment, { config, extendStart, extend
     segmentId: segment.id,
     constructionType,
     pitchLine,
+    // DEBUG DATA (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14) — the full solved
+    // (u,Z) profile and its top/bottom envelope, exposed so a future debug view can show
+    // exactly why the contour has its shape without recomputing anything. Not consumed by
+    // stringerRenderer.js (it only reads outerContour/cleats/housings), so adding fields here
+    // is safe and additive.
+    pitchProfile: pitchKnots,
+    topProfile: topPolyline,
+    bottomProfile: bottomPolyline,
     outerContour,
     cleats,
     housings,

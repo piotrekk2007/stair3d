@@ -96,6 +96,34 @@ visual-recess into one number), and every `stringer*Mm` config default reclassif
 [src/rules/sets/stringerConstructionAssumptions.js](src/rules/sets/stringerConstructionAssumptions.js).
 Tests: [src/rules/__tests__/schema.test.js](src/rules/__tests__/schema.test.js).
 
+## Stringer profile refactor: unfolded (u,Z) profile through every bearing (implemented)
+
+See [docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md](docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md)
+for the full investigation and math. Fixes a reported "floating winder tread" symptom, but the
+diagnosis behind it turned out to be wrong in one specific, empirically-checked way: the
+2-point "pitch line" (`stringerConstructionGeometry.js`, fit through only a segment's first and
+last bearing) was the actual defect, **not** `stringerSolver.js`'s `COLLINEAR_EPS`-based
+segmentation, which was measured to already produce a small, fixed number of straight
+per-corner boards regardless of winder count — `stringerSolver.js` was not touched by this
+stage. `buildPitchKnots()` now builds one knot per bearing at its own front corner (plus an
+extrapolated closing knot), so intermediate winder bearings — previously up to ~250mm away
+from the naive 2-point line — sit exactly on it. `src/geometry/polylineProfile.js` (new, pure,
+independently tested) offsets that knot profile along its OWN LOCAL NORMAL to produce the
+structural top/bottom edges — never a raw vertical (world-elevation) shift, which was only
+correct for a horizontal profile and, on a uniform straight flight, also overstated the true
+remaining board thickness by `1/cos(pitch angle)`. This surfaced a real, closed-form quantity
+that the old code never actually computed correctly: a 'cut' board's notch "throat" thickness
+(`boardWidth − riserHeight·treadGoing/√(treadGoing²+riserHeight²)`), now locked in by a
+regression test. Two new ERROR-level `STRINGER-TREAD-SUPPORT` diagnostics
+(`checkCutSupportFailure`/`checkClosedSupportContainment`) verify a tread is never silently
+rendered without real support. `src/takeoff/materialTakeoff.js`'s stringer STOCK length was
+also fixed in the same pass: it must be the pitch profile's true arc length (a raked board's
+real 3D length, `profileLength()`), not the bounding box of the now-sheared offset contour nor
+even the profile's own horizontal u-extent. `stringerRenderer.js` was **not** touched — it
+still only extrudes whatever this file hands it. Tests:
+[src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
+[src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

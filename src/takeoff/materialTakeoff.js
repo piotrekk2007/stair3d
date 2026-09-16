@@ -19,7 +19,8 @@
 import { signedPolygonArea } from '../geometry/pathUtils.js';
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
-import { boundingRectAlong, boundingRectUV } from './stockGeometry.js';
+import { boundingRectAlong } from './stockGeometry.js';
+import { profileLength } from '../geometry/polylineProfile.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
@@ -143,19 +144,20 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
   const netAreaMm2 = Math.abs(signedPolygonArea(geo.outerContour.map((p) => ({ x: p.u, y: p.v }))));
   const netVolumeMm3 = netAreaMm2 * geo.thicknessMm;
 
-  // STOCK: the plain rectangular board this would actually be cut FROM — length spans the
-  // contour's own u-range (the board's physical length, unaffected by the vertical-elevation
-  // convention noted below); WIDTH is the DESIGN parameter (boardWidthMm), never re-derived
-  // from the contour's v-range, because v is WORLD ELEVATION (see note), not true
-  // perpendicular-to-pitch board width — re-deriving it from v would conflate slope-driven
-  // elevation gain with cross-sectional board width.
-  const { lengthMm } = boundingRectUV(geo.outerContour);
+  // STOCK: the plain rectangular board this would actually be cut FROM — length is the TRUE
+  // physical length of geo.pitchProfile (arc length in the (u,v) plane, where u = plan
+  // distance along the board and v = world elevation — its hypotenuse, not just its u-extent:
+  // a raked board is measurably longer than its horizontal plan projection). NOT the bounding
+  // box of geo.outerContour: the contour's top/bottom edges are now genuine PERPENDICULAR
+  // offsets of the pitch profile (see stringerConstructionGeometry.js), so the contour itself
+  // is a sheared quadrilateral whose axis-aligned bounding box doesn't equal true board length
+  // either. WIDTH is the DESIGN parameter (boardWidthMm) — the offset distance IS the true
+  // perpendicular board depth now, so this is no longer an approximation.
+  const lengthMm = profileLength(geo.pitchProfile);
   const stockAreaMm2 = lengthMm * geo.boardWidthMm;
   const stockVolumeMm3 = stockAreaMm2 * geo.thicknessMm;
 
-  const notes = [
-    'UWAGA (odziedziczona konwencja modelu geometrii, nieskorygowana w tym etapie): "v" w konturze wangi to ŚWIATOWA WYSOKOŚĆ (pionowa), nie odległość prostopadła do linii pochylenia — realna "szerokość deski mierzona prostopadle" różni się od tej pionowej przez czynnik cos(kąta biegu). Wymiar STOCK.widthMm celowo bierze wprost boardWidthMm (parametr projektowy), a NIE różnicę v konturu, żeby uniknąć zafałszowania przez tę konwencję. Patrz docs/STRINGER_CONSTRUCTION_SPEC.md.',
-  ];
+  const notes = [];
   if (geo.diagnostics.length > 0) notes.push(`Diagnostyka konstrukcyjna: ${geo.diagnostics.map((d) => d.ruleId).join(', ')}`);
 
   return createTakeoffItem({

@@ -13,6 +13,7 @@ import { buildStringerModel, buildStringerModelsForFlight } from '../stringerSol
 import { buildStringerConstructionGeometry } from '../stringerConstructionGeometry.js';
 import { checkParallelAndSpaced, assertReferenceLineIsStraight, CONSTRUCTION_TYPES } from '../stringerModel.js';
 import { segmentsProperlyIntersect } from '../pathUtils.js';
+import { valueAtU, distancePointToPolyline } from '../polylineProfile.js';
 
 function build(configPatch) {
   const config = { ...createDefaultConfig(), ...configPatch };
@@ -100,9 +101,16 @@ test('B. straight housed: outer contour is a plain 4-point parallelogram regardl
   const bearingCount = model.segments[0].treadBearings.length;
   assert.equal(geo.housings.length, bearingCount);
   assert.equal(geo.cleats, undefined);
-  // Housings never change the outer silhouette — their u-ranges lie within the board's own.
+  // Housings never change the outer silhouette — every housing's own elevation is contained
+  // within the solved [bottom,top] envelope AT ITS OWN POSITION (checked via valueAtU, not a
+  // raw u-range comparison — the top/bottom edges are now genuine PERPENDICULAR offsets of the
+  // pitch profile, so their u-coordinates shift very slightly relative to the original bearing
+  // u-values whenever the profile is sloped; a fixed-u containment check is the wrong test for
+  // an offset that is deliberately not purely vertical anymore).
   for (const h of geo.housings) {
-    assert.ok(h.uStart >= geo.outerContour[0].u - 1e-6 && h.uEnd <= geo.outerContour[1].u + 1e-6);
+    const topAtStart = valueAtU(geo.topProfile, h.uStart);
+    const bottomAtStart = valueAtU(geo.bottomProfile, h.uStart);
+    assert.ok(h.topV <= topAtStart + 1e-6 && h.topV >= bottomAtStart - 1e-6, 'housing must sit inside the board envelope at its own position');
   }
 });
 
@@ -188,17 +196,27 @@ test('tread supports in the construction geometry correspond to FINAL (edited) t
 
 // --- G. Changed stringer width (board depth) ----------------------------------------------------
 
-test('G. changed stringer width (board depth) changes the bottom edge offset by exactly the new width', () => {
-  const narrow = build({ ...REALISTIC_STRAIGHT, stringerHeight: 220 });
-  const wide = build({ ...REALISTIC_STRAIGHT, stringerHeight: 380 });
+test('G. changed stringer width (board depth) changes the bottom edge by exactly the new width, measured PERPENDICULAR to the pitch line', () => {
+  // Not a raw vertical (world-elevation) delta: for a sloped pitch line, a true perpendicular
+  // offset of `boardWidth` moves a point's v-coordinate by boardWidth*cos(angle) < boardWidth
+  // — asserting a raw vertical delta here would silently re-introduce the bug this refactor
+  // fixes (see stringerConstructionGeometry.js's file header on "measured perpendicular, not
+  // raw world elevation").
+  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 220 });
+  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 380 });
   const geoNarrow = buildStringerConstructionGeometry(buildStringerModel(narrow.planLayout, narrow.config, 'outer'), narrow.config)[0];
   const geoWide = buildStringerConstructionGeometry(buildStringerModel(wide.planLayout, wide.config, 'outer'), wide.config)[0];
 
   assert.equal(geoNarrow.boardWidthMm, 220);
   assert.equal(geoWide.boardWidthMm, 380);
-  const bottomNarrow = geoNarrow.outerContour[geoNarrow.outerContour.length - 1];
-  const bottomWide = geoWide.outerContour[geoWide.outerContour.length - 1];
-  assert.ok(Math.abs(bottomNarrow.v - bottomWide.v - (380 - 220)) < 1e-6, 'the bottom edge must move down by exactly the width delta');
+
+  // Every bearing's front corner sits exactly ON the (pre-offset) pitch profile by
+  // construction, so its perpendicular distance to the offset bottom line must equal the
+  // configured board width exactly, for both widths.
+  const knotNarrow = geoNarrow.pitchProfile[0];
+  const knotWide = geoWide.pitchProfile[0];
+  assert.ok(Math.abs(distancePointToPolyline(knotNarrow, geoNarrow.bottomProfile) - 220) < 1e-6);
+  assert.ok(Math.abs(distancePointToPolyline(knotWide, geoWide.bottomProfile) - 380) < 1e-6);
 });
 
 // --- H. Changed board thickness -------------------------------------------------------------
@@ -229,13 +247,77 @@ test('paired stringers remain parallel and correctly spaced after building const
   }
 });
 
-// --- Diagnostics genuinely fire on a deliberately unrealistic/steep configuration ---------------
+// --- Diagnostics genuinely fire when the board is actually too narrow ---------------------------
 
-test('an unrealistically steep flight (tall risers, short goings) is flagged by the min-remaining-section diagnostic, not silently accepted', () => {
-  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6, totalRise: 2800, treadGoing: 270, stringerConstructionType: 'cut' });
+test('a remaining section below the configured minimum threshold is flagged, not silently accepted', () => {
+  // Raise the REQUIRED minimum past the board's own actual remaining section (rather than
+  // shrinking the board itself, which for a 'cut' stringer's notch geometry quickly becomes
+  // self-intersecting instead of merely thin — a different, ERROR-level failure mode).
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionType: 'cut', stringerMinRemainingSectionMm: 320 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
-  assert.ok(geo.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-SECTION'), 'expected the naive pitch-line method\'s limits to be surfaced as a diagnostic, not hidden');
+  assert.ok(geo.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-SECTION'), 'expected a remaining section below the configured minimum to trip the diagnostic');
+});
+
+// --- Regression: the min-section number for a UNIFORM flight must be a real, closed-form ------
+// --- quantity (the notch "throat" thickness), not an artifact of a badly-fit pitch line -------
+//
+// The pre-refactor 2-point pitch line (fit through only the first and last bearing) computed a
+// slope that did not match the flight's own true riser/going ratio (see this file's header and
+// docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md) — for this exact steep-but-uniform flight it
+// produced a NEGATIVE (i.e. self-intersecting) min-section reading, purely from the wrong slope.
+// The fixed pitch line passes through every real bearing, so the only remaining thinning is the
+// genuine, physically real one: a notch's BACK corner (where riser meets the next tread) sits
+// below the smooth pitch line by exactly one riserHeight, which — projected perpendicular to a
+// sloped pitch line — is a smaller gap than the boardWidth measured at the notch's FRONT corner.
+// For a uniform flight this reduction has an exact closed form:
+//   throat = boardWidth - riserHeight * treadGoing / hypot(treadGoing, riserHeight)
+// This test locks in that closed form, rather than either the old (wrong, negative) reading or
+// a naive "must equal the full board width" assumption (also wrong — a real notch throat IS
+// thinner than the board's own depth, by design of the notch itself).
+
+test('a steep but UNIFORM straight flight reports the real notch-throat thickness as its remaining section (closed form, not a pitch-line artifact)', () => {
+  const totalRise = 2800;
+  const treadGoing = 270;
+  const treadsLegA = 6;
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA, totalRise, treadGoing, stringerConstructionType: 'cut' });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  const riserHeight = totalRise / (treadsLegA + 1);
+  const expectedThroat = geo.boardWidthMm - (riserHeight * treadGoing) / Math.hypot(treadGoing, riserHeight);
+  assert.ok(Math.abs(geo.minRemainingSectionMm - expectedThroat) < 1e-3, `expected ${expectedThroat}, got ${geo.minRemainingSectionMm}`);
+  assert.ok(geo.minRemainingSectionMm > 0, 'must be a real positive thickness, not the old negative/self-intersecting reading');
+});
+
+// --- THE reported bug: winder tread widths must not disconnect the board from the treads --------
+
+test('winder bug fix: every bearing on a winder segment is fully contained within the solved board envelope (no floating tread)', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionType: 'closed' });
+  for (const side of ['outer', 'inner']) {
+    const model = buildStringerModel(planLayout, config, side);
+    const geometries = buildStringerConstructionGeometry(model, config);
+    for (const geo of geometries) {
+      if (!geo.topProfile) continue;
+      const supportErrors = geo.diagnostics.filter((d) => d.ruleId === 'STRINGER-TREAD-SUPPORT');
+      assert.deepEqual(supportErrors, [], `${side}/${geo.segmentId}: every bearing must be contained in the board envelope, got: ${JSON.stringify(supportErrors)}`);
+    }
+  }
+});
+
+test('winder bug fix: the pitch profile passes through every real bearing position, not just the first and last', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER);
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  const multiTreadSegment = geometries.find((g) => g.pitchProfile.length > 0 && model.segments.find((s) => s.id === g.segmentId).treadBearings.length > 2);
+  assert.ok(multiTreadSegment, 'expected at least one winder segment with more than 2 bearings for this to be a meaningful test');
+  const segment = model.segments.find((s) => s.id === multiTreadSegment.segmentId);
+  // Every bearing's own front corner must be, by construction, essentially ON the pitch
+  // profile (perpendicular distance ~0) — the defining property that fixes the original bug
+  // (a naive 2-point line left intermediate bearings 100-250mm away from it).
+  for (const b of segment.treadBearings) {
+    const dist = distancePointToPolyline({ u: b.finalUStart, v: b.bearingElevation }, multiTreadSegment.pitchProfile);
+    assert.ok(dist < 1e-6, `bearing ${b.treadIndex} is ${dist.toFixed(1)}mm away from its own pitch profile`);
+  }
 });
 
 // --- Cleats are an optional support method, not a mandatory feature of 'cut' ---------------------
