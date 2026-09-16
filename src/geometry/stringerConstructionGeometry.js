@@ -495,6 +495,75 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
  *   stringerCleatHeightMm/treadThickness/hasCornerPost; never mutated.
  * @returns {import('./stringerModel.js').StringerSegmentConstructionGeometry[]}
  */
+// At a CORNER_POST joint (see groupSegmentsByLapJoint's header — a real post genuinely
+// interrupts the run, so the two sides are deliberately solved independently, never forced
+// into one continuous profile) each side's own boundary knot, right next to the post, is
+// reached by extrapolating that side's OWN local slope backward/forward past its own real
+// bearing data. For a segment whose first few treads are much NARROWER than the rest (the
+// classic case: treads right next to the inner "dusza" on a winder are far narrower than
+// straight-flight treads), that local slope is far steeper than the segment's overall pitch —
+// and extrapolating a steep line, THEN extrapolating its own perpendicular OFFSET again
+// (offsetting shifts a steep segment's own u-domain further, requiring an even larger backward
+// extrapolation to reach u=0) compounds into a boundary point far below/above where it
+// physically belongs — a real, reported symptom: one board's end visibly overshooting past
+// where the post-jointed neighbour's own end already sits.
+//
+// A post can absorb SOME difference between the two sides (that is the whole reason
+// CORNER_POST joints don't require exact continuity — see groupSegmentsByLapJoint) but not an
+// unbounded one. This clamps each segment's own boundary elevation so it never overshoots PAST
+// the immediately preceding segment's own corresponding boundary — a sanity bound, not a
+// continuity requirement: the two sides may still legitimately differ (the post covers that),
+// they just may not cross past each other.
+function clampCrossSegmentOvershoot(orderedGeometries) {
+  for (let i = 1; i < orderedGeometries.length; i++) {
+    const prev = orderedGeometries[i - 1];
+    const curr = orderedGeometries[i];
+    if (!prev.bottomProfile || !curr.bottomProfile) continue;
+    let changed = false;
+
+    const prevBottomEnd = prev.bottomProfile[prev.bottomProfile.length - 1];
+    const currBottomStart = curr.bottomProfile[0];
+    if (currBottomStart.v < prevBottomEnd.v) {
+      currBottomStart.v = prevBottomEnd.v; // mutates the shared point object — see outerContour note below
+      changed = true;
+    }
+
+    if (prev.topProfile && curr.topProfile) {
+      const prevTopEnd = prev.topProfile[prev.topProfile.length - 1];
+      const currTopStart = curr.topProfile[0];
+      if (currTopStart.v > prevTopEnd.v) {
+        currTopStart.v = prevTopEnd.v;
+        changed = true;
+      }
+    }
+
+    // outerContour's bottom (and, for closed, top) points are the SAME object references as
+    // bottomProfile/topProfile (see buildGroupConstructionGeometry: `bottomPolyline.slice().
+    // reverse()` copies the ARRAY, not the points) — mutating the point above already updated
+    // outerContour too. Only the self-intersection diagnostic can change as a result; the
+    // min-section/support-containment numbers were computed from the pre-clamp profile and
+    // describe the tread supports themselves, which this clamp never touches.
+    if (changed) {
+      const wasFlagged = curr.diagnostics.some((d) => d.ruleId === 'STRINGER-CONTOUR-SELF-INTERSECTION');
+      const isNowSelfIntersecting = hasSelfIntersection(curr.outerContour);
+      if (wasFlagged && !isNowSelfIntersecting) {
+        curr.diagnostics = curr.diagnostics.filter((d) => d.ruleId !== 'STRINGER-CONTOUR-SELF-INTERSECTION');
+      } else if (!wasFlagged && isNowSelfIntersecting) {
+        curr.diagnostics.push(
+          createDiagnostic({
+            ruleId: 'STRINGER-CONTOUR-SELF-INTERSECTION',
+            severity: 'ERROR',
+            elementType: 'stringer',
+            elementId: curr.segmentId,
+            parameter: 'outerContour',
+            message: `Kontur wangi (${curr.segmentId}) jest samoprzecinający się — geometria nieprawidłowa.`,
+          })
+        );
+      }
+    }
+  }
+}
+
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model.segments, config.hasCornerPost);
   const extendInfo = new Map(
@@ -504,5 +573,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
-  return model.segments.map((s) => bySegmentId.get(s.id));
+  const ordered = model.segments.map((s) => bySegmentId.get(s.id));
+  clampCrossSegmentOvershoot(ordered);
+  return ordered;
 }

@@ -164,7 +164,21 @@ one — an artificial near-zero-width flat plateau that made the immediately fol
 unrealistically steep, which the closing-knot extrapolation then amplified into a long, sharply
 pointed spike at the very ends of the board (reported: projecting past the ceiling/floor).
 Fixed by skipping any bearing where `!b.ownsStart` when building front knots — zero effect on
-ordinary bearings, which always own their start. See §14 of the same doc. Tests:
+ordinary bearings, which always own their start. See §14 of the same doc.
+
+**Fourth follow-up: a CORNER_POST-separated segment's own boundary overshot its neighbour.**
+At a `CORNER_POST` joint each side is deliberately solved independently (a post absorbs the
+difference — exact continuity isn't required, unlike a `LAP_JOINT`). When a segment's first
+few treads are much narrower than the rest (the inner "dusza" side of a winder: measured 110mm
+vs. 270mm treads), its local pitch slope near the start is far steeper than its overall pitch —
+reaching that segment's own boundary requires extrapolating the steep slope backward, then
+extrapolating its already-offset bottom line backward AGAIN (offsetting a steep segment shifts
+its own u-domain further, requiring an even larger correction), compounding into a boundary far
+below where it belongs (reported: one board's end visibly stretched/drooping past where the
+post-jointed neighbour's own end already sits). `clampCrossSegmentOvershoot()` now clamps each
+segment's own boundary so it never crosses past the immediately preceding segment's own
+corresponding boundary — a sanity bound, not a continuity requirement, so a `LAP_JOINT` pair
+(already exactly continuous) is untouched. See §15 of the same doc. Tests:
 [src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
 [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
 

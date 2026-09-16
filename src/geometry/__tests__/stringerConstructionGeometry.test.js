@@ -431,6 +431,45 @@ test('spike bug fix: the profile never overshoots more than roughly one riser he
   }
 });
 
+// --- Fifth reported bug: a CORNER_POST-separated segment's own boundary overshot the ---------
+// --- neighbouring segment's already-solved boundary --------------------------------------------
+//
+// At a CORNER_POST joint each side is deliberately solved independently (see
+// groupSegmentsByLapJoint's header — the post absorbs the difference, exact continuity isn't
+// required). But when a segment's FIRST few treads are much NARROWER than the rest (the
+// classic inner/"dusza" side of a winder: 110mm treads next to 270mm ones), that segment's own
+// local pitch slope near its start is far steeper than its overall pitch. Extrapolating that
+// steep slope backward to the segment's own u=0 — and then extrapolating its already-OFFSET
+// bottom line backward AGAIN (offsetting a steep line shifts its own u-domain further forward,
+// so reaching back to u=0 needs an even larger correction) — compounds into a boundary far
+// below where it physically belongs: reported as one board's end visibly drooping/stretching
+// past where the post-jointed neighbour's own end already sits.
+
+test('overshoot bug fix: a narrow-tread inner segment\'s bottom start never drops below the previous segment\'s own bottom end', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, hasCornerPost: true, stringerConstructionType: 'cut' });
+  const model = buildStringerModel(planLayout, config, 'inner');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  for (let i = 1; i < geometries.length; i++) {
+    const prev = geometries[i - 1];
+    const curr = geometries[i];
+    if (!prev.bottomProfile || !curr.bottomProfile) continue;
+    const prevEnd = prev.bottomProfile[prev.bottomProfile.length - 1];
+    const currStart = curr.bottomProfile[0];
+    assert.ok(currStart.v >= prevEnd.v - 1e-6, `${curr.segmentId}'s bottom start (${currStart.v}) drops below ${prev.segmentId}'s bottom end (${prevEnd.v})`);
+  }
+});
+
+test('overshoot bug fix: clamping does not touch a lap-jointed pair (already exactly continuous)', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER); // outer side is always a lap joint
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  for (let i = 1; i < geometries.length; i++) {
+    const prevEnd = geometries[i - 1].bottomProfile[geometries[i - 1].bottomProfile.length - 1];
+    const currStart = geometries[i].bottomProfile[0];
+    assert.ok(Math.abs(currStart.v - prevEnd.v) < 1e-6, 'a lap-jointed pair must remain exactly continuous, not merely clamped');
+  }
+});
+
 // --- Third reported bug: the notch's riser face must be a true vertical cut, never diagonal -----
 //
 // With riser boards enabled, `effectiveBearings()` shifts every tread's own front corner

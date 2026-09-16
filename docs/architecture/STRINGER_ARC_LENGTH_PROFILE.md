@@ -282,3 +282,30 @@ no discontinuity), and a broad sweep across winder-count/leg-length/corner-post 
 pitch-profile point straying more than roughly one riser height past the segment's own real
 bearing-elevation range. Locked in by two regression tests (a direct plateau check, and a
 range-bound sweep using the specific short-leg config that originally triggered the spike).
+
+## 15. Addendum 4 — a CORNER_POST-separated segment's own boundary overshot its neighbour
+
+A further report: the INNER stringer's second segment (after a corner post) had a visibly
+"stretched"/drooping bottom end.
+
+Root cause: at a `CORNER_POST` joint each side is deliberately solved independently (§3's
+`groupSegmentsByLapJoint` — the post absorbs the difference, exact continuity is not required
+there, unlike a `LAP_JOINT`). When a segment's first few treads are much NARROWER than the rest
+— the classic case: treads next to the inner "dusza" on a winder are far narrower (measured:
+110mm) than straight-flight treads (270mm) — that segment's own local pitch slope near its
+start is far steeper than its overall pitch (measured: 1.59 vs. 0.65). Reaching the segment's
+own `u=0` boundary requires extrapolating that steep slope backward — and then, separately,
+extrapolating its already-OFFSET bottom line backward AGAIN, since offsetting a steep segment
+shifts its own u-domain further forward, requiring an even larger backward correction to reach
+back to `u=0`. The two extrapolations compound into a boundary point far below where it
+physically belongs.
+
+A post can absorb SOME difference between its two sides — that's the entire reason a
+`CORNER_POST` joint doesn't require exact continuity — but not an unbounded one.
+`clampCrossSegmentOvershoot()` now clamps each segment's own boundary elevation so it never
+drops below (bottom) / rises above (top) the immediately preceding segment's own corresponding
+boundary — a sanity bound, not a continuity requirement: the two sides may still legitimately
+differ, they simply may not cross past each other. Since a `LAP_JOINT` pair is already exactly
+continuous (§3), the clamp is a no-op there (locked in by a dedicated test). Re-checks the
+self-intersection diagnostic after clamping, since changing a boundary point can (rarely) fix or
+introduce one.
