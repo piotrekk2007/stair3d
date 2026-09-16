@@ -1,8 +1,13 @@
 // MATERIAL CATALOG — a deliberately thin abstraction, NOT an ERP. It exists so a company can
 // eventually say "we stock C24 in these thicknesses/widths/lengths" without that knowledge
-// living inside the takeoff solver itself. Nothing here enforces or validates a computed stock
-// size against the catalog yet (no "round up to nearest available board width" logic) — that
-// is exactly the kind of stock-optimization feature explicitly deferred by this stage.
+// living inside the takeoff solver itself.
+//
+// `roundUpToCatalogSize()` below is the one piece of "does this computed dimension correspond
+// to a real, orderable size" logic this file owns — deliberately NOT the same thing as stock
+// OPTIMIZATION (bin-packing, board nesting, cutting-plan generation are still explicitly out of
+// scope): this only answers "what is the smallest catalog size that is >= what's needed", one
+// dimension at a time, for a single linear member (a stringer, a cleat, a post) — never how to
+// lay out several parts across one board.
 
 /**
  * @typedef {Object} MaterialCatalogEntry
@@ -43,4 +48,26 @@ export const DEFAULT_MATERIAL_CATALOG = Object.freeze({
  */
 export function getMaterialCatalogEntry(materialId, catalog = DEFAULT_MATERIAL_CATALOG) {
   return catalog[materialId] ?? null;
+}
+
+/**
+ * Finds the smallest available catalog size that is still >= `requiredMm` — "round up to the
+ * next real board", never down (rounding down would silently make the part too short/thin/
+ * narrow). Returns `{ sizeMm: null, exact: false }`, never an invented number, when even the
+ * largest available size isn't enough — that case means the part must be joined/laminated from
+ * more than one piece, which is a real manufacturing fact worth surfacing, not something to
+ * paper over with a number that doesn't correspond to anything orderable.
+ *
+ * @param {number} requiredMm
+ * @param {number[]} [availableSizesMm]  Needn't be pre-sorted.
+ * @returns {{ sizeMm: number|null, exact: boolean }}  `exact` is true when `requiredMm` already
+ *   matches an available size (within 1e-6mm) — i.e. no rounding was actually needed.
+ */
+export function roundUpToCatalogSize(requiredMm, availableSizesMm) {
+  if (!availableSizesMm || availableSizesMm.length === 0) return { sizeMm: null, exact: false };
+  const sorted = [...availableSizesMm].sort((a, b) => a - b);
+  for (const size of sorted) {
+    if (size >= requiredMm - 1e-6) return { sizeMm: size, exact: Math.abs(size - requiredMm) < 1e-6 };
+  }
+  return { sizeMm: null, exact: false }; // nothing in the catalog is long/wide/thick enough
 }

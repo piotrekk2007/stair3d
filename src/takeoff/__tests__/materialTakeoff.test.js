@@ -357,3 +357,51 @@ test('scenario F: a manual edge override changes only the affected tread/riser/s
     assert.equal(postsBase[i].netVolume, postsEdited[i].netVolume);
   }
 });
+
+// --- Catalog stock rounding — "what do I actually order" for linear timber members -------------
+
+test('catalog stock: a stringer\'s computed length is rounded UP to the nearest real catalog length', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionType: 'cut', stringerThickness: 50 });
+  const items = compute(scenario);
+  const stringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER);
+  assert.ok(stringer.catalogStock, 'expected a catalogStock entry for a timber-c24 stringer');
+  assert.ok(stringer.catalogStock.lengthMm >= stringer.calculatedDimensions.lengthMm, 'catalog length must never be shorter than the real requirement');
+  assert.equal(stringer.catalogStock.exact, false, 'this length should not land exactly on a catalog size');
+  assert.equal(stringer.catalogStock.unsupported, false);
+});
+
+test('catalog stock: a board width/thickness that exceeds every catalog size is reported as unsupported, never invented', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450 }); // catalog tops out at 350mm width
+  const items = compute(scenario);
+  const stringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER);
+  assert.equal(stringer.catalogStock.widthMm, null, 'no catalog width covers 450mm — must be null, not a guessed number');
+  assert.equal(stringer.catalogStock.unsupported, true);
+  assert.ok(stringer.notes.some((n) => n.includes('widthMm') && n.includes('450')), 'the gap must be named explicitly in notes');
+});
+
+test('catalog stock: cleats are deliberately excluded (cut from offcuts, never bought to a catalog length)', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450, stringerCleatsEnabled: true });
+  const items = compute(scenario);
+  const cleats = items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_CLEAT);
+  assert.ok(cleats.length > 0);
+  for (const cleat of cleats) assert.equal(cleat.catalogStock, null);
+});
+
+test('catalog stock: a post\'s square cross-section is checked against BOTH catalog width and thickness lists', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 5 });
+  const items = compute(scenario);
+  const post = items.find((i) => i.elementType === ELEMENT_TYPES.POST);
+  assert.ok(post.catalogStock);
+  // Default post size (110mm) exceeds the illustrative catalog's max sawn-board thickness
+  // (60mm) — a genuine catalog gap (posts need their own stock entry), correctly surfaced
+  // rather than silently matched to something that doesn't apply.
+  assert.equal(post.catalogStock.thicknessMm, null);
+  assert.equal(post.catalogStock.unsupported, true);
+});
+
+test('catalog stock: risers and housings never get a catalogStock (sheet-nesting / not a purchasable board)', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, hasRiserBoards: true, stringerConstructionType: 'closed' });
+  const items = compute(scenario);
+  for (const riser of items.filter((i) => i.elementType === ELEMENT_TYPES.RISER)) assert.equal(riser.catalogStock, null);
+  for (const housing of items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING)) assert.equal(housing.catalogStock, null);
+});

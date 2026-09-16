@@ -414,7 +414,21 @@ mirroring the Validator's own composition:
   `(elementType, materialId)` pair — never hardcoded into the solver above.
 - **`src/takeoff/materialCatalog.js`** — a deliberately thin material catalog (species,
   available thicknesses/widths/lengths per `materialId`) — explicitly not stock-optimization or
-  an ERP; nothing here rounds a computed STOCK size up to an available board yet.
+  an ERP. `roundUpToCatalogSize(requiredMm, availableSizesMm)` finds the smallest catalog size
+  that is still `>=` a computed requirement — one dimension of one linear member at a time,
+  never board-nesting/cutting-plan generation, which stays explicitly out of scope. Found by an
+  end-to-end audit (a salesperson would otherwise have to look up real board sizes by hand):
+  `materialTakeoff.js` now attaches a `catalogStock: {lengthMm, widthMm, thicknessMm, exact,
+  unsupported}` to every STRINGER and POST item (not cleats — cut from scrap/offcuts, never
+  bought to a catalog length; not risers/housings — sheet goods nested across a sheet, or not a
+  purchasable item at all). `unsupported: true` (with an explanatory note, e.g. "wymaga
+  łączenia/sklejania") when even the largest catalog size can't cover a dimension — e.g. the
+  illustrative catalog's 350mm max board width can't cover a 450mm-deep stringer, and its 60mm
+  max sawn-board thickness can't cover a typical ~110mm square post section (a genuine catalog
+  gap: posts need their own stock entry) — surfaced honestly, never rounded to a number that
+  doesn't exist. Exposed in both `export/toCSV.js` (Order length/width/thickness/gap columns)
+  and `export/toTextReport.js` ("Zamówienie (katalog): ..."). Tests:
+  [src/takeoff/__tests__/materialCatalog.test.js](src/takeoff/__tests__/materialCatalog.test.js).
 - **`src/takeoff/pricing.js`** (`applyPricing`, `DEFAULT_PRICE_LIST`) — COST, joined onto
   quantities by **`materialId`** (not `itemId` — the same price entry prices every tread, every
   cleat, etc. made of that material) afterwards, multiplying `wasteAdjustedQuantity` (STOCK ×

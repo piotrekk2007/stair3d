@@ -81,6 +81,27 @@ export const TAKEOFF_ITEM_STATUS = Object.freeze({
  *                                            or carrying a WARNING even when status is OK).
  * @property {string[]} notes               Human-readable caveats (e.g. "purchasing
  *                                            approximation: winder bounding rectangle").
+ * @property {CatalogStock|null} catalogStock  The nearest REAL orderable board for this item,
+ *                                            per materialCatalog.js — null for element types
+ *                                            that don't map onto a single-board catalog lookup
+ *                                            (sheet goods bought/nested by area, informational
+ *                                            housings, or a material with no catalog entry at
+ *                                            all). See materialCatalog.js's roundUpToCatalogSize.
+ */
+
+/**
+ * @typedef {Object} CatalogStock
+ * @property {number|null} lengthMm      Smallest catalog length >= the computed requirement,
+ *                                         or null if none is long enough.
+ * @property {number|null} widthMm       Same, for width/board-depth. null if not applicable
+ *                                         (e.g. a post has no separate "width").
+ * @property {number|null} thicknessMm   Same, for thickness.
+ * @property {boolean} exact             True only if EVERY dimension above already matched a
+ *                                         catalog size exactly (no rounding needed anywhere).
+ * @property {boolean} unsupported       True if ANY dimension exceeds every available catalog
+ *                                         size — the part cannot be cut from one stock piece as
+ *                                         specified; see the item's own `notes` for which
+ *                                         dimension and by how much.
  */
 
 const REQUIRED_FIELDS = ['itemId', 'elementType', 'sourceElementId', 'material', 'materialId', 'quantity', 'unit', 'nominalDimensions', 'calculatedDimensions', 'wasteFactor', 'optional', 'status'];
@@ -142,5 +163,6 @@ export function createTakeoffItem(fields) {
     status: fields.status,
     diagnostics: fields.diagnostics ?? [],
     notes: fields.notes ?? [],
+    catalogStock: fields.catalogStock ?? null,
   };
 }

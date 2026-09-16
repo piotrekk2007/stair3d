@@ -21,6 +21,7 @@ import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoff
 import { wasteFactorFor } from './wasteFactors.js';
 import { boundingRectAlong } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
+import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
@@ -28,6 +29,45 @@ const MM3_TO_M3 = 1 / 1_000_000_000;
 const TIMBER_MATERIAL_ID = (grade) => `timber-${(grade || 'c24').toLowerCase()}`;
 const RISER_MATERIAL_ID = 'sheet-plywood-mdf';
 const RISER_MATERIAL_LABEL = 'Sklejka/płyta MDF';
+
+// --- Catalog stock rounding (linear/prismatic timber members only — see materialCatalog.js) ---
+//
+// Rounds a computed {lengthMm, widthMm, thicknessMm} requirement up to the nearest size the
+// material catalog actually stocks, one dimension at a time — never averaged, never "close
+// enough" — and reports honestly (`unsupported: true`) when even the largest catalog size can't
+// cover a dimension, rather than inventing a board that doesn't exist. `widthMm` may be
+// `undefined` (a post has no separate width) and is simply skipped. Sheet goods (plywood/MDF)
+// and elements with no catalog entry (housings: `materialId: null`) correctly get `null` back —
+// nesting several parts across one sheet is real stock-optimization, explicitly out of scope.
+function buildCatalogStock(materialId, required) {
+  const entry = getMaterialCatalogEntry(materialId);
+  if (!entry) return { catalogStock: null, notes: [] };
+
+  const dims = [
+    ['lengthMm', entry.availableLengthsMm],
+    ['widthMm', entry.availableWidthsMm],
+    ['thicknessMm', entry.availableThicknessesMm],
+  ];
+  const rounded = { lengthMm: null, widthMm: null, thicknessMm: null };
+  let exact = true;
+  let unsupported = false;
+  const notes = [];
+
+  for (const [key, availableSizes] of dims) {
+    const requiredMm = required[key];
+    if (requiredMm === undefined || requiredMm === null) continue;
+    const { sizeMm, exact: dimExact } = roundUpToCatalogSize(requiredMm, availableSizes);
+    rounded[key] = sizeMm;
+    if (sizeMm === null) {
+      unsupported = true;
+      notes.push(`Wymagany wymiar "${key}" (${Math.round(requiredMm)}mm) przekracza największy dostępny w katalogu dla ${entry.label} — wymaga łączenia/sklejania z kilku elementów.`);
+    } else if (!dimExact) {
+      exact = false;
+    }
+  }
+
+  return { catalogStock: { ...rounded, exact, unsupported }, notes };
+}
 
 // --- Treads (also covers "podesty" — a landing tread is elementType LANDING) -----------------
 
@@ -159,6 +199,8 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
 
   const notes = [];
   if (geo.diagnostics.length > 0) notes.push(`Diagnostyka konstrukcyjna: ${geo.diagnostics.map((d) => d.ruleId).join(', ')}`);
+  const { catalogStock, notes: catalogNotes } = buildCatalogStock(materialId, { lengthMm, widthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm });
+  notes.push(...catalogNotes);
 
   return createTakeoffItem({
     itemId: `stringer-${side}-${segment.id}`,
@@ -171,6 +213,7 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
     unit: 'szt',
     nominalDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm, netAreaMm2 },
     calculatedDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm },
+    catalogStock,
     netVolume: netVolumeMm3 * MM3_TO_M3,
     netArea: netAreaMm2 * MM2_TO_M2,
     stockVolume: stockVolumeMm3 * MM3_TO_M3,
@@ -267,6 +310,12 @@ function buildPostItem(post, config, wasteFactors) {
   const heightMm = post.elevation.top - post.elevation.bottom;
   const netVolumeMm3 = post.size * post.size * heightMm;
   const label = { start: 'Słupek początkowy', end: 'Słupek końcowy', corner: 'Słup narożny (konstrukcyjny)' }[post.kind] || post.kind;
+  // A post is square in section, so its cross-section maps onto BOTH the catalog's width and
+  // thickness lists — the current illustrative timber-c24 catalog only lists sawn-board sizes
+  // (thickness <= 60mm, width >= 150mm), which don't cover a typical ~110mm square post
+  // section at all; that's a genuine, useful gap to surface (this catalog needs a dedicated
+  // post-stock entry), not something to paper over by skipping the check.
+  const { catalogStock, notes: catalogNotes } = buildCatalogStock(materialId, { lengthMm: heightMm, widthMm: post.size, thicknessMm: post.size });
   return createTakeoffItem({
     itemId: `post-${post.postId}`,
     elementType: ELEMENT_TYPES.POST,
@@ -277,6 +326,7 @@ function buildPostItem(post, config, wasteFactors) {
     unit: 'szt',
     nominalDimensions: { crossSectionMm: post.size, heightMm },
     calculatedDimensions: { crossSectionMm: post.size, heightMm },
+    catalogStock,
     netVolume: netVolumeMm3 * MM3_TO_M3,
     netArea: 0,
     stockVolume: netVolumeMm3 * MM3_TO_M3, // already a plain rectangular prism — net === stock
@@ -284,7 +334,7 @@ function buildPostItem(post, config, wasteFactors) {
     wasteFactor: wasteFactorFor(ELEMENT_TYPES.POST, materialId, wasteFactors),
     optional: post.kind === 'corner', // corner posts are conditional on config.hasCornerPost
     status: TAKEOFF_ITEM_STATUS.OK,
-    notes: [label],
+    notes: [label, ...catalogNotes],
   });
 }
 

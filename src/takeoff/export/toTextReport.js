@@ -31,6 +31,15 @@ export function takeoffToTextReport(items, options = {}) {
       if (item.wasteAdjustedQuantity !== null) {
         lines.push(`  Do zakupu (z odpadem): ${item.wasteAdjustedQuantity.toFixed(4)} ${item.wasteAdjustedUnit}`);
       }
+      if (item.catalogStock) {
+        const c = item.catalogStock;
+        if (c.unsupported) {
+          lines.push(`  Zamówienie: BRAK odpowiedniego rozmiaru w katalogu — wymaga łączenia/sklejania z kilku elementów.`);
+        } else {
+          const dims = [c.lengthMm && `dł. ${c.lengthMm}mm`, c.widthMm && `szer. ${c.widthMm}mm`, c.thicknessMm && `grub. ${c.thicknessMm}mm`].filter(Boolean).join(' × ');
+          lines.push(`  Zamówienie (katalog): ${dims}${c.exact ? '' : ' (zaokrąglone w górę)'}`);
+        }
+      }
       if (item.calculatedCost !== null) {
         lines.push(`  Koszt: ${item.calculatedCost.toFixed(2)} ${item.currency}`);
       }

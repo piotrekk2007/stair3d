@@ -66,6 +66,20 @@ test('takeoffToCSV: escapes commas/quotes in field values', () => {
   assert.ok(csv.includes('"Świerk, klasa C24"'));
 });
 
+test('takeoffToCSV: exposes the catalog order size for a stringer, blank for elements with no catalogStock', () => {
+  const items = buildItems({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionType: 'cut', stringerThickness: 50 });
+  const csv = takeoffToCSV(items);
+  const lines = csv.split('\n');
+  const header = lines[0].split(',');
+  const orderLenCol = header.indexOf('Order length (mm)');
+  const stringerRowIndex = 1 + items.findIndex((i) => i.elementType === ELEMENT_TYPES.STRINGER);
+  const treadRowIndex = 1 + items.findIndex((i) => i.elementType === ELEMENT_TYPES.TREAD);
+  assert.ok(Number(lines[stringerRowIndex].split(',')[orderLenCol]) >= 4610, 'stringer order length must be a real catalog size >= the computed requirement');
+  // A tread has no materialCatalog-backed catalogStock computation (only stringers/posts do) —
+  // its "Order length" column must be blank, never a fabricated number.
+  assert.equal(lines[treadRowIndex].split(',')[orderLenCol], '');
+});
+
 test('takeoffToTextReport: includes every item id and a grand total when priced', () => {
   const items = applyPricing(buildItems({ stairType: 'straight', treadsLegA: 6, hasRiserBoards: true }));
   const report = takeoffToTextReport(items);
