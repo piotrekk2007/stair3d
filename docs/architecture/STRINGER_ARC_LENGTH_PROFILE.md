@@ -257,3 +257,28 @@ against), so the polygon reads as an L — a short flat ledge, then a true verti
 next tread's own front corner — rather than one diagonal line. Verified: every rising edge in
 the profile now has zero horizontal travel (locked in by a dedicated regression test), checked
 against the exact config the live app uses.
+
+## 14. Addendum 3 — a partial bearing counted twice created an exaggerated spike at the board's ends
+
+A further visual check found the board's very ends (top and bottom of the whole stringer)
+extending into a long, sharply pointed spike — projecting past the ceiling at the top, past the
+floor at the bottom.
+
+Root cause: `stringerSolver.js` genuinely splits a single tread's support across two boards
+when its raw chain straddles a real corner (a `partial` bearing, one copy per segment — see
+`StringerTreadBearing.partial`/`ownsStart`/`ownsEnd`). The group-level pitch-knot builder
+(`buildPitchKnots`, §2) included BOTH copies as independent front knots. Only the copy where
+`ownsStart` is true represents that tread's TRUE front corner; the other copy is the SAME tread
+continuing into the next board. Counting it twice inserted a knot at the tread's own (unchanged)
+elevation right next to its real one — an artificial, near-zero-width flat plateau — which made
+the immediately FOLLOWING knot-to-knot slope unrealistically steep (a full riser height packed
+into a tiny u-span). When that steep slope landed on the group's own last two knots, extrapolating
+the closing knot (§2) amplified it into the sharp overshoot spike.
+
+Fix: `buildPitchKnots` now skips any bearing where `!b.ownsStart` when building front knots —
+zero effect on ordinary (non-split) bearings, since those always have `ownsStart: true`. Verified:
+the joint on either side of the corrected knot now lands on the exact same elevation (no plateau,
+no discontinuity), and a broad sweep across winder-count/leg-length/corner-post variants finds no
+pitch-profile point straying more than roughly one riser height past the segment's own real
+bearing-elevation range. Locked in by two regression tests (a direct plateau check, and a
+range-bound sweep using the specific short-leg config that originally triggered the spike).

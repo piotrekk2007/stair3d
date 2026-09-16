@@ -157,7 +157,20 @@ function buildPitchKnots(effectiveByGroup, segmentLengths) {
   let offset = 0;
   for (let i = 0; i < effectiveByGroup.length; i++) {
     offsets.push(offset);
-    for (const b of effectiveByGroup[i]) knots.push({ u: offset + b.uStart, v: b.bearingElevation });
+    for (const b of effectiveByGroup[i]) {
+      // A `partial` bearing (a single tread whose support genuinely straddles a real corner —
+      // see stringerSolver.js) appears TWICE in a lap-joint group: once in each segment. Only
+      // the copy that `ownsStart` represents that tread's TRUE front corner; the other copy is
+      // the SAME tread continuing into the next board, not a new tread. Including it here would
+      // insert a spurious knot at the tread's own (unchanged) elevation, creating an artificial
+      // flat plateau in the profile — and, worse, a following segment with an unrealistically
+      // small u-span (since two consecutive knots end up almost on top of each other), giving an
+      // extremely steep local slope. If that steep slope lands on the group's own last two
+      // knots, closing-knot extrapolation amplifies it into the sharp overshoot spike reported
+      // at the very ends of the board (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14).
+      if (!b.ownsStart) continue;
+      knots.push({ u: offset + b.uStart, v: b.bearingElevation });
+    }
     offset += segmentLengths[i];
   }
   const lastSegBearings = effectiveByGroup[effectiveByGroup.length - 1];

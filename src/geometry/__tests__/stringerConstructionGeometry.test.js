@@ -374,6 +374,63 @@ test('joint bug fix: a CORNER_POST joint (inner stringer, hasCornerPost: true) i
   }
 });
 
+// --- Fourth reported bug: exaggerated spike at the very end of the wanga, at a lap joint -------
+//
+// A `partial` bearing (a single tread whose support genuinely straddles a real corner — see
+// stringerSolver.js) appears TWICE within a lap-joint group: once per segment. Only the copy
+// that `ownsStart` is that tread's TRUE front corner; the other copy is the SAME tread
+// continuing into the next board, not a new one. The group-level pitch-knot builder used to
+// include BOTH copies as separate front knots, inserting a spurious knot at the tread's own
+// (unchanged) elevation — creating an artificial flat plateau, and therefore an unrealistically
+// short next segment with an extremely steep local slope. When that steep slope landed on the
+// group's own last two knots, extrapolating the closing knot amplified it into a sharp
+// overshoot spike at the very end of the board (reported: a long pointed tip projecting far
+// past the ceiling/floor).
+
+test('spike bug fix: a partial bearing at a lap joint is counted ONCE, not twice, in the group pitch profile', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER);
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  // Find the joint: the segment whose LAST bearing is `partial`, and the next segment whose
+  // FIRST bearing shares that same treadIndex (the continuation half).
+  for (let i = 0; i < model.segments.length - 1; i++) {
+    const seg = model.segments[i];
+    const lastBearing = seg.treadBearings[seg.treadBearings.length - 1];
+    if (!lastBearing.partial) continue;
+    const geo = geometries[i];
+    // The tread's own elevation must appear as a knot, but its adjacent segment must not
+    // restate the SAME elevation as an independent "front corner" — i.e. no artificial flat
+    // plateau: consecutive knots must never share the same v while spanning a near-zero u.
+    for (let k = 0; k < geo.pitchProfile.length - 1; k++) {
+      const a = geo.pitchProfile[k];
+      const b = geo.pitchProfile[k + 1];
+      if (Math.abs(a.v - b.v) < 1e-6) {
+        assert.fail(`spurious flat plateau at (${a.u},${a.v})-(${b.u},${b.v}) in ${geo.segmentId}`);
+      }
+    }
+  }
+});
+
+test('spike bug fix: the profile never overshoots more than roughly one riser height past the true bearing elevation range', () => {
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, treadsLegA: 1, treadsLegB: 1 }); // short legs — the config that originally triggered the spike
+  for (const side of ['outer', 'inner']) {
+    const model = buildStringerModel(planLayout, config, side);
+    const geometries = buildStringerConstructionGeometry(model, config);
+    for (const geo of geometries) {
+      if (geo.pitchProfile.length === 0) continue;
+      const segment = model.segments.find((s) => s.id === geo.segmentId);
+      const elevations = segment.treadBearings.map((b) => b.bearingElevation);
+      const riserHeight = config.totalRise / (config.treadsLegA + config.treadsLegB + config.windersPerTurn + 1);
+      const margin = riserHeight * 3; // generous — legitimate boundary extrapolation, not a hard bound
+      const minE = Math.min(...elevations) - margin;
+      const maxE = Math.max(...elevations) + margin;
+      for (const p of geo.pitchProfile) {
+        assert.ok(p.v >= minE && p.v <= maxE, `${side}/${geo.segmentId}: pitch profile point v=${p.v} is far outside the real bearing range [${minE},${maxE}] — looks like the reported spike`);
+      }
+    }
+  }
+});
+
 // --- Third reported bug: the notch's riser face must be a true vertical cut, never diagonal -----
 //
 // With riser boards enabled, `effectiveBearings()` shifts every tread's own front corner

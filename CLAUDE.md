@@ -153,7 +153,18 @@ once, drawing a visibly diagonal "riser face" instead of a plumb cut. Fixed by i
 explicit ledge point at the current tread's own elevation across the gap, so the profile reads
 as an L (a short flat ledge, then a true vertical rise) — locked in by a test asserting every
 rising edge has zero horizontal travel, and confirmed against the live app's own config. See
-§13 of the same doc. Tests:
+§13 of the same doc.
+
+**Third follow-up: a partial bearing at a lap joint was counted twice, spiking the board's
+ends.** `stringerSolver.js` genuinely splits one tread's support across two boards when its raw
+chain straddles a real corner (a `partial` bearing — one copy per segment, only one of which
+`ownsStart`). The group-level pitch-knot builder counted BOTH copies as independent front
+knots, inserting a spurious knot at the tread's own unchanged elevation right next to its real
+one — an artificial near-zero-width flat plateau that made the immediately following slope
+unrealistically steep, which the closing-knot extrapolation then amplified into a long, sharply
+pointed spike at the very ends of the board (reported: projecting past the ceiling/floor).
+Fixed by skipping any bearing where `!b.ownsStart` when building front knots — zero effect on
+ordinary bearings, which always own their start. See §14 of the same doc. Tests:
 [src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
 [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
 
