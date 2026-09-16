@@ -155,11 +155,18 @@ function buildStraightOrLandingPanel(tread, finalEdge) {
  * @returns {RiserModel}
  */
 export function buildRiserModel(tread, config) {
-  const { riserHeight, treadThickness, nosing, riserBoardThickness } = config;
+  const { riserHeight, treadThickness, riserBoardThickness } = config;
   const isLanding = tread.type === 'landing';
-  // Podest nie ma noska — nie ma szczeliny do wypełnienia według `nosing`; tam podstopień
-  // zachowuje swoją niezależnie skonfigurowaną grubość i "na zewnątrz" zamiast "do wnętrza".
-  const thickness = isLanding ? riserBoardThickness : nosing;
+  // The riser board's own physical thickness is ALWAYS config.riserBoardThickness — a real,
+  // independently configured material dimension (a sheet of plywood, an MDF board), never
+  // derived from `nosing` (the tread's own overhang past the riser line, an unrelated
+  // quantity). Conflating the two here used to mean setting nosing to 0 for a flush
+  // "carpeted stair" look (riser board flush with the tread, no overhang) also made the riser
+  // board itself disappear — a real, reported bug (thickness must never depend on nosing).
+  // `nosing` still legitimately drives stringerSolver.js's `riserRecess` (how far a tread's
+  // OWN bearing is set back to leave room for the NEXT tread's nosing overhang) — a genuinely
+  // different quantity from this one, not touched here.
+  const thickness = riserBoardThickness;
   const inward = !isLanding;
 
   // Góra podstopnia i-tego = spód i-tego stopnia (patrz treadSolver.js: spód = (i+1)*h -

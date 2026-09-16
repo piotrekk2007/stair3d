@@ -94,9 +94,30 @@ test('buildRiserModels: empty when hasRiserBoards is false, one model per tread 
   assert.equal(buildRiserModels(planLayout, withRisers).length, 4);
 });
 
-test('buildRiserModels: a zero-thickness configuration (nosing=0) is filtered out, not returned as degenerate models', () => {
-  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 3, nosing: 0 });
+test('buildRiserModels: riserBoardThickness=0 is filtered out, not returned as degenerate models', () => {
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 3, riserBoardThickness: 0 });
   assert.equal(buildRiserModels(planLayout, config).length, 0);
+});
+
+// Regression: nosing and riser board thickness are two INDEPENDENT physical quantities —
+// nosing=0 (a "carpeted stair" look, tread flush with the riser, no overhang) must never make
+// the riser board itself disappear. This was a real reported bug: riserSolver.js used to read
+// `thickness = nosing` for a non-landing tread, so setting nosing to 0 also zeroed (and thus
+// filtered out) the riser board even with hasRiserBoards on and a nonzero riserBoardThickness.
+test('nosing=0 does not remove the riser board — thickness comes ONLY from riserBoardThickness', () => {
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 3, nosing: 0, riserBoardThickness: 40 });
+  const models = buildRiserModels(planLayout, config);
+  assert.equal(models.length, 3);
+  for (const m of models) assert.equal(m.thickness, 40);
+});
+
+test('changing nosing never changes riser board thickness, and changing riserBoardThickness never changes it either way around', () => {
+  const thin = build({ stairType: 'straight', treadsLegA: 3, nosing: 10, riserBoardThickness: 20 });
+  const thick = build({ stairType: 'straight', treadsLegA: 3, nosing: 40, riserBoardThickness: 20 });
+  const modelsThin = buildRiserModels(thin.planLayout, thin.config);
+  const modelsThick = buildRiserModels(thick.planLayout, thick.config);
+  assert.equal(modelsThin[0].thickness, 20);
+  assert.equal(modelsThick[0].thickness, 20, 'riser board thickness must not depend on nosing');
 });
 
 // --- Regression tests for the manual-edit trace finding: RiserModel used to silently ignore
