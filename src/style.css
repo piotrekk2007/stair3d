@@ -35,7 +35,7 @@ html, body {
 
 #app.workspace {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr) 380px;
+  grid-template-columns: 390px minmax(0, 1fr) 380px;
   grid-template-rows: auto minmax(0, 1fr) 28px;
   grid-template-areas:
     'toolbar toolbar toolbar'
@@ -170,10 +170,24 @@ html, body {
   min-height: 0;
 }
 
-#sidebar-left .lil-gui.root {
+#sidebar-left .lil-gui.lil-root {
   --width: 100%;
-  --name-width: 52%;
+  --name-width: 40%;
   width: 100%;
+}
+
+/* Wiersz = nazwa | widget (suwak+liczba) | znacznik AUTO/USER | kłódka. lil-gui daje przyciskom
+   width:100%, więc bez tych reguł kłódka rozpychała wiersz i ściskała suwak do 4px. */
+#sidebar-left .lil-controller .lil-widget {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+
+#sidebar-left .lil-gui .lock-toggle {
+  width: auto;
+  height: auto;
+  flex: 0 0 auto;
 }
 
 #main-view {
@@ -1084,7 +1098,7 @@ code {
 /* ============================ Węższe okna ============================ */
 @media (max-width: 1180px) {
   #app.workspace {
-    grid-template-columns: 290px minmax(0, 1fr) 320px;
+    grid-template-columns: 330px minmax(0, 1fr) 320px;
   }
   #project-name {
     width: 140px;
