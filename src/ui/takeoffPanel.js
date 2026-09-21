@@ -99,6 +99,8 @@ function summaryHTML(summary, takeoff, settings) {
   const caveats = [];
   if (summary.unpricedCount > 0) caveats.push(`${summary.unpricedCount} pozycji bez ceny w cenniku — nie wliczone do sumy.`);
   if (summary.invalidCount > 0) caveats.push(`${summary.invalidCount} pozycji bez wyliczonej ilości (INVALID/UNSUPPORTED) — nie wliczone do sumy.`);
+  const waivedCount = takeoff.waivedDiagnostics?.length ?? 0;
+  if (waivedCount > 0) caveats.push(`Kosztorys policzony mimo ${waivedCount} zaakceptowanych wyjątków walidacji — nie oznacza to, że geometria jest poprawna.`);
   if (summary.optionalCount > 0) caveats.push(`Suma zawiera ${summary.optionalCount} pozycji opcjonalnych (np. klocki wangi nakładanej).`);
 
   return `
@@ -176,17 +178,22 @@ export function updateTakeoffPanel(panel, takeoff, settings = {}) {
     panel._items = [];
     banner.hidden = false;
     banner.className = 'error';
-    const errors = takeoff.diagnostics.filter((d) => d.severity === 'ERROR');
-    banner.innerHTML = `<b>Kosztorys zablokowany</b> — geometria ma ${errors.length} błędów walidacji, więc ilości nie są liczone (żeby nie pokazać mylącej liczby). Popraw błędy w zakładce Walidacja.`;
+    const errors = (takeoff.activeDiagnostics ?? takeoff.diagnostics).filter((d) => d.severity === 'ERROR');
+    banner.innerHTML = `<b>Kosztorys zablokowany</b> — geometria ma ${errors.length} błędów walidacji, więc ilości nie są liczone (żeby nie pokazać mylącej liczby). Popraw je w zakładce Walidacja albo — jeśli świadomie je akceptujesz — użyj tam przycisku „Dodaj wyjątek".`;
     body.innerHTML = '';
     return;
   }
 
-  const warnings = takeoff.diagnostics.filter((d) => d.severity === 'WARNING');
-  if (takeoff.status === 'WARNING') {
+  const active = takeoff.activeDiagnostics ?? takeoff.diagnostics;
+  const warnings = active.filter((d) => d.severity === 'WARNING');
+  const waivedCount = takeoff.waivedDiagnostics?.length ?? 0;
+  const messages = [];
+  if (takeoff.status === 'WARNING') messages.push(`<b>Uwaga:</b> ${warnings.length} ostrzeżeń walidatora — ilości policzone, ale sprawdź zakładkę Walidacja przed użyciem w ofercie.`);
+  if (waivedCount > 0) messages.push(`<b>Wyjątki:</b> kosztorys policzony mimo ${waivedCount} zaakceptowanych problemów walidacji (lista w zakładce Walidacja). Elementy z niepoprawną geometrią nadal są oznaczone jako niewyliczone.`);
+  if (messages.length > 0) {
     banner.hidden = false;
     banner.className = 'warning';
-    banner.innerHTML = `<b>Uwaga:</b> ${warnings.length} ostrzeżeń walidatora — ilości policzone, ale sprawdź zakładkę Walidacja przed użyciem w ofercie.`;
+    banner.innerHTML = messages.join('<br>');
   } else {
     banner.hidden = true;
   }

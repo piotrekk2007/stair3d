@@ -35,6 +35,12 @@ import { takeoffToTextReport } from './export/toTextReport.js';
  * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics  Every gate
  *   finding (Staircase Validator + stringer construction geometry diagnostics), regardless of
  *   status.
+ * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} activeDiagnostics  Findings that
+ *   count toward the status (i.e. not waived by the user).
+ * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} waivedDiagnostics  Findings the
+ *   user explicitly accepted (options.waivers) — still reported, never hidden, but they no longer
+ *   block the takeoff.
+ * @property {Array} staleWaivers  Waivers that currently match nothing.
  * @property {MaterialTakeoffItem[]} items
  */
 
@@ -46,17 +52,25 @@ import { takeoffToTextReport } from './export/toTextReport.js';
  * @param {Object} models  The same shape buildStaircase() returns: { fullConfig|config,
  *   derived, planLayout, treadModels, riserModels, stringerModels, stringerConstruction,
  *   postModels }.
- * @param {{wasteFactors?: Object, profileId?: string}} [options]
+ * @param {{wasteFactors?: Object, profileId?: string, waivers?: import('../diagnostics/waivers.js').Waiver[]}} [options]
+ *   `waivers` — findings the user explicitly accepted; they stop blocking the gate (see
+ *   validationGate.js) but stay in the result.
  * @returns {MaterialTakeoffResult}
  */
 export function buildMaterialTakeoff(models, options = {}) {
-  const gate = runTakeoffValidationGate(models, { profileId: options.profileId });
+  const gate = runTakeoffValidationGate(models, { profileId: options.profileId, waivers: options.waivers });
+  const findings = {
+    diagnostics: gate.diagnostics,
+    activeDiagnostics: gate.activeDiagnostics,
+    waivedDiagnostics: gate.waivedDiagnostics,
+    staleWaivers: gate.staleWaivers,
+  };
   if (gate.status === GATE_STATUS.BLOCKED) {
-    return { status: gate.status, diagnostics: gate.diagnostics, items: [] };
+    return { status: gate.status, ...findings, items: [] };
   }
   const config = models.fullConfig ?? models.config;
   const items = computeMaterialTakeoff(models, config, { wasteFactors: options.wasteFactors });
-  return { status: gate.status, diagnostics: gate.diagnostics, items };
+  return { status: gate.status, ...findings, items };
 }
 
 /**

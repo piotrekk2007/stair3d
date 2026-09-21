@@ -9,8 +9,15 @@
 // implies): ANY ERROR-severity diagnostic from either source blocks the takeoff entirely.
 // WARNING-only lets the takeoff compute normally but reports GATE_STATUS.WARNING. No
 // diagnostics at all (or INFO-only) reports GATE_STATUS.OK.
+//
+// WYJĄTKI (options.waivers, patrz diagnostics/waivers.js): diagnostyka, którą użytkownik świadomie
+// zaakceptował, nie blokuje bramki i nie wpływa na status — ale NIGDY nie znika z wyniku
+// (`diagnostics` zawiera wszystko, `waivedDiagnostics` wskazuje, co zaakceptowano), żeby nikt nie
+// mógł jej przeoczyć. Wyjątek nie zmienia żadnej ilości: pozycje, których geometria jest
+// faktycznie niepoprawna (INVALID), nadal są oznaczane przez materialTakeoff.js.
 
 import { validateModels } from '../validator/StaircaseValidator.js';
+import { partitionByWaivers } from '../diagnostics/waivers.js';
 
 export const GATE_STATUS = Object.freeze({
   OK: 'OK',
@@ -33,9 +40,11 @@ function collectStringerConstructionDiagnostics(stringerConstruction) {
  *   stringerModels, stringerConstruction, postModels } — the same shape buildStaircase()
  *   returns (accepts `fullConfig` OR `config` as the config field, matching that function's
  *   own naming).
- * @param {{profileId?: string}} [options]
+ * @param {{profileId?: string, waivers?: import('../diagnostics/waivers.js').Waiver[]}} [options]
  * @returns {{status: keyof GATE_STATUS, diagnostics: import('../diagnostics/diagnostic.js').Diagnostic[],
- *   errors: Array, warnings: Array, info: Array}}
+ *   activeDiagnostics: Array, waivedDiagnostics: Array, staleWaivers: Array,
+ *   errors: Array, warnings: Array, info: Array}}  `errors`/`warnings`/`info` and `status` count
+ *   ACTIVE (non-waived) diagnostics only.
  */
 export function runTakeoffValidationGate(models, options = {}) {
   const config = models.fullConfig ?? models.config;
@@ -48,15 +57,16 @@ export function runTakeoffValidationGate(models, options = {}) {
       riserModels: models.riserModels,
       stringerModels: models.stringerModels,
     },
-    options
+    { profileId: options.profileId }
   );
 
   const diagnostics = [...validatorResult.diagnostics, ...collectStringerConstructionDiagnostics(models.stringerConstruction || {})];
-  const errors = diagnostics.filter((d) => d.severity === 'ERROR');
-  const warnings = diagnostics.filter((d) => d.severity === 'WARNING');
-  const info = diagnostics.filter((d) => d.severity === 'INFO');
+  const { active, waived, staleWaivers } = partitionByWaivers(diagnostics, options.waivers);
+  const errors = active.filter((d) => d.severity === 'ERROR');
+  const warnings = active.filter((d) => d.severity === 'WARNING');
+  const info = active.filter((d) => d.severity === 'INFO');
 
   const status = errors.length > 0 ? GATE_STATUS.BLOCKED : warnings.length > 0 ? GATE_STATUS.WARNING : GATE_STATUS.OK;
 
-  return { status, diagnostics, errors, warnings, info };
+  return { status, diagnostics, activeDiagnostics: active, waivedDiagnostics: waived, staleWaivers, errors, warnings, info };
 }

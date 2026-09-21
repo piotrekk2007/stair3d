@@ -95,3 +95,11 @@ test('an older v2 file without metadata still loads, with empty metadata', () =>
   assert.equal(meta.notes, '');
   assert.equal(meta.takeoffSettings, null);
 });
+
+test('accepted validation waivers round-trip at the top level, outside config; older files load with none', () => {
+  const waivers = [{ ruleId: 'PL-LEGAL-C-01', elementId: 'step-7', message: 'm', acceptedAt: '2026-01-01T00:00:00.000Z' }];
+  const payload = buildProjectPayloadV2(createDefaultConfig(), { waivers });
+  assert.equal(payload.config.waivers, undefined);
+  assert.deepEqual(parseProjectFile(JSON.stringify(payload)).meta.waivers, waivers);
+  assert.deepEqual(parseProjectFile(JSON.stringify(buildProjectPayloadV2(createDefaultConfig()))).meta.waivers, []);
+});

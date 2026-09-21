@@ -1,4 +1,5 @@
 import { downloadTextFile } from '../export/downloadTextFile.js';
+import { sanitizeWaivers } from '../diagnostics/waivers.js';
 
 // Schemat pliku projektu — patrz docs/model/STAIRCASE_DATA_MODEL.md §7.1 dla pełnego
 // uzasadnienia wersji 2: `edgeOverrides` (ręczne korekty krawędzi — patrz §3, Nominal ->
@@ -36,6 +37,9 @@ export function buildProjectPayloadV2(config, meta = {}) {
   if (meta.projectName) payload.projectName = meta.projectName;
   if (meta.notes) payload.notes = meta.notes;
   if (meta.takeoffSettings) payload.takeoffSettings = meta.takeoffSettings;
+  // Zaakceptowane wyjątki walidacji (diagnostics/waivers.js) — decyzja projektowa, więc żyje w
+  // pliku, ale poza `config` (nie jest wejściem solvera i nie wchodzi do historii modelu).
+  if (meta.waivers && meta.waivers.length > 0) payload.waivers = meta.waivers;
   return payload;
 }
 
@@ -96,6 +100,7 @@ export function parseProjectFile(text) {
       projectName: typeof data.projectName === 'string' ? data.projectName : '',
       notes: typeof data.notes === 'string' ? data.notes : '',
       takeoffSettings: data.takeoffSettings && typeof data.takeoffSettings === 'object' ? data.takeoffSettings : null,
+      waivers: sanitizeWaivers(data.waivers),
       schemaVersion: version,
       savedAt: typeof data.savedAt === 'string' ? data.savedAt : null,
     },

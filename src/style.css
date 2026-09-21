@@ -1134,3 +1134,63 @@ code {
     min-height: 420px;
   }
 }
+
+/* ---- Wyjątki walidacji ("Dodaj wyjątek") ---- */
+.validator-actions {
+  margin-top: 5px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.validator-waive {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid #b7c0ca;
+  background: #fff;
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.validator-waive:hover {
+  background: #eef1f5;
+  border-color: var(--c-accent);
+}
+
+.validator-count.waived {
+  color: var(--c-muted);
+}
+
+.validator-group.waived .validator-group-title {
+  color: var(--c-muted);
+}
+
+.validator-waived-note {
+  margin: 2px 0 6px;
+  padding: 6px 8px;
+  background: #f1f3f5;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #555;
+}
+
+.validator-finding.waived {
+  opacity: 0.75;
+  background: #f4f5f7;
+  border-left-style: dashed;
+}
+
+.validator-stale {
+  margin-top: 12px;
+  padding: 6px 8px;
+  border: 1px dashed var(--c-border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.validator-stale .validator-waive {
+  margin-left: 6px;
+}

@@ -296,13 +296,27 @@ export function describeDiagnosticElement(d) {
   return d.elementId ? `${typeLabel} ${d.elementId}` : typeLabel;
 }
 
-export function createValidatorPanel(container, { onSelect } = {}) {
+export function createValidatorPanel(container, { onSelect, onWaive, onUnwaive, onClearStale } = {}) {
   const panel = document.createElement('div');
   panel.id = 'validator-panel';
   panel.innerHTML = `<div id="validator-panel-summary"></div><div id="validator-panel-body"></div>`;
   container.appendChild(panel);
   panel._diagnostics = [];
   panel.querySelector('#validator-panel-body').addEventListener('click', (e) => {
+    // Przyciski wyjątków obsługujemy PRZED zaznaczeniem — klik w przycisk nie ma zmieniać zaznaczenia.
+    const action = e.target.closest('[data-action]');
+    if (action) {
+      e.stopPropagation();
+      if (action.dataset.action === 'clear-stale') {
+        onClearStale?.();
+        return;
+      }
+      const d = panel._diagnostics[Number(action.closest('[data-diag-index]').dataset.diagIndex)];
+      if (!d) return;
+      if (action.dataset.action === 'waive') onWaive?.(d);
+      else if (action.dataset.action === 'unwaive') onUnwaive?.(d);
+      return;
+    }
     const el = e.target.closest('[data-diag-index]');
     if (!el) return;
     const d = panel._diagnostics[Number(el.dataset.diagIndex)];
@@ -321,13 +335,35 @@ function formatValueExpected(d) {
   return `<div class="validator-finding-detail">${parts.join(' · ')}</div>`;
 }
 
+function findingHTML(d, index, { selected, waived }) {
+  const severity = d.severity;
+  // Wyjątek ma sens dla błędów i ostrzeżeń; INFO niczego nie blokuje.
+  const button = waived
+    ? `<button type="button" class="validator-waive" data-action="unwaive" title="Przywróć ten problem do aktywnych">Cofnij wyjątek</button>`
+    : severity === 'INFO'
+      ? ''
+      : `<button type="button" class="validator-waive" data-action="waive" title="Nie traktuj tego konkretnego problemu jako blokującego (nie naprawia geometrii)">Dodaj wyjątek</button>`;
+  return `
+        <div class="validator-finding ${severity.toLowerCase()}${selected ? ' selected' : ''}${waived ? ' waived' : ''}" data-diag-index="${index}" title="Kliknij, aby podświetlić element">
+          <div class="validator-finding-head">
+            <span class="validator-badge ${severity.toLowerCase()}">${SEVERITY_BADGE_PL[severity]}</span>
+            <span class="validator-finding-location">${escapeHtml(describeDiagnosticElement(d))}</span>
+            <code class="validator-rule">${escapeHtml(d.ruleId)}</code>
+          </div>
+          <div class="validator-finding-message">${escapeHtml(d.message)}</div>
+          ${formatValueExpected(d)}
+          ${button ? `<div class="validator-actions">${button}</div>` : ''}
+        </div>`;
+}
+
 /**
  * @param {HTMLElement} panel
- * @param {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics
- * @param {{selectedDiagnostic?: object|null}} [options]
- * @returns {{ERROR:number, WARNING:number, INFO:number}} liczby wg poziomu (dla znaczników/statusu)
+ * @param {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics  AKTYWNE diagnostyki
+ *   (bez tych objętych wyjątkiem).
+ * @param {{selectedDiagnostic?: object|null, waivedDiagnostics?: object[], staleWaivers?: object[]}} [options]
+ * @returns {{ERROR:number, WARNING:number, INFO:number}} liczby AKTYWNYCH wg poziomu (dla znaczników/statusu)
  */
-export function updateValidatorPanel(panel, diagnostics, { selectedDiagnostic = null } = {}) {
+export function updateValidatorPanel(panel, diagnostics, { selectedDiagnostic = null, waivedDiagnostics = [], staleWaivers = [] } = {}) {
   const summary = panel.querySelector('#validator-panel-summary');
   const body = panel.querySelector('#validator-panel-body');
 
@@ -337,41 +373,46 @@ export function updateValidatorPanel(panel, diagnostics, { selectedDiagnostic = 
     <span class="validator-count error">${counts.ERROR} błędów</span>
     <span class="validator-count warning">${counts.WARNING} ostrzeżeń</span>
     <span class="validator-count info">${counts.INFO} informacji</span>
+    ${waivedDiagnostics.length ? `<span class="validator-count waived">${waivedDiagnostics.length} wyjątków</span>` : ''}
   `;
 
-  // Indeks w panel._diagnostics = kolejność wyświetlania (po posortowaniu wg poziomu), żeby
-  // data-diag-index z kliknięcia zawsze wskazywał dokładnie tę diagnostykę, którą widać.
+  // Indeks w panel._diagnostics = kolejność wyświetlania (po posortowaniu wg poziomu, potem
+  // wyjątki), żeby data-diag-index z kliknięcia zawsze wskazywał dokładnie tę diagnostykę, którą widać.
   const ordered = [];
   for (const severity of SEVERITY_ORDER) ordered.push(...diagnostics.filter((d) => d.severity === severity));
+  ordered.push(...waivedDiagnostics);
   panel._diagnostics = ordered;
 
-  if (diagnostics.length === 0) {
-    body.innerHTML = `<div class="validator-empty">✔ Brak zastrzeżeń — model spełnia wszystkie sprawdzone reguły.</div>`;
-    return counts;
+  let html = '';
+  if (diagnostics.length === 0 && waivedDiagnostics.length === 0) {
+    html += `<div class="validator-empty">✔ Brak zastrzeżeń — model spełnia wszystkie sprawdzone reguły.</div>`;
+  } else if (diagnostics.length === 0) {
+    html += `<div class="validator-empty">✔ Brak aktywnych problemów — pozostały tylko zaakceptowane wyjątki.</div>`;
   }
 
   let index = 0;
-  body.innerHTML = SEVERITY_ORDER.map((severity) => {
+  for (const severity of SEVERITY_ORDER) {
     const group = diagnostics.filter((d) => d.severity === severity);
-    if (group.length === 0) return '';
-    const items = group
-      .map((d) => {
-        const i = index++;
-        const selected = d === selectedDiagnostic ? ' selected' : '';
-        return `
-        <div class="validator-finding ${severity.toLowerCase()}${selected}" data-diag-index="${i}" title="Kliknij, aby podświetlić element">
-          <div class="validator-finding-head">
-            <span class="validator-badge ${severity.toLowerCase()}">${SEVERITY_BADGE_PL[severity]}</span>
-            <span class="validator-finding-location">${escapeHtml(describeDiagnosticElement(d))}</span>
-            <code class="validator-rule">${escapeHtml(d.ruleId)}</code>
-          </div>
-          <div class="validator-finding-message">${escapeHtml(d.message)}</div>
-          ${formatValueExpected(d)}
-        </div>`;
-      })
-      .join('');
-    return `<div class="validator-group ${severity.toLowerCase()}"><div class="validator-group-title">${SEVERITY_LABEL_PL[severity]} <span>${group.length}</span></div>${items}</div>`;
-  }).join('');
+    if (group.length === 0) continue;
+    const items = group.map((d) => findingHTML(d, index++, { selected: d === selectedDiagnostic, waived: false })).join('');
+    html += `<div class="validator-group ${severity.toLowerCase()}"><div class="validator-group-title">${SEVERITY_LABEL_PL[severity]} <span>${group.length}</span></div>${items}</div>`;
+  }
+
+  if (waivedDiagnostics.length > 0) {
+    const items = waivedDiagnostics.map((d) => findingHTML(d, index++, { selected: d === selectedDiagnostic, waived: true })).join('');
+    html += `
+      <div class="validator-group waived">
+        <div class="validator-group-title">ZAAKCEPTOWANE WYJĄTKI <span>${waivedDiagnostics.length}</span></div>
+        <div class="validator-waived-note">Wyjątek tylko przestaje blokować kosztorys — nie naprawia geometrii i nie zmienia żadnej ilości. Kosztorys jest liczony mimo tych problemów, więc traktuj go ostrożnie.</div>
+        ${items}
+      </div>`;
+  }
+
+  if (staleWaivers.length > 0) {
+    html += `<div class="validator-stale">${staleWaivers.length} wyjątków nie odpowiada już żadnemu problemowi (zniknął po zmianie parametrów). <button type="button" class="validator-waive" data-action="clear-stale">Usuń nieaktywne</button></div>`;
+  }
+
+  body.innerHTML = html;
   return counts;
 }
 

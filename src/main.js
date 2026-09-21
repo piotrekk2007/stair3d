@@ -17,6 +17,7 @@ import { GROUP_BY } from './ui/takeoffView.js';
 import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
 import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffToTextReport } from './takeoff/index.js';
 import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
+import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
 import { downloadTextFile } from './export/downloadTextFile.js';
@@ -73,6 +74,11 @@ const takeoffSettings = {
 const projectMeta = { name: '', notes: '', lastFileNote: '' };
 let takeoffGroupBy = GROUP_BY.ELEMENT;
 
+// Wyjątki walidacji ("Dodaj wyjątek"): świadomie zaakceptowane pary (ruleId, elementId), które
+// przestają blokować kosztorys. Decyzja projektowa (zapisywana w pliku), ale nie parametr
+// geometrii — poza `config` i poza historią modelu, tak jak ceny.
+let waivers = [];
+
 // Zaznaczenie (wspólne dla 2D, 3D, Walidacji i Kosztorysu) — kształt z ui/selection.js. Nie jest
 // stanem modelu: nie trafia do historii ani do pliku projektu.
 let selection = null;
@@ -93,7 +99,9 @@ let currentPlanLayout = null;
 let currentDerived = null;
 let currentPlan2DSVG = '';
 let lastModels = null;
-let lastDiagnostics = [];
+let lastDiagnostics = []; // AKTYWNE (bez objętych wyjątkiem)
+let lastWaived = [];
+let lastStaleWaivers = [];
 let lastTakeoff = null;
 let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
 
@@ -203,7 +211,9 @@ function rebuild() {
   // zawsze pokazują ten sam stan (bez drugiego, osobnego przebiegu walidatora). Nic z tego nie
   // liczy geometrii: wszystko czyta te modele, które buildStaircase() już policzył.
   lastTakeoff = computeTakeoff();
-  lastDiagnostics = lastTakeoff.diagnostics;
+  lastDiagnostics = lastTakeoff.activeDiagnostics;
+  lastWaived = lastTakeoff.waivedDiagnostics;
+  lastStaleWaivers = lastTakeoff.staleWaivers;
 
   currentDebugOverlay = buildDebugOverlay({ planLayout, treadModels, stringerModels, diagnostics: lastDiagnostics });
   scene.add(currentDebugOverlay);
@@ -217,7 +227,7 @@ function rebuild() {
   if (!planViewport) fitPlanView();
 
   updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit);
-  const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic });
+  const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
 
   applyOverlayVisibility();
@@ -245,6 +255,7 @@ function computeTakeoff() {
   return buildPricedMaterialTakeoff(lastModels, {
     priceList: takeoffSettings.priceList,
     wasteFactors: takeoffSettings.wasteFactors,
+    waivers,
   });
 }
 
@@ -273,7 +284,10 @@ function manualEditCount() {
 function updateStatus(counts) {
   let level = 'ok';
   let text = '● Geometria poprawna';
-  if (counts.ERROR > 0) {
+  if (counts.ERROR === 0 && counts.WARNING === 0 && lastWaived.length > 0) {
+    level = 'warning';
+    text = `● Brak aktywnych problemów · zaakceptowanych wyjątków: ${lastWaived.length}`;
+  } else if (counts.ERROR > 0) {
     level = 'error';
     text = `● Geometria z błędami: ${counts.ERROR}`;
   } else if (counts.WARNING > 0) {
@@ -281,7 +295,8 @@ function updateStatus(counts) {
     text = `● Geometria z ostrzeżeniami: ${counts.WARNING}`;
   }
   const manual = manualEditCount();
-  ws.setStatus({ validity: { level, html: `${text}${manual ? ` · ✎ ręcznych zmian: ${manual}` : ''}` } });
+  const waivedNote = lastWaived.length > 0 && (counts.ERROR > 0 || counts.WARNING > 0) ? ` · wyjątków: ${lastWaived.length}` : '';
+  ws.setStatus({ validity: { level, html: `${text}${waivedNote}${manual ? ` · ✎ ręcznych zmian: ${manual}` : ''}` } });
   if (counts.ERROR > 0) ws.setTabBadge('validation', String(counts.ERROR), 'error');
   else if (counts.WARNING > 0) ws.setTabBadge('validation', String(counts.WARNING), 'warning');
   else ws.setTabBadge('validation', '', 'info');
@@ -425,6 +440,21 @@ function handleSelectDiagnostic(d) {
   ws.setStatus({ selection: 'Ta diagnostyka dotyczy całych schodów/parametrów — brak konkretnego elementu do podświetlenia' });
 }
 
+// Wyjątek nie zmienia geometrii ani historii modelu — przelicza tylko bramkę walidacji i kosztorys
+// (pełny rebuild() jest najprostszą drogą do spójnego stanu wszystkich paneli).
+function handleWaive(diagnostic) {
+  waivers = addWaiver(waivers, diagnostic);
+  rebuild();
+}
+function handleUnwaive(diagnostic) {
+  waivers = removeWaiver(waivers, diagnostic);
+  rebuild();
+}
+function handleClearStaleWaivers() {
+  waivers = waivers.filter((w) => !lastStaleWaivers.includes(w));
+  rebuild();
+}
+
 function handleSelectTakeoffItem(item) {
   const sel = selectionFromTakeoffSourceId(item.sourceElementId);
   setSelection(sel, { takeoffItem: item });
@@ -536,6 +566,7 @@ function handleNewProject() {
   if (!window.confirm('Rozpocząć nowy projekt? Bieżące parametry i ręczne edycje zostaną zastąpione domyślnymi (można to cofnąć przyciskiem Cofnij).')) return;
   Object.assign(config, createDefaultConfig());
   resetTakeoffSettings();
+  waivers = [];
   projectMeta.name = '';
   projectMeta.notes = '';
   projectMeta.lastFileNote = 'Nowy projekt';
@@ -562,6 +593,7 @@ function handleSaveProject() {
     projectName: projectMeta.name,
     notes: projectMeta.notes,
     takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors },
+    waivers,
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
   ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
@@ -578,6 +610,7 @@ function handleFileSelected(event) {
       Object.assign(config, createDefaultConfig(), loadedConfig);
       projectMeta.name = meta.projectName;
       projectMeta.notes = meta.notes;
+      waivers = meta.waivers;
       resetTakeoffSettings();
       if (meta.takeoffSettings) {
         for (const incoming of meta.takeoffSettings.priceList || []) {
@@ -623,7 +656,11 @@ function exportTakeoff(kind) {
   if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
   const base = fileBaseName();
   if (kind === 'csv') downloadTextFile(takeoffToCSV(lastTakeoff.items), `${base}_zestawienie.csv`, 'text/csv');
-  else downloadTextFile(takeoffToTextReport(lastTakeoff.items, { title: `Zestawienie materiałowe — ${projectMeta.name || 'schody'}` }), `${base}_zestawienie.txt`, 'text/plain');
+  else {
+    // Raport wychodzący poza aplikację musi nieść zastrzeżenie, że powstał mimo zaakceptowanych wyjątków.
+    const caveat = lastWaived.length > 0 ? ` (UWAGA: policzono mimo ${lastWaived.length} zaakceptowanych wyjątków walidacji)` : '';
+    downloadTextFile(takeoffToTextReport(lastTakeoff.items, { title: `Zestawienie materiałowe — ${projectMeta.name || 'schody'}${caveat}` }), `${base}_zestawienie.txt`, 'text/plain');
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -631,7 +668,12 @@ function exportTakeoff(kind) {
 // ---------------------------------------------------------------------------------------------
 const infoPanel = createInfoPanel(ws.leftEl);
 const inspectorPanel = createInspectorPanel(ws.tabBody('inspector'));
-const validatorPanel = createValidatorPanel(ws.tabBody('validation'), { onSelect: handleSelectDiagnostic });
+const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
+  onSelect: handleSelectDiagnostic,
+  onWaive: handleWaive,
+  onUnwaive: handleUnwaive,
+  onClearStale: handleClearStaleWaivers,
+});
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,
   onGroupChange: (groupBy) => {

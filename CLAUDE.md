@@ -341,6 +341,18 @@ No panel or interaction computes geometry.
   measured/expected, message; click → selection. Its data comes from the **takeoff validation
   gate** (`buildPricedMaterialTakeoff(...).diagnostics` = `StaircaseValidator` + stringer
   construction diagnostics), so Walidacja and Kosztorys can never disagree and validation runs once.
+- **Validation waivers ("Dodaj wyjątek")** (`src/diagnostics/waivers.js`, pure): the user can
+  consciously accept one ERROR/WARNING, which then stops blocking the takeoff gate. A waiver is a
+  `(ruleId, elementId)` pair — accepting "rule X on step 5" never silences X elsewhere. It is
+  passed to the facade as `options.waivers`; `runTakeoffValidationGate`/`buildMaterialTakeoff` return
+  `diagnostics` (everything — nothing is ever hidden), `activeDiagnostics`, `waivedDiagnostics` and
+  `staleWaivers` (waivers matching nothing any more), and `status`/`errors`/`warnings` count active
+  findings only. A waiver **never changes a quantity or fabricates a number**: a construction-level
+  ERROR still marks its own stringer item `INVALID` ("BRAK WYLICZONEJ ILOŚCI"), and the Kosztorys
+  banner, cost summary and TXT report title all say the takeoff was computed despite waived
+  findings. Waivers are project decisions, so they are saved as an optional top-level `waivers` field
+  in the project file (outside `config`, outside undo history, cleared by "Nowy"). Tests:
+  `takeoff/__tests__/waivers.test.js`.
 - **Kosztorys** (`takeoffPanel.js` + pure `takeoffView.js` grouping/summing): NET (finished
   element) and STOCK/ORDER (raw + catalog size) shown side by side, group by element/material/
   construction, cost summary with explicit assumptions (illustrative prices, waste, no labour)
