@@ -158,7 +158,7 @@ difference, with the existing sanity clamp). A tread never loses its support (`S
 every grid test). Not built: local board widening at a winder, a shaped transition piece at the newel
 (documented in `docs/STRINGER_CONSTRUCTION_SPEC.md`).
 
-## 10. Side-view model (UI not built)
+## 10. Side-view model and editor (implemented)
 
 `buildProfileViewModel()` returns, per segment, plain data to *draw*: treads and risers, upper/lower contours
 (lines + arcs), the reference, the **minimum-depth envelope** (reference pushed down by the minimum), depth
@@ -236,4 +236,6 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
   steep board). That top clamp can shave ~1 mm off the local depth of a housed board there — `localDepthMm`
   is measured before the end clamps and does not include it.
 * `localDepthMm` is measured before the end clamps, so it does not reflect them.
-* Overrides are not yet exposed in the UI (data, events and view model only).
+* The side-view editor (tab "Profil wangi") exposes the override layer; its limits are listed in CLAUDE.md
+  ("Side-view editor"): no handles for control points beyond a board's end faces, and the first edit turns every
+  tread into a control point.

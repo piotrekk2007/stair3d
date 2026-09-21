@@ -546,9 +546,10 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
 
     // Control points are the WHOLE group's (a point just past the board's end still shapes the
     // curve there — an offset contour's own end vertex sits beyond the plane that cuts the board);
-    // `withinSegment` says whether it lies on this board, for a side view that draws handles.
+    // `withinSegment` says whether it lies on this board (between its two end faces), for a side view that
+    // draws handles.
     const localControl = (list) =>
-      list ? list.map((c) => ({ ...c, u: c.u - segStart, withinSegment: c.u - segStart >= -GEOMETRY_EPS && c.u - segStart <= segmentLengths[i] + GEOMETRY_EPS })) : null;
+      list ? list.map((c) => ({ ...c, u: c.u - segStart, withinSegment: c.u - segStart >= spanStart - GEOMETRY_EPS && c.u - segStart <= spanEnd + GEOMETRY_EPS })) : null;
 
     bySegmentId.set(segment.id, {
       segmentId: segment.id,

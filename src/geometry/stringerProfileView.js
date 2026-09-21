@@ -59,6 +59,9 @@ export function buildProfileViewModel(geometries, model, config) {
         tangent: c.tangent,
         normal: c.normal,
         radiusMm: c.radius,
+        // an inserted point: how far along its edge it sits (0..1) and that edge's length
+        t: c.t,
+        edgeLength: c.edgeLength,
         // anchored to a tread / the end, manually moved or given a radius, or inserted by hand
         kind: c.inserted ? 'inserted' : c.overridden ? 'overridden' : 'anchored',
         withinSegment: c.withinSegment,
@@ -67,6 +70,9 @@ export function buildProfileViewModel(geometries, model, config) {
     return {
       segmentId: g.segmentId,
       constructionType: g.constructionType,
+      // the board's silhouette (filled in the editor) and where its two end faces are
+      outline: g.outerContour,
+      span: { uStart: g.ends.start.u, uEnd: g.ends.end.u },
       treads,
       risers,
       upperCurve: g.upperCurve,

@@ -3,6 +3,8 @@ import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase } from './geometry/buildStaircase.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
+import { applyProfileEdit } from './geometry/stringerProfileModel.js';
+import { createProfileEditor } from './ui/profileEditorPanel.js';
 import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
@@ -241,6 +243,9 @@ function rebuild() {
   applyLayerVisibility();
   refreshSelectionViews();
   updateStatus(counts);
+  // Edytor profilu rysuje się z TYCH SAMYCH modeli — po każdym przeliczeniu (także w trakcie przeciągania
+  // punktu) odświeżamy go, jeśli jest widoczny.
+  if (viewState.view === 'profile' && typeof profileEditor !== 'undefined') profileEditor.refresh();
 }
 
 function selectionStillExists(sel, built) {
@@ -523,10 +528,14 @@ function setView(view) {
   ws.setView(view);
   const show2d = view === '2d';
   plan2dPanel.classList.toggle('visible', show2d);
+  profilePanel.classList.toggle('visible', view === 'profile');
   if (show2d) {
     if (!planViewport) fitPlanView();
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
     updateScaleReadout();
+  } else if (view === 'profile') {
+    ws.setStatus({ view: 'Profil wangi (widok z boku)' });
+    profileEditor.refresh();
   } else {
     ws.setStatus({ view: `3D: ${sceneApi.getCameraMode() === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
   }
@@ -771,6 +780,20 @@ renderer.domElement.addEventListener('click', (event) => {
 const plan2dPanel = document.createElement('div');
 plan2dPanel.id = 'plan2d-panel';
 ws.mainEl.appendChild(plan2dPanel);
+
+// Edytor profilu wangi (widok z boku): gesty -> zdarzenia PROFILE_EDITS -> config.manualStringerProfileOverrides
+// -> zwykłe rebuild(). Panel niczego nie liczy — patrz ui/profileEditorPanel.js.
+const profilePanel = document.createElement('div');
+profilePanel.id = 'profile-panel';
+ws.mainEl.appendChild(profilePanel);
+const profileEditor = createProfileEditor(profilePanel, {
+  getContext: () => (lastModels ? { config, models: lastModels } : null),
+  applyEdit: (edit) => {
+    config.manualStringerProfileOverrides = applyProfileEdit(config.manualStringerProfileOverrides, edit);
+    rebuild();
+  },
+  commit: () => commitHistory(),
+});
 
 // Architektura DOM planu 2D: plan2dPanel ma DWA stałe, rozłączne dzieci — kontener SVG (jedyne
 // miejsce, które regeneratePlan2D() nadpisuje przez innerHTML=) i HUD (przyciski/skala/legenda,

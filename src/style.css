@@ -312,6 +312,7 @@ html, body {
 #app.client-mode > #sidebar-right,
 #app.client-mode > #statusbar,
 #app.client-mode #plan2d-panel,
+#app.client-mode #profile-panel,
 #app.client-mode #project-notes-popover {
   display: none !important;
 }
@@ -348,7 +349,8 @@ html, body {
   font-size: 12px;
 }
 
-#app[data-view='2d'] #viewport-hud {
+#app[data-view='2d'] #viewport-hud,
+#app[data-view='profile'] #viewport-hud {
   display: none;
 }
 
@@ -1344,3 +1346,42 @@ code {
 .insp-btn { padding: 5px 10px; border: 1px solid #c9ced6; border-radius: 5px; background: #f4f6f9; cursor: pointer; }
 .insp-btn:hover { background: #e8edf4; }
 .insp-btn.danger { color: #a32020; border-color: #d9a6a6; }
+
+/* Edytor profilu wangi (widok z boku) */
+#profile-panel { position: absolute; inset: 0; background: #fff; z-index: 20; display: none; flex-direction: column; }
+#profile-panel.visible { display: flex; }
+#profile-panel .pe-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--c-border, #d4d9df); background: #f6f8fa; font-size: 12px; }
+#profile-panel .pe-toolbar button { padding: 4px 10px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#profile-panel .pe-toolbar button:disabled { opacity: 0.45; cursor: default; }
+#profile-panel .pe-toolbar button.manual { background: #fff3e0; border-color: #e0a04a; }
+#profile-panel .pe-layers { display: flex; gap: 10px; margin-left: auto; }
+#profile-panel .pe-canvas { position: relative; flex: 1; min-height: 0; outline: none; cursor: grab; }
+#profile-panel .pe-canvas.panning { cursor: grabbing; }
+#profile-panel .pe-svg { width: 100%; height: 100%; display: block; }
+#profile-panel .pe-svg * { vector-effect: non-scaling-stroke; }
+.pe-floor { stroke: #9aa3ad; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.pe-outline { fill: rgba(140, 100, 60, 0.18); stroke: none; }
+.pe-tread { fill: #d9c49a; stroke: #a8925f; stroke-width: 1; }
+.pe-riser { stroke: #b9a77c; stroke-width: 1.5; }
+.pe-reference { fill: none; stroke: #7d8894; stroke-width: 1.5; stroke-dasharray: 8 5; }
+.pe-envelope { fill: none; stroke: #2b9a8a; stroke-width: 1.5; stroke-dasharray: 3 4; }
+.pe-contour { fill: none; stroke: #5a3d24; stroke-width: 2.5; pointer-events: none; }
+.pe-contour.pe-upper { stroke: #7a5a3a; }
+.pe-contour.violation { stroke: #d33; }
+.pe-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: copy; pointer-events: stroke; }
+.pe-cp { stroke-width: 2; cursor: move; }
+.pe-cp-anchored { fill: #fff; stroke: #1a5fb4; }
+.pe-cp-overridden { fill: #ffd8a8; stroke: #e07b00; }
+.pe-cp-inserted { fill: #c9f0d0; stroke: #2a9d4b; }
+.pe-cp.selected { stroke-width: 3.5; fill: #1a5fb4; }
+.pe-radius-label, .pe-label { fill: #444; font-family: inherit; }
+.pe-label.violation { fill: #d33; font-weight: 600; }
+#profile-panel .pe-info { padding: 8px 12px; border-top: 1px solid #d4d9df; font-size: 12px; max-height: 32%; overflow: auto; background: #fafbfc; }
+#profile-panel .pe-point { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#profile-panel .pe-point.muted { color: #6b7684; }
+#profile-panel .pe-point input { width: 72px; padding: 2px 5px; }
+#profile-panel .pe-point-actions button { padding: 3px 9px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#profile-panel .pe-diag { margin-top: 6px; padding: 5px 8px; border-radius: 5px; background: #eef4fc; }
+#profile-panel .pe-diag.error { background: #fdeaea; }
+#profile-panel .pe-diag.warning { background: #fff5e0; }
+#profile-panel .pe-hint { padding: 4px 12px 8px; font-size: 11px; color: #6b7684; }

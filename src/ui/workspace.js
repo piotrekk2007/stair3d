@@ -6,7 +6,7 @@
 //   #app (CSS grid)
 //     #toolbar        — projekt, nowy/zapisz/wczytaj, cofnij/ponów, przełącznik 2D/3D, tryb prezentacji
 //     #sidebar-left   — #info-panel (podsumowanie wyliczeń) + lil-gui (parametry)
-//     #main-view      — #viewport (3D) i #plan2d-panel (2D) — jeden widoczny naraz (zakładki)
+//     #main-view      — #viewport (3D), #plan2d-panel (2D) i #profile-panel (edytor profilu wangi) — jeden widoczny naraz
 //     #sidebar-right  — zakładki: Inspektor / Walidacja / Kosztorys
 //     #statusbar      — stan poprawności, zaznaczenie, skala/kamera
 
@@ -24,7 +24,7 @@ const TABS = [
  * @param {() => void} handlers.onLoad
  * @param {() => void} handlers.onUndo
  * @param {() => void} handlers.onRedo
- * @param {(view: '2d'|'3d') => void} handlers.onViewChange
+ * @param {(view: '2d'|'3d'|'profile') => void} handlers.onViewChange
  * @param {() => void} handlers.onToggleClientMode
  * @param {(name: string) => void} handlers.onProjectNameChange
  * @param {(notes: string) => void} handlers.onProjectNotesChange
@@ -48,6 +48,7 @@ export function createWorkspace(app, handlers) {
       <div id="view-switch" role="tablist" aria-label="Widok">
         <button type="button" role="tab" data-view="2d">Plan 2D</button>
         <button type="button" role="tab" data-view="3d" class="active">Widok 3D</button>
+        <button type="button" role="tab" data-view="profile" title="Edytor profilu wangi (widok z boku)">Profil wangi</button>
       </div>
       <button type="button" data-action="client-mode" title="Tryb prezentacji: czysty widok 3D dla klienta">🎬 Prezentacja</button>
     </header>

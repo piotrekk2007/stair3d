@@ -231,9 +231,20 @@ RULES #5 — and is never touched by any profile parameter or override).
   polygon (offset by the nominal depth) -> overrides -> radii (feasible, then depth-clamped in AUTO)
   -> lines + arcs. **Local stringer depth** = the exact minimum distance between the reference
   curve and the lower contour (NOT the vertical Z difference, NOT a bounding box).
-- **`stringerProfileView.js`** — `buildProfileViewModel()`: plain data for a future side-view editor
-  (treads, contours, minimum-depth envelope, depth samples, control points); the editor itself is not
-  built.
+- **`stringerProfileView.js`** — `buildProfileViewModel()`: plain data for the side-view editor
+  (treads, contours, silhouette, board span, minimum-depth envelope, depth samples, control points).
+- **Side-view editor ("Profil wangi" tab, implemented)**: `profileEditor/profileEditorRenderer.js` (pure: board
+  layout side by side, `toSvg`/`fromSvg`, SVG string — tested without a DOM) + `ui/profileEditorPanel.js`
+  (interactions) wired in `main.js`. Gestures only become `PROFILE_EDITS` events (`applyProfileEdit`) that change
+  `config.manualStringerProfileOverrides`, then the normal `rebuild()` (which refreshes the editor while it is
+  visible); undo/redo and the project file cover it like any other config field. Drag a control point
+  (`offsetFromDrag` -> ds/dn from the NOMINAL position), double-click a contour to insert a point, right-click /
+  Delete to remove an inserted point or undo an anchored one, exact numbers (offset, position on the edge, corner
+  radius) in the form under the drawing, AUTO/RĘCZNY switch and "Resetuj profil wangi" per stringer, wheel zoom, pan,
+  "Deska" selector (the view fits ONE board by default — a whole flight is too small to edit). The editor never
+  computes geometry. **Limits:** control points outside a board's end faces (e.g. a contour's own end vertex past the
+  board) have no handle — use a double-click to insert one; the first edit of a stringer turns every tread into an
+  addressable control point; the cut string's notched top edge is derived and has no handles.
 - **`stringerConstructionGeometry.js`** is now the adapter: it decides the reference (bearings,
   lap-joint grouping, riser recess), calls the solver once per group, slices per board, builds the
   comb/housings/diagnostics. Its output gained `lowerCurve`/`upperCurve` (lines + arcs),
@@ -264,9 +275,7 @@ RULES #5 — and is never touched by any profile parameter or override).
 - **Diagnostics**: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO),
   `STRINGER-OVERRIDE-ORPHANED`/`-REJECTED` (WARNING). An explicit override radius or moved point that
   breaks the minimum depth is KEPT and reported, not silently corrected.
-- **Not done (next stages)**: deriving a *blank depth* from the profile for the takeoff/pricing (the
-  takeoff still reads the nominal depth), a side-view editor UI, multi-arc/spline transitions, riser
-  housings, curved plan paths, CNC.
+- **Not done (next stages)**: multi-arc/spline transitions, riser housings, curved plan paths, CNC.
 - Tests: `geometry/__tests__/profileCurve.test.js`, `stringerProfile.test.js` (a 216-case grid of
   geometry x inclination x minimum depth x radius x construction type).
 

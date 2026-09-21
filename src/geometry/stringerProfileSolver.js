@@ -166,6 +166,8 @@ function buildControlPolygon({ reference, contour, nominalPoints, overrides, fin
         inserted: true,
         tangent: { u: du / len, v: dv / len },
         normal: n,
+        t: ins.t,
+        edgeLength: len,
       });
     }
   });
@@ -281,6 +283,8 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
       radius: applied[i] || 0,
       overridden: !!v.override || v.explicitRadius !== undefined,
       inserted: v.inserted,
+      t: v.t,
+      edgeLength: v.edgeLength,
       nominal: v.nominal ? { u: v.nominal.u, v: v.nominal.v } : null,
       tangent: v.tangent,
       normal: v.normal,

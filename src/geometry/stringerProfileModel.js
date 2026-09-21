@@ -209,6 +209,7 @@ export const PROFILE_EDITS = Object.freeze({
   INSERT_VERTEX: 'insertVertex',
   RESET_VERTEX: 'resetVertex',
   SET_MODE: 'setMode',
+  RESET_SIDE: 'resetSide',
 });
 
 function withEntry(current, side, entry) {
@@ -250,6 +251,10 @@ export function applyProfileEdit(all, edit) {
         delete next[edit.contour][edit.anchorId];
       }
       return withEntry(current, edit.side, next);
+    }
+    case PROFILE_EDITS.RESET_SIDE: {
+      const { [edit.side]: _dropped, ...rest } = current;
+      return sanitizeStringerProfileOverrides(rest);
     }
     case PROFILE_EDITS.SET_MODE:
       return withEntry(current, edit.side, { ...entry, mode: edit.mode === PROFILE_MODES.AUTO ? PROFILE_MODES.AUTO : PROFILE_MODES.MANUAL });
