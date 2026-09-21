@@ -58,6 +58,9 @@ export function applyPricing(items, priceList = DEFAULT_PRICE_LIST) {
   const byMaterial = indexByMaterialId(priceList);
   return items.map((item) => {
     if (item.status !== 'OK') return { ...item };
+    // Pozycje wycenione (albo świadomie niewycenione) z tabeli cennikowej desek — patrz
+    // boardPricing.js — nie są wyceniane drugi raz ogólnym cennikiem po materialId.
+    if (item.pricingSource) return { ...item };
     const price = byMaterial.get(item.materialId);
     if (!price) return { ...item };
     const measure = measureFor(item, price.unit);

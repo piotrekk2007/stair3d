@@ -1194,3 +1194,106 @@ code {
 .validator-stale .validator-waive {
   margin-left: 6px;
 }
+
+/* ---- Edytor cennika (zakładka Kosztorys) ---- */
+.tk-pricing {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #fbfcfd;
+}
+
+.tk-pricing > summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-weight: 700;
+}
+
+.tk-pricing .tk-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.tk-pricing-body {
+  padding: 0 10px 10px;
+}
+
+.tkp-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eceff2;
+}
+
+.tkp-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.tkp-block label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+}
+
+.tkp-block select,
+.tkp-block input {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid #c3c9d0;
+  border-radius: 4px;
+  background: #fff;
+  min-width: 0;
+}
+
+.tkp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.tkp-table th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--c-muted);
+  font-weight: 600;
+  padding: 2px 2px;
+}
+
+.tkp-table td {
+  padding: 1px 2px;
+}
+
+.tkp-table input[type='number'] {
+  width: 100%;
+}
+
+.tkp-table input[type='text'] {
+  width: 100%;
+}
+
+.tkp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.tkp-actions button,
+.tk-x {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid #b7c0ca;
+  background: #fff;
+  cursor: pointer;
+}
+
+.tk-x {
+  padding: 0 6px;
+  color: var(--c-err);
+}

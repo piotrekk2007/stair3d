@@ -1,8 +1,6 @@
 import GUI from 'lil-gui';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
-import { DEFAULT_MATERIAL_CATALOG } from '../takeoff/materialCatalog.js';
-import { elementLabelPl } from './takeoffView.js';
 import { stepIndexFromElementId } from './selection.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
@@ -57,8 +55,6 @@ export function createUI({
   onRedo,
   onFitPlanView,
   container,
-  takeoffSettings,
-  onTakeoffSettingsChange,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
   // do rogu body (stary układ). Grupy poniżej odpowiadają sekcjom specyfikacji etapu 10:
@@ -136,26 +132,6 @@ export function createUI({
   lockable(ceiling.add(config, 'openingWidth', 700, 2500, 50).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
   lockable(ceiling.add(config, 'openingOffsetX', -2000, 2000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
   lockable(ceiling.add(config, 'openingOffsetY', -2000, 2000, 10).name('Otwór: offset Y [mm]'), 'openingOffsetY');
-
-  // MATERIAŁY (sekcja 2 specyfikacji): gatunek/katalog (tylko odczyt) + ceny i współczynniki
-  // odpadu. To NIE jest `config` (warstwa Material Takeoff, nie parametr geometrii) — zmiana
-  // przelicza wyłącznie kosztorys, nie wchodzi do historii modelu i nie dotyka solverów.
-  if (takeoffSettings) {
-    const materials = gui.addFolder('Materiały i ceny');
-    materials.close();
-    const notify = () => onTakeoffSettingsChange?.();
-    for (const price of takeoffSettings.priceList) {
-      const entry = DEFAULT_MATERIAL_CATALOG[price.materialId];
-      const unitLabel = price.unit === 'volume' ? 'm³' : price.unit === 'area' ? 'm²' : 'szt.';
-      const label = `${entry?.label ?? price.materialId} [${price.currency}/${unitLabel}]`;
-      materials.add(price, 'price', 0, price.unit === 'area' ? 500 : 12000, price.unit === 'area' ? 1 : 50).name(label).onChange(notify);
-      if (entry?.species) materials.add({ species: entry.species }, 'species').name('  gatunek').disable();
-    }
-    const wasteFolder = materials.addFolder('Odpady / zapas materiałowy');
-    for (const type of Object.keys(takeoffSettings.wasteFactors)) {
-      wasteFolder.add(takeoffSettings.wasteFactors, type, 0, 0.4, 0.01).name(`${elementLabelPl(type)} [ułamek]`).onChange(notify);
-    }
-  }
 
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));

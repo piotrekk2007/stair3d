@@ -19,6 +19,7 @@
 
 import { computeMaterialTakeoff } from './materialTakeoff.js';
 import { applyPricing, totalCost, DEFAULT_PRICE_LIST } from './pricing.js';
+import { applyBoardPricing, createDefaultBoardPricing } from './boardPricing.js';
 import { runTakeoffValidationGate, GATE_STATUS } from './validationGate.js';
 import { takeoffToCSV } from './export/toCSV.js';
 import { takeoffToJSON } from './export/toJSON.js';
@@ -78,14 +79,20 @@ export function buildMaterialTakeoff(models, options = {}) {
  * bill of materials immediately. Same validation-gate behavior as `buildMaterialTakeoff`.
  *
  * @param {Object} models
- * @param {{wasteFactors?: Object, priceList?: import('./pricing.js').MaterialPrice[], profileId?: string}} [options]
+ * @param {{wasteFactors?: Object, priceList?: import('./pricing.js').MaterialPrice[], profileId?: string,
+ *   waivers?: Array, boardPricing?: ReturnType<typeof createDefaultBoardPricing>}} [options]
+ *   `boardPricing` — cennik desek (metr bieżący wg głębokości/długości, patrz boardPricing.js):
+ *   stopnie, podesty i podstopnie z drewna wycenia z tabeli; reszta idzie ogólnym `priceList`.
+ *   Bez niego wszystko wycenia ogólny `priceList` (zachowanie sprzed cennika desek).
  * @returns {MaterialTakeoffResult & { totalCost: number }}
  */
 export function buildPricedMaterialTakeoff(models, options = {}) {
   const takeoff = buildMaterialTakeoff(models, options);
   if (takeoff.status === GATE_STATUS.BLOCKED) return { ...takeoff, totalCost: 0 };
-  const priced = applyPricing(takeoff.items, options.priceList || DEFAULT_PRICE_LIST);
+  const boardPriced = options.boardPricing ? applyBoardPricing(takeoff.items, options.boardPricing) : takeoff.items;
+  const priced = applyPricing(boardPriced, options.priceList || DEFAULT_PRICE_LIST);
   return { ...takeoff, items: priced, totalCost: totalCost(priced) };
 }
 
+export { applyBoardPricing, createDefaultBoardPricing };
 export { applyPricing, totalCost, DEFAULT_PRICE_LIST, GATE_STATUS, runTakeoffValidationGate, takeoffToCSV, takeoffToJSON, takeoffToTextReport };

@@ -17,6 +17,8 @@ import { GROUP_BY } from './ui/takeoffView.js';
 import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
 import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffToTextReport } from './takeoff/index.js';
 import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
+import { createDefaultBoardPricing, sanitizeBoardPricing } from './takeoff/boardPricing.js';
+import { createPricingEditor } from './ui/pricingEditor.js';
 import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
@@ -68,8 +70,9 @@ const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: t
 // Wycena to warstwa Material Takeoff, NIE parametr geometrii: osobny stan, poza `config` i poza
 // historią modelu (zmiana ceny nie jest "cofnięciem schodów"), ale zapisywany w pliku projektu.
 const takeoffSettings = {
-  priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
+  priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })), // pozostałe materiały (wangi, słupy…)
   wasteFactors: { ...DEFAULT_WASTE_FACTORS },
+  boardPricing: createDefaultBoardPricing(), // cennik desek: stopnie/podesty/podstopnie z drewna
 };
 const projectMeta = { name: '', notes: '', lastFileNote: '' };
 let takeoffGroupBy = GROUP_BY.ELEMENT;
@@ -255,6 +258,7 @@ function computeTakeoff() {
   return buildPricedMaterialTakeoff(lastModels, {
     priceList: takeoffSettings.priceList,
     wasteFactors: takeoffSettings.wasteFactors,
+    boardPricing: takeoffSettings.boardPricing,
     waivers,
   });
 }
@@ -272,6 +276,7 @@ function renderTakeoffPanel() {
     selectedItemId: selectedTakeoffItemId,
     priceList: takeoffSettings.priceList,
     wasteFactors: takeoffSettings.wasteFactors,
+    boardPricing: takeoffSettings.boardPricing,
   });
   if (lastTakeoff.status === 'BLOCKED') ws.setTabBadge('takeoff', '!', 'error');
   else ws.setTabBadge('takeoff', `≈${Math.round(lastTakeoff.totalCost).toLocaleString('pl-PL')} zł`, lastTakeoff.status === 'WARNING' ? 'warning' : 'info');
@@ -560,6 +565,7 @@ function resetTakeoffSettings() {
     if (def) Object.assign(price, def);
   }
   Object.assign(takeoffSettings.wasteFactors, DEFAULT_WASTE_FACTORS);
+  takeoffSettings.boardPricing = createDefaultBoardPricing();
 }
 
 function handleNewProject() {
@@ -567,6 +573,7 @@ function handleNewProject() {
   Object.assign(config, createDefaultConfig());
   resetTakeoffSettings();
   waivers = [];
+  pricingEditor.render();
   projectMeta.name = '';
   projectMeta.notes = '';
   projectMeta.lastFileNote = 'Nowy projekt';
@@ -592,7 +599,7 @@ function handleSaveProject() {
   exportProjectJSON(config, filename, {
     projectName: projectMeta.name,
     notes: projectMeta.notes,
-    takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors },
+    takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing },
     waivers,
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
@@ -618,7 +625,9 @@ function handleFileSelected(event) {
           if (price) Object.assign(price, incoming);
         }
         Object.assign(takeoffSettings.wasteFactors, meta.takeoffSettings.wasteFactors || {});
+        if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
       }
+      pricingEditor.render();
       projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
       ws.setProjectMeta({ name: projectMeta.name, notes: projectMeta.notes, lastFileNote: projectMeta.lastFileNote });
       document.title = projectMeta.name ? `${projectMeta.name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
@@ -683,6 +692,9 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportCSV: () => exportTakeoff('csv'),
   onExportTXT: () => exportTakeoff('txt'),
 });
+// Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
+// tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.
+const pricingEditor = createPricingEditor(takeoffPanel.querySelector('#takeoff-pricing'), { settings: takeoffSettings, onChange: refreshTakeoff });
 
 // Raycaster nie zna `visible` — ukryta warstwa (checkbox w HUD) nie może być zaznaczalna.
 function isEffectivelyVisible(obj) {
@@ -817,8 +829,6 @@ const gui = createUI({
   onFitPlanView: fitPlanView,
   onResetEdgeOverrides: handleResetEdgeOverrides,
   exportSelection,
-  takeoffSettings,
-  onTakeoffSettingsChange: refreshTakeoff,
   exportHandlers: {
     onExportOBJ: () => withoutHighlight(() => exportStaircaseToOBJ(currentRoot, 'schody.obj', exportSelection)),
     onExportDAE: () => withoutHighlight(() => exportStaircaseToDAE(currentRoot, 'schody.dae', exportSelection)),

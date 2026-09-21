@@ -69,7 +69,7 @@ function itemHTML(item, index, selectedItemId) {
         </div>
       </div>
       <div class="tk-foot">
-        <span>odpad ${(item.wasteFactor * 100).toFixed(0)}% → ${measure(item.wasteAdjustedQuantity, unit)}</span>
+        <span>${item.pricingSource === 'board-table' ? 'cena z cennika desek (odpad w cenie)' : `odpad ${(item.wasteFactor * 100).toFixed(0)}% → ${measure(item.wasteAdjustedQuantity, unit)}`}</span>
         <span class="tk-cost">${cost}</span>
       </div>
       ${notes}
@@ -96,6 +96,10 @@ function summaryHTML(summary, takeoff, settings) {
     .map(([type, f]) => `${esc(elementLabelPl(type))} ${(f * 100).toFixed(0)}%`)
     .join(', ');
 
+  const bp = settings.boardPricing;
+  const boardLine = bp
+    ? `<div>Stopnie, podesty${bp.riserMaterial === 'oak' ? ' i podstopnie' : ''} z drewna: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie.</div>`
+    : '';
   const caveats = [];
   if (summary.unpricedCount > 0) caveats.push(`${summary.unpricedCount} pozycji bez ceny w cenniku — nie wliczone do sumy.`);
   if (summary.invalidCount > 0) caveats.push(`${summary.invalidCount} pozycji bez wyliczonej ilości (INVALID/UNSUPPORTED) — nie wliczone do sumy.`);
@@ -116,9 +120,10 @@ function summaryHTML(summary, takeoff, settings) {
       </div>
       <div class="tk-assumptions">
         <b>Założenia (nie jest to oferta handlowa):</b>
-        <div>Ceny jednostkowe — ilustracyjne, do edycji w Parametry → Materiały: ${prices || 'brak'}.</div>
-        <div>Współczynniki odpadu wg typu elementu: ${waste || 'domyślne'}.</div>
-        <div>Koszt liczony od ilości STOCK z odpadem (nie od NET); bez robocizny, okuć, wykończenia i transportu.</div>
+        ${boardLine}
+        <div>Pozostałe materiały (wangi, słupy, klocki) — ceny ilustracyjne, do edycji w „Cennik i materiały": ${prices || 'brak'}.</div>
+        <div>Współczynniki odpadu wg typu elementu (dla pozycji spoza cennika desek): ${waste || 'domyślne'}.</div>
+        <div>Koszt liczony od ilości STOCK (nie od NET); bez robocizny, okuć, wykończenia i transportu.</div>
         ${caveats.map((c) => `<div class="tk-warn">${esc(c)}</div>`).join('')}
       </div>
     </div>`;
@@ -139,6 +144,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
       <button type="button" data-action="csv" title="Pobierz zestawienie jako CSV">CSV</button>
       <button type="button" data-action="txt" title="Pobierz raport tekstowy">Raport TXT</button>
     </div>
+    <div id="takeoff-pricing"></div>
     <div id="takeoff-banner" hidden></div>
     <div id="takeoff-body"></div>
   `;

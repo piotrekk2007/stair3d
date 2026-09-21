@@ -353,6 +353,30 @@ No panel or interaction computes geometry.
   findings. Waivers are project decisions, so they are saved as an optional top-level `waivers` field
   in the project file (outside `config`, outside undo history, cleared by "Nowy"). Tests:
   `takeoff/__tests__/waivers.test.js`.
+- **Board price list ("cennik desek")** (`src/takeoff/boardPricing.js`, ported from the DREWEX
+  WordPress calculator `Kalkulator_DREWEX/staircost-calculator/includes/class-calculator.php`
+  `board_price_for_depth`): treads, landings and (optionally) wooden risers are priced from a
+  table of **PLN per running metre** — row chosen by the blank's DEPTH range (lower-inclusive,
+  upper-exclusive, else nearest range), column by its LENGTH (≤1500 / 1501–2000 / >2000 mm), the
+  thickness class 20/40/60 (material 10–20 / 21–40 / 41–65 mm), base = oak "Klasa Natura" 100%,
+  other species/class = percentage multiplier; cost = price/mb × length[m]. A depth beyond the
+  largest range is glued from several boards (sum of FULL per-mb prices; a remainder below the
+  smallest range is priced like the top range, as in DREWEX). The blank is the takeoff's STOCK
+  bounding rectangle (board length = its longer side, depth = shorter side; our tread outline
+  already includes the nosing = DREWEX "formatka = beton + nosek"). **Waste is already inside the
+  table price**, so board-priced items get `wasteFactor: 0` — never double-counted. An item that
+  can't be priced (thickness > 65 mm, empty table) stays unpriced with an explanatory note rather
+  than being guessed. Items carry `pricingSource: 'board-table'` + `priceBreakdown`, so
+  `applyPricing()` (generic per-m³/m² list, still used for stringers/posts/cleats/MDF risers) skips
+  them. Opt-in via `buildPricedMaterialTakeoff(..., {boardPricing})`; without it behaviour is the
+  old generic pricing. The table is edited in the Kosztorys tab's "Cennik i materiały"
+  (`ui/pricingEditor.js`), imported/exported as CSV in the exact DREWEX format
+  (`cennik-stopni-*.csv`: `grubość_mm;głębokość_od_mm;głębokość_do_mm;cena_do_1500mb;…`), and saved
+  in the project file under `takeoffSettings.boardPricing`. **The defaults are the plugin's
+  code defaults, not necessarily the real production prices** (those live in the WordPress DB) —
+  import the real price list via CSV. Not ported (out of scope so far): assembly, finishes, extra
+  services, balustrades, VAT/margin. Stringers and posts have no counterpart in the DREWEX table and
+  are still priced with the illustrative generic list. Tests: `takeoff/__tests__/boardPricing.test.js`.
 - **Kosztorys** (`takeoffPanel.js` + pure `takeoffView.js` grouping/summing): NET (finished
   element) and STOCK/ORDER (raw + catalog size) shown side by side, group by element/material/
   construction, cost summary with explicit assumptions (illustrative prices, waste, no labour)
