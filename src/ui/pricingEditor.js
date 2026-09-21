@@ -4,8 +4,9 @@
 //
 //   settings.boardPricing  — cennik desek (metr bieżący wg głębokości i długości formatki) +
 //                            gatunek/klasa + materiał podstopni
-//   settings.priceList     — pozostałe materiały (wangi, słupy, klocki, podstopnie z płyty)
-//   settings.wasteFactors  — odpad wg typu elementu (nie dotyczy pozycji z cennika desek)
+//                            + dopłata do wang + tabela cen słupów
+//   settings.priceList     — już tylko podstopnie z płyty MDF (cena za m²)
+//   settings.wasteFactors  — odpad płyty MDF (pozycje z cenników desek/słupów mają odpad w cenie)
 import { createDefaultBoardPricing, parseBoardsCSV, boardsToCSV, RISER_MATERIALS, BOARD_THICKNESS_CLASSES_MM } from '../takeoff/boardPricing.js';
 import { DEFAULT_PRICE_LIST } from '../takeoff/pricing.js';
 import { DEFAULT_WASTE_FACTORS } from '../takeoff/wasteFactors.js';
@@ -80,7 +81,22 @@ export function createPricingEditor(container, { settings, onChange }) {
       )
       .join('');
 
+    // Ogólny cennik dotyczy już tylko podstopni z płyty MDF (wangi i słupy mają własne cenniki).
+    const postRows = (p.postPrices || [])
+      .map(
+        (r, i) => `
+        <tr>
+          <td>${numInput(`data-kind="post" data-i="${i}" data-field="sectionMm"`, r.sectionMm)}</td>
+          <td>${numInput(`data-kind="post" data-i="${i}" data-field="price"`, r.price)}</td>
+          <td><select data-kind="post" data-i="${i}" data-field="unit"><option value="szt" ${r.unit === 'szt' ? 'selected' : ''}>szt.</option><option value="mb" ${r.unit === 'mb' ? 'selected' : ''}>mb</option></select></td>
+          <td><button type="button" class="tk-x" data-action="del-post" data-i="${i}" title="Usuń">✕</button></td>
+        </tr>`
+      )
+      .join('');
+
+    // Ogólny cennik dotyczy już tylko podstopni z płyty MDF (wangi i słupy mają własne cenniki).
     const priceRows = settings.priceList
+      .filter((price) => price.materialId === 'sheet-plywood-mdf')
       .map((price) => {
         const label = DEFAULT_MATERIAL_CATALOG[price.materialId]?.label ?? price.materialId;
         const unit = price.unit === 'volume' ? 'zł/m³' : price.unit === 'area' ? 'zł/m²' : 'zł/szt.';
@@ -89,6 +105,7 @@ export function createPricingEditor(container, { settings, onChange }) {
       .join('');
 
     const wasteRows = Object.keys(settings.wasteFactors)
+      .filter((type) => type === 'RISER')
       .map((type) => `<tr><td>${esc(elementLabelPl(type))}</td><td>${numInput(`data-kind="waste" data-type="${esc(type)}"`, Math.round(settings.wasteFactors[type] * 1000) / 10)}</td><td>%</td></tr>`)
       .join('');
 
@@ -121,6 +138,20 @@ export function createPricingEditor(container, { settings, onChange }) {
         </div>
 
         <div class="tkp-block">
+          <div class="tkp-title">Wangi nośne <span class="tk-hint">(deska z cennika desek: grubość × szerokość wangi z parametrów × rzeczywista długość)</span></div>
+          <label>Dopłata do ceny wangi [%] ${numInput('data-kind="surcharge"', p.stringerSurchargePct ?? 0)}</label>
+        </div>
+
+        <div class="tkp-block">
+          <div class="tkp-title">Słupy <span class="tk-hint">(najmniejszy przekrój z tabeli, który jest ≥ przekroju słupa)</span></div>
+          <table class="tkp-table">
+            <thead><tr><th>Przekrój mm</th><th>Cena zł</th><th>za</th><th></th></tr></thead>
+            <tbody>${postRows}</tbody>
+          </table>
+          <div class="tkp-actions"><button type="button" data-action="add-post">+ Dodaj przekrój</button></div>
+        </div>
+
+        <div class="tkp-block">
           <div class="tkp-title">Mnożniki gatunku i klasy <span class="tk-hint">(% ceny bazowej; brak wpisu = 100%)</span></div>
           <table class="tkp-table">
             <thead><tr><th>Gatunek</th><th>Klasa</th><th>%</th><th></th></tr></thead>
@@ -130,12 +161,12 @@ export function createPricingEditor(container, { settings, onChange }) {
         </div>
 
         <div class="tkp-block">
-          <div class="tkp-title">Pozostałe materiały <span class="tk-hint">(wangi, słupy, klocki — nie ma ich w cenniku desek; ceny ilustracyjne)</span></div>
+          <div class="tkp-title">Podstopnie z płyty MDF/sklejki <span class="tk-hint">(tylko gdy wybrano płytę; cena ilustracyjna)</span></div>
           <table class="tkp-table"><tbody>${priceRows}</tbody></table>
         </div>
 
         <div class="tkp-block">
-          <div class="tkp-title">Odpad wg typu elementu <span class="tk-hint">(nie dotyczy pozycji wycenionych z cennika desek — tam odpad jest w cenie)</span></div>
+          <div class="tkp-title">Odpad płyty MDF <span class="tk-hint">(pozycje z cennika desek i słupów mają odpad w cenie)</span></div>
           <table class="tkp-table"><tbody>${wasteRows}</tbody></table>
         </div>
         <div class="tkp-actions"><button type="button" data-action="reset-all">Przywróć wszystkie domyślne ceny</button></div>
@@ -171,6 +202,11 @@ export function createPricingEditor(container, { settings, onChange }) {
       render();
     } else if (kind === 'riser') {
       p.riserMaterial = el.value;
+    } else if (kind === 'surcharge') {
+      p.stringerSurchargePct = Math.max(0, Number(el.value) || 0);
+    } else if (kind === 'post') {
+      const row = p.postPrices[Number(el.dataset.i)];
+      row[el.dataset.field] = el.dataset.field === 'unit' ? el.value : Math.max(0, Number(el.value) || 0);
     } else if (kind === 'price') {
       const price = settings.priceList.find((x) => x.materialId === el.dataset.material);
       if (price) price.price = Math.max(0, Number(el.value) || 0);
@@ -190,6 +226,11 @@ export function createPricingEditor(container, { settings, onChange }) {
       p.table.boards.push(last ? { ...last, depthMin: last.depthMax, depthMax: last.depthMax + 60 } : { thickness: 40, depthMin: 240, depthMax: 300, priceTo1500: 0, price1501to2000: 0, priceOver2000: 0 });
     } else if (action === 'del-board') {
       p.table.boards.splice(Number(btn.dataset.i), 1);
+    } else if (action === 'add-post') {
+      const last = p.postPrices[p.postPrices.length - 1];
+      p.postPrices.push({ sectionMm: last ? last.sectionMm + 20 : 100, price: 0, unit: last ? last.unit : 'szt' });
+    } else if (action === 'del-post') {
+      p.postPrices.splice(Number(btn.dataset.i), 1);
     } else if (action === 'add-mult') {
       p.table.speciesMultipliers.push({ species: 'Nowy gatunek', cls: 'Klasa Natura', multiplierPct: 100 });
     } else if (action === 'del-mult') {

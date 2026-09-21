@@ -9,6 +9,8 @@ import { buildStringerModelsForFlight } from '../../geometry/stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../../geometry/stringerConstructionGeometry.js';
 import { buildPostModels } from '../../geometry/postSolver.js';
 import { buildPricedMaterialTakeoff } from '../index.js';
+import { computeMaterialTakeoff } from '../materialTakeoff.js';
+import { computeWinderBlank } from '../../geometry/winderBlank.js';
 import {
   createDefaultBoardPricing,
   thicknessClassFor,
@@ -18,6 +20,7 @@ import {
   boardsToCSV,
   sanitizeBoardPricing,
   boardMaterialId,
+  applyBoardPricing,
   RISER_MATERIALS,
 } from '../boardPricing.js';
 
@@ -172,11 +175,110 @@ test('a 900 wide, 305 deep oak tread costs 342.00 (380 zł/mb x 0.9 m)', () => {
   assert.equal(tread.calculatedCost, 342);
 });
 
-test('stringers and posts are NOT taken from the board table — they keep the generic price list', () => {
-  const generic = buildPricedMaterialTakeoff(models());
-  const withBoards = buildPricedMaterialTakeoff(models(), { boardPricing: createDefaultBoardPricing() });
-  const pick = (t) => t.items.filter((i) => i.elementType === 'STRINGER' || i.elementType === 'POST').map((i) => [i.itemId, i.calculatedCost]);
-  assert.deepEqual(pick(withBoards), pick(generic));
+// ---- wangi, stopnie zabiegowe, słupy, zakres kosztorysu ----
+
+const synthetic = (over) => ({
+  itemId: 'x',
+  elementType: 'STRINGER',
+  sourceElementId: 'stringer:outer:outer-seg-0',
+  material: 'C24',
+  materialId: 'timber-c24',
+  quantity: 1,
+  unit: 'szt',
+  status: 'OK',
+  notes: [],
+  optional: false,
+  wasteFactor: 0.15,
+  wasteAdjustedUnit: 'm3',
+  stockVolume: 0.01,
+  stockArea: null,
+  calculatedDimensions: { lengthMm: 2660, boardWidthMm: 330, thicknessMm: 40 },
+  ...over,
+});
+
+test('a stringer 40 x 330 x 2660 mm is a normal board from the price list + 20%: 720 zł/mb x 2.66 m x 1.2 = 2298.24', () => {
+  const [item] = applyBoardPricing([synthetic({})], createDefaultBoardPricing());
+  assert.equal(item.pricingSource, 'board-table');
+  assert.equal(item.priceBreakdown.thicknessClass, 40);
+  assert.equal(item.priceBreakdown.chunks[0].rangeLabel, '300–360 mm');
+  assert.equal(item.priceBreakdown.pricePerMb, 720);
+  assert.equal(item.priceBreakdown.surchargePct, 20);
+  assert.equal(item.calculatedCost, 2298.24);
+  assert.equal(item.wasteFactor, 0, 'no separate waste on top of the price list');
+});
+
+test('the stringer surcharge is a setting (0% = plain board price)', () => {
+  const bp = { ...createDefaultBoardPricing(), stringerSurchargePct: 0 };
+  const [item] = applyBoardPricing([synthetic({})], bp);
+  assert.equal(item.calculatedCost, 1915.2);
+});
+
+test('the surcharge applies to stringers ONLY, not to treads', () => {
+  const t = buildPricedMaterialTakeoff(models(), { boardPricing: createDefaultBoardPricing() });
+  const tread = t.items.find((i) => i.sourceElementId === 'tread:step-0');
+  assert.equal(tread.priceBreakdown.surchargePct ?? 0, 0);
+  assert.equal(tread.calculatedCost, 342);
+});
+
+test('real stringers are priced by their parameter width and true length', () => {
+  const t = buildPricedMaterialTakeoff(models({ stringerHeight: 330 }), { boardPricing: createDefaultBoardPricing() });
+  const stringer = t.items.find((i) => i.elementType === 'STRINGER');
+  assert.equal(stringer.calculatedDimensions.boardWidthMm, 330);
+  assert.equal(stringer.priceBreakdown.chunks[0].rangeLabel, '300–360 mm');
+  const expected = Math.round(720 * (stringer.calculatedDimensions.lengthMm / 1000) * 1.2 * 100) / 100;
+  assert.equal(stringer.calculatedCost, expected);
+});
+
+test('a winder tread is priced from its PRODUCTION BLANK — the same one the 2D plan shows', () => {
+  const m = models({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, treadsLegB: 3, windersPerTurn: 5, treadGoing: 280, totalRise: 2800, openingLength: 6000, openingWidth: 3000 });
+  // Realistic winder layouts are usually blocked by the validation gate; the quantities/pricing
+  // layers are exercised directly here (the gate is not what is under test).
+  const t = { items: applyBoardPricing(computeMaterialTakeoff(m, m.fullConfig), createDefaultBoardPricing()) };
+  const winders = m.treadModels.filter((x) => x.type === 'winder');
+  assert.ok(winders.length > 0);
+  for (const w of winders) {
+    const planTread = m.planLayout.treads[w.index];
+    const shownOnPlan = computeWinderBlank(planTread); // exactly what plan2dRenderer draws
+    assert.equal(w.winderBlank.length, shownOnPlan.length);
+    assert.equal(w.winderBlank.depth, shownOnPlan.depth);
+    const item = t.items.find((i) => i.sourceElementId === 'tread:' + w.stepId);
+    assert.equal(item.calculatedDimensions.lengthMm, shownOnPlan.length, 'takeoff STOCK = the plan\'s blank');
+    assert.equal(item.calculatedDimensions.widthMm, shownOnPlan.depth);
+    assert.equal(item.priceBreakdown.lengthMm, Math.max(shownOnPlan.length, shownOnPlan.depth));
+    assert.ok(item.calculatedCost > 0);
+  }
+});
+
+test('posts: the smallest listed section that is >= the post section is used; a bigger post stays unpriced with an explanation', () => {
+  const ok = buildPricedMaterialTakeoff(models({ postSize: 90 }), { boardPricing: createDefaultBoardPricing() });
+  const post = ok.items.find((i) => i.elementType === 'POST');
+  assert.equal(post.pricingSource, 'post-table');
+  assert.equal(post.calculatedCost, 160, '90 mm post -> the 100x100 row');
+
+  const big = buildPricedMaterialTakeoff(models({ postSize: 110 }), { boardPricing: createDefaultBoardPricing() });
+  const bigPost = big.items.find((i) => i.elementType === 'POST');
+  assert.equal(bigPost.calculatedCost, null);
+  assert.ok(bigPost.notes.some((n) => n.startsWith('Brak ceny słupa')));
+
+  const bp = createDefaultBoardPricing();
+  bp.postPrices.push({ sectionMm: 120, price: 30, unit: 'mb' });
+  const priced = buildPricedMaterialTakeoff(models({ postSize: 110 }), { boardPricing: bp });
+  const p = priced.items.find((i) => i.elementType === 'POST');
+  assert.equal(p.calculatedCost, Math.round(30 * (p.calculatedDimensions.heightMm / 1000) * 100) / 100);
+});
+
+test('the cost covers material only: cleats and housings are excluded, not priced', () => {
+  const m = models({ stringerConstructionType: 'cut', stringerCleatsEnabled: true });
+  const t = buildPricedMaterialTakeoff(m, { boardPricing: createDefaultBoardPricing() });
+  const extras = t.items.filter((i) => i.elementType === 'STRINGER_CLEAT' || i.elementType === 'STRINGER_HOUSING');
+  assert.ok(extras.length > 0, 'the scenario must actually produce cleats');
+  for (const i of extras) {
+    assert.equal(i.pricingSource, 'excluded');
+    assert.equal(i.calculatedCost, null);
+  }
+  const counted = t.items.filter((i) => i.calculatedCost !== null).map((i) => i.elementType);
+  assert.ok(counted.every((type) => ['TREAD', 'LANDING', 'RISER', 'STRINGER', 'POST'].includes(type)));
+  assert.equal(t.totalCost, Math.round(t.items.reduce((sum, i) => sum + (i.calculatedCost || 0), 0) * 100) / 100);
 });
 
 test('oak risers are priced from the 20 mm table; MDF risers keep the sheet price', () => {

@@ -9,6 +9,7 @@
 
 import { pointsEqual, normalizeVector } from './pathUtils.js';
 import { shiftFrontEdge } from './nosingUtils.js';
+import { computeWinderBlank } from './winderBlank.js';
 
 /**
  * @typedef {Object} TreadEdgeInfo
@@ -37,6 +38,10 @@ import { shiftFrontEdge } from './nosingUtils.js';
  *   per-tread overhang (config.manualTreadOverhangs) was actually applied — an INTENTIONAL
  *   lateral extension of this one tread, so validators must not read the resulting mismatch with
  *   the neighbour's shared edge as a discontinuity.
+ * @property {{length:number, depth:number, corners:{x:number,y:number}[]}|null} winderBlank  The
+ *   PRODUCTION blank ("formatka") of a winder tread — exactly what the 2D plan and 3D labels show
+ *   (winderBlank.js, computed from the unnosed plan outline) — so drawings and the material
+ *   takeoff can never disagree on it. `null` for straight/landing treads.
  * @property {object|null} winderInfo  Passthrough of tread.winderInfo (planLayout.js) — null
  *   for straight/landing treads.
  * @property {{x:number,y:number}[]} outline  FINAL, nosed footprint — the real as-built shape.
@@ -128,6 +133,7 @@ export function buildTreadModel(tread, config) {
     frontEdge,
     backEdge,
     winderInfo: tread.winderInfo || null,
+    winderBlank: tread.type === 'winder' ? computeWinderBlank(tread) : null,
     overhang: tread.overhang ?? null,
     outline: applyNosing(tread, effectiveNosing),
   };

@@ -75,14 +75,17 @@ function buildTreadItem(t, config, wasteFactors) {
   const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
   const netAreaMm2 = Math.abs(signedPolygonArea(t.outline));
   const netVolumeMm3 = netAreaMm2 * t.thickness;
-  const { lengthMm, widthMm } = boundingRectAlong(t.outline, t.direction);
+  // Winder treads are bought/cut as their PRODUCTION BLANK (the "formatka" shown on the 2D plan and
+  // in the 3D labels, TreadModel.winderBlank); every other tread as the bounding rectangle of its
+  // own outline in its walking direction.
+  const { lengthMm, widthMm } = t.winderBlank ? { lengthMm: t.winderBlank.length, widthMm: t.winderBlank.depth } : boundingRectAlong(t.outline, t.direction);
   const stockAreaMm2 = lengthMm * widthMm;
   const stockVolumeMm3 = stockAreaMm2 * t.thickness;
   const elementType = t.type === 'landing' ? ELEMENT_TYPES.LANDING : ELEMENT_TYPES.TREAD;
 
   const notes = [];
   if (t.type === 'winder') {
-    notes.push('Wymiar zakupowy (stock) to prostokąt otaczający kontur zabiegowego stopnia, zorientowany wzdłuż kierunku wchodzenia — świadome przybliżenie zakupowe, nie rzeczywisty kształt.');
+    notes.push('Wymiar zakupowy (stock) to formatka produkcyjna stopnia zabiegowego — ta sama, którą pokazuje plan 2D (prostokąt opisany na konturze, dłuższy bok wzdłuż krawędzi czołowej; bez noska).');
   }
 
   return createTakeoffItem({

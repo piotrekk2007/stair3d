@@ -18,6 +18,17 @@
 //      jest liczony jak najwyższy przedział — tak samo jak w kalkulatorze DREWEX).
 // Cena z tabeli dotyczy formatki (surowca do zakupu), więc odpad jest już w cenniku — dla pozycji
 // wycenionych tą metodą współczynnik odpadu NIE jest doliczany drugi raz.
+//
+// ZAKRES KOSZTORYSU (decyzja użytkownika): liczony jest wyłącznie MATERIAŁ elementów nośnych i
+// wykończeniowych — stopnie, stopnie zabiegowe, podesty, podstopnie (jeśli są), wangi nośne i
+// słupy. Nic więcej (klocki, wpusty, montaż, wykończenie, okucia) nie wchodzi do kosztu.
+//   - WANGA = deska z TEGO SAMEGO cennika (np. 40 × 330 × 2660 mm: grubość, głębokość = szerokość
+//     deski z parametrów, długość = jej rzeczywista długość) + stała dopłata procentowa (domyślnie
+//     +20%).
+//   - STOPIEŃ ZABIEGOWY = jego formatka produkcyjna (TreadModel.winderBlank — ta sama, którą
+//     pokazuje plan 2D), cena jak każdej deski z cennika.
+//   - SŁUP = osobna tabela cen wg przekroju (cena za sztukę albo za metr bieżący) — nie ma go w
+//     cenniku desek.
 
 import { ELEMENT_TYPES } from './takeoffTypes.js';
 
@@ -58,6 +69,14 @@ export function createDefaultBoardPricing() {
     species: 'Dąb',
     cls: 'Klasa Natura',
     riserMaterial: RISER_MATERIALS.OAK,
+    stringerSurchargePct: 20, // dopłata do ceny wangi względem ceny deski z cennika
+    // Słupy: najmniejszy przekrój z tabeli, który jest >= przekroju słupa. Wartości domyślne to
+    // pozycje "Drewniany 80×80/100×100" z cennika DREWEX (cena za sztukę) — słup o większym
+    // przekroju zostaje niewyceniony, dopóki nie dopiszesz dla niego wiersza.
+    postPrices: [
+      { sectionMm: 80, price: 120, unit: 'szt' },
+      { sectionMm: 100, price: 160, unit: 'szt' },
+    ],
     table: {
       boards: DEFAULT_BOARDS.map((r) => ({ ...r })),
       speciesMultipliers: DEFAULT_MULTIPLIERS.map((r) => ({ ...r })),
@@ -163,14 +182,19 @@ export function boardMaterialId(species, cls) {
 
 const fmtPln = (v) => v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Formatka elementu → { lengthMm, depthMm, thicknessMm } albo null, gdy element nie jest deską.
+// Formatka elementu → { lengthMm, depthMm, thicknessMm } albo null, gdy element nie jest deską z cennika.
 function boardBlankOf(item, riserMaterial) {
   const c = item.calculatedDimensions || {};
   if (item.elementType === ELEMENT_TYPES.TREAD || item.elementType === ELEMENT_TYPES.LANDING) {
     if (!(c.lengthMm > 0) || !(c.widthMm > 0)) return null;
-    // Deska biegnie wzdłuż dłuższego boku formatki (stopień prosty: szerokość biegu; klin
-    // zabiegowy: dłuższy bok prostokąta otaczającego), głębokość to krótszy bok.
+    // Deska biegnie wzdłuż dłuższego boku formatki (stopień prosty: szerokość biegu; stopień
+    // zabiegowy: dłuższy bok jego formatki produkcyjnej), głębokość to krótszy bok.
     return { lengthMm: Math.max(c.lengthMm, c.widthMm), depthMm: Math.min(c.lengthMm, c.widthMm), thicknessMm: c.thicknessMm };
+  }
+  if (item.elementType === ELEMENT_TYPES.STRINGER) {
+    // Wanga: deska o zadanej szerokości (parametr wangi, np. 330 mm) i rzeczywistej długości.
+    if (!(c.lengthMm > 0) || !(c.boardWidthMm > 0)) return null;
+    return { lengthMm: c.lengthMm, depthMm: c.boardWidthMm, thicknessMm: c.thicknessMm };
   }
   if (item.elementType === ELEMENT_TYPES.RISER && riserMaterial === RISER_MATERIALS.OAK) {
     if (!(c.totalWidthMm > 0) || !(c.heightMm > 0)) return null;
@@ -179,7 +203,7 @@ function boardBlankOf(item, riserMaterial) {
   return null;
 }
 
-function describeBreakdown(pricing, blank, lookup, cost, quantity) {
+function describeBreakdown(pricing, blank, lookup, cost, quantity, surchargePct) {
   const parts = [`${pricing.species} ${pricing.cls} (${lookup.multiplierPct}% ceny bazowej)`];
   parts.push(`grubość ${Math.round(blank.thicknessMm)} mm → klasa ${lookup.thicknessClass} mm`);
   parts.push(`formatka dł. ${Math.round(blank.lengthMm)} × głęb. ${Math.round(blank.depthMm)} mm`);
@@ -189,46 +213,91 @@ function describeBreakdown(pricing, blank, lookup, cost, quantity) {
     parts.push(`przedział głęb. ${lookup.chunks[0].rangeLabel}${lookup.viaNearestRange ? ' (najbliższy)' : ''}`);
   }
   parts.push(`dł. ${lookup.tier.label}`);
+  if (surchargePct) parts.push(`dopłata wangi +${surchargePct}%`);
   const qty = quantity > 1 ? ` × ${quantity} szt.` : '';
-  parts.push(`${fmtPln(lookup.pricePerMb)} zł/mb × ${(blank.lengthMm / 1000).toFixed(3).replace('.', ',')} m${qty} = ${fmtPln(cost)} zł`);
+  const factor = surchargePct ? ` × ${(1 + surchargePct / 100).toFixed(2).replace('.', ',')}` : '';
+  parts.push(`${fmtPln(lookup.pricePerMb)} zł/mb × ${(blank.lengthMm / 1000).toFixed(3).replace('.', ',')} m${qty}${factor} = ${fmtPln(cost)} zł`);
   return `Cennik desek: ${parts.join(' · ')}`;
 }
 
+export const EXCLUDED_PRICING_SOURCE = 'excluded';
+export const POST_PRICING_SOURCE = 'post-table';
+
+function excludedItem(item) {
+  return {
+    ...item,
+    pricingSource: EXCLUDED_PRICING_SOURCE,
+    calculatedCost: null,
+    notes: [...item.notes, 'Poza zakresem kosztorysu — liczony jest tylko materiał: stopnie, stopnie zabiegowe, podesty, podstopnie, wangi i słupy.'],
+  };
+}
+
+function pricePost(item, pricing) {
+  const c = item.calculatedDimensions || {};
+  const size = c.crossSectionMm;
+  const rows = [...(pricing.postPrices || [])].sort((a, b) => a.sectionMm - b.sectionMm);
+  const row = rows.find((r) => r.sectionMm >= size - 1e-6);
+  // catalogStock: null — katalog rozmiarów (C24, ilustracyjny) nie dotyczy pozycji wycenianych z cennika.
+  const base = { ...item, material: 'Słup · cennik słupów', materialId: 'post-table', pricingSource: POST_PRICING_SOURCE, wasteFactor: 0, catalogStock: null };
+  if (!row) {
+    return { ...base, notes: [...item.notes, `Brak ceny słupa ${Math.round(size)}×${Math.round(size)} mm — w cenniku słupów nie ma przekroju >= ${Math.round(size)} mm; dopisz wiersz w „Cennik i materiały".`] };
+  }
+  const perMb = row.unit === 'mb';
+  const cost = round2(perMb ? row.price * (c.heightMm / 1000) * item.quantity : row.price * item.quantity);
+  const how = perMb ? `${fmtPln(row.price)} zł/mb × ${(c.heightMm / 1000).toFixed(3).replace('.', ',')} m` : `${fmtPln(row.price)} zł/szt.`;
+  return {
+    ...base,
+    wasteAdjustedQuantity: item.wasteAdjustedUnit === 'm3' ? item.stockVolume : item.stockArea,
+    unitPrice: row.price,
+    priceUnit: perMb ? 'mb' : 'szt',
+    currency: 'PLN',
+    calculatedCost: cost,
+    priceBreakdown: { sectionMm: row.sectionMm, price: row.price, unit: row.unit },
+    notes: [...item.notes, `Cennik słupów: przekrój słupa ${Math.round(size)}×${Math.round(size)} mm → wiersz ${row.sectionMm}×${row.sectionMm} mm · ${how}${item.quantity > 1 ? ` × ${item.quantity} szt.` : ''} = ${fmtPln(cost)} zł`],
+  };
+}
+
 /**
- * Wycenia z tabeli cennikowej stopnie, podesty i (opcjonalnie) podstopnie z drewna. Zwraca NOWE
- * pozycje; pozostałe (wangi, słupy, klocki, podstopnie z płyty) zwraca bez zmian — wycenia je
- * dopiero applyPricing() z ogólnego cennika. Pozycji, której nie da się wycenić (np. grubość > 65
- * mm), NIE wycenia się "na oko" — zostaje niewyceniona z wyjaśnieniem w notatkach.
+ * Wycenia MATERIAŁ: stopnie, stopnie zabiegowe, podesty, podstopnie z drewna, wangi (z cennika desek
+ * + dopłata) i słupy (z tabeli słupów). Klocki i wpusty wangi są poza zakresem (oznaczone
+ * `pricingSource: 'excluded'`, bez kosztu). Pozostałe pozycje zwraca bez zmian (np. podstopnie z
+ * płyty — wycenia je dopiero applyPricing()). Zwraca NOWE pozycje. Pozycji, której nie da się
+ * wycenić (np. grubość > 65 mm, brak wiersza dla słupa), NIE wycenia się "na oko" — zostaje
+ * niewyceniona z wyjaśnieniem w notatkach.
  *
  * @param {import('./takeoffTypes.js').MaterialTakeoffItem[]} items
  * @param {ReturnType<typeof createDefaultBoardPricing>} pricing
  */
 export function applyBoardPricing(items, pricing) {
   return items.map((item) => {
+    if (item.elementType === ELEMENT_TYPES.STRINGER_CLEAT || item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
     if (item.status !== 'OK') return item;
+    if (item.elementType === ELEMENT_TYPES.POST) return pricePost(item, pricing);
     const blank = boardBlankOf(item, pricing.riserMaterial);
     if (!blank) return item;
 
     const material = `${pricing.species} · ${pricing.cls}`;
-    const base = { ...item, material, materialId: boardMaterialId(pricing.species, pricing.cls), pricingSource: BOARD_PRICING_SOURCE };
+    const base = { ...item, material, materialId: boardMaterialId(pricing.species, pricing.cls), pricingSource: BOARD_PRICING_SOURCE, catalogStock: null };
     const lookup = lookupBoardPricePerMb(pricing.table, { species: pricing.species, cls: pricing.cls, thicknessMm: blank.thicknessMm, depthMm: blank.depthMm, lengthMm: blank.lengthMm });
     if (!lookup.ok) {
       return { ...base, priceBreakdown: null, notes: [...item.notes, `Brak ceny z cennika desek: ${lookup.reason}`] };
     }
 
-    const cost = round2(lookup.pricePerMb * (blank.lengthMm / 1000) * item.quantity);
+    const surchargePct = item.elementType === ELEMENT_TYPES.STRINGER ? Number(pricing.stringerSurchargePct) || 0 : 0;
+    const factor = 1 + surchargePct / 100;
+    const cost = round2(lookup.pricePerMb * (blank.lengthMm / 1000) * item.quantity * factor);
     const stockMeasure = item.wasteAdjustedUnit === 'm3' ? item.stockVolume : item.stockArea;
     return {
       ...base,
       // Cena dotyczy formatki (surowca), odpad jest w cenniku — bez drugiego doliczania.
       wasteFactor: 0,
       wasteAdjustedQuantity: stockMeasure,
-      unitPrice: lookup.pricePerMb,
+      unitPrice: round4(lookup.pricePerMb * factor),
       priceUnit: 'mb',
       currency: 'PLN',
       calculatedCost: cost,
-      priceBreakdown: { pricePerMb: lookup.pricePerMb, lengthMm: blank.lengthMm, depthMm: blank.depthMm, thicknessClass: lookup.thicknessClass, chunks: lookup.chunks },
-      notes: [...item.notes, describeBreakdown(pricing, blank, lookup, cost, item.quantity)],
+      priceBreakdown: { pricePerMb: lookup.pricePerMb, surchargePct, lengthMm: blank.lengthMm, depthMm: blank.depthMm, thicknessClass: lookup.thicknessClass, chunks: lookup.chunks },
+      notes: [...item.notes, describeBreakdown(pricing, blank, lookup, cost, item.quantity, surchargePct)],
     };
   });
 }
@@ -299,7 +368,12 @@ export function sanitizeBoardPricing(value) {
   const multipliers = Array.isArray(value.table?.speciesMultipliers)
     ? value.table.speciesMultipliers.filter((r) => r && typeof r.species === 'string' && typeof r.cls === 'string' && isNum(r.multiplierPct)).map((r) => ({ species: r.species, cls: r.cls, multiplierPct: r.multiplierPct }))
     : [];
+  const postPrices = Array.isArray(value.postPrices)
+    ? value.postPrices.filter((r) => r && isNum(r.sectionMm) && r.sectionMm > 0 && isNum(r.price) && r.price >= 0 && (r.unit === 'szt' || r.unit === 'mb')).map((r) => ({ sectionMm: r.sectionMm, price: r.price, unit: r.unit }))
+    : null;
   return {
+    stringerSurchargePct: isNum(value.stringerSurchargePct) && value.stringerSurchargePct >= 0 ? value.stringerSurchargePct : fresh.stringerSurchargePct,
+    postPrices: postPrices ?? fresh.postPrices,
     species: typeof value.species === 'string' ? value.species : fresh.species,
     cls: typeof value.cls === 'string' ? value.cls : fresh.cls,
     riserMaterial: Object.values(RISER_MATERIALS).includes(value.riserMaterial) ? value.riserMaterial : fresh.riserMaterial,

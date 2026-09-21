@@ -43,7 +43,8 @@ export function groupTakeoffItems(items, groupBy = GROUP_BY.ELEMENT) {
 // Pozycje "nie do kupienia" (wpusty — materiał USUWANY, nie kupowany) nie wchodzą do sum
 // zamówienia; INVALID/UNSUPPORTED są liczone osobno jako "bez wyliczenia".
 function isPurchasable(item) {
-  return item.status === 'OK' && item.materialId !== null && item.wasteAdjustedQuantity !== null;
+  // pricingSource 'excluded' = poza zakresem kosztorysu (klocki, wpusty) — nie wchodzi do sum.
+  return item.status === 'OK' && item.pricingSource !== 'excluded' && item.materialId !== null && item.wasteAdjustedQuantity !== null;
 }
 
 /**

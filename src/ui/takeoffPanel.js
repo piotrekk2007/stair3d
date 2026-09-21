@@ -46,7 +46,7 @@ function itemHTML(item, index, selectedItemId) {
   const unit = item.wasteAdjustedUnit;
   const netMeasure = unit === 'm3' ? item.netVolume : item.netArea;
   const stockMeasure = unit === 'm3' ? item.stockVolume : item.stockArea;
-  const cost = item.calculatedCost === null ? '<span class="tk-muted">niewyceniona</span>' : money(item.calculatedCost, item.currency);
+  const cost = item.pricingSource === 'excluded' ? '<span class="tk-muted">poza kosztorysem</span>' : item.calculatedCost === null ? '<span class="tk-warn">niewyceniona</span>' : money(item.calculatedCost, item.currency);
   const notes = item.notes.length ? `<div class="tk-notes">${item.notes.map((n) => `<div>• ${esc(n)}</div>`).join('')}</div>` : '';
   return `
     <div class="tk-item${selected}" data-item-index="${index}">
@@ -69,7 +69,7 @@ function itemHTML(item, index, selectedItemId) {
         </div>
       </div>
       <div class="tk-foot">
-        <span>${item.pricingSource === 'board-table' ? 'cena z cennika desek (odpad w cenie)' : `odpad ${(item.wasteFactor * 100).toFixed(0)}% → ${measure(item.wasteAdjustedQuantity, unit)}`}</span>
+        <span>${item.pricingSource === 'board-table' ? 'cena z cennika desek (odpad w cenie)' : item.pricingSource === 'post-table' ? 'cena z cennika słupów' : item.pricingSource === 'excluded' ? 'nie liczone w kosztorysie' : `odpad ${(item.wasteFactor * 100).toFixed(0)}% → ${measure(item.wasteAdjustedQuantity, unit)}`}</span>
         <span class="tk-cost">${cost}</span>
       </div>
       ${notes}
@@ -98,7 +98,8 @@ function summaryHTML(summary, takeoff, settings) {
 
   const bp = settings.boardPricing;
   const boardLine = bp
-    ? `<div>Stopnie, podesty${bp.riserMaterial === 'oak' ? ' i podstopnie' : ''} z drewna: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie.</div>`
+    ? `<div>Stopnie, stopnie zabiegowe (wg formatek produkcyjnych), podesty${bp.riserMaterial === 'oak' ? ', podstopnie' : ''} i wangi: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie. Wangi z dopłatą <b>+${bp.stringerSurchargePct ?? 0}%</b>.</div>
+        <div>Słupy: cennik słupów wg przekroju. Klocki i wpusty wangi nie są liczone.</div>`
     : '';
   const caveats = [];
   if (summary.unpricedCount > 0) caveats.push(`${summary.unpricedCount} pozycji bez ceny w cenniku — nie wliczone do sumy.`);
@@ -121,9 +122,8 @@ function summaryHTML(summary, takeoff, settings) {
       <div class="tk-assumptions">
         <b>Założenia (nie jest to oferta handlowa):</b>
         ${boardLine}
-        <div>Pozostałe materiały (wangi, słupy, klocki) — ceny ilustracyjne, do edycji w „Cennik i materiały": ${prices || 'brak'}.</div>
-        <div>Współczynniki odpadu wg typu elementu (dla pozycji spoza cennika desek): ${waste || 'domyślne'}.</div>
-        <div>Koszt liczony od ilości STOCK (nie od NET); bez robocizny, okuć, wykończenia i transportu.</div>
+        ${bp && bp.riserMaterial === 'mdf' ? `<div>Podstopnie z płyty MDF — cena za m² (${prices || 'brak'}); odpad wg typu elementu: ${waste || 'domyślny'}.</div>` : ''}
+        <div>Koszt liczony od ilości STOCK (nie od NET). Kosztorys obejmuje wyłącznie materiał: stopnie, stopnie zabiegowe, podesty, podstopnie, wangi i słupy — bez robocizny, montażu, wykończenia i transportu.</div>
         ${caveats.map((c) => `<div class="tk-warn">${esc(c)}</div>`).join('')}
       </div>
     </div>`;

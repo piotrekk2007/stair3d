@@ -374,9 +374,19 @@ No panel or interaction computes geometry.
   (`cennik-stopni-*.csv`: `grubość_mm;głębokość_od_mm;głębokość_do_mm;cena_do_1500mb;…`), and saved
   in the project file under `takeoffSettings.boardPricing`. **The defaults are the plugin's
   code defaults, not necessarily the real production prices** (those live in the WordPress DB) —
-  import the real price list via CSV. Not ported (out of scope so far): assembly, finishes, extra
-  services, balustrades, VAT/margin. Stringers and posts have no counterpart in the DREWEX table and
-  are still priced with the illustrative generic list. Tests: `takeoff/__tests__/boardPricing.test.js`.
+  import the real price list via CSV. **Scope decision: the cost is MATERIAL only** — treads,
+  winder treads, landings, risers (if any), load-bearing stringers and posts; no assembly, finishes,
+  extra services, balustrades, VAT/margin, cleats or housings (those get `pricingSource:
+  'excluded'`, no cost, and are left out of the summary sums). **Stringer** = a normal board from
+  the same table (thickness class × board width from the stringer parameter, e.g. 40×330 × its true
+  length, e.g. 2660) **+ a surcharge (default +20%, `stringerSurchargePct`)**. **Winder tread** =
+  its PRODUCTION BLANK: `TreadModel.winderBlank` (from `winderBlank.js`, the very same numbers the 2D
+  plan and 3D labels show — currently WITHOUT nosing) is now also the takeoff STOCK for winders,
+  replacing the old bounding rectangle. **Post** = a separate table `postPrices` (smallest section
+  >= the post's, per piece or per running metre; defaults are DREWEX's "Drewniany 80×80/100×100"
+  per-piece prices, so a 110 mm post stays unpriced until a row is added). Priced items get
+  `catalogStock: null` (the illustrative C24 catalog does not apply). Tests:
+  `takeoff/__tests__/boardPricing.test.js`.
 - **Kosztorys** (`takeoffPanel.js` + pure `takeoffView.js` grouping/summing): NET (finished
   element) and STOCK/ORDER (raw + catalog size) shown side by side, group by element/material/
   construction, cost summary with explicit assumptions (illustrative prices, waste, no labour)
