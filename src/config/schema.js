@@ -60,6 +60,10 @@ export function createDefaultConfig() {
     // faktycznie wystawać poza wangę.
     manualTreadOverhangs: {},
 
+    // Ręczne edycje POJEDYNCZYCH słupów: { [postId]: { removed?: true, topDeltaMm?, bottomDeltaMm? } } —
+    // wydłużenie (+) / skrócenie (-) od góry i od dołu albo usunięcie słupa. Patrz postSolver.js.
+    manualPostOverrides: {},
+
     treadThickness: 40, // mm
     nosing: 25, // mm, wysunięcie noska stopnia
 

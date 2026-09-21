@@ -1335,3 +1335,12 @@ code {
 .tk-item.manual {
   background: #f4f8fd;
 }
+
+/* Edycja pojedynczego słupa w Inspektorze */
+.insp-field { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.insp-field .insp-label { flex: 1; }
+.insp-field input[type='number'] { width: 78px; padding: 3px 6px; border: 1px solid #c9ced6; border-radius: 4px; text-align: right; }
+.insp-actions { display: flex; gap: 8px; margin-top: 8px; }
+.insp-btn { padding: 5px 10px; border: 1px solid #c9ced6; border-radius: 5px; background: #f4f6f9; cursor: pointer; }
+.insp-btn:hover { background: #e8edf4; }
+.insp-btn.danger { color: #a32020; border-color: #d9a6a6; }

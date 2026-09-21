@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase } from './geometry/buildStaircase.js';
+import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
@@ -250,7 +251,7 @@ function selectionStillExists(sel, built) {
     case 'stringer':
       return !!built.stringerModels[sel.stringerId];
     case 'post':
-      return !sel.postId || built.postModels.some((p) => p.postId === sel.postId);
+      return !sel.postId || built.allPostModels.some((p) => p.postId === sel.postId);
     default:
       return false;
   }
@@ -294,7 +295,7 @@ function renderTakeoffPanel() {
 }
 
 function manualEditCount() {
-  return Object.keys(config.manualEdgeOverrides || {}).length + Object.keys(config.manualTreadOverhangs || {}).length;
+  return Object.keys(config.manualEdgeOverrides || {}).length + Object.keys(config.manualTreadOverhangs || {}).length + Object.keys(config.manualPostOverrides || {}).length;
 }
 
 function updateStatus(counts) {
@@ -423,7 +424,7 @@ function refreshSelectionViews() {
       planLayout: lastModels.planLayout,
       treadModels: lastModels.treadModels,
       stringerModels: lastModels.stringerModels,
-      postModels: lastModels.postModels,
+      postModels: lastModels.allPostModels, // także usunięte (oznaczone) — Inspektor pokazuje "Przywróć"
       manualCount: manualEditCount(),
     });
   }
@@ -508,6 +509,7 @@ function regeneratePlan2D() {
     selectedStepIndex,
     selection,
     layers: viewState.plan2dLayers,
+    postStates: Object.fromEntries((lastModels?.allPostModels || []).map((p) => [p.postId, { removed: p.removed, overridden: p.overridden }])),
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -548,9 +550,28 @@ function handleViewChange(key, value) {
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
 }
 
+// Edycja POJEDYNCZEGO słupa z Inspektora: zmienia wyłącznie config.manualPostOverrides (dane modelu),
+// potem zwykły rebuild() — tak samo jak każda inna ręczna korekta. Nic nie dotyka siatki.
+function applyPostEdit(postId, change) {
+  const overrides = { ...(config.manualPostOverrides || {}) };
+  const entry = { ...(overrides[postId] || {}) };
+  if (change.field === 'topDeltaMm' || change.field === 'bottomDeltaMm') entry[change.field] = Number.isFinite(change.value) ? change.value : 0;
+  else if (change.action === 'remove') entry.removed = true;
+  else if (change.action === 'restore') delete entry.removed;
+  else if (change.action === 'reset') {
+    delete entry.topDeltaMm;
+    delete entry.bottomDeltaMm;
+  }
+  overrides[postId] = entry;
+  config.manualPostOverrides = sanitizePostOverrides(overrides);
+  rebuild();
+  commitHistory();
+}
+
 function handleResetEdgeOverrides() {
   config.manualEdgeOverrides = {};
   config.manualTreadOverhangs = {};
+  config.manualPostOverrides = {};
   rebuild();
   commitHistory();
 }
@@ -692,6 +713,14 @@ function exportTakeoff(kind) {
 // ---------------------------------------------------------------------------------------------
 const infoPanel = createInfoPanel(ws.leftEl);
 const inspectorPanel = createInspectorPanel(ws.tabBody('inspector'));
+inspectorPanel.addEventListener('change', (e) => {
+  const key = e.target?.dataset?.postEdit;
+  if (key && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: key, value: Number(e.target.value) });
+});
+inspectorPanel.addEventListener('click', (e) => {
+  const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
+  if (action && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { action });
+});
 const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onSelect: handleSelectDiagnostic,
   onWaive: handleWaive,

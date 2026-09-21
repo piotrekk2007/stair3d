@@ -247,6 +247,12 @@ RULES #5 — and is never touched by any profile parameter or override).
 - **Board ends**: every end is a plumb (vertical) face; the first board's foot is cut horizontally along the
   floor line (`ends.start.cut = 'FLOOR_HORIZONTAL'`), with a vertical start face. Both contours are cut at the
   same planes, so a postless lap joint no longer has a slanted end. See STRINGER_PROFILE_MODEL.md §11a.
+- **Steep end edges**: a contour is continued along its end tangent to reach an end face only up to
+  `MAX_END_EXTENSION_SLOPE` (tan 70 degrees); a steeper end edge — the 15-55 mm-deep dusza treads of a tight
+  winder, 85 degrees and vertical — becomes a flat cap at that edge's own end height (`sliceCurveByU(…,
+  maxExtensionSlope)`). Before, an exactly vertical first edge left the lower contour detached from its start
+  face (no risers) and a near-vertical one was extrapolated to v = -1630 mm (with risers). Reproduced with the
+  user's own project file; regression tests in `stringerProfile.test.js`.
 - **Takeoff blank**: a stringer's STOCK is now the smallest rectangle covering the whole solved contour
   (`stockGeometry.js` `minAreaRectUV`) — the real board to buy/price — not the design depth. Straight
   flights stay at the design depth; winder boards come out deeper. `totalCost` is rounded to grosze.
@@ -258,6 +264,21 @@ RULES #5 — and is never touched by any profile parameter or override).
   housings, curved plan paths, CNC.
 - Tests: `geometry/__tests__/profileCurve.test.js`, `stringerProfile.test.js` (a 216-case grid of
   geometry x inclination x minimum depth x radius x construction type).
+
+## Per-post edits (implemented)
+
+`config.manualPostOverrides` = `{ [postId]: { removed?: true, topDeltaMm?, bottomDeltaMm? } }` (postId =
+`post-start` / `post-end` / `post-corner-<turn>`); `topDeltaMm`/`bottomDeltaMm` > 0 lengthen, < 0 shorten. Applied in
+`postSolver.js` on top of the nominal post (`PostModel.nominalElevation` is kept; `overridden`,
+`overrideRejected` — a result under `MIN_POST_HEIGHT_MM` = 100 is ignored). `buildPostModels()` returns only the
+posts that exist (what is rendered, priced, validated); `buildAllPostModels()` also returns removed ones
+(`removed: true`) for the UI, which draws them as dashed ghosts in the 2D plan (still clickable) and offers
+"Przywróć słup" in the Inspektor. Editing lives in the Inspektor's post view (`data-post-edit`/`data-post-action`,
+delegated in `main.js` `applyPostEdit`) and only changes the config, then the normal `rebuild()` + undo entry. Saved
+as the optional top-level `postOverrides` in the project file (no schema bump — older files simply lack it).
+**Limitation:** removing a *corner* post does not change how the stringers meet there (the inner boards stay
+post-jointed); use the global "Słup konstrukcyjny na zakręcie" switch for that. Tests:
+`geometry/__tests__/postOverrides.test.js`.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

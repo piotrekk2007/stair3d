@@ -5,6 +5,7 @@
 import { stateBadgeHTML } from './valueState.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stepIndexFromElementId } from './selection.js';
+import { MIN_POST_HEIGHT_MM } from '../geometry/postSolver.js';
 
 const TYPE_LABEL_PL = { straight: 'prosty', winder: 'zabiegowy', landing: 'podest' };
 const SEVERITY_LABEL_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
@@ -107,6 +108,22 @@ function stringerHTML(ctx) {
   return rows.join('');
 }
 
+// Formularz edycji pojedynczego słupa. Czysty HTML z atrybutami data-* — zdarzenia obsługuje main.js
+// (deleguje na panelu), który zmienia WYŁĄCZNIE config.manualPostOverrides i woła rebuild().
+function postEditFormHTML(post, o) {
+  if (post.removed) {
+    return section('Edycja słupa') + `<button type="button" class="insp-btn" data-post-action="restore">Przywróć słup</button>`;
+  }
+  const field = (label, key, value) =>
+    `<label class="insp-field"><span class="insp-label">${label}</span><input type="number" step="10" value="${value}" data-post-edit="${key}"> mm</label>`;
+  return (
+    section('Edycja słupa') +
+    field('Wydłuż (+) / skróć (−) od GÓRY', 'topDeltaMm', o.topDeltaMm || 0) +
+    field('Wydłuż (+) / skróć (−) od DOŁU', 'bottomDeltaMm', o.bottomDeltaMm || 0) +
+    `<div class="insp-actions"><button type="button" class="insp-btn" data-post-action="reset">Resetuj długość</button><button type="button" class="insp-btn danger" data-post-action="remove">Usuń słup</button></div>`
+  );
+}
+
 function postHTML(ctx) {
   const { selection, config, postModels, diagnostics } = ctx;
   const post = postModels?.find((p) => p.postId === selection.postId) ?? null;
@@ -116,7 +133,14 @@ function postHTML(ctx) {
     rows.push(row('Rodzaj', post.kind, 'auto'));
     rows.push(row('Przekrój', `${post.size} × ${post.size} mm`, config.lockedFields?.includes('postSize') ? 'user' : 'auto'));
     rows.push(row('Pozycja w rzucie', pt(post.position), 'auto'));
-    rows.push(row('Wysokość (od–do)', `${post.elevation.bottom.toFixed(0)}–${post.elevation.top.toFixed(0)} mm`, 'auto'));
+    if (post.removed) {
+      rows.push(row('Stan', 'usunięty — nie ma go w modelu 3D, wycenie ani walidacji', 'manual'));
+    } else {
+      rows.push(row('Wysokość (od–do)', `${post.elevation.bottom.toFixed(0)}–${post.elevation.top.toFixed(0)} mm (${(post.elevation.top - post.elevation.bottom).toFixed(0)} mm)`, post.overridden ? 'manual' : 'auto'));
+      if (post.overridden) rows.push(row('Wysokość nominalna', `${post.nominalElevation.bottom.toFixed(0)}–${post.nominalElevation.top.toFixed(0)} mm`, 'auto'));
+      if (post.overrideRejected) rows.push(`<div class="insp-diag warning"><b>UWAGA</b><div>Ta zmiana długości została zignorowana — słup byłby krótszy niż ${MIN_POST_HEIGHT_MM} mm.</div></div>`);
+    }
+    rows.push(postEditFormHTML(post, config.manualPostOverrides?.[post.postId] || {}));
   }
   rows.push(section('Walidacja'));
   rows.push(diagnosticsHTML(diagnostics));

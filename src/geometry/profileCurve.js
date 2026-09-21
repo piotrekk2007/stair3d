@@ -255,8 +255,15 @@ function subPrimitive(prim, t0, t1, aOverride, bOverride) {
  * curve's own ends, the first/last primitive's tangent is continued in a straight line — the
  * same "extrapolate along the nearest slope" rule polylineProfile.js's valueAtU uses, so a
  * board that reaches slightly past its outermost tread still has a defined edge there.
+ *
+ * `maxExtensionSlope` bounds that straight continuation by STEEPNESS (|dv/du| of the end edge): a
+ * steeper end edge is instead continued FLAT — a horizontal cap at the curve's own end height.
+ * Without a bound, a near-vertical end edge (the narrow "dusza" treads of a tight winder, 85 degrees
+ * and more) is extrapolated metres away, or, when exactly vertical, cannot reach the plane at all
+ * (a start face left detached from its post). The bound is on the slope, not on the length of the
+ * continuation: a long continuation of an ordinary steep flight is exactly right.
  */
-export function sliceCurveByU(curve, u0, u1) {
+export function sliceCurveByU(curve, u0, u1, maxExtensionSlope = Infinity) {
   if (curve.length === 0 || !(u1 > u0)) return [];
   let extended = curve;
   const first = curve[0];
@@ -265,11 +272,15 @@ export function sliceCurveByU(curve, u0, u1) {
   const suffix = [];
   if (first.a.u > u0) {
     const t = primTangent(first, true);
-    if (t.u > ANGLE_EPS) prefix.push(lineSegment({ u: u0, v: first.a.v - (t.v / t.u) * (first.a.u - u0) }, first.a));
+    const steepness = t.u > ANGLE_EPS ? Math.abs(t.v / t.u) : Infinity;
+    if (steepness <= maxExtensionSlope) prefix.push(lineSegment({ u: u0, v: first.a.v - (t.v / t.u) * (first.a.u - u0) }, first.a));
+    else prefix.push(lineSegment({ u: u0, v: first.a.v }, first.a));
   }
   if (last.b.u < u1) {
     const t = primTangent(last, false);
-    if (t.u > ANGLE_EPS) suffix.push(lineSegment(last.b, { u: u1, v: last.b.v + (t.v / t.u) * (u1 - last.b.u) }));
+    const steepness = t.u > ANGLE_EPS ? Math.abs(t.v / t.u) : Infinity;
+    if (steepness <= maxExtensionSlope) suffix.push(lineSegment(last.b, { u: u1, v: last.b.v + (t.v / t.u) * (u1 - last.b.u) }));
+    else suffix.push(lineSegment(last.b, { u: u1, v: last.b.v }));
   }
   if (prefix.length || suffix.length) extended = [...prefix, ...curve, ...suffix];
 

@@ -1,7 +1,11 @@
 // PostModel — plain-data description of slupy (newel posts / corner posts), independent of
 // Three.js. This is DELIBERATELY a thin model, not a full solver-with-invariants like
-// StringerModel: a post has no manual-edit/nominal-vs-final distinction (nothing about it is
-// user-editable today), so there is nothing to validate beyond "where is it and how tall".
+// StringerModel: there is nothing to validate beyond "where is it and how tall".
+//
+// Each post can be edited individually through `config.manualPostOverrides` (see
+// sanitizePostOverrides): lengthened/shortened at the top and/or the bottom, or removed altogether.
+// The nominal post is always built first, the override is applied on top (Nominal -> Override ->
+// Final, like the tread edges), so an edit follows the post when the stair changes.
 // It still earns a real model (not just inline box-building in the renderer) because its
 // POSITION is a genuine, non-trivial derivation from planLayout (the start post is shifted
 // forward by half its own size to avoid swallowing the first tread's nosing — see
@@ -10,6 +14,10 @@
 // future cross-check between the two would compare against.
 
 import { normalizeVector } from './pathUtils.js';
+
+// A post shortened below this is treated as a mistake and the length edit is ignored (reported on the
+// model as `overrideRejected`) — a 100 mm stub is not a post.
+export const MIN_POST_HEIGHT_MM = 100;
 
 const NEWEL_HEIGHT = 1000; // mm, wysokość słupka początkowego/końcowego ponad poziom podłogi
 
@@ -24,14 +32,70 @@ function unitDir(pFrom, pTo) {
  * @property {{x:number,y:number}} position
  * @property {{bottom:number, top:number}} elevation
  * @property {number} size  mm, przekrój kwadratowy (config.postSize)
+ * @property {{bottom:number, top:number}} nominalElevation  before any manual length edit
+ * @property {boolean} removed        the user deleted this post (only present in buildAllPostModels)
+ * @property {boolean} overridden     a manual length edit is in effect
+ * @property {boolean} overrideRejected  a length edit was ignored because it left less than MIN_POST_HEIGHT_MM
  */
 
 /**
+ * Cleans the manual per-post override layer: { [postId]: { removed?: true, topDeltaMm?, bottomDeltaMm? } }.
+ * `topDeltaMm` > 0 lengthens the post upwards, < 0 shortens it; `bottomDeltaMm` > 0 lengthens it
+ * downwards, < 0 shortens it. Anything that is not a finite number (or an empty entry) is dropped.
+ */
+export function sanitizePostOverrides(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [postId, entry] of Object.entries(raw)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const clean = {};
+    if (entry.removed === true) clean.removed = true;
+    if (Number.isFinite(entry.topDeltaMm) && entry.topDeltaMm !== 0) clean.topDeltaMm = entry.topDeltaMm;
+    if (Number.isFinite(entry.bottomDeltaMm) && entry.bottomDeltaMm !== 0) clean.bottomDeltaMm = entry.bottomDeltaMm;
+    if (Object.keys(clean).length > 0) out[postId] = clean;
+  }
+  return out;
+}
+
+function applyPostOverrides(models, rawOverrides) {
+  const overrides = sanitizePostOverrides(rawOverrides);
+  return models.map((m) => {
+    const o = overrides[m.postId];
+    const base = { ...m, nominalElevation: { ...m.elevation }, removed: false, overridden: false, overrideRejected: false };
+    if (!o) return base;
+    if (o.removed) base.removed = true;
+    const top = m.elevation.top + (o.topDeltaMm || 0);
+    const bottom = m.elevation.bottom - (o.bottomDeltaMm || 0);
+    if (o.topDeltaMm || o.bottomDeltaMm) {
+      if (top - bottom >= MIN_POST_HEIGHT_MM) {
+        base.elevation = { bottom, top };
+        base.overridden = true;
+      } else {
+        base.overrideRejected = true;
+      }
+    }
+    return base;
+  });
+}
+
+/**
+ * The posts that actually exist (removed ones left out) — what is rendered, priced and validated.
+ *
  * @param {import('./planLayout.js').PlanLayout} planLayout
  * @param {Object} config
  * @returns {PostModel[]}
  */
 export function buildPostModels(planLayout, config) {
+  return buildAllPostModels(planLayout, config).filter((p) => !p.removed);
+}
+
+/**
+ * Every post the stair has, INCLUDING the ones the user removed (flagged `removed`) — for the UI, so a
+ * removed post can still be shown as a ghost and brought back.
+ *
+ * @returns {PostModel[]}
+ */
+export function buildAllPostModels(planLayout, config) {
   const { postSize, totalRise, hasCornerPost } = config;
   const path = planLayout.innerFullPath;
   const startPoint = path[0];
@@ -67,5 +131,5 @@ export function buildPostModels(planLayout, config) {
     });
   }
 
-  return models;
+  return applyPostOverrides(models, config.manualPostOverrides);
 }

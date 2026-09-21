@@ -77,6 +77,11 @@ import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, p
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 
+// tan(70 degrees): the steepest end edge that is still continued along its own line to the end face.
+// The ordinary steep dusza of a normal winder is ~58 degrees (slope 1.6) and stays a straight line;
+// 85 degrees and vertical do not.
+const MAX_END_EXTENSION_SLOPE = 2.75;
+
 function toXY(p) {
   return { x: p.u, y: p.v };
 }
@@ -456,10 +461,13 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // the top ran on, the end face would be slanted. Both contours are cut at the SAME two planes.
     const spanStart = Math.min(0, effective[0].uStart);
     const spanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd);
-    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart + spanStart, segStart + spanEnd));
+    // A contour is continued along its end tangent to reach an end face only up to this steepness; a
+    // steeper end edge (the narrow dusza treads of a tight winder) becomes a flat cap (see sliceCurveByU).
+    const maxDrop = MAX_END_EXTENSION_SLOPE;
+    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart + spanStart, segStart + spanEnd, maxDrop));
     const lowerCurve = translateCurveU(lowerGroupSlice, -segStart);
     const upperCurveSolved = solved.upperCurve
-      ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart + spanStart, segStart + spanEnd)), -segStart)
+      ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart + spanStart, segStart + spanEnd, maxDrop)), -segStart)
       : null;
     // Arcs become chords only here, at the edge of the profile model, never inside it.
     const bottomPolyline = curveToPolyline(lowerCurve);

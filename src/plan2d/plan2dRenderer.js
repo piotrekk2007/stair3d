@@ -269,9 +269,12 @@ function stringerSpacingXML(planLayout, config) {
  * @param {{grid?:boolean, axes?:boolean, widths?:boolean, walkline?:boolean,
  *   runBoundaries?:boolean, stepBoundaries?:boolean, stringers?:boolean,
  *   winderWidth?:boolean, stringerSpacing?:boolean}} [options.layers]
+ * @param {Object<string,{removed?:boolean, overridden?:boolean}>} [options.postStates]  Stan słupów po
+ *   ręcznych edycjach (z PostModel) — usunięty słup jest rysowany jako przerywany "duch" (nadal
+ *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {} } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {} } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -306,7 +309,13 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   // przy "1 dużym podeście" drugi zakręt ma ten sam róg, więc dostaje ID pierwszego).
   const postRect = (postId, x, y, size) => {
     const selected = selection?.elementType === 'post' && selection.postId === postId;
-    return `<rect class="post-marker${selected ? ' selected' : ''}" data-post-id="${postId}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(size)}" height="${fmt(size)}" fill="${selected ? '#1a5fb4' : '#5a3d24'}" stroke="${selected ? '#1a5fb4' : 'none'}" stroke-width="30"/>`;
+    const state = postStates[postId] || {};
+    if (state.removed) {
+      // usunięty słup: przerywany kontur bez wypełnienia, ale klikalny (pointer-events na całym prostokącie)
+      return `<rect class="post-marker removed${selected ? ' selected' : ''}" data-post-id="${postId}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(size)}" height="${fmt(size)}" fill="transparent" pointer-events="all" stroke="${selected ? '#1a5fb4' : '#a0855f'}" stroke-width="24" stroke-dasharray="60 40"/>`;
+    }
+    const stroke = selected ? '#1a5fb4' : state.overridden ? '#e07b00' : 'none';
+    return `<rect class="post-marker${selected ? ' selected' : ''}${state.overridden ? ' overridden' : ''}" data-post-id="${postId}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(size)}" height="${fmt(size)}" fill="${selected ? '#1a5fb4' : '#5a3d24'}" stroke="${stroke}" stroke-width="30"/>`;
   };
   const cornerIds = [];
   const postsXML = planLayout.turns

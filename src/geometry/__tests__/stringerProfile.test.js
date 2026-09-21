@@ -15,7 +15,7 @@ import { buildStringerConstructionGeometry } from '../stringerConstructionGeomet
 import { solveStringerProfile } from '../stringerProfileSolver.js';
 import { profileParamsFromConfig, setVertexOverride, countProfileOverrides, sanitizeStringerProfileOverrides, anchorIdForTread, END_ANCHOR_ID, applyProfileEdit, PROFILE_EDITS } from '../stringerProfileModel.js';
 import { buildProfileViewModel, offsetFromDrag } from '../stringerProfileView.js';
-import { curveDistance, polylineToCurve, curveToPolyline } from '../profileCurve.js';
+import { curveDistance, polylineToCurve, curveToPolyline, sliceCurveByU } from '../profileCurve.js';
 import { segmentsProperlyIntersect } from '../pathUtils.js';
 
 const GEOMETRIES = {
@@ -490,4 +490,42 @@ test('board ends: at a postless lap joint the top and the lower contour end at t
   assert.ok(b.ends.start.u < -1);
   const lowEnd = a.lowerCurve[a.lowerCurve.length - 1].b;
   assert.ok(Math.abs(lowEnd.u - a.ends.end.u) < 1e-6);
+});
+
+// --- regression: a near-vertical end edge (tight winder) must still reach its end face -----------------
+//
+// Reported with the user's own project (a 700 mm wide L, 4 winders, 210 mm treads, walkline offset 280):
+// the first treads of the inner stringer's second board are only 15-55 mm deep against a ~190 mm riser, so
+// the profile's first edge is 80+ degrees steep. Without risers the lower contour started 280 mm short of
+// its start face (the board "detached from the post"); with risers the same edge was extrapolated to
+// v = -1630 (1.6 m below the floor).
+const TIGHT_WINDER = { stairType: 'L', turn1Type: 'winder', turnDirection: 'right', totalRise: 2930, stairWidth: 700, treadGoing: 210, treadsLegA: 6, treadsLegB: 2, windersPerTurn: 4, walklineOffset: 280, walklineSplitOffset: 400, minInnerWidth: 105, nosing: 20, riserBoardThickness: 16, postSize: 70, hasCornerPost: true, minimumStringerDepthMm: 330 };
+
+for (const type of ['closed', 'cut']) {
+  for (const risers of [false, true]) {
+    test(`tight winder (${type}, ${risers ? 'with' : 'without'} risers): every board's lower and upper contour reach their start/end faces and never go below the floor`, () => {
+      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionType: type, hasRiserBoards: risers });
+      for (const side of ['outer', 'inner']) {
+        for (const g of geo[side]) {
+          assert.ok(Math.min(...g.outerContour.map((p) => p.v)) >= -1e-6, `${side}/${g.segmentId}: dips below the floor`);
+          const lowStart = g.lowerCurve[0].a;
+          const lowEnd = g.lowerCurve[g.lowerCurve.length - 1].b;
+          if (g.ends.start.cut === 'VERTICAL') assert.ok(Math.abs(lowStart.u - g.ends.start.u) < 1e-6, `${side}/${g.segmentId}: lower contour starts at u=${lowStart.u}, its start face is at ${g.ends.start.u}`);
+          assert.ok(Math.abs(lowEnd.u - g.ends.end.u) < 1e-6, `${side}/${g.segmentId}: lower contour ends at u=${lowEnd.u}, its end face is at ${g.ends.end.u}`);
+          assert.ok(isSimplePolygon(g.outerContour), `${side}/${g.segmentId}: self-intersecting`);
+        }
+      }
+    });
+  }
+}
+
+test('sliceCurveByU: an end edge steeper than the limit is capped flat instead of extrapolated (or left detached when vertical)', () => {
+  const steep = polylineToCurve([{ u: 300, v: 1500 }, { u: 302, v: 1700 }, { u: 900, v: 2200 }]); // 89 degrees at the start
+  const capped = sliceCurveByU(steep, 0, 900, 2.75);
+  assert.equal(capped[0].a.u, 0);
+  assert.equal(capped[0].a.v, 1500, 'flat cap at the first vertex height');
+  const vertical = polylineToCurve([{ u: 300, v: 1500 }, { u: 300, v: 1700 }, { u: 900, v: 2200 }]);
+  assert.equal(sliceCurveByU(vertical, 0, 900, 2.75)[0].a.u, 0, 'a vertical first edge still reaches the face');
+  const gentle = polylineToCurve([{ u: 300, v: 1500 }, { u: 900, v: 2000 }]); // slope 0.83
+  assert.ok(sliceCurveByU(gentle, 0, 900, 2.75)[0].a.v < 1500 - 100, 'a gentle edge is still continued along its own line');
 });

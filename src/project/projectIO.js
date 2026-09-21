@@ -1,6 +1,7 @@
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { sanitizeWaivers } from '../diagnostics/waivers.js';
 import { sanitizeStringerProfileOverrides } from '../geometry/stringerProfileModel.js';
+import { sanitizePostOverrides } from '../geometry/postSolver.js';
 
 // Schemat pliku projektu — patrz docs/model/STAIRCASE_DATA_MODEL.md §7.1 dla pełnego
 // uzasadnienia wersji 2: `edgeOverrides` (ręczne korekty krawędzi — patrz §3, Nominal ->
@@ -32,7 +33,7 @@ export const CURRENT_PROJECT_VERSION = 3;
 // OPCJONALNE, więc starszy plik v2 bez nich nadal się wczytuje (brak pola ≠ błąd) i wersja
 // schematu się nie zmienia.
 export function buildProjectPayload(config, meta = {}) {
-  const { manualEdgeOverrides, manualStringerProfileOverrides, ...configWithoutOverrides } = config;
+  const { manualEdgeOverrides, manualStringerProfileOverrides, manualPostOverrides, ...configWithoutOverrides } = config;
   const payload = {
     _type: PROJECT_TYPE,
     _version: CURRENT_PROJECT_VERSION,
@@ -41,6 +42,10 @@ export function buildProjectPayload(config, meta = {}) {
     edgeOverrides: manualEdgeOverrides || {},
     stringerProfileOverrides: sanitizeStringerProfileOverrides(manualStringerProfileOverrides),
   };
+  // Ręczne edycje pojedynczych słupów — opcjonalne pole (starszy plik go nie ma i wczytuje się z pustym),
+  // więc wersja schematu się nie zmienia.
+  const postOverrides = sanitizePostOverrides(manualPostOverrides);
+  if (Object.keys(postOverrides).length > 0) payload.postOverrides = postOverrides;
   if (meta.projectName) payload.projectName = meta.projectName;
   if (meta.notes) payload.notes = meta.notes;
   if (meta.takeoffSettings) payload.takeoffSettings = meta.takeoffSettings;
@@ -119,6 +124,7 @@ export function parseProjectFile(text) {
       ...data.config,
       manualEdgeOverrides: data.edgeOverrides || {},
       manualStringerProfileOverrides: sanitizeStringerProfileOverrides(data.stringerProfileOverrides),
+      manualPostOverrides: sanitizePostOverrides(data.postOverrides),
     },
     meta: {
       projectName: typeof data.projectName === 'string' ? data.projectName : '',

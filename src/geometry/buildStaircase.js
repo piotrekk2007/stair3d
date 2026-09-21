@@ -7,7 +7,7 @@ import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
 import { buildStringerConstructionGeometry } from './stringerConstructionGeometry.js';
 import { renderStringers } from './stringerRenderer.js';
-import { buildPostModels } from './postSolver.js';
+import { buildPostModels, buildAllPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
@@ -46,6 +46,8 @@ export function buildStaircase(config) {
     inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
   };
   const postModels = buildPostModels(planLayout, fullConfig);
+  // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
+  const allPostModels = buildAllPostModels(planLayout, fullConfig);
 
   const root = new THREE.Group();
   root.name = 'Staircase';
@@ -70,5 +72,5 @@ export function buildStaircase(config) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels };
 }
