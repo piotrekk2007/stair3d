@@ -1,10 +1,16 @@
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { sanitizeWaivers } from '../diagnostics/waivers.js';
+import { sanitizeStringerProfileOverrides } from '../geometry/stringerProfileModel.js';
 
 // Schemat pliku projektu — patrz docs/model/STAIRCASE_DATA_MODEL.md §7.1 dla pełnego
 // uzasadnienia wersji 2: `edgeOverrides` (ręczne korekty krawędzi — patrz §3, Nominal ->
 // Override -> Final) są koncepcyjnie WARSTWĄ KOREKT, nie parametrem wejściowym Staircase, więc
 // w wersji 2 pliku żyją jako osobne, top-level pole zamiast być zagnieżdżone w `config`.
+//
+// Wersja 3 (profil wangi, docs/architecture/STRINGER_PROFILE_MODEL.md): tak samo traktuje drugą
+// warstwę korekt — `stringerProfileOverrides` (ręcznie przesunięte punkty profilu wangi) — oraz
+// zmienia nazwę parametru głębokości wangi `stringerHeight` -> `minimumStringerDepthMm` (to jest
+// minimalna GŁĘBOKOŚĆ profilu, nie wysokość ani grubość deski). Migracja v2 -> v3 robi obie rzeczy.
 //
 // UWAGA O ZAKRESIE: to jest zmiana FORMATU PLIKU, nie modelu w pamięci. `config` używany
 // wewnątrz aplikacji (main.js, planLayout.js, ...) nadal ma `manualEdgeOverrides` zagnieżdżone
@@ -12,9 +18,9 @@ import { sanitizeWaivers } from '../diagnostics/waivers.js';
 // runtime'owego kształtu configu to osobny, większy refaktor modelu danych, świadomie
 // zostawiony na później (poza zakresem etapu konsolidacji — patrz CLAUDE.md).
 const PROJECT_TYPE = 'schody3d-project';
-export const CURRENT_PROJECT_VERSION = 2;
+export const CURRENT_PROJECT_VERSION = 3;
 
-// Buduje payload wersji 2 z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
+// Buduje payload bieżącej wersji z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
 // oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
 // środowiska przeglądarki (downloadTextFile potrzebuje document/Blob, których nie ma w
 // środowisku testowym node:test).
@@ -25,14 +31,15 @@ export const CURRENT_PROJECT_VERSION = 2;
 // cena/notatka nie jest wejściem solvera i nie ma wchodzić do historii modelu. Pola są
 // OPCJONALNE, więc starszy plik v2 bez nich nadal się wczytuje (brak pola ≠ błąd) i wersja
 // schematu się nie zmienia.
-export function buildProjectPayloadV2(config, meta = {}) {
-  const { manualEdgeOverrides, ...configWithoutOverrides } = config;
+export function buildProjectPayload(config, meta = {}) {
+  const { manualEdgeOverrides, manualStringerProfileOverrides, ...configWithoutOverrides } = config;
   const payload = {
     _type: PROJECT_TYPE,
     _version: CURRENT_PROJECT_VERSION,
     savedAt: new Date().toISOString(),
     config: configWithoutOverrides,
     edgeOverrides: manualEdgeOverrides || {},
+    stringerProfileOverrides: sanitizeStringerProfileOverrides(manualStringerProfileOverrides),
   };
   if (meta.projectName) payload.projectName = meta.projectName;
   if (meta.notes) payload.notes = meta.notes;
@@ -44,7 +51,7 @@ export function buildProjectPayloadV2(config, meta = {}) {
 }
 
 export function exportProjectJSON(config, filename = 'schody_projekt.json', meta = {}) {
-  const payload = buildProjectPayloadV2(config, meta);
+  const payload = buildProjectPayload(config, meta);
   downloadTextFile(JSON.stringify(payload, null, 2), filename, 'application/json');
 }
 
@@ -62,8 +69,21 @@ function migrateV1ToV2(data) {
   };
 }
 
+// v2 -> v3: the stringer depth parameter was renamed (same meaning and value — the distance from
+// the reference curve to the lower contour), a lock on the old name follows it, and the profile
+// override layer starts out empty.
+function migrateV2ToV3(data) {
+  const { stringerHeight, ...config } = data.config || {};
+  if (stringerHeight !== undefined && config.minimumStringerDepthMm === undefined) config.minimumStringerDepthMm = stringerHeight;
+  if (Array.isArray(config.lockedFields)) {
+    config.lockedFields = config.lockedFields.map((f) => (f === 'stringerHeight' ? 'minimumStringerDepthMm' : f));
+  }
+  return { ...data, _version: 3, config, stringerProfileOverrides: data.stringerProfileOverrides || {} };
+}
+
 const MIGRATIONS = {
   1: migrateV1ToV2,
+  2: migrateV2ToV3,
 };
 
 // Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d albo nie da się
@@ -95,7 +115,11 @@ export function parseProjectFile(text) {
   }
 
   return {
-    config: { ...data.config, manualEdgeOverrides: data.edgeOverrides || {} },
+    config: {
+      ...data.config,
+      manualEdgeOverrides: data.edgeOverrides || {},
+      manualStringerProfileOverrides: sanitizeStringerProfileOverrides(data.stringerProfileOverrides),
+    },
     meta: {
       projectName: typeof data.projectName === 'string' ? data.projectName : '',
       notes: typeof data.notes === 'string' ? data.notes : '',

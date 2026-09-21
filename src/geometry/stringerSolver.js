@@ -17,6 +17,7 @@
 
 import { cumulativeDistances, isCollinear, projectPointOntoLine, pointsEqual } from './pathUtils.js';
 import { COLLINEAR_EPS } from './tolerances.js';
+import { profileParamsFromConfig } from './stringerProfileModel.js';
 import {
   CONSTRUCTION_TYPES,
   CONNECTION_TYPES,
@@ -161,7 +162,10 @@ function buildBearingsForWalk(walk, runs, treads, sideIdx) {
 export function buildStringerModel(planLayout, config, side) {
   const chainKey = side === 'outer' ? 'outerChain' : 'innerChain';
   const sideIdx = side === 'outer' ? 1 : 0; // frontEdge/backEdge = [innerPoint, outerPoint]
-  const { riserHeight, treadThickness, stringerHeight, stringerThickness, nosing, hasRiserBoards } = config;
+  const { riserHeight, treadThickness, stringerThickness, nosing, hasRiserBoards } = config;
+  // The nominal depth the lower contour is generated at (minimum depth + profile offset) — the
+  // segment's "width" is that board depth, one definition shared with the profile solver.
+  const boardDepth = profileParamsFromConfig(config).nominalDepthMm;
   const constructionType = config.stringerConstructionType || CONSTRUCTION_TYPES.CLOSED;
 
   const walks = buildRawWalks(planLayout.treads, chainKey);
@@ -194,7 +198,7 @@ export function buildStringerModel(planLayout, config, side) {
       const segment = {
         id: `${side}-seg-${segmentCounter++}`,
         referenceLine: { start: run.start, end: run.end, direction, length },
-        width: stringerHeight,
+        width: boardDepth,
         thickness: stringerThickness,
         constructionType,
         treadBearings,

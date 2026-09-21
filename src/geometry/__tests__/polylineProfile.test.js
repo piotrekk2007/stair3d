@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU, slicePolylineByU, sliceOffsetProfile } from '../polylineProfile.js';
+import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU, slicePolylineByU } from '../polylineProfile.js';
 
 test('simplifyCollinear collapses a uniform straight run down to its two endpoints', () => {
   const points = [
@@ -103,23 +103,6 @@ test('offsetPolylineByNormal never produces a wild miter spike for two segments 
   for (const p of top) {
     assert.ok(Math.abs(p.v) < 3000, `offset point v=${p.v} is wildly out of range — likely a miter-join blowup`);
   }
-});
-
-test('sliceOffsetProfile never inserts the reference polyline\'s own endpoint as a spurious "interior" knot', () => {
-  // The reference's first/last points are where its line begins/ends, not a real kink — if the
-  // requested slice range extends past them (e.g. a riser-recess-shifted first bearing puts the
-  // reference's own start at u=25 while the physical board itself starts at u=0), re-inserting
-  // that endpoint as "interior" can, after offsetting, land at a u that isn't even ordered
-  // relative to the boundary point just computed — producing a non-monotonic, self-crossing
-  // result. A real 2-knot reference has ZERO genuine interior kinks, so the slice must too.
-  const reference = [
-    { u: 25, v: 133.33333333333334 },
-    { u: 3920, v: 2544.5238095238096 },
-  ];
-  const offsetLine = offsetPolylineByNormal(reference, 50, 'up');
-  const sliced = sliceOffsetProfile(offsetLine, reference, 0, 3920);
-  assert.equal(sliced.length, 2, 'a straight 2-knot reference must slice down to exactly 2 points, not reintroduce its own endpoint');
-  assert.ok(sliced[0].u < sliced[1].u, 'the slice must stay u-monotonic');
 });
 
 test('slicePolylineByU never inserts the polyline\'s own endpoint as a spurious "interior" knot either', () => {

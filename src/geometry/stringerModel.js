@@ -107,7 +107,8 @@ export function housingDepthFor(stringerThickness) {
  * @property {string} id
  * @property {StringerReferenceGeometry} referenceLine
  * @property {number} width      mm — board depth (vertical dimension below the step line);
- *                                 config.stringerHeight
+ *                                 nominal profile depth = config.minimumStringerDepthMm +
+ *                                 config.stringerProfileOffsetMm (NOT the board thickness)
  * @property {number} thickness  mm — board thickness (the dimension set edgewise, horizontal
  *                                 in plan); config.stringerThickness
  * @property {keyof CONSTRUCTION_TYPES} constructionType
@@ -181,7 +182,7 @@ export function housingDepthFor(stringerThickness) {
  *   bottom edge is the single straight pitch-line-parallel line. 'closed': a plain
  *   parallelogram — both edges straight and parallel to the pitch line.
  * @property {StringerHousing[]} [housings]  'closed' only.
- * @property {number} boardWidthMm       config.stringerHeight
+ * @property {number} boardWidthMm       nominal profile depth (see StringerSegment.width)
  * @property {number} thicknessMm        config.stringerThickness
  * @property {number} minRemainingSectionMm  Diagnostic: thinnest surviving board material.
  * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics

@@ -221,7 +221,7 @@ test('the surcharge applies to stringers ONLY, not to treads', () => {
 });
 
 test('real stringers are priced by their parameter width and true length', () => {
-  const t = buildPricedMaterialTakeoff(models({ stringerHeight: 330 }), { boardPricing: createDefaultBoardPricing() });
+  const t = buildPricedMaterialTakeoff(models({ minimumStringerDepthMm: 330 }), { boardPricing: createDefaultBoardPricing() });
   const stringer = t.items.find((i) => i.elementType === 'STRINGER');
   assert.equal(stringer.calculatedDimensions.boardWidthMm, 330);
   assert.equal(stringer.priceBreakdown.chunks[0].rangeLabel, '300–360 mm');

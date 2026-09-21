@@ -58,10 +58,22 @@
 //
 // stringerRenderer.js consumes this file's output and NEVER computes geometry itself; this
 // file never touches Three.js.
+//
+// --- Since the stringer profile model (docs/architecture/STRINGER_PROFILE_MODEL.md) -----------
+//
+// The top/bottom EDGES described above are no longer computed in this file: the reference knots
+// built here (buildPitchKnots) go to stringerProfileSolver.js, which returns the lower (and, for a
+// housed board, upper) contour as lines and true tangent arcs, with the corner radius, minimum
+// local depth and manual-override layer applied. This file remains the ADAPTER: it decides what
+// the reference is (bearings, lap-joint grouping, riser recess), slices the solved curves per
+// physical board, builds the comb and housings, and reports the diagnostics.
 
 import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
-import { simplifyCollinear, offsetPolylineByNormal, distancePointToPolyline, valueAtU, slicePolylineByU, sliceOffsetProfile } from './polylineProfile.js';
+import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthFor } from './stringerModel.js';
+import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM } from './stringerProfileModel.js';
+import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
+import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 
@@ -151,7 +163,13 @@ function groupSegmentsByLapJoint(segments, segmentJoints) {
 // bends at a real (postless) corner still gets ONE solved profile instead of two that don't
 // meet. A single-segment group (the ordinary case — most corners in this codebase have a post)
 // degenerates to exactly the old per-segment behavior, offset 0.
-function buildPitchKnots(effectiveByGroup, segmentLengths) {
+//
+// Every knot carries a stable, semantic anchor id (stringerProfileModel.js) so a manual profile
+// edit can address "the control point at tread 7" no matter how many treads there are. The
+// collinear simplification below would drop the ids of interior treads of a straight flight, so
+// it is skipped when the stringer has manual overrides (`keepAllAnchors`) — a control point the
+// user can see must stay addressable. Without overrides the output is exactly what it always was.
+function buildPitchKnots(effectiveByGroup, segmentLengths, keepAllAnchors = false) {
   const knots = [];
   const offsets = [];
   let offset = 0;
@@ -169,7 +187,7 @@ function buildPitchKnots(effectiveByGroup, segmentLengths) {
       // knots, closing-knot extrapolation amplifies it into the sharp overshoot spike reported
       // at the very ends of the board (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14).
       if (!b.ownsStart) continue;
-      knots.push({ u: offset + b.uStart, v: b.bearingElevation });
+      knots.push({ u: offset + b.uStart, v: b.bearingElevation, id: anchorIdForTread(b.treadIndex) });
     }
     offset += segmentLengths[i];
   }
@@ -186,7 +204,8 @@ function buildPitchKnots(effectiveByGroup, segmentLengths) {
   } else {
     closingV = lastKnot.v; // a single-bearing group has no local slope to extrapolate — flat is the only option
   }
-  const allKnots = simplifyCollinear([...knots, { u: lastOffset + last.uEnd, v: closingV }]);
+  const closing = { u: lastOffset + last.uEnd, v: closingV, id: END_ANCHOR_ID };
+  const allKnots = keepAllAnchors ? [...knots, closing] : simplifyCollinear([...knots, closing]);
   return { knots: allKnots, offsets };
 }
 
@@ -224,6 +243,21 @@ function buildOverlayTop(effective) {
     }
   });
   return top;
+}
+
+// The comb as a curve. A notch's INSIDE corner (where the seat meets the riser cut — the walker
+// goes right, then up: a left turn) can be given a tool radius, config.stringerNotchRadiusMm
+// (0 by default = the sharp corner it always was). Only those corners: rounding one adds
+// material (never thins the board), while the outside corner at each tread's front edge stays
+// sharp because that is the tread's own edge. With radius 0 the polygon is the comb exactly as
+// buildOverlayTop() made it.
+const NOTCH_INSIDE_TURN = 1;
+function buildCombCurve(top, notchRadiusMm) {
+  const points = top.filter((p, i) => i === 0 || Math.hypot(p.u - top[i - 1].u, p.v - top[i - 1].v) > GEOMETRY_EPS);
+  if (!(notchRadiusMm > 0)) return { polyline: top, curve: polylineToCurve(points) };
+  const radii = points.map((p, i) => (i > 0 && i < points.length - 1 && turnSignAt(points[i - 1], p, points[i + 1]) === NOTCH_INSIDE_TURN ? notchRadiusMm : 0));
+  const { curve } = filletPolyline(points, radii);
+  return { polyline: curveToPolyline(curve), curve };
 }
 
 // --- CLOSED (housed/recessed) -----------------------------------------------------------------
@@ -343,9 +377,16 @@ function emptySegmentGeometry(segment) {
     pitchProfile: [],
     topProfile: null,
     bottomProfile: null,
+    lowerCurve: [],
+    upperCurve: null,
+    lowerControl: [],
+    upperControl: null,
     outerContour: [],
     boardWidthMm: segment.width,
     thicknessMm: segment.thickness,
+    localDepthMm: null,
+    requiredDepthMm: null,
+    profileOverridden: false,
     minRemainingSectionMm: null,
     diagnostics: [],
   };
@@ -358,51 +399,60 @@ function emptySegmentGeometry(segment) {
 // segment's own outerContour/pitchProfile/diagnostics look exactly like a single-segment
 // result would, but a board that spans a postless corner now has edges that actually meet
 // there, instead of two independently-fit profiles that happen to disagree at the join.
-function buildGroupConstructionGeometry(group, extendInfo, config) {
+function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides) {
   const withBearings = group.filter((s) => s.treadBearings.length > 0);
   if (withBearings.length === 0) return group.map(emptySegmentGeometry);
 
+  const params = profileParamsFromConfig(config);
   const effectiveByGroup = withBearings.map((s) => effectiveBearings(s, extendInfo.get(s.id).extendStart, extendInfo.get(s.id).extendEnd));
   const segmentLengths = withBearings.map((s) => s.referenceLine.length);
-  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths);
+  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, profileOverrides !== null);
   const constructionType = withBearings[0].constructionType;
   const boardWidth = withBearings[0].width;
 
-  let groupBottom;
-  let groupTop = null;
-  if (constructionType === CONSTRUCTION_TYPES.CUT) {
-    groupBottom = offsetPolylineByNormal(groupKnots, boardWidth, 'down');
-  } else {
-    const topMarginMm = config.stringerTopMarginMm ?? 0;
-    groupTop = offsetPolylineByNormal(groupKnots, topMarginMm, 'up');
-    groupBottom = offsetPolylineByNormal(groupKnots, boardWidth - topMarginMm, 'down');
-  }
+  // The profile itself — reference curve, lower and (housed) upper contour as lines and true
+  // arcs — is solved in ONE place, stringerProfileSolver.js. This file only decides WHAT the
+  // reference is (the bearings) and how the solved profile is cut into physical boards.
+  const solved = solveStringerProfile({ reference: groupKnots, constructionType, params, overrides: profileOverrides });
+  const profileDiagnostics = solved.findings.map((f) =>
+    createDiagnostic({
+      ruleId: f.ruleId,
+      severity: f.severity,
+      elementType: 'stringer',
+      elementId: withBearings[0].id,
+      parameter: f.parameter,
+      value: f.value ?? f.anchorId,
+      message: f.message,
+    })
+  );
 
   const bySegmentId = new Map();
   withBearings.forEach((segment, i) => {
     const effective = effectiveByGroup[i];
     const segStart = offsets[i];
     const segEnd = segStart + segmentLengths[i];
-    // Slice the GROUP's solved profile/edges down to this segment's own span, then shift back
-    // to this segment's own local u=0 origin — from here on, every calculation is exactly what
-    // the old single-segment version did, just fed a profile that is now actually continuous
-    // across the join.
+    // Slice the GROUP's solved profile down to this segment's own span, then shift back to this
+    // segment's own local u=0 origin — from here on, every calculation is exactly what the old
+    // single-segment version did, just fed a profile that is now actually continuous across the
+    // join (see groupSegmentsByLapJoint).
     const toLocal = (p) => ({ u: p.u - segStart, v: p.v });
     const pitchProfile = slicePolylineByU(groupKnots, segStart, segEnd).map(toLocal);
-    // groupBottom/groupTop are OFFSETS of groupKnots (see offsetPolylineByNormal) — their own
-    // u values are shifted slightly off of groupKnots' own, so which points are genuinely
-    // "interior" to this segment's span must be decided from groupKnots (the reference), not
-    // from the offset line's own shifted u — see sliceOffsetProfile's own header.
-    const bottomPolyline = sliceOffsetProfile(groupBottom, groupKnots, segStart, segEnd).map(toLocal);
-    const topPolyline = groupTop ? sliceOffsetProfile(groupTop, groupKnots, segStart, segEnd).map(toLocal) : null;
+    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart, segEnd));
+    const lowerCurve = translateCurveU(lowerGroupSlice, -segStart);
+    const upperCurveSolved = solved.upperCurve ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart, segEnd)), -segStart) : null;
+    // Arcs become chords only here, at the edge of the profile model, never inside it.
+    const bottomPolyline = curveToPolyline(lowerCurve);
+    const topPolyline = upperCurveSolved ? curveToPolyline(upperCurveSolved) : null;
     const pitchLine = computePitchLineFromKnots(pitchProfile);
 
-    const diagnostics = [];
+    const diagnostics = i === 0 ? [...profileDiagnostics] : [];
     let outerContour;
     let housings;
+    let upperCurve = upperCurveSolved;
     if (constructionType === CONSTRUCTION_TYPES.CUT) {
-      const top = buildOverlayTop(effective);
-      outerContour = [...top, ...bottomPolyline.slice().reverse()];
+      const comb = buildCombCurve(buildOverlayTop(effective), params.notchRadiusMm);
+      upperCurve = comb.curve;
+      outerContour = [...comb.polyline, ...bottomPolyline.slice().reverse()];
       diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
     } else {
       outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
@@ -431,6 +481,25 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
       );
     }
 
+    // Local stringer depth: this segment's slice of the lower contour against the WHOLE group's
+    // depth reference (see stringerProfileSolver.js measureLocalDepth for why not a sliced one).
+    const localDepthMm = measureLocalDepth(lowerGroupSlice, solved.depthReferenceCurve);
+    if (params.minimumDepthMm > 0 && localDepthMm < params.minimumDepthMm - DEPTH_TOLERANCE_MM) {
+      diagnostics.push(
+        createDiagnostic({
+          ruleId: 'STRINGER-MIN-DEPTH',
+          severity: 'ERROR',
+          elementType: 'stringer',
+          elementId: segment.id,
+          parameter: 'minimumStringerDepthMm',
+          value: Math.round(localDepthMm * 10) / 10,
+          expected: `>= ${params.minimumDepthMm}`,
+          unit: 'mm',
+          message: `Wanga (${segment.id}) ma lokalnie mniejszą głębokość (${Math.round(localDepthMm)} mm) niż wymagane minimum ${params.minimumDepthMm} mm.`,
+        })
+      );
+    }
+
     if (hasSelfIntersection(outerContour)) {
       diagnostics.push(
         createDiagnostic({
@@ -444,6 +513,12 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
       );
     }
 
+    // Control points are the WHOLE group's (a point just past the board's end still shapes the
+    // curve there — an offset contour's own end vertex sits beyond the plane that cuts the board);
+    // `withinSegment` says whether it lies on this board, for a side view that draws handles.
+    const localControl = (list) =>
+      list ? list.map((c) => ({ ...c, u: c.u - segStart, withinSegment: c.u - segStart >= -GEOMETRY_EPS && c.u - segStart <= segmentLengths[i] + GEOMETRY_EPS })) : null;
+
     bySegmentId.set(segment.id, {
       segmentId: segment.id,
       constructionType,
@@ -456,10 +531,20 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
       pitchProfile,
       topProfile: topPolyline,
       bottomProfile: bottomPolyline,
+      // The profile as lines + true arcs (profileCurve.js), in this segment's own (u,v) frame —
+      // what a CNC/template export and a side-view editor read; the polylines above are the same
+      // curves as chords, for the mesh.
+      lowerCurve,
+      upperCurve,
+      lowerControl: localControl(solved.lowerControl),
+      upperControl: localControl(solved.upperControl),
       outerContour,
       housings,
       boardWidthMm: boardWidth,
       thicknessMm: segment.thickness,
+      localDepthMm,
+      requiredDepthMm: params.minimumDepthMm,
+      profileOverridden: profileOverrides !== null,
       minRemainingSectionMm,
       diagnostics,
     });
@@ -571,28 +656,58 @@ function trimToFloor(a, b) {
 // riserHeight above v=0 — see stringerSolver.js). This trims ONLY the very first segment's own
 // starting boundary (bottom, and — symmetrically, though not the reported case — top) to where
 // it actually crosses v=0; every other, already-elevated segment is far above 0 and unaffected.
+//
+// "Where it crosses v=0" means walking the polyline: EVERY leading point still below the floor
+// is dropped (the profile's own first control point can be below it too, not just the
+// extrapolated boundary point) and the boundary becomes the crossing on the first edge that
+// rises through v=0. The curve is cut at that same u, so an arc near the floor stays an arc.
+function trimPolylineStartToFloor(polyline) {
+  if (polyline.length < 2 || polyline[0].v >= 0) return null;
+  let k = 1;
+  while (k < polyline.length && polyline[k].v < 0) k++;
+  if (k >= polyline.length) return null; // wholly below the floor — nothing sensible to cut
+  if (polyline[k].v === 0) return polyline.slice(k);
+  return [trimToFloor(polyline[k - 1], polyline[k]), ...polyline.slice(k)];
+}
+
 function clampFirstSegmentToFloor(orderedGeometries) {
   const first = orderedGeometries[0];
   if (!first || !first.bottomProfile || first.bottomProfile.length < 2) return;
   let changed = false;
+  const oc = first.outerContour;
 
-  if (first.bottomProfile[0].v < 0) {
-    const trimmed = trimToFloor(first.bottomProfile[0], first.bottomProfile[1]);
-    const oc = first.outerContour;
-    if (oc.length > 0 && oc[oc.length - 1] === first.bottomProfile[0]) oc[oc.length - 1] = trimmed;
-    first.bottomProfile[0] = trimmed;
+  const trimmedBottom = trimPolylineStartToFloor(first.bottomProfile);
+  if (trimmedBottom) {
+    // outerContour ends with the bottom edge, reversed (see buildGroupConstructionGeometry).
+    oc.splice(oc.length - first.bottomProfile.length, first.bottomProfile.length, ...trimmedBottom.slice().reverse());
+    first.bottomProfile = trimmedBottom;
+    first.lowerCurve = sliceCurveByU(first.lowerCurve, trimmedBottom[0].u, first.lowerCurve[first.lowerCurve.length - 1].b.u);
     changed = true;
   }
 
-  if (first.topProfile && first.topProfile.length >= 2 && first.topProfile[0].v < 0) {
-    const trimmed = trimToFloor(first.topProfile[0], first.topProfile[1]);
-    const oc = first.outerContour;
-    if (oc.length > 0 && oc[0] === first.topProfile[0]) oc[0] = trimmed;
-    first.topProfile[0] = trimmed;
+  const trimmedTop = first.topProfile ? trimPolylineStartToFloor(first.topProfile) : null;
+  if (trimmedTop) {
+    // outerContour starts with the top edge for a closed board.
+    oc.splice(0, first.topProfile.length, ...trimmedTop);
+    first.topProfile = trimmedTop;
+    first.upperCurve = sliceCurveByU(first.upperCurve, trimmedTop[0].u, first.upperCurve[first.upperCurve.length - 1].b.u);
     changed = true;
   }
 
   if (changed) recheckSelfIntersection(first);
+}
+
+// The two end clamps above edit the discretized polylines' first points; the curves are the
+// primary data (what an export reads), so they must agree. A clamp only ever moves a boundary
+// point, and a boundary primitive is a line (an arc cannot start exactly at a board end that was
+// sliced off a straight extrapolation) — anything else is left as solved.
+function syncCurveStartsToPolylines(geo) {
+  const sync = (curve, polyline) => {
+    if (!curve || curve.length === 0 || !polyline || polyline.length === 0 || curve[0].type !== 'line') return;
+    curve[0] = { ...curve[0], a: { u: polyline[0].u, v: polyline[0].v } };
+  };
+  sync(geo.lowerCurve, geo.bottomProfile);
+  if (geo.constructionType === CONSTRUCTION_TYPES.CLOSED) sync(geo.upperCurve, geo.topProfile);
 }
 
 export function buildStringerConstructionGeometry(model, config) {
@@ -601,11 +716,13 @@ export function buildStringerConstructionGeometry(model, config) {
     model.segments.map((segment, segIdx) => [segment.id, { extendStart: extendStartOf.has(segIdx), extendEnd: extendEndOf.has(segIdx) }])
   );
   const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
-  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config));
+  const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
+  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampCrossSegmentOvershoot(ordered);
   clampFirstSegmentToFloor(ordered);
+  ordered.forEach(syncCurveStartsToPolylines);
   return ordered;
 }

@@ -83,7 +83,10 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
 // --- B. Straight housed (closed) stringer -------------------------------------------------------
 
 test('B. straight housed: outer contour is a plain 4-point parallelogram regardless of tread count, housings are separate', () => {
-  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 50 });
+  // 300 mm deep, so the lower edge stays above the floor: a deeper board (the 350 mm default) is
+  // legitimately cut flush with the floor at the bottom of the flight and becomes a pentagon —
+  // see the floor-trim tests below.
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
 
@@ -206,8 +209,8 @@ test('G. changed stringer width (board depth) changes the bottom edge by exactly
   // above the floor (v >= 0) — clampFirstSegmentToFloor (a separate, deliberate behavior; see
   // its own tests) would otherwise trim that corner flush with the floor instead of keeping it
   // at a pure perpendicular offset, which is specifically what this test checks.
-  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 80 });
-  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', stringerHeight: 100 });
+  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', minimumStringerDepthMm: 80 });
+  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', minimumStringerDepthMm: 100 });
   const geoNarrow = buildStringerConstructionGeometry(buildStringerModel(narrow.planLayout, narrow.config, 'outer'), narrow.config)[0];
   const geoWide = buildStringerConstructionGeometry(buildStringerModel(wide.planLayout, wide.config, 'outer'), wide.config)[0];
 
@@ -496,7 +499,7 @@ test('floor bug fix: the very first segment of a stringer never extends below th
 });
 
 test('floor bug fix: trimming to the floor cuts the board off along its own line (not a vertical snap that crosses the notch pattern)', () => {
-  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: true, stringerHeight: 380 });
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: true, minimumStringerDepthMm: 380 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
   assert.ok(geo.bottomProfile[0].v === 0 || geo.bottomProfile[0].v > 0, 'must not remain below the floor');

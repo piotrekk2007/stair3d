@@ -91,7 +91,7 @@ function stringerHTML(ctx) {
   const rows = [];
   rows.push(`<div class="insp-title">Wanga ${selection.stringerId === 'outer' ? 'zewnętrzna' : 'wewnętrzna (dusza)'}${segment ? ` <small>${segment.id}</small>` : ''}</div>`);
   rows.push(row('Typ wangi', typeLabel, 'user'));
-  rows.push(row('Wysokość deski', mm(config.stringerHeight), locked('stringerHeight')));
+  rows.push(row('Min. głębokość wangi', mm(config.minimumStringerDepthMm), locked('minimumStringerDepthMm')));
   rows.push(row('Grubość deski', mm(config.stringerThickness), locked('stringerThickness')));
   rows.push(row('Min. grubość drewna (próg)', mm(config.stringerMinRemainingSectionMm), locked('stringerMinRemainingSectionMm')));
   if (model) rows.push(row('Liczba segmentów', String(model.segments.length), 'auto'));

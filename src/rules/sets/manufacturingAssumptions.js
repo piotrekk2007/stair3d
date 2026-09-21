@@ -78,9 +78,9 @@ export const manufacturingAssumptions = defineRuleSet([
   {
     ruleId: 'CO-STD-E-01',
     category: 'E',
-    description: 'Default stringer height (structural depth below the step line) and thickness, as a starting point for a self-supporting timber stringer — not derived from any cited structural calculation, pending EC5-STRUCT-I-01/I-02 being wired to real timber grade data.',
-    condition: 'stringerHeight = 300 mm (default) ; stringerThickness = 40 mm (default)',
-    configRefs: ['stringerHeight', 'stringerThickness'],
+    description: 'Default minimum stringer depth (structural depth below the step line) and thickness, as a starting point for a self-supporting timber stringer — not derived from any cited structural calculation, pending EC5-STRUCT-I-01/I-02 being wired to real timber grade data.',
+    condition: 'minimumStringerDepthMm = 350 mm (default) ; stringerThickness = 40 mm (default)',
+    configRefs: ['minimumStringerDepthMm', 'stringerThickness'],
     ruleType: 'USER_DEFINED_COMPANY_STANDARD',
     jurisdiction: 'COMPANY',
     source: 'No external source — mirrors current config.js defaults, presented explicitly as a company standard pending a real structural check',

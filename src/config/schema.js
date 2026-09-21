@@ -63,8 +63,21 @@ export function createDefaultConfig() {
     treadThickness: 40, // mm
     nosing: 25, // mm, wysunięcie noska stopnia
 
-    stringerHeight: 300, // mm, wysokość policzka (poniżej linii schodkowej) — "width" w StringerModel (src/geometry/stringerModel.js)
-    stringerThickness: 40, // mm — "thickness" w StringerModel
+    // --- PROFIL wangi (widok z boku) — patrz docs/architecture/STRINGER_PROFILE_MODEL.md -------
+    // Minimalna GŁĘBOKOŚĆ wangi: minimalna odległość geometryczna między krzywą odniesienia R
+    // (linia przez przednie narożniki stopni) a dolnym konturem L, mierzona w profilu — NIE różnica
+    // Z i NIE wymiar ramki otaczającej. Lokalnie głębokość może być większa (360/390/450 mm),
+    // nigdy mniejsza. To NIE jest grubość deski (patrz stringerThickness niżej).
+    minimumStringerDepthMm: 350,
+    stringerProfileOffsetMm: 0, // mm, dodatkowe pogłębienie dolnego konturu ponad minimum (>= 0)
+    stringerCornerRadiusMm: 0, // mm, promień zaokrąglenia narożników konturu; 0 = ostre (jak dotychczas)
+    stringerRadiusScope: 'BOTTOM', // 'BOTTOM' | 'TOP' | 'BOTH' — który kontur zaokrąglać
+    stringerTransitionStyle: 'TANGENT_ARC', // 'SHARP' | 'TANGENT_ARC' — 'SHARP' wyłącza zaokrąglenia
+    stringerNotchRadiusMm: 0, // mm, promień narzędzia w wewnętrznym narożniku wcięcia (tylko 'cut'); 0 = ostry
+    // Ręczne korekty profilu (przesunięte punkty kontrolne, promienie, dodane punkty) — warstwa
+    // Nominal -> Override -> Final, klucz = 'outer' | 'inner'. Patrz stringerProfileModel.js.
+    manualStringerProfileOverrides: {},
+    stringerThickness: 40, // mm — GRUBOŚĆ deski ("thickness" w StringerModel), osobna wielkość od głębokości
     stringerConstructionType: 'closed', // 'closed' (wanga wpuszczana/wcinana, schowana) | 'cut' (wanga nakładana/wycinana, otwarta) — patrz stringerModel.js CONSTRUCTION_TYPES i stringerConstructionGeometry.js
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
     // wartości domyślne to jawnie oznaczone założenia produkcyjne (MANUFACTURING_ASSUMPTION),

@@ -98,7 +98,7 @@ test('scenario A (straight): one STRINGER item per side, quantity 1 (a straight 
 // --- Scenario B: straight overlay (cut) stringer ---------------------------------------------------
 
 test('scenario B (straight, overlay/cut stringer): the board items exist and there are NO separate sub-items (no cleats, no housings)', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450 });
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', minimumStringerDepthMm: 450 });
   const items = compute(scenario);
   assert.ok(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER));
   assert.equal(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING), false);
@@ -341,7 +341,7 @@ test('catalog stock: a stringer\'s computed length is rounded UP to the nearest 
 });
 
 test('catalog stock: a board width/thickness that exceeds every catalog size is reported as unsupported, never invented', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450 }); // catalog tops out at 350mm width
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', minimumStringerDepthMm: 450 }); // catalog tops out at 350mm width
   const items = compute(scenario);
   const stringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER);
   assert.equal(stringer.catalogStock.widthMm, null, 'no catalog width covers 450mm — must be null, not a guessed number');

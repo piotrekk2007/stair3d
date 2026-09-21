@@ -76,7 +76,7 @@ function numericErr(field, message, extra = {}) {
 // so it must never assume planLayout/derived exist.
 export function checkBasicNumericValidity(config) {
   const diags = [];
-  const positiveFields = ['totalRise', 'stairWidth', 'treadGoing', 'treadThickness', 'stringerThickness', 'stringerHeight'];
+  const positiveFields = ['totalRise', 'stairWidth', 'treadGoing', 'treadThickness', 'stringerThickness', 'minimumStringerDepthMm'];
   for (const field of positiveFields) {
     const value = config[field];
     if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) {

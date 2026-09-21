@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { planToWorld } from '../geometry/geometryUtils.js';
 import { pointsEqual } from '../geometry/pathUtils.js';
 import { computeWinderBlank } from '../geometry/winderBlank.js';
+import { profileParamsFromConfig } from '../geometry/stringerProfileModel.js';
 
 function variantStyle(variant) {
   if (variant === 'red' || variant === true) return { color: 0xc01c1c, className: 'dim-label dim-label-red' };
@@ -214,11 +215,12 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
   const group = new THREE.Group();
   group.name = 'StringerLengthLabels';
 
-  const { treadThickness, stringerHeight } = config;
+  const { treadThickness } = config;
+  const stringerDepth = profileParamsFromConfig(config).nominalDepthMm;
   const { riserHeight } = derived;
 
   const zGoing = (tread) => (tread.index + 1) * riserHeight - treadThickness;
-  const zBottom = (tread) => zGoing(tread) - stringerHeight;
+  const zBottom = (tread) => zGoing(tread) - stringerDepth;
 
   const turnIndexByTreadIndex = getTurnIndexByTreadIndex(planLayout.treads);
   const cornerFor = (side, tread) => {

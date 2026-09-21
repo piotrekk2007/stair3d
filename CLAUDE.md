@@ -205,6 +205,47 @@ same doc. Tests:
 [src/geometry/__tests__/polylineProfile.test.js](src/geometry/__tests__/polylineProfile.test.js),
 [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
 
+## Stringer profile model (implemented, Tier 1)
+
+See [docs/architecture/STRINGER_PROFILE_MODEL.md](docs/architecture/STRINGER_PROFILE_MODEL.md) for
+the design study and what was built. The board's **elevation profile** (its shape in the unfolded
+`(u,v)` side view) is now a first-class model, separate from the plan path (which stays straight —
+RULES #5 — and is never touched by any profile parameter or override).
+
+- **`src/geometry/profileCurve.js`** — curve primitives: lines and true arcs, `filletPolyline`
+  (tangent arcs with feasibility scaling), `sliceCurveByU`, `curveToPolyline` (arcs -> chords, only
+  at the mesh/export edge), `mergeCollinearLines`, and the **exact** curve-to-curve
+  `curveDistance`.
+- **`stringerProfileModel.js`** — vocabulary (`PROFILE_MODES`, `RADIUS_SCOPES`,
+  `TRANSITION_STYLES`), `profileParamsFromConfig`, the manual-override layer
+  (`sanitizeStringerProfileOverrides`, `setVertexOverride`, `applyProfileEdit` + `PROFILE_EDITS`
+  events), stable anchor ids (`support:step-N`, `end:top`).
+- **`stringerProfileSolver.js`** — pure `solveStringerProfile()`: reference knots -> nominal control
+  polygon (offset by the nominal depth) -> overrides -> radii (feasible, then depth-clamped in AUTO)
+  -> lines + arcs. **Local stringer depth** = the exact minimum distance between the reference
+  curve and the lower contour (NOT the vertical Z difference, NOT a bounding box).
+- **`stringerProfileView.js`** — `buildProfileViewModel()`: plain data for a future side-view editor
+  (treads, contours, minimum-depth envelope, depth samples, control points); the editor itself is not
+  built.
+- **`stringerConstructionGeometry.js`** is now the adapter: it decides the reference (bearings,
+  lap-joint grouping, riser recess), calls the solver once per group, slices per board, builds the
+  comb/housings/diagnostics. Its output gained `lowerCurve`/`upperCurve` (lines + arcs),
+  `lowerControl`/`upperControl`, `localDepthMm`/`requiredDepthMm`; `outerContour` and the
+  polylines are unchanged in meaning.
+- **Config**: `minimumStringerDepthMm` (350; formerly `stringerHeight` — the minimum local depth AND
+  the nominal offset; not the board thickness), `stringerProfileOffsetMm`, `stringerCornerRadiusMm`,
+  `stringerRadiusScope`, `stringerTransitionStyle`, `stringerNotchRadiusMm` (cut inside corners),
+  `manualStringerProfileOverrides`. Defaults keep straight lines. **Project file schema v3**
+  (migration v2->v3 renames `stringerHeight`; `stringerProfileOverrides` is a top-level field).
+- **Diagnostics**: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO),
+  `STRINGER-OVERRIDE-ORPHANED`/`-REJECTED` (WARNING). An explicit override radius or moved point that
+  breaks the minimum depth is KEPT and reported, not silently corrected.
+- **Not done (next stages)**: deriving a *blank depth* from the profile for the takeoff/pricing (the
+  takeoff still reads the nominal depth), a side-view editor UI, multi-arc/spline transitions, riser
+  housings, curved plan paths, CNC.
+- Tests: `geometry/__tests__/profileCurve.test.js`, `stringerProfile.test.js` (a 216-case grid of
+  geometry x inclination x minimum depth x radius x construction type).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
@@ -242,7 +283,7 @@ is unaffected by this rename.
   inner/dusza) — `stringerRenderer.js` imports it rather than re-deriving which way a board's
   thickness should extrude.
 
-## Project file format v2 (implemented)
+## Project file format v2 (implemented; now v3 — see "Stringer profile model")
 
 `src/project/projectIO.js` writes/reads `_version: 2`: `edgeOverrides` lives as its own
 top-level field in the **file**, separate from `config` (matching

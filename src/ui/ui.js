@@ -114,7 +114,12 @@ export function createUI({
   live(build.add(config, 'stringerConstructionType', stringerConstructionOptions)).name('Typ wangi');
   lockable(build.add(config, 'treadThickness', 20, 60, 1).name('Grubość stopnia [mm]'), 'treadThickness');
   lockable(build.add(config, 'nosing', 0, 40, 1).name('Nosek [mm]'), 'nosing');
-  lockable(build.add(config, 'stringerHeight', 150, 450, 10).name('Wysokość policzka [mm]'), 'stringerHeight');
+  lockable(build.add(config, 'minimumStringerDepthMm', 150, 600, 10).name('Min. głębokość wangi [mm]'), 'minimumStringerDepthMm');
+  lockable(build.add(config, 'stringerProfileOffsetMm', 0, 200, 5).name('Pogłębienie profilu [mm]'), 'stringerProfileOffsetMm');
+  lockable(build.add(config, 'stringerCornerRadiusMm', 0, 300, 10).name('Promień narożników profilu [mm]'), 'stringerCornerRadiusMm');
+  live(build.add(config, 'stringerRadiusScope', { 'Dół': 'BOTTOM', 'Góra': 'TOP', 'Góra i dół': 'BOTH' })).name('Zaokrąglaj kontur');
+  live(build.add(config, 'stringerTransitionStyle', { 'Łuk styczny': 'TANGENT_ARC', 'Ostry narożnik': 'SHARP' })).name('Przejście w narożniku');
+  lockable(build.add(config, 'stringerNotchRadiusMm', 0, 30, 1).name('Promień wewn. wcięcia (nakładana) [mm]'), 'stringerNotchRadiusMm');
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad linią (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');

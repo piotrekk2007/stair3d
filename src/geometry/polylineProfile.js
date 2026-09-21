@@ -150,31 +150,6 @@ export function slicePolylineByU(polyline, uStart, uEnd) {
   return [{ u: uStart, v: startV }, ...interior, { u: uEnd, v: endV }];
 }
 
-// Same idea as slicePolylineByU, but for a polyline that was produced by offsetting some
-// OTHER (reference) polyline along its own local normal — offsetPolylineByNormal shifts every
-// point's u slightly as well as its v (see its own header), so a knot that WAS the reference's
-// own endpoint can end up with a shifted u that falls strictly inside [uStart,uEnd], and would
-// be wrongly kept as a spurious "interior" point by slicePolylineByU's own u-based test. This
-// version decides which points are interior from the REFERENCE polyline's own (un-shifted) u
-// values — `offsetPolyline` and `referenceKnots` must have the same length and correspond
-// index-for-index (true for every offsetPolylineByNormal output) — and only pulls the matching
-// offset points for those; the two boundary values still come from interpolating/extrapolating
-// the OFFSET polyline itself at the exact uStart/uEnd.
-export function sliceOffsetProfile(offsetPolyline, referenceKnots, uStart, uEnd) {
-  const startV = valueAtU(offsetPolyline, uStart);
-  const endV = valueAtU(offsetPolyline, uEnd);
-  const interior = [];
-  // Indices 0 and length-1 are the REFERENCE's own overall endpoints, never a genuine interior
-  // kink (see slicePolylineByU's header for why: they're just where the line begins/ends, and
-  // after offsetting can shift to a u that isn't even ordered relative to the boundary point
-  // above — a real, observed bug when a slice's own [uStart,uEnd] extends past the reference's
-  // own domain, e.g. a riser-recess-shifted first bearing).
-  for (let i = 1; i < referenceKnots.length - 1; i++) {
-    if (referenceKnots[i].u > uStart && referenceKnots[i].u < uEnd) interior.push(offsetPolyline[i]);
-  }
-  return [{ u: uStart, v: startV }, ...interior, { u: uEnd, v: endV }];
-}
-
 // Interpolates (or, past either end, extrapolates along the nearest segment's own slope) the
 // profile's v-value at a given u — used to check whether a tread bearing at a known (u,v) sits
 // inside a solved [bottom,top] envelope. Assumes `polyline` is u-monotonic (true for every

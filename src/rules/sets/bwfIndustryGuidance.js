@@ -200,7 +200,7 @@ export const bwfIndustryGuidance = defineRuleSet([
     category: 'F',
     description: 'Prescriptive minimum string cross-section for a standard domestic stair within a stated envelope (max. 900mm overall width, 13 full risers/treads, treads let into strings).',
     condition: 'stringSection >= 220 mm x 26 mm (valid ONLY within the stated envelope — see notes)',
-    configRefs: ['stringerHeight', 'stringerThickness'],
+    configRefs: ['minimumStringerDepthMm', 'stringerThickness'],
     ruleType: 'MANUFACTURING_ASSUMPTION',
     jurisdiction: 'UK',
     source: 'BWF Timber Stair Design Guide 2013, Table 6.1',
