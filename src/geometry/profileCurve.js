@@ -93,6 +93,12 @@ function primTangent(prim, atStart) {
   return { u: -Math.sin(angle) * dir, v: Math.cos(angle) * dir };
 }
 
+/** Steepness |dv/du| of a primitive at its start/end (Infinity when it is vertical). */
+export function edgeSlope(prim, atStart) {
+  const t = primTangent(prim, atStart);
+  return t.u > ANGLE_EPS ? Math.abs(t.v / t.u) : Infinity;
+}
+
 export function curveLength(curve) {
   let total = 0;
   for (const prim of curve) total += prim.type === 'line' ? dist(prim.a, prim.b) : Math.abs(prim.sweep) * prim.radius;

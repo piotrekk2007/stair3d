@@ -529,3 +529,50 @@ test('sliceCurveByU: an end edge steeper than the limit is capped flat instead o
   const gentle = polylineToCurve([{ u: 300, v: 1500 }, { u: 900, v: 2000 }]); // slope 0.83
   assert.ok(sliceCurveByU(gentle, 0, 900, 2.75)[0].a.v < 1500 - 100, 'a gentle edge is still continued along its own line');
 });
+
+// --- regression: the steep start blends smoothly down to the previous board's end ---------------------
+//
+// Reported (screenshots of the user's project): after the flat cap fix the inner board ended in a flat
+// "cut parallel to the floor" at the post. The lower edge should come to the post SLANTED and smooth, but never
+// lower than the previous inner board's own lower end.
+
+for (const type of ['closed', 'cut']) {
+  for (const risers of [false, true]) {
+    test(`steep start blend (${type}, ${risers ? 'with' : 'without'} risers): starts at the previous board's lower end, never below it, and joins the steep edge tangent-continuously`, () => {
+      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionType: type, hasRiserBoards: risers });
+      const prev = geo.inner[0];
+      const g = geo.inner[1];
+      assert.equal(g.ends.start.blendedToPreviousEnd, true, 'the capped start was replaced by the transition');
+      const previousEndV = prev.bottomProfile[prev.bottomProfile.length - 1].v;
+      // it reaches the post at the neighbour's end height, exactly at the vertical start face
+      assert.ok(Math.abs(g.lowerCurve[0].a.v - previousEndV) < 1e-6);
+      assert.ok(Math.abs(g.lowerCurve[0].a.u - g.ends.start.u) < 1e-6);
+      // nothing of the start region goes below the neighbour's end (it would hang lower than the board it meets)
+      const steepStartIdx = g.lowerCurve.findIndex((p) => p.type === 'line' && Math.abs(p.b.v - p.a.v) > 1e-6 && Math.abs(p.b.v - p.a.v) > 2 * Math.abs(p.b.u - p.a.u));
+      assert.ok(steepStartIdx > 0, 'there is a transition before the steep edge');
+      for (const p of g.lowerCurve.slice(0, steepStartIdx)) {
+        assert.ok(p.a.v >= previousEndV - 1e-6 && p.b.v >= previousEndV - 1e-6, 'the transition never dips below the previous board\'s end');
+      }
+      // smooth: an arc, and G1 with the steep edge that follows
+      const arcIdx = g.lowerCurve.findIndex((p) => p.type === 'arc');
+      assert.ok(arcIdx >= 0 && arcIdx < steepStartIdx);
+      const arc = g.lowerCurve[arcIdx];
+      const next = g.lowerCurve[arcIdx + 1];
+      const ang = arc.startAngle + arc.sweep;
+      const dirEnd = { u: -Math.sin(ang), v: Math.cos(ang) }; // CCW arc
+      const len = Math.hypot(next.b.u - next.a.u, next.b.v - next.a.v);
+      const dirNext = { u: (next.b.u - next.a.u) / len, v: (next.b.v - next.a.v) / len };
+      assert.ok(Math.abs(dirEnd.u - dirNext.u) < 1e-6 && Math.abs(dirEnd.v - dirNext.v) < 1e-6, 'the arc meets the steep edge tangentially');
+      assert.ok(isSimplePolygon(g.outerContour));
+      assert.ok(Math.min(...g.outerContour.map((p) => p.v)) >= 0);
+    });
+  }
+}
+
+test('steep start blend: a start that is NOT steep is untouched (no blend, no cap) — the ordinary winder', () => {
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'closed' });
+  for (const g of [...geo.outer, ...geo.inner]) {
+    assert.ok(!g.ends.start.blendedToPreviousEnd);
+    assert.ok(!g.ends.start.capped);
+  }
+});

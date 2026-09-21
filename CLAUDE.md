@@ -253,6 +253,11 @@ RULES #5 — and is never touched by any profile parameter or override).
   maxExtensionSlope)`). Before, an exactly vertical first edge left the lower contour detached from its start
   face (no risers) and a near-vertical one was extrapolated to v = -1630 mm (with risers). Reproduced with the
   user's own project file; regression tests in `stringerProfile.test.js`.
+  **Blend to the previous board:** a flat cap is not what a real board looks like at a post either, so for a
+  capped start after a corner post `blendCappedStartsToPreviousEnd()` replaces the cap: the steep edge is continued
+  down to the height of the PREVIOUS board's lower end (never lower — they meet at the post), then a tangent arc turns
+  into a horizontal run to the vertical start face (`ends.start.blendedToPreviousEnd`). Nothing changes when the
+  neighbour's end is not lower than the cap, or when the start is not steep.
 - **Takeoff blank**: a stringer's STOCK is now the smallest rectangle covering the whole solved contour
   (`stockGeometry.js` `minAreaRectUV`) — the real board to buy/price — not the design depth. Straight
   flights stay at the design depth; winder boards come out deeper. `totalCost` is rounded to grosze.

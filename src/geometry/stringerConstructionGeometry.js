@@ -73,7 +73,7 @@ import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU 
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthFor } from './stringerModel.js';
 import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
-import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt } from './profileCurve.js';
+import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 
@@ -466,6 +466,8 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     const maxDrop = MAX_END_EXTENSION_SLOPE;
     const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart + spanStart, segStart + spanEnd, maxDrop));
     const lowerCurve = translateCurveU(lowerGroupSlice, -segStart);
+    const firstLower = solved.lowerCurve[0];
+    const startCapped = segStart + spanStart < firstLower.a.u - GEOMETRY_EPS && edgeSlope(firstLower, true) > MAX_END_EXTENSION_SLOPE;
     const upperCurveSolved = solved.upperCurve
       ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart + spanStart, segStart + spanEnd, maxDrop)), -segStart)
       : null;
@@ -570,7 +572,13 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       outerContour,
       // How each end of the board is cut. Always a vertical face at the span ends; the very first
       // board's foot is then re-cut to a horizontal line on the floor (clampFirstSegmentToFloor).
-      ends: { start: { u: spanStart, cut: 'VERTICAL' }, end: { u: spanEnd, cut: 'VERTICAL' } },
+      ends: {
+        // `capped`: the first lower edge was too steep to be continued to the start face and got a flat
+        // cap (see sliceCurveByU); blendCappedStartsToPreviousEnd() then turns that cap into a smooth
+        // transition down to the neighbouring board's end.
+        start: { u: spanStart, cut: 'VERTICAL', capped: startCapped },
+        end: { u: spanEnd, cut: 'VERTICAL' },
+      },
       housings,
       boardWidthMm: boardWidth,
       thicknessMm: segment.thickness,
@@ -755,6 +763,50 @@ function syncCurveStartsToPolylines(geo) {
   if (geo.constructionType === CONSTRUCTION_TYPES.CLOSED) sync(geo.upperCurve, geo.topProfile);
 }
 
+// At the start of a board that follows a corner post, a steep first edge cannot simply be continued to the
+// start face (it would run metres below the floor), so it ends in a flat cap (see sliceCurveByU). A flat cap is
+// not what a real board looks like there either: the lower edge should come down to the post SLANTED and
+// SMOOTH, but never lower than the previous board's own lower end (they meet at the post). So the cap is
+// replaced by: the steep edge continued down to the neighbour's end height, then a tangent arc turning
+// into a horizontal run to the start face. Nothing changes when the neighbour's end is not lower than the cap.
+const START_BLEND_MIN_DROP_MM = 1;
+// Share of the shorter of the two legs the arc's tangent length may use (leaves a straight piece on each leg).
+const START_BLEND_LEG_SHARE = 0.9;
+
+function blendCappedStartsToPreviousEnd(ordered) {
+  for (let i = 1; i < ordered.length; i++) {
+    const curr = ordered[i];
+    const prev = ordered[i - 1];
+    if (!curr.ends.start.capped || !prev.bottomProfile || prev.bottomProfile.length === 0 || curr.lowerCurve.length < 2) continue;
+    const cap = curr.lowerCurve[0];
+    const steep = curr.lowerCurve[1];
+    if (cap.type !== 'line' || steep.type !== 'line') continue;
+    const p1 = cap.b;
+    const previousEndV = prev.bottomProfile[prev.bottomProfile.length - 1].v;
+    if (p1.v - previousEndV < START_BLEND_MIN_DROP_MM) continue;
+    const len = Math.hypot(steep.b.u - steep.a.u, steep.b.v - steep.a.v);
+    const d = { u: (steep.b.u - steep.a.u) / len, v: (steep.b.v - steep.a.v) / len };
+    if (d.v <= GEOMETRY_EPS) continue;
+    // where the steep edge's own line, continued downward, reaches the neighbour's end height
+    const legAlongSteep = (p1.v - previousEndV) / d.v;
+    const corner = { u: p1.u - d.u * legAlongSteep, v: previousEndV };
+    const start = { u: cap.a.u, v: previousEndV };
+    const legFlat = corner.u - start.u;
+    if (legFlat <= GEOMETRY_EPS) continue; // the steep line already reaches the start face at that height
+    const turn = Math.atan2(d.v, d.u); // turn from the horizontal run into the steep edge
+    const tangent = START_BLEND_LEG_SHARE * Math.min(legFlat, legAlongSteep);
+    const { curve } = filletPolyline([start, corner, p1], [0, tangent / Math.tan(turn / 2), 0]);
+
+    const oldBottomLength = curr.bottomProfile.length;
+    curr.lowerCurve = [...curve, ...curr.lowerCurve.slice(1)];
+    curr.bottomProfile = curveToPolyline(curr.lowerCurve);
+    // outerContour ends with the bottom edge, reversed (see buildGroupConstructionGeometry)
+    curr.outerContour.splice(curr.outerContour.length - oldBottomLength, oldBottomLength, ...curr.bottomProfile.slice().reverse());
+    curr.ends.start = { u: start.u, cut: 'VERTICAL', capped: false, blendedToPreviousEnd: true };
+    recheckSelfIntersection(curr);
+  }
+}
+
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model.segments, config.hasCornerPost);
   const extendInfo = new Map(
@@ -767,6 +819,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampCrossSegmentOvershoot(ordered);
+  blendCappedStartsToPreviousEnd(ordered);
   clampFirstSegmentToFloor(ordered);
   ordered.forEach(syncCurveStartsToPolylines);
   return ordered;
