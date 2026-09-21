@@ -271,11 +271,11 @@ test('posts: the smallest listed section >= the post section is used; a bigger p
   assert.equal(priced.items.find((i) => i.elementType === 'POST').calculatedCost, 30);
 });
 
-test('the cost covers material only: cleats and housings are excluded, not priced', () => {
-  const m = models({ stringerConstructionType: 'cut', stringerCleatsEnabled: true });
+test('the cost covers material only: housings are excluded, not priced', () => {
+  const m = models({ stringerConstructionType: 'closed' });
   const t = buildPricedMaterialTakeoff(m, { boardPricing: createDefaultBoardPricing() });
-  const extras = t.items.filter((i) => i.elementType === 'STRINGER_CLEAT' || i.elementType === 'STRINGER_HOUSING');
-  assert.ok(extras.length > 0, 'the scenario must actually produce cleats');
+  const extras = t.items.filter((i) => i.elementType === 'STRINGER_HOUSING');
+  assert.ok(extras.length > 0, 'the scenario must actually produce housings');
   for (const i of extras) {
     assert.equal(i.pricingSource, 'excluded');
     assert.equal(i.calculatedCost, null);

@@ -9,7 +9,6 @@ const ELEMENT_LABEL_PL = {
   LANDING: 'Podesty',
   RISER: 'Podstopnie',
   STRINGER: 'Wangi',
-  STRINGER_CLEAT: 'Klocki wangi',
   STRINGER_HOUSING: 'Wpusty wangi (informacyjnie)',
   POST: 'Słupy',
   SUPPORT: 'Podpory',
@@ -123,7 +122,7 @@ function categoryOf(item, winderStepIds) {
     case 'POST':
       return 'Słupy';
     default:
-      return null; // klocki, wpusty — poza kosztorysem
+      return null; // wpusty — poza kosztorysem
   }
 }
 

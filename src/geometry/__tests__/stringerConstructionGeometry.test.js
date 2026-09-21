@@ -75,8 +75,8 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
   const bottomSlope = (bottomEnd.v - bottomStart.v) / (bottomEnd.u - bottomStart.u);
   assert.ok(Math.abs(bottomSlope - geo.pitchLine.slope) < 1e-9);
 
-  // Cleats are reported SEPARATELY from the structural board contour (never merged into it).
-  assert.equal(geo.cleats.length, bearingCount);
+  // A cut string has NO separate support blocks (cleats were removed) and no housings.
+  assert.equal(geo.cleats, undefined);
   assert.equal(geo.housings, undefined);
 });
 
@@ -544,17 +544,4 @@ test('notch bug fix: with riser-board recess enabled, the riser face of every no
     }
   }
   assert.ok(foundRise, 'expected at least one rising (riser) edge in the notch profile');
-});
-
-// --- Cleats are an optional support method, not a mandatory feature of 'cut' ---------------------
-
-test('stringerCleatsEnabled: false produces an empty cleats array, never a hidden assumption; contour/pitchLine are unaffected', () => {
-  const withCleats = build({ ...REALISTIC_STRAIGHT_CUT, stringerCleatsEnabled: true });
-  const withoutCleats = build({ ...REALISTIC_STRAIGHT_CUT, stringerCleatsEnabled: false });
-  const geoWith = buildStringerConstructionGeometry(buildStringerModel(withCleats.planLayout, withCleats.config, 'outer'), withCleats.config)[0];
-  const geoWithout = buildStringerConstructionGeometry(buildStringerModel(withoutCleats.planLayout, withoutCleats.config, 'outer'), withoutCleats.config)[0];
-  assert.ok(geoWith.cleats.length > 0);
-  assert.deepEqual(geoWithout.cleats, []);
-  assert.deepEqual(geoWithout.outerContour, geoWith.outerContour, 'disabling cleats must not change the structural board contour');
-  assert.deepEqual(geoWithout.pitchLine, geoWith.pitchLine);
 });

@@ -118,8 +118,6 @@ export function createUI({
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad linią (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
-  lockable(build.add(config, 'stringerCleatThicknessMm', 10, 40, 5).name('Grubość klocka (nakładana) [mm]'), 'stringerCleatThicknessMm');
-  lockable(build.add(config, 'stringerCleatHeightMm', 20, 80, 5).name('Wysokość klocka (nakładana) [mm]'), 'stringerCleatHeightMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');

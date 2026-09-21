@@ -28,7 +28,7 @@ function inwardDirection(direction, side) {
 
 // Builds a world-space toWorld(u,v)->Vector3 function for one segment's own straight
 // referenceLine — u = distance along it from its start, v = world elevation. Every mesh for
-// this segment (the board itself, its cleats, its housing indicators) is built through this
+// this segment (the board itself, its housing indicators) is built through this
 // SAME function, so they can never drift apart or rotate independently of one another.
 function localFrameFor(segment) {
   const ref = segment.referenceLine;
@@ -70,24 +70,6 @@ function buildBoardMesh(segment, geo, side, material) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData = traceability({ elementType: 'stringer', stringerId: side, geometrySourceId: `stringer:${side}:${geo.segmentId}` });
   return mesh;
-}
-
-function buildCleatMeshes(segment, geo, side, material) {
-  if (!geo.cleats) return [];
-  const toWorld = localFrameFor(segment);
-  const direction = inwardDirection(segment.referenceLine.direction, side);
-  return geo.cleats.map((cleat) => {
-    const pts2D = rect(cleat.uStart, cleat.uEnd, cleat.topV - cleat.height, cleat.topV);
-    const geometry = extrude(pts2D, toWorld, direction, cleat.thickness);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.userData = traceability({
-      elementType: 'stringer',
-      stepId: `step-${cleat.treadIndex}`,
-      stringerId: side,
-      geometrySourceId: `stringer:${side}:${geo.segmentId}:cleat-${cleat.treadIndex}`,
-    });
-    return mesh;
-  });
 }
 
 function buildHousingIndicatorMeshes(segment, geo, side, material) {
@@ -133,10 +115,6 @@ export function renderStringers(model, constructionGeometries, material, groupNa
       board.name = `${groupName}_${i}_board`;
       group.add(board);
     }
-    buildCleatMeshes(segment, geo, side, material).forEach((mesh, j) => {
-      mesh.name = `${groupName}_${i}_cleat_${j}`;
-      group.add(mesh);
-    });
     buildHousingIndicatorMeshes(segment, geo, side, material).forEach((mesh, j) => {
       mesh.name = `${groupName}_${i}_housing_${j}`;
       group.add(mesh);

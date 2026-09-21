@@ -64,7 +64,8 @@ of**, never replacing, `StringerModel`/`StringerSegment`/`StringerTreadBearing` 
 analytical bearing model into a real, continuous timber board contour
 (`StringerSegmentConstructionGeometry`, one per segment): a plain 2-point "pitch line" struck
 through the segment's first/last bearing, then either a stepped-top/straight-bottom contour
-(`cut`, "wanga nakładana") with separate `cleats[]`, or a plain-rectangle contour (`closed`,
+(`cut`, "wanga nakładana" — the tread rests on the notch alone; the former separate support-block
+"cleats" were **removed**, see below), or a plain-rectangle contour (`closed`,
 "wanga wpuszczana") with separate `housings[]` recessed into the inner face — never the old
 per-bearing rectangle stack whose bottom edge sawtoothed along with the top. Diagnostics
 (`STRINGER-MIN-SECTION`, `STRINGER-CONTOUR-SELF-INTERSECTION`) are computed by this layer and
@@ -94,6 +95,15 @@ visual-recess into one number), and every `stringer*Mm` config default reclassif
 (purely additive — existing rules untouched); the classifications themselves live in
 [src/rules/sets/stringerConstructionAssumptions.js](src/rules/sets/stringerConstructionAssumptions.js).
 Tests: [src/rules/__tests__/schema.test.js](src/rules/__tests__/schema.test.js).
+
+**Cleats ("klocki") removed.** The support blocks a `cut` string used to carry
+(`config.stringerCleatThicknessMm`/`stringerCleatHeightMm`/`stringerCleatsEnabled`, `cleats[]` on
+`StringerSegmentConstructionGeometry`, their meshes, `STRINGER_CLEAT` takeoff items, the two UI
+sliders and the two `STAIR3D-STRINGER-CLEAT*` catalogue rules) were dropped at the user's request: they
+were never a required part of the construction, weren't visibly effective in the model and were not
+priced. A `cut` stringer is now just the notched board. Old project files that still carry the
+removed config keys load fine (the keys are ignored). The historical sections/docs above and in
+`docs/` that talk about cleats describe the earlier design.
 
 ## Stringer profile refactor: unfolded (u,Z) profile through every bearing (implemented)
 
@@ -553,9 +563,8 @@ mirroring the Validator's own composition:
   one physical riser even when it fans into several winder panels), a stringer SEGMENT = one
   item (`STRINGER` — a 14-tread straight flight's stringer is genuinely ONE board, hence ONE
   item; a winder's real segmentation is respected because it comes straight from
-  `StringerConstructionGeometry`), a cleat/housing = one item per tread
-  (`STRINGER_CLEAT`/`STRINGER_HOUSING`, only created when the geometry layer actually produced
-  one — respects `config.stringerCleatsEnabled`), a post = one item (`POST`). This maximizes
+  `StringerConstructionGeometry`), a housing = one item per tread
+  (`STRINGER_HOUSING`, only created when the geometry layer actually produced one), a post = one item (`POST`). This maximizes
   traceability: every item's `sourceElementId` is one unambiguous id
   (`tread:step-3`, `stringer:outer:outer-seg-0`, `stringer:outer:outer-seg-0:cleat-3`,
   `post:post-start`) — grouping/rollup for a human-readable report is a UI/export concern (see

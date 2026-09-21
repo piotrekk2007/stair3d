@@ -19,7 +19,6 @@ export const ELEMENT_TYPES = Object.freeze({
   RISER: 'RISER',
   STRINGER: 'STRINGER',
   STRINGER_HOUSING: 'STRINGER_HOUSING',
-  STRINGER_CLEAT: 'STRINGER_CLEAT',
   LANDING: 'LANDING',
   POST: 'POST',
   SUPPORT: 'SUPPORT', // reserved — no solved model produces this yet; never fabricated
@@ -73,7 +72,7 @@ export const TAKEOFF_ITEM_STATUS = Object.freeze({
  * @property {string|null} currency
  * @property {number|null} calculatedCost   quantity/measure x unitPrice — see pricing.js.
  * @property {boolean} optional             True for config-conditional elements (riser boards,
- *                                            corner posts, cleats, housings) — absent entirely
+ *                                            corner posts, housings) — absent entirely
  *                                            when the config disables them, never quantity 0.
  * @property {keyof TAKEOFF_ITEM_STATUS} status
  * @property {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics  Any per-item

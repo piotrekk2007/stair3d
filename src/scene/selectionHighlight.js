@@ -25,7 +25,6 @@ export function matchesSelection(userData, selection) {
       if (selection.stringerId && stringerId !== selection.stringerId) return false;
       if (!selection.segmentId) return true;
       const base = `stringer:${selection.stringerId}:${selection.segmentId}`;
-      if (selection.cleatId) return geometrySourceId === `${base}:${selection.cleatId}`;
       return geometrySourceId === base || geometrySourceId.startsWith(`${base}:`);
     }
     case 'post':

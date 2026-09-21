@@ -156,18 +156,6 @@ export function housingDepthFor(stringerThickness) {
  */
 
 /**
- * @typedef {Object} StringerCleat  Overlay/'cut' only — a small support block glued/screwed
- *   under a tread's horizontal seat, modelled SEPARATELY from the structural board (never
- *   merged into the board's own outer contour).
- * @property {number} treadIndex
- * @property {number} uStart
- * @property {number} uEnd
- * @property {number} topV     World elevation of the cleat's top face (= the seat it supports)
- * @property {number} height   mm
- * @property {number} thickness  mm
- */
-
-/**
  * @typedef {Object} StringerHousing  Closed/'housed' only — a recess cut into the board's inner
  *   face for one tread; never changes the board's own outer silhouette.
  * @property {number} treadIndex
@@ -192,7 +180,6 @@ export function housingDepthFor(stringerThickness) {
  *   (the classic notched/"sawtooth" top of an open string — a REAL feature, not a defect),
  *   bottom edge is the single straight pitch-line-parallel line. 'closed': a plain
  *   parallelogram — both edges straight and parallel to the pitch line.
- * @property {StringerCleat[]} [cleats]      'cut' only.
  * @property {StringerHousing[]} [housings]  'closed' only.
  * @property {number} boardWidthMm       config.stringerHeight
  * @property {number} thicknessMm        config.stringerThickness

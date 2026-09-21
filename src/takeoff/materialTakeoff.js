@@ -12,7 +12,7 @@
 // item, one riser = one item (even a multi-panel winder fan — RiserModel already represents
 // exactly one physical riser per stepId), one stringer SEGMENT = one item (a 14-step straight
 // flight's stringer is ONE segment, hence ONE item — never one item per tread bearing), one
-// post = one item, one cleat/housing = one item per tread. This maximizes traceability
+// post = one item, one housing = one item per tread. This maximizes traceability
 // (sourceElementId is always unambiguous) — grouping/rollup for display is a UI/export concern
 // (see export/*.js), never baked into this core model.
 
@@ -229,38 +229,6 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
   });
 }
 
-// Cleats are separate, genuinely distinct physical pieces (small support blocks) — one item
-// PER TREAD, never merged into the board item, and never created when cleats[] is empty
-// (config.stringerCleatsEnabled === false, or constructionType !== 'cut' — see
-// stringerConstructionGeometry.js). "If cleats are disabled: do not create them as hidden or
-// assumed material" — an empty cleats[] on the model produces zero items here, truthfully.
-function buildCleatItems(side, segment, geo, config, wasteFactors) {
-  if (!geo.cleats || geo.cleats.length === 0) return [];
-  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
-  return geo.cleats.map((cleat) => {
-    const netVolumeMm3 = (cleat.uEnd - cleat.uStart) * cleat.height * cleat.thickness;
-    return createTakeoffItem({
-      itemId: `stringer-${side}-${segment.id}-cleat-${cleat.treadIndex}`,
-      elementType: ELEMENT_TYPES.STRINGER_CLEAT,
-      sourceElementId: `stringer:${side}:${segment.id}:cleat-${cleat.treadIndex}`,
-      constructionType: geo.constructionType,
-      material: config.timberGrade,
-      materialId,
-      quantity: 1,
-      unit: 'szt',
-      nominalDimensions: { lengthMm: cleat.uEnd - cleat.uStart, heightMm: cleat.height, thicknessMm: cleat.thickness },
-      calculatedDimensions: { lengthMm: cleat.uEnd - cleat.uStart, heightMm: cleat.height, thicknessMm: cleat.thickness },
-      netVolume: netVolumeMm3 * MM3_TO_M3,
-      netArea: 0,
-      stockVolume: netVolumeMm3 * MM3_TO_M3,
-      stockArea: 0,
-      wasteFactor: wasteFactorFor(ELEMENT_TYPES.STRINGER_CLEAT, materialId, wasteFactors),
-      optional: true,
-      status: TAKEOFF_ITEM_STATUS.OK,
-    });
-  });
-}
-
 // Housings are informational — a FEATURE of the stringer board, never a separate purchasable
 // item ("do not treat a housing as a separate board"). `netVolume` here reports the material
 // REMOVED by the housing (useful for waste/scrap tracking), never a purchase quantity —
@@ -299,7 +267,6 @@ function buildStringerSideItems(side, stringerModel, constructionGeometries, con
     const board = buildStringerBoardItem(side, segment, geo, config, wasteFactors);
     if (board) items.push(board);
     if (board && board.status === TAKEOFF_ITEM_STATUS.OK) {
-      items.push(...buildCleatItems(side, segment, geo, config, wasteFactors));
       items.push(...buildHousingItems(side, segment, geo));
     }
   });

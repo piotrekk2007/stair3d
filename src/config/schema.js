@@ -66,20 +66,11 @@ export function createDefaultConfig() {
     stringerHeight: 300, // mm, wysokość policzka (poniżej linii schodkowej) — "width" w StringerModel (src/geometry/stringerModel.js)
     stringerThickness: 40, // mm — "thickness" w StringerModel
     stringerConstructionType: 'closed', // 'closed' (wanga wpuszczana/wcinana, schowana) | 'cut' (wanga nakładana/wycinana, otwarta) — patrz stringerModel.js CONSTRUCTION_TYPES i stringerConstructionGeometry.js
-    // Poniższe 4 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
+    // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
     // wartości domyślne to jawnie oznaczone założenia produkcyjne (MANUFACTURING_ASSUMPTION),
     // NIE liczby z normy — patrz docs/architecture/STRINGER_CONSTRUCTION_MODEL.md.
     stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje nad linię schodkową (osłania noski stopni od zewnątrz)
     stringerMinRemainingSectionMm: 30, // mm, próg diagnostyczny — minimalna dopuszczalna grubość drewna w najcieńszym miejscu (nad wcięciem/pod wręgą)
-    stringerCleatThicknessMm: 20, // mm, TYLKO 'cut' — grubość klocka podpierającego (cleat) pod stopniem
-    stringerCleatHeightMm: 40, // mm, TYLKO 'cut' — wysokość klocka podpierającego
-    // Czy klocki podpierające (cleats) w ogóle istnieją dla wangi typu 'cut' — patrz
-    // STAIR3D-STRINGER-CLEATS-OPTIONALITY w stringerConstructionAssumptions.js: to jest
-    // SOFTWARE_DESIGN_CHOICE, nie wymóg konstrukcyjny — wiele prawdziwych "wang nakładanych"
-    // nie ma klocków wcale (stopień opiera się wyłącznie o wcięcie). Domyślnie true (zgodne z
-    // dotychczasowym zachowaniem sprzed tego pola), ale material takeoff MUSI respektować
-    // false zamiast zakładać klocki jako ukryty materiał.
-    stringerCleatsEnabled: true,
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia

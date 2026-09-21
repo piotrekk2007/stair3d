@@ -6,7 +6,7 @@
 // to a real, orderable size" logic this file owns — deliberately NOT the same thing as stock
 // OPTIMIZATION (bin-packing, board nesting, cutting-plan generation are still explicitly out of
 // scope): this only answers "what is the smallest catalog size that is >= what's needed", one
-// dimension at a time, for a single linear member (a stringer, a cleat, a post) — never how to
+// dimension at a time, for a single linear member (a stringer, a post) — never how to
 // lay out several parts across one board.
 
 /**

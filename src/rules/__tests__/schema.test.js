@@ -90,7 +90,7 @@ test('getRulesByConstructionType("cut") returns cut-specific and "both" rules, n
   for (const rule of rules) {
     assert.notEqual(rule.constructionType, 'closed');
   }
-  assert.ok(rules.some((r) => r.ruleId === 'STAIR3D-STRINGER-CLEATS-OPTIONALITY'));
+  assert.ok(!rules.some((r) => r.ruleId === 'STAIR3D-STRINGER-CLEATS-OPTIONALITY'), 'cleats were removed from the model');
 });
 
 test('getRuleById resolves a stringer-construction rule by id', () => {

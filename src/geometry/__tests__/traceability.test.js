@@ -68,7 +68,7 @@ test('every riser panel mesh carries stepId + a panel-indexed geometrySourceId',
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('every stringer board mesh carries the correct side as stringerId, and every cleat/housing sub-mesh carries its own supported tread as stepId', () => {
+test('every stringer board mesh carries the correct side as stringerId, and every housing sub-mesh carries its own supported tread as stepId', () => {
   const { stringerModels, stringerConstruction } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5, stringerConstructionType: 'cut' });
   for (const side of ['outer', 'inner']) {
     const group = renderStringers(stringerModels[side], stringerConstruction[side], MATERIAL, `Stringer${side}`);
@@ -81,7 +81,7 @@ test('every stringer board mesh carries the correct side as stringerId, and ever
         assert.equal(mesh.userData.stepId, null);
         assert.match(mesh.userData.geometrySourceId, new RegExp(`^stringer:${side}:${side}-seg-\\d+$`));
       } else {
-        // A cleat (or, for 'closed', a housing indicator) supports exactly one tread.
+        // A housing indicator supports exactly one tread.
         assert.match(mesh.userData.stepId, /^step-\d+$/);
       }
     }

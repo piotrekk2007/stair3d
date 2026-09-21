@@ -95,24 +95,14 @@ test('scenario A (straight): one STRINGER item per side, quantity 1 (a straight 
   }
 });
 
-// --- Scenario B: straight overlay (cut) stringer, cleats enabled --------------------------------
+// --- Scenario B: straight overlay (cut) stringer ---------------------------------------------------
 
-test('scenario B (straight, overlay/cut stringer, cleats on): produces one STRINGER_CLEAT item per tread bearing', () => {
-  // stringerHeight raised from the default (300mm) to keep the cut board's notch geometry
-  // valid (a self-intersection ERROR at 300mm here is a genuine, correct diagnostic — this
-  // scenario is testing cleat generation on VALID geometry, not the diagnostic path itself;
-  // see scenario K for that).
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerCleatsEnabled: true, stringerHeight: 450 });
+test('scenario B (straight, overlay/cut stringer): the board items exist and there are NO separate sub-items (no cleats, no housings)', () => {
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450 });
   const items = compute(scenario);
-  const cleats = items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_CLEAT);
-  // 5 treads x 2 sides (outer+inner) = 10 cleats, unless construction type isn't actually 'cut'
-  // in this config's schema — assert against the real construction type used by the model.
-  const outerGeo = scenario.models.stringerConstruction.outer[0];
-  if (outerGeo.constructionType === 'cut') {
-    assert.ok(cleats.length > 0);
-    assert.ok(cleats.every((c) => c.optional === true));
-    assert.ok(cleats.every((c) => c.status === TAKEOFF_ITEM_STATUS.OK));
-  }
+  assert.ok(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER));
+  assert.equal(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING), false);
+  assert.equal(items.some((i) => i.sourceElementId.includes(':cleat-')), false);
 });
 
 // --- Scenario C: straight housed (closed) stringer -----------------------------------------------
@@ -215,26 +205,6 @@ test('scenario I (changed stringer thickness): only stringer volumes change, tre
   assert.equal(postThin.netVolume, postThick.netVolume, 'changing stringer thickness must never affect post volume');
 });
 
-// --- Scenario J: cleats enabled/disabled --------------------------------------------------------
-
-test('scenario J: disabling stringerCleatsEnabled removes every STRINGER_CLEAT item without touching the board itself', () => {
-  const withCleats = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450, stringerCleatsEnabled: true });
-  const withoutCleats = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450, stringerCleatsEnabled: false });
-  const itemsWith = compute(withCleats);
-  const itemsWithout = compute(withoutCleats);
-
-  const outerGeo = withCleats.models.stringerConstruction.outer[0];
-  if (outerGeo.constructionType === 'cut') {
-    assert.ok(itemsWith.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_CLEAT).length > 0);
-  }
-  assert.equal(itemsWithout.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_CLEAT).length, 0, 'disabling cleats must never leave a hidden/assumed cleat item');
-
-  // Disabling cleats must not change the board's own net/stock geometry.
-  const boardWith = itemsWith.find((i) => i.elementType === ELEMENT_TYPES.STRINGER && i.sourceElementId === 'stringer:outer:' + withCleats.models.stringerModels.outer.segments[0].id);
-  const boardWithout = itemsWithout.find((i) => i.elementType === ELEMENT_TYPES.STRINGER && i.sourceElementId === 'stringer:outer:' + withoutCleats.models.stringerModels.outer.segments[0].id);
-  assert.equal(boardWith.netVolume, boardWithout.netVolume);
-});
-
 // --- Scenario K: invalid stringer geometry (hand-built, negative test) ---------------------------
 
 test('scenario K: a stringer segment carrying an ERROR diagnostic produces an INVALID takeoff item, never an invented quantity', () => {
@@ -265,8 +235,8 @@ test('scenario K: a stringer segment carrying an ERROR diagnostic produces an IN
   assert.equal(outerStringer.stockVolume, null);
   assert.equal(outerStringer.wasteAdjustedQuantity, null);
   assert.ok(outerStringer.diagnostics.some((d) => d.ruleId === 'TEST-FORCED-ERROR'));
-  // An invalid board must never produce cleats/housings (nothing trustworthy to hang them off of).
-  assert.equal(items.some((i) => i.sourceElementId.startsWith('stringer:outer:') && i.elementType === ELEMENT_TYPES.STRINGER_CLEAT), false);
+  // An invalid board must never produce housings (nothing trustworthy to hang them off of).
+  assert.equal(items.some((i) => i.sourceElementId.startsWith('stringer:outer:') && i.elementType === ELEMENT_TYPES.STRINGER_HOUSING), false);
 });
 
 // --- Risers, posts, waste, overrides -------------------------------------------------------------
@@ -377,14 +347,6 @@ test('catalog stock: a board width/thickness that exceeds every catalog size is 
   assert.equal(stringer.catalogStock.widthMm, null, 'no catalog width covers 450mm — must be null, not a guessed number');
   assert.equal(stringer.catalogStock.unsupported, true);
   assert.ok(stringer.notes.some((n) => n.includes('widthMm') && n.includes('450')), 'the gap must be named explicitly in notes');
-});
-
-test('catalog stock: cleats are deliberately excluded (cut from offcuts, never bought to a catalog length)', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', stringerHeight: 450, stringerCleatsEnabled: true });
-  const items = compute(scenario);
-  const cleats = items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_CLEAT);
-  assert.ok(cleats.length > 0);
-  for (const cleat of cleats) assert.equal(cleat.catalogStock, null);
 });
 
 test('catalog stock: a post\'s square cross-section is checked against BOTH catalog width and thickness lists', () => {

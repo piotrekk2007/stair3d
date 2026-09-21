@@ -21,7 +21,7 @@
 //
 // ZAKRES KOSZTORYSU (decyzja użytkownika): liczony jest wyłącznie MATERIAŁ elementów nośnych i
 // wykończeniowych — stopnie, stopnie zabiegowe, podesty, podstopnie (jeśli są), wangi nośne i
-// słupy. Nic więcej (klocki, wpusty, montaż, wykończenie, okucia) nie wchodzi do kosztu.
+// słupy. Nic więcej (wpusty, montaż, wykończenie, okucia) nie wchodzi do kosztu.
 //   - WANGA = deska z TEGO SAMEGO cennika (np. 40 × 330 × 2660 mm: grubość, głębokość = szerokość
 //     deski z parametrów, długość = jej rzeczywista długość) + stała dopłata procentowa (domyślnie
 //     +20%).
@@ -260,7 +260,7 @@ function pricePost(item, pricing) {
 
 /**
  * Wycenia MATERIAŁ: stopnie, stopnie zabiegowe, podesty, podstopnie z drewna, wangi (z cennika desek
- * + dopłata) i słupy (z tabeli słupów). Klocki i wpusty wangi są poza zakresem (oznaczone
+ * + dopłata) i słupy (z tabeli słupów). Wpusty wangi są poza zakresem (oznaczone
  * `pricingSource: 'excluded'`, bez kosztu). Pozostałe pozycje zwraca bez zmian (np. podstopnie z
  * płyty — wycenia je dopiero applyPricing()). Zwraca NOWE pozycje. Pozycji, której nie da się
  * wycenić (np. grubość > 65 mm, brak wiersza dla słupa), NIE wycenia się "na oko" — zostaje
@@ -271,7 +271,7 @@ function pricePost(item, pricing) {
  */
 export function applyBoardPricing(items, pricing) {
   return items.map((item) => {
-    if (item.elementType === ELEMENT_TYPES.STRINGER_CLEAT || item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
+    if (item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
     if (item.status !== 'OK') return item;
     if (item.elementType === ELEMENT_TYPES.POST) return pricePost(item, pricing);
     const blank = boardBlankOf(item, pricing.riserMaterial);

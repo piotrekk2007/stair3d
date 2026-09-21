@@ -67,11 +67,11 @@ test('a BLOCKED takeoff stays untouched by manual items (no partial total from i
   assert.equal(applyManualItems(blocked, [{ name: 'Tralki', qty: 5, unit: 'szt', price: 10 }]), blocked);
 });
 
-test('category summary: cleats/housings are left out and winder treads are separate', () => {
-  const t = realTakeoff({ stringerConstructionType: 'cut', stringerCleatsEnabled: true });
-  assert.ok(t.items.some((i) => i.elementType === 'STRINGER_CLEAT'));
+test('category summary: housings are left out and winder treads are separate', () => {
+  const t = realTakeoff({ stringerConstructionType: 'closed' });
+  assert.ok(t.items.some((i) => i.elementType === 'STRINGER_HOUSING'));
   const s = summarizeByCategory(t.items);
-  assert.ok(!s.lines.some((l) => /klocki|wpusty/i.test(l.label)));
+  assert.ok(!s.lines.some((l) => /wpusty/i.test(l.label)));
   const separated = summarizeByCategory(t.items, { winderStepIds: new Set(['step-0']) });
   assert.equal(separated.lines.find((l) => l.label === 'Stopnie zabiegowe').count, 1);
   assert.equal(separated.lines.find((l) => l.label === 'Stopnie').count, s.lines.find((l) => l.label === 'Stopnie').count - 1);

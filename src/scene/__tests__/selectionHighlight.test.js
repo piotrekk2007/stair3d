@@ -7,7 +7,7 @@ import { matchesSelection, applySelectionHighlight } from '../selectionHighlight
 const tread = (n) => ({ elementType: 'tread', stepId: `step-${n}`, stringerId: null, geometrySourceId: `tread:step-${n}` });
 const riser = (n) => ({ elementType: 'riser', stepId: `step-${n}`, stringerId: null, geometrySourceId: `riser:step-${n}:panel-0` });
 const board = (side) => ({ elementType: 'stringer', stepId: null, stringerId: side, geometrySourceId: `stringer:${side}:${side}-seg-0` });
-const cleat = (side, i) => ({ elementType: 'stringer', stepId: null, stringerId: side, geometrySourceId: `stringer:${side}:${side}-seg-0:cleat-${i}` });
+const housing = (side, i) => ({ elementType: 'stringer', stepId: null, stringerId: side, geometrySourceId: `stringer:${side}:${side}-seg-0:housing-${i}` });
 const post = (id) => ({ elementType: 'post', stepId: null, stringerId: null, geometrySourceId: `post:${id}` });
 
 test('a step selection matches that step\'s tread AND riser, never another step', () => {
@@ -18,21 +18,18 @@ test('a step selection matches that step\'s tread AND riser, never another step'
   assert.ok(!matchesSelection(board('outer'), sel));
 });
 
-test('a stringer selection matches only that side (and its own cleats), never the other side', () => {
+test('a stringer selection matches only that side (and its own housings), never the other side', () => {
   const sel = { elementType: 'stringer', stringerId: 'outer', segmentId: null };
   assert.ok(matchesSelection(board('outer'), sel));
-  assert.ok(matchesSelection(cleat('outer', 2), sel));
+  assert.ok(matchesSelection(housing('outer', 2), sel));
   assert.ok(!matchesSelection(board('inner'), sel));
 });
 
-test('a segment selection matches its board and cleats; a cleat selection only that cleat', () => {
-  const seg = { elementType: 'stringer', stringerId: 'outer', segmentId: 'outer-seg-0', cleatId: null };
+test('a segment selection matches its board and its housings, but not another segment', () => {
+  const seg = { elementType: 'stringer', stringerId: 'outer', segmentId: 'outer-seg-0' };
   assert.ok(matchesSelection(board('outer'), seg));
-  assert.ok(matchesSelection(cleat('outer', 1), seg));
-  const one = { ...seg, cleatId: 'cleat-1' };
-  assert.ok(matchesSelection(cleat('outer', 1), one));
-  assert.ok(!matchesSelection(cleat('outer', 2), one));
-  assert.ok(!matchesSelection(board('outer'), one));
+  assert.ok(matchesSelection(housing('outer', 1), seg));
+  assert.ok(!matchesSelection({ ...board('outer'), geometrySourceId: 'stringer:outer:outer-seg-1' }, seg));
 });
 
 test('a post selection matches by id; with no id it matches every post', () => {

@@ -226,19 +226,6 @@ function buildOverlayTop(effective) {
   return top;
 }
 
-function buildCleats(effective, config) {
-  const height = config.stringerCleatHeightMm;
-  const thickness = config.stringerCleatThicknessMm;
-  return effective.map((b) => ({
-    treadIndex: b.treadIndex,
-    uStart: b.uStart,
-    uEnd: b.uEnd,
-    topV: b.bearingElevation,
-    height,
-    thickness,
-  }));
-}
-
 // --- CLOSED (housed/recessed) -----------------------------------------------------------------
 
 // Housing height matches the tread's own thickness (a real parametric value already in the
@@ -412,15 +399,10 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
 
     const diagnostics = [];
     let outerContour;
-    let cleats;
     let housings;
     if (constructionType === CONSTRUCTION_TYPES.CUT) {
       const top = buildOverlayTop(effective);
       outerContour = [...top, ...bottomPolyline.slice().reverse()];
-      // Cleats are an optional support method, not a universal feature of a cut string — see
-      // STAIR3D-STRINGER-CLEATS-OPTIONALITY (docs/STRINGER_CONSTRUCTION_SPEC.md §I). When
-      // disabled, the tread rests on the notch alone: an empty array, never a hidden assumption.
-      cleats = config.stringerCleatsEnabled === false ? [] : buildCleats(effective, config);
       diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
     } else {
       outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
@@ -469,13 +451,12 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
       // DEBUG DATA (see docs/architecture/STRINGER_ARC_LENGTH_PROFILE.md §14) — the full solved
       // (u,Z) profile and its top/bottom envelope, exposed so a future debug view can show
       // exactly why the contour has its shape without recomputing anything. Not consumed by
-      // stringerRenderer.js (it only reads outerContour/cleats/housings), so adding fields here
+      // stringerRenderer.js (it only reads outerContour/housings), so adding fields here
       // is safe and additive.
       pitchProfile,
       topProfile: topPolyline,
       bottomProfile: bottomPolyline,
       outerContour,
-      cleats,
       housings,
       boardWidthMm: boardWidth,
       thicknessMm: segment.thickness,
@@ -491,8 +472,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config) {
  * @param {import('./stringerModel.js').StringerModel} model  Already built by
  *   stringerSolver.js — never rebuilt or re-derived here.
  * @param {Object} config  Full config (post riserHeight merge) — read for
- *   stringerTopMarginMm/stringerMinRemainingSectionMm/stringerCleatThicknessMm/
- *   stringerCleatHeightMm/treadThickness/hasCornerPost; never mutated.
+ *   stringerTopMarginMm/stringerMinRemainingSectionMm/treadThickness/hasCornerPost; never mutated.
  * @returns {import('./stringerModel.js').StringerSegmentConstructionGeometry[]}
  */
 // At a CORNER_POST joint (see groupSegmentsByLapJoint's header — a real post genuinely

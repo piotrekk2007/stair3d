@@ -33,16 +33,6 @@ test('selectionFromTakeoffSourceId parses a stringer segment id', () => {
     elementType: 'stringer',
     stringerId: 'outer',
     segmentId: 'outer-seg-0',
-    cleatId: null,
-  });
-});
-
-test('selectionFromTakeoffSourceId parses a stringer cleat id', () => {
-  assert.deepEqual(selectionFromTakeoffSourceId('stringer:outer:outer-seg-0:cleat-3'), {
-    elementType: 'stringer',
-    stringerId: 'outer',
-    segmentId: 'outer-seg-0',
-    cleatId: 'cleat-3',
   });
 });
 

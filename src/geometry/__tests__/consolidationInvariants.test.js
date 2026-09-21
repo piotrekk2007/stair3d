@@ -94,9 +94,9 @@ test('invariant 6: the 3D renderer produces exactly one continuous board mesh pe
     const boardMeshes = group.children.filter((m) => m.name.endsWith('_board'));
     assert.equal(boardMeshes.length, model.segments.length, `${side}: exactly one board mesh per segment, never one per bearing`);
 
-    // Sub-elements (cleats for 'cut', housings for 'closed') are per-tread, never per-bearing
+    // Sub-elements (housings for 'closed') are per-tread, never per-bearing
     // duplicated, and never counted as if they were the structural board itself.
-    const expectedSubCount = constructionGeometries.reduce((n, g) => n + (g.cleats?.length || 0) + (g.housings?.length || 0), 0);
+    const expectedSubCount = constructionGeometries.reduce((n, g) => n + (g.housings?.length || 0), 0);
     const subMeshes = group.children.filter((m) => !m.name.endsWith('_board'));
     assert.equal(subMeshes.length, expectedSubCount);
   }

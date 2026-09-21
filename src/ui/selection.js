@@ -16,7 +16,6 @@ export function stepIndexFromElementId(elementId) {
 // 'tread:step-3' -> {elementType:'tread', stepIndex:3}
 // 'riser:step-3:panel-1' -> {elementType:'riser', stepIndex:3, panelId:'panel-1'}
 // 'stringer:outer:outer-seg-0' -> {elementType:'stringer', stringerId:'outer', segmentId:'outer-seg-0'}
-// 'stringer:outer:outer-seg-0:cleat-3' -> {elementType:'stringer', stringerId:'outer', segmentId:'outer-seg-0', cleatId:'cleat-3'}
 // 'post:post-start' -> {elementType:'post', postId:'post-start'}
 // Zwraca null, jeśli sourceElementId nie pasuje do żadnej znanej konwencji (nowy typ elementu
 // dodany później bez aktualizacji tego parsera — świadomie nie zgadujemy kształtu).
@@ -34,8 +33,8 @@ export function selectionFromTakeoffSourceId(sourceElementId) {
     return { elementType: 'riser', stepIndex, panelId: parts[2] ?? null };
   }
   if (kind === 'stringer') {
-    const [, stringerId, segmentId, cleatId] = parts;
-    return { elementType: 'stringer', stringerId: stringerId ?? null, segmentId: segmentId ?? null, cleatId: cleatId ?? null };
+    const [, stringerId, segmentId] = parts;
+    return { elementType: 'stringer', stringerId: stringerId ?? null, segmentId: segmentId ?? null };
   }
   if (kind === 'post') {
     return { elementType: 'post', postId: parts[1] ?? null };
