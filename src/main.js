@@ -19,6 +19,8 @@ import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffTo
 import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
 import { createDefaultBoardPricing, sanitizeBoardPricing } from './takeoff/boardPricing.js';
 import { createPricingEditor } from './ui/pricingEditor.js';
+import { createManualItemsEditor } from './ui/manualItemsEditor.js';
+import { createDefaultManualItems, sanitizeManualItems, applyManualItems } from './takeoff/manualItems.js';
 import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
@@ -72,7 +74,8 @@ const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: t
 const takeoffSettings = {
   priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })), // pozostałe materiały (wangi, słupy…)
   wasteFactors: { ...DEFAULT_WASTE_FACTORS },
-  boardPricing: createDefaultBoardPricing(), // cennik desek: stopnie/podesty/podstopnie z drewna
+  boardPricing: createDefaultBoardPricing(), // cennik desek: stopnie/podesty/podstopnie/wangi + słupy
+  manualItems: createDefaultManualItems(), // wpisywane ręcznie: tralki, poręcze…
 };
 const projectMeta = { name: '', notes: '', lastFileNote: '' };
 let takeoffGroupBy = GROUP_BY.ELEMENT;
@@ -255,12 +258,19 @@ function selectionStillExists(sel, built) {
 
 // Kosztorys liczony z TYCH SAMYCH modeli co reszta (bez drugiego rozwiązywania geometrii).
 function computeTakeoff() {
-  return buildPricedMaterialTakeoff(lastModels, {
+  const takeoff = buildPricedMaterialTakeoff(lastModels, {
     priceList: takeoffSettings.priceList,
     wasteFactors: takeoffSettings.wasteFactors,
     boardPricing: takeoffSettings.boardPricing,
     waivers,
   });
+  // Pozycje wpisane ręcznie (tralki, poręcze…) dochodzą do sumy dopiero tu — nie są wyliczane z modelu.
+  return applyManualItems(takeoff, takeoffSettings.manualItems);
+}
+
+// ID stopni zabiegowych — kosztorys pokazuje je w osobnej kategorii ("Stopnie zabiegowe").
+function winderStepIds() {
+  return new Set((lastModels?.treadModels ?? []).filter((t) => t.type === 'winder').map((t) => t.stepId));
 }
 
 // Zmiana cen/odpadów przelicza tylko kosztorys — geometria i historia modelu zostają nietknięte.
@@ -277,6 +287,7 @@ function renderTakeoffPanel() {
     priceList: takeoffSettings.priceList,
     wasteFactors: takeoffSettings.wasteFactors,
     boardPricing: takeoffSettings.boardPricing,
+    winderStepIds: winderStepIds(),
   });
   if (lastTakeoff.status === 'BLOCKED') ws.setTabBadge('takeoff', '!', 'error');
   else ws.setTabBadge('takeoff', `≈${Math.round(lastTakeoff.totalCost).toLocaleString('pl-PL')} zł`, lastTakeoff.status === 'WARNING' ? 'warning' : 'info');
@@ -566,6 +577,7 @@ function resetTakeoffSettings() {
   }
   Object.assign(takeoffSettings.wasteFactors, DEFAULT_WASTE_FACTORS);
   takeoffSettings.boardPricing = createDefaultBoardPricing();
+  takeoffSettings.manualItems = createDefaultManualItems();
 }
 
 function handleNewProject() {
@@ -574,6 +586,7 @@ function handleNewProject() {
   resetTakeoffSettings();
   waivers = [];
   pricingEditor.render();
+  manualItemsEditor.render();
   projectMeta.name = '';
   projectMeta.notes = '';
   projectMeta.lastFileNote = 'Nowy projekt';
@@ -599,7 +612,7 @@ function handleSaveProject() {
   exportProjectJSON(config, filename, {
     projectName: projectMeta.name,
     notes: projectMeta.notes,
-    takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing },
+    takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing, manualItems: takeoffSettings.manualItems },
     waivers,
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
@@ -626,8 +639,10 @@ function handleFileSelected(event) {
         }
         Object.assign(takeoffSettings.wasteFactors, meta.takeoffSettings.wasteFactors || {});
         if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
+        if (meta.takeoffSettings.manualItems) takeoffSettings.manualItems = sanitizeManualItems(meta.takeoffSettings.manualItems);
       }
       pricingEditor.render();
+      manualItemsEditor.render();
       projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
       ws.setProjectMeta({ name: projectMeta.name, notes: projectMeta.notes, lastFileNote: projectMeta.lastFileNote });
       document.title = projectMeta.name ? `${projectMeta.name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
@@ -694,6 +709,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.
+const manualItemsEditor = createManualItemsEditor(takeoffPanel.querySelector('#takeoff-manual'), { settings: takeoffSettings, onChange: refreshTakeoff });
 const pricingEditor = createPricingEditor(takeoffPanel.querySelector('#takeoff-pricing'), { settings: takeoffSettings, onChange: refreshTakeoff });
 
 // Raycaster nie zna `visible` — ukryta warstwa (checkbox w HUD) nie może być zaznaczalna.

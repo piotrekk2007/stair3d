@@ -296,7 +296,7 @@ export function buildWinderBlankLabels(planLayout, config, derived) {
   for (const tread of planLayout.treads) {
     if (tread.type !== 'winder') continue;
 
-    const blank = computeWinderBlank(tread);
+    const blank = computeWinderBlank(tread, config.nosing);
     const elevation = zGoing(tread) + 15;
 
     const worldCorners = blank.corners.map((c) => planToWorld(c.x, c.y, elevation));

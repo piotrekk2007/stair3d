@@ -281,7 +281,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     : planLayout.treads
         .filter((t) => t.type === 'winder')
         .map((t) => {
-          const blank = computeWinderBlank(t);
+          const blank = computeWinderBlank(t, config.nosing);
           const cx = blank.corners.reduce((s, p) => s + p.x, 0) / 4;
           const cy = blank.corners.reduce((s, p) => s - p.y, 0) / 4;
           return `

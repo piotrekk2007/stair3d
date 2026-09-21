@@ -71,11 +71,12 @@ export function createDefaultBoardPricing() {
     riserMaterial: RISER_MATERIALS.OAK,
     stringerSurchargePct: 20, // dopłata do ceny wangi względem ceny deski z cennika
     // Słupy: najmniejszy przekrój z tabeli, który jest >= przekroju słupa. Wartości domyślne to
-    // pozycje "Drewniany 80×80/100×100" z cennika DREWEX (cena za sztukę) — słup o większym
-    // przekroju zostaje niewyceniony, dopóki nie dopiszesz dla niego wiersza.
+    // pozycje "Drewniany 80×80/100×100" z cennika DREWEX (cena za sztukę) + 110×110 = 200 zł/mb;
+    // słup o większym przekroju zostaje niewyceniony, dopóki nie dopiszesz dla niego wiersza.
     postPrices: [
       { sectionMm: 80, price: 120, unit: 'szt' },
       { sectionMm: 100, price: 160, unit: 'szt' },
+      { sectionMm: 110, price: 200, unit: 'mb' }, // słup 110×110 — cena podana przez użytkownika
     ],
     table: {
       boards: DEFAULT_BOARDS.map((r) => ({ ...r })),

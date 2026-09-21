@@ -1297,3 +1297,41 @@ code {
   padding: 0 6px;
   color: var(--c-err);
 }
+
+/* ---- Podsumowanie kosztu wg kategorii + pozycje ręczne ---- */
+.tk-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tk-cat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px dotted #d5d9de;
+}
+
+.tk-cat b {
+  white-space: nowrap;
+}
+
+.tk-manual {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: #fbfcfd;
+}
+
+.tkm-cost {
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tk-item.manual {
+  background: #f4f8fd;
+}

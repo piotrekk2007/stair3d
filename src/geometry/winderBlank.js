@@ -7,7 +7,12 @@
 // przedni narożnik (zwłaszcza bliżej duszy przy metodzie proporcjonalnej) często wystaje
 // bokiem poza sam odcinek frontEdge, więc formatka bywa DŁUŻSZA niż sama krawędź czołowa.
 // Współdzielone przez widok 3D i plan 2D, żeby liczby nigdy się nie rozjechały między nimi.
-export function computeWinderBlank(tread) {
+//
+// `nosingMm` — nosek stopnia (config.nosing). Formatka produkcyjna to deska, z której stopień
+// jest wycinany, więc MUSI obejmować nosek: krawędź czołowa leży na skraju konturu (cały
+// wypukły kontur jest po jednej jej stronie), a nosek wysuwa ją do przodu — głębokość rośnie o
+// `nosingMm`, długość się nie zmienia. Wywołanie bez noska (0) daje sam kontur.
+export function computeWinderBlank(tread, nosingMm = 0) {
   const [inner1, outer1] = tread.frontEdge;
   const dir = { x: outer1.x - inner1.x, y: outer1.y - inner1.y };
   const len = Math.hypot(dir.x, dir.y) || 1;
@@ -23,6 +28,12 @@ export function computeWinderBlank(tread) {
     maxU = Math.max(maxU, u);
     minV = Math.min(minV, v);
     maxV = Math.max(maxV, v);
+  }
+
+  if (nosingMm > 0) {
+    // Krawędź czołowa leży na v = 0 — to ta z granic (minV/maxV), która jest bliżej zera.
+    if (Math.abs(minV) <= Math.abs(maxV)) minV -= nosingMm;
+    else maxV += nosingMm;
   }
 
   const corner = (u, v) => ({ x: inner1.x + u * ux + v * vx, y: inner1.y + u * uy + v * vy });

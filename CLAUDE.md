@@ -380,11 +380,19 @@ No panel or interaction computes geometry.
   'excluded'`, no cost, and are left out of the summary sums). **Stringer** = a normal board from
   the same table (thickness class × board width from the stringer parameter, e.g. 40×330 × its true
   length, e.g. 2660) **+ a surcharge (default +20%, `stringerSurchargePct`)**. **Winder tread** =
-  its PRODUCTION BLANK: `TreadModel.winderBlank` (from `winderBlank.js`, the very same numbers the 2D
-  plan and 3D labels show — currently WITHOUT nosing) is now also the takeoff STOCK for winders,
-  replacing the old bounding rectangle. **Post** = a separate table `postPrices` (smallest section
-  >= the post's, per piece or per running metre; defaults are DREWEX's "Drewniany 80×80/100×100"
-  per-piece prices, so a 110 mm post stays unpriced until a row is added). Priced items get
+  its PRODUCTION BLANK: `TreadModel.winderBlank` (from `winderBlank.js` `computeWinderBlank(tread, nosing)`, the very same
+  numbers the 2D plan and 3D labels show) is now also the takeoff STOCK for winders, replacing the
+  old bounding rectangle. **The blank includes the nosing** (`config.nosing`): the front edge lies on
+  the outline's extreme, so depth grows by exactly the nosing while length is unchanged. **Post** = a separate table `postPrices` (smallest section
+  >= the post's, per piece or per running metre; defaults: DREWEX's "Drewniany 80×80/100×100"
+  per-piece prices plus 110×110 = 200 zł/mb; a larger post stays unpriced until a row is added).
+  **Manual items** (`takeoff/manualItems.js`, `ui/manualItemsEditor.js`): balusters (qty × PLN/pc),
+  handrails (m × PLN/m) and any other rows the user types in — user INPUT, not derived — are turned
+  into `OTHER` items with `pricingSource: 'manual'`, added to the items/total by
+  `applyManualItems()` (not when the takeoff is BLOCKED) and saved in
+  `takeoffSettings.manualItems`. **The cost summary is per category** (`summarizeByCategory()`:
+  Stopnie / Stopnie zabiegowe / Podesty / Podstopnie / Wangi / Słupy, then the manual rows; excluded
+  items are left out; an unpriced item is counted and flagged, never silently added). Priced items get
   `catalogStock: null` (the illustrative C24 catalog does not apply). Tests:
   `takeoff/__tests__/boardPricing.test.js`.
 - **Kosztorys** (`takeoffPanel.js` + pure `takeoffView.js` grouping/summing): NET (finished

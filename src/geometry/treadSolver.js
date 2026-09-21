@@ -40,7 +40,7 @@ import { computeWinderBlank } from './winderBlank.js';
  *   the neighbour's shared edge as a discontinuity.
  * @property {{length:number, depth:number, corners:{x:number,y:number}[]}|null} winderBlank  The
  *   PRODUCTION blank ("formatka") of a winder tread — exactly what the 2D plan and 3D labels show
- *   (winderBlank.js, computed from the unnosed plan outline) — so drawings and the material
+ *   (winderBlank.js, the plan outline plus the nosing, config.nosing) — so drawings and the material
  *   takeoff can never disagree on it. `null` for straight/landing treads.
  * @property {object|null} winderInfo  Passthrough of tread.winderInfo (planLayout.js) — null
  *   for straight/landing treads.
@@ -133,7 +133,7 @@ export function buildTreadModel(tread, config) {
     frontEdge,
     backEdge,
     winderInfo: tread.winderInfo || null,
-    winderBlank: tread.type === 'winder' ? computeWinderBlank(tread) : null,
+    winderBlank: tread.type === 'winder' ? computeWinderBlank(tread, nosing) : null,
     overhang: tread.overhang ?? null,
     outline: applyNosing(tread, effectiveNosing),
   };

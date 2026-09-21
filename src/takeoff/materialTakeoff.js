@@ -85,7 +85,7 @@ function buildTreadItem(t, config, wasteFactors) {
 
   const notes = [];
   if (t.type === 'winder') {
-    notes.push('Wymiar zakupowy (stock) to formatka produkcyjna stopnia zabiegowego — ta sama, którą pokazuje plan 2D (prostokąt opisany na konturze, dłuższy bok wzdłuż krawędzi czołowej; bez noska).');
+    notes.push('Wymiar zakupowy (stock) to formatka produkcyjna stopnia zabiegowego — ta sama, którą pokazuje plan 2D (prostokąt opisany na konturze, dłuższy bok wzdłuż krawędzi czołowej, z noskiem).');
   }
 
   return createTakeoffItem({

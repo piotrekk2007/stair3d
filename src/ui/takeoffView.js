@@ -106,3 +106,53 @@ export function describeDimensions(d) {
   if (!text) return area;
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
+
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy'];
+
+function categoryOf(item, winderStepIds) {
+  if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
+  switch (item.elementType) {
+    case 'TREAD':
+      return winderStepIds?.has(item.sourceElementId.replace(/^tread:/, '')) ? 'Stopnie zabiegowe' : 'Stopnie';
+    case 'LANDING':
+      return 'Podesty';
+    case 'RISER':
+      return 'Podstopnie';
+    case 'STRINGER':
+      return 'Wangi';
+    case 'POST':
+      return 'Słupy';
+    default:
+      return null; // klocki, wpusty — poza kosztorysem
+  }
+}
+
+/**
+ * Podsumowanie kosztu wg kategorii: "Stopnie: … zł; Podstopnie: … zł; Wangi: … zł; …". Kategorie
+ * w stałej kolejności (stopnie, zabiegowe, podesty, podstopnie, wangi, słupy), potem pozycje ręczne
+ * w kolejności wpisania; pusta kategoria się nie pokazuje. Pozycje poza kosztorysem (klocki,
+ * wpusty) są pomijane. Pozycja bez ceny nie wchodzi do sumy, ale jest liczona w `unpriced`, żeby
+ * suma nigdy nie udawała pełnej.
+ *
+ * @param {object[]} items
+ * @param {{winderStepIds?: Set<string>}} [options]  ID stopni zabiegowych ('step-7'), żeby je wydzielić
+ * @returns {{lines: {label:string, count:number, cost:number, unpriced:number, manual:boolean}[], total:number, unpricedCount:number}}
+ */
+export function summarizeByCategory(items, { winderStepIds } = {}) {
+  const byLabel = new Map();
+  for (const item of items) {
+    if (item.status !== 'OK' || item.pricingSource === 'excluded') continue;
+    const label = categoryOf(item, winderStepIds);
+    if (!label) continue;
+    if (!byLabel.has(label)) byLabel.set(label, { label, count: 0, cost: 0, unpriced: 0, manual: item.pricingSource === 'manual' });
+    const line = byLabel.get(label);
+    line.count += item.quantity;
+    if (item.calculatedCost === null) line.unpriced += 1;
+    else line.cost += item.calculatedCost;
+  }
+  const known = CATEGORY_ORDER.filter((l) => byLabel.has(l)).map((l) => byLabel.get(l));
+  const manual = [...byLabel.values()].filter((l) => !CATEGORY_ORDER.includes(l.label));
+  const lines = [...known, ...manual].map((l) => ({ ...l, cost: Math.round(l.cost * 100) / 100 }));
+  const total = Math.round(lines.reduce((s, l) => s + l.cost, 0) * 100) / 100;
+  return { lines, total, unpricedCount: lines.reduce((s, l) => s + l.unpriced, 0) };
+}

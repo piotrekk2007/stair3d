@@ -2,7 +2,7 @@
 // nic tu nie jest liczone poza agregacją z takeoffView.js. NET (gotowy element) i STOCK/
 // ZAMÓWIENIE (surowiec do kupienia) są jawnie rozdzielone wizualnie. Koszt jest ZAWSZE
 // oznaczony jako orientacyjny (ceny domyślne to placeholdery, patrz src/takeoff/pricing.js).
-import { GROUP_BY, groupTakeoffItems, summarizeTakeoff, describeDimensions, elementLabelPl } from './takeoffView.js';
+import { GROUP_BY, groupTakeoffItems, summarizeTakeoff, summarizeByCategory, describeDimensions, elementLabelPl } from './takeoffView.js';
 import { stateBadgeHTML } from './valueState.js';
 
 const UNIT_LABEL = { m3: 'm³', m2: 'm²' };
@@ -36,6 +36,13 @@ function orderText(item) {
 function itemHTML(item, index, selectedItemId) {
   const selected = item.itemId === selectedItemId ? ' selected' : '';
   const optional = item.optional ? ' <span class="tk-tag">opcjonalny</span>' : '';
+  if (item.pricingSource === 'manual') {
+    return `
+      <div class="tk-item manual${selected}" data-item-index="${index}">
+        <div class="tk-item-head"><b>${esc(item.material)}</b> <span class="tk-tag">wpisane ręcznie</span><span class="tk-qty">${item.quantity} ${esc(item.unit)} × ${money(item.unitPrice, item.currency)}</span></div>
+        <div class="tk-foot"><span>${esc(item.unit === 'mb' ? 'cena za metr bieżący' : 'cena za sztukę')}</span><span class="tk-cost">${money(item.calculatedCost, item.currency)}</span></div>
+      </div>`;
+  }
   if (item.status !== 'OK') {
     return `
       <div class="tk-item invalid${selected}" data-item-index="${index}">
@@ -78,52 +85,50 @@ function itemHTML(item, index, selectedItemId) {
 
 function summaryHTML(summary, takeoff, settings) {
   const currency = takeoff.items.find((i) => i.currency)?.currency ?? 'PLN';
-  const rows = summary.rows
-    .map(
-      (r) => `
-      <tr>
-        <td>${esc(r.material)}</td>
-        <td>${measure(r.net, r.unit)}</td>
-        <td>${measure(r.stock, r.unit)}</td>
-        <td>${measure(r.withWaste, r.unit)}</td>
-        <td>${money(r.cost, currency)}</td>
-      </tr>`
-    )
+  const categories = summarizeByCategory(takeoff.items, { winderStepIds: settings.winderStepIds });
+
+  const lines = categories.lines
+    .map((l) => {
+      const count = l.manual ? '' : ` <span class="tk-muted">(${l.count} szt.)</span>`;
+      const warn = l.unpriced > 0 ? ` <span class="tk-warn" title="Pozycje bez ceny nie wchodzą do sumy">⚠ ${l.unpriced} bez ceny</span>` : '';
+      return `<div class="tk-cat"><span>${esc(l.label)}${count}${warn}</span><b>${money(l.cost, currency)}</b></div>`;
+    })
     .join('');
 
-  const prices = (settings.priceList || []).map((p) => `${esc(p.materialId)}: ${p.price} ${esc(p.currency)}/${p.unit === 'volume' ? 'm³' : p.unit === 'area' ? 'm²' : 'szt.'}`).join('; ');
+  const prices = (settings.priceList || [])
+    .filter((p) => p.materialId === 'sheet-plywood-mdf')
+    .map((p) => `${esc(p.materialId)}: ${p.price} ${esc(p.currency)}/m²`)
+    .join('; ');
   const waste = Object.entries(settings.wasteFactors || {})
+    .filter(([type]) => type === 'RISER')
     .map(([type, f]) => `${esc(elementLabelPl(type))} ${(f * 100).toFixed(0)}%`)
     .join(', ');
 
   const bp = settings.boardPricing;
   const boardLine = bp
-    ? `<div>Stopnie, stopnie zabiegowe (wg formatek produkcyjnych), podesty${bp.riserMaterial === 'oak' ? ', podstopnie' : ''} i wangi: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie. Wangi z dopłatą <b>+${bp.stringerSurchargePct ?? 0}%</b>.</div>
-        <div>Słupy: cennik słupów wg przekroju. Klocki i wpusty wangi nie są liczone.</div>`
+    ? `<div>Stopnie, stopnie zabiegowe (wg formatek produkcyjnych, z noskiem), podesty${bp.riserMaterial === 'oak' ? ', podstopnie' : ''} i wangi: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie. Wangi z dopłatą <b>+${bp.stringerSurchargePct ?? 0}%</b>.</div>
+        <div>Słupy: cennik słupów wg przekroju. Klocki i wpusty wangi nie są liczone. Tralki i poręcze — wyłącznie pozycje wpisane ręcznie.</div>`
     : '';
+
   const caveats = [];
-  if (summary.unpricedCount > 0) caveats.push(`${summary.unpricedCount} pozycji bez ceny w cenniku — nie wliczone do sumy.`);
-  if (summary.invalidCount > 0) caveats.push(`${summary.invalidCount} pozycji bez wyliczonej ilości (INVALID/UNSUPPORTED) — nie wliczone do sumy.`);
   const waivedCount = takeoff.waivedDiagnostics?.length ?? 0;
   if (waivedCount > 0) caveats.push(`Kosztorys policzony mimo ${waivedCount} zaakceptowanych wyjątków walidacji — nie oznacza to, że geometria jest poprawna.`);
-  if (summary.optionalCount > 0) caveats.push(`Suma zawiera ${summary.optionalCount} pozycji opcjonalnych (np. klocki wangi nakładanej).`);
+  if (categories.unpricedCount > 0) caveats.push(`${categories.unpricedCount} pozycji bez ceny — nie wliczone do sumy (szczegóły przy pozycjach poniżej).`);
+  if (summary.invalidCount > 0) caveats.push(`${summary.invalidCount} pozycji bez wyliczonej ilości (INVALID/UNSUPPORTED) — nie wliczone do sumy.`);
 
   return `
     <div class="tk-summary">
-      <div class="tk-summary-title">Podsumowanie materiału ${stateBadgeHTML('auto')}</div>
-      <table class="tk-summary-table">
-        <thead><tr><th>Materiał</th><th>NET</th><th>STOCK</th><th>z odpadem</th><th>Koszt</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="tk-summary-title">Podsumowanie kosztu ${stateBadgeHTML('auto')}</div>
+      <div class="tk-cats">${lines || '<div class="tk-muted">Brak pozycji do wyceny.</div>'}</div>
       <div class="tk-total">
         <span>Szacowany koszt materiału (orientacyjny)</span>
-        <b>≈ ${money(summary.totalCost, currency)}</b>
+        <b>≈ ${money(categories.total, currency)}</b>
       </div>
       <div class="tk-assumptions">
         <b>Założenia (nie jest to oferta handlowa):</b>
         ${boardLine}
-        ${bp && bp.riserMaterial === 'mdf' ? `<div>Podstopnie z płyty MDF — cena za m² (${prices || 'brak'}); odpad wg typu elementu: ${waste || 'domyślny'}.</div>` : ''}
-        <div>Koszt liczony od ilości STOCK (nie od NET). Kosztorys obejmuje wyłącznie materiał: stopnie, stopnie zabiegowe, podesty, podstopnie, wangi i słupy — bez robocizny, montażu, wykończenia i transportu.</div>
+        ${bp && bp.riserMaterial === 'mdf' ? `<div>Podstopnie z płyty MDF — cena za m² (${prices || 'brak'}); odpad: ${waste || 'domyślny'}.</div>` : ''}
+        <div>Koszt liczony od ilości STOCK (nie od NET). Kosztorys obejmuje wyłącznie materiał: stopnie, stopnie zabiegowe, podesty, podstopnie, wangi i słupy (plus pozycje ręczne) — bez robocizny, montażu, wykończenia i transportu.</div>
         ${caveats.map((c) => `<div class="tk-warn">${esc(c)}</div>`).join('')}
       </div>
     </div>`;
@@ -144,6 +149,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
       <button type="button" data-action="csv" title="Pobierz zestawienie jako CSV">CSV</button>
       <button type="button" data-action="txt" title="Pobierz raport tekstowy">Raport TXT</button>
     </div>
+    <div id="takeoff-manual"></div>
     <div id="takeoff-pricing"></div>
     <div id="takeoff-banner" hidden></div>
     <div id="takeoff-body"></div>

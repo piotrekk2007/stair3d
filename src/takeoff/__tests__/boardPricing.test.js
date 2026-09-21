@@ -238,7 +238,7 @@ test('a winder tread is priced from its PRODUCTION BLANK — the same one the 2D
   assert.ok(winders.length > 0);
   for (const w of winders) {
     const planTread = m.planLayout.treads[w.index];
-    const shownOnPlan = computeWinderBlank(planTread); // exactly what plan2dRenderer draws
+    const shownOnPlan = computeWinderBlank(planTread, m.fullConfig.nosing); // exactly what plan2dRenderer draws
     assert.equal(w.winderBlank.length, shownOnPlan.length);
     assert.equal(w.winderBlank.depth, shownOnPlan.depth);
     const item = t.items.find((i) => i.sourceElementId === 'tread:' + w.stepId);
@@ -249,22 +249,26 @@ test('a winder tread is priced from its PRODUCTION BLANK — the same one the 2D
   }
 });
 
-test('posts: the smallest listed section that is >= the post section is used; a bigger post stays unpriced with an explanation', () => {
+test('posts: the smallest listed section >= the post section is used; a bigger post stays unpriced with an explanation', () => {
   const ok = buildPricedMaterialTakeoff(models({ postSize: 90 }), { boardPricing: createDefaultBoardPricing() });
   const post = ok.items.find((i) => i.elementType === 'POST');
   assert.equal(post.pricingSource, 'post-table');
-  assert.equal(post.calculatedCost, 160, '90 mm post -> the 100x100 row');
+  assert.equal(post.calculatedCost, 160, '90 mm post -> the 100x100 row (per piece)');
 
-  const big = buildPricedMaterialTakeoff(models({ postSize: 110 }), { boardPricing: createDefaultBoardPricing() });
+  const std = buildPricedMaterialTakeoff(models({ postSize: 110 }), { boardPricing: createDefaultBoardPricing() });
+  const p110 = std.items.find((i) => i.elementType === 'POST');
+  assert.equal(p110.priceUnit, 'mb');
+  assert.equal(p110.calculatedCost, Math.round(200 * (p110.calculatedDimensions.heightMm / 1000) * 100) / 100, '110x110 = 200 zł/mb');
+
+  const big = buildPricedMaterialTakeoff(models({ postSize: 120 }), { boardPricing: createDefaultBoardPricing() });
   const bigPost = big.items.find((i) => i.elementType === 'POST');
   assert.equal(bigPost.calculatedCost, null);
   assert.ok(bigPost.notes.some((n) => n.startsWith('Brak ceny słupa')));
 
   const bp = createDefaultBoardPricing();
-  bp.postPrices.push({ sectionMm: 120, price: 30, unit: 'mb' });
-  const priced = buildPricedMaterialTakeoff(models({ postSize: 110 }), { boardPricing: bp });
-  const p = priced.items.find((i) => i.elementType === 'POST');
-  assert.equal(p.calculatedCost, Math.round(30 * (p.calculatedDimensions.heightMm / 1000) * 100) / 100);
+  bp.postPrices.push({ sectionMm: 120, price: 30, unit: 'szt' });
+  const priced = buildPricedMaterialTakeoff(models({ postSize: 120 }), { boardPricing: bp });
+  assert.equal(priced.items.find((i) => i.elementType === 'POST').calculatedCost, 30);
 });
 
 test('the cost covers material only: cleats and housings are excluded, not priced', () => {
@@ -316,4 +320,37 @@ test('changing a price in the table changes only cost, never the quantities', ()
 test('without boardPricing the behaviour is exactly the previous generic pricing', () => {
   const t = buildPricedMaterialTakeoff(models());
   assert.ok(t.items.every((i) => !i.pricingSource));
+});
+
+// ---- nosek w formatce zabiegowej ----
+
+test('the winder blank includes the nosing: depth grows by exactly the nosing, length and corners stay consistent', () => {
+  const m = models({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, treadsLegB: 3, windersPerTurn: 5, treadGoing: 280, totalRise: 2800, openingLength: 6000, openingWidth: 3000 });
+  const winder = m.planLayout.treads.find((t) => t.type === 'winder');
+  const bare = computeWinderBlank(winder, 0);
+  const nosed = computeWinderBlank(winder, 25);
+  assert.ok(Math.abs(nosed.depth - (bare.depth + 25)) < 1e-9);
+  assert.ok(Math.abs(nosed.length - bare.length) < 1e-9);
+  const side = (c) => Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
+  assert.ok(Math.abs(side(nosed.corners) - nosed.length) < 1e-6);
+  const other = Math.hypot(nosed.corners[3].x - nosed.corners[0].x, nosed.corners[3].y - nosed.corners[0].y);
+  assert.ok(Math.abs(other - nosed.depth) < 1e-6);
+});
+
+test('the nosing is extended toward the FRONT: the blank still contains the whole tread outline', () => {
+  const m = models({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, treadsLegB: 3, windersPerTurn: 5, treadGoing: 280, totalRise: 2800, openingLength: 6000, openingWidth: 3000 });
+  const winder = m.planLayout.treads.find((t) => t.type === 'winder');
+  const { corners } = computeWinderBlank(winder, 25);
+  const [c0, c1, , c3] = corners;
+  const ux = (c1.x - c0.x) / Math.hypot(c1.x - c0.x, c1.y - c0.y);
+  const uy = (c1.y - c0.y) / Math.hypot(c1.x - c0.x, c1.y - c0.y);
+  const vx = (c3.x - c0.x) / Math.hypot(c3.x - c0.x, c3.y - c0.y);
+  const vy = (c3.y - c0.y) / Math.hypot(c3.x - c0.x, c3.y - c0.y);
+  const depth = Math.hypot(c3.x - c0.x, c3.y - c0.y);
+  const length = Math.hypot(c1.x - c0.x, c1.y - c0.y);
+  for (const p of winder.outline) {
+    const u = (p.x - c0.x) * ux + (p.y - c0.y) * uy;
+    const v = (p.x - c0.x) * vx + (p.y - c0.y) * vy;
+    assert.ok(u >= -1e-6 && u <= length + 1e-6 && v >= -1e-6 && v <= depth + 1e-6);
+  }
 });
