@@ -231,7 +231,9 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 
 ## 15. Known limitations
 
-* The end clamps (`clampCrossSegmentOvershoot` at a corner post, the floor trim) act on the mesh polylines;
-  the curves are re-synchronised at the board start, but a clamp can leave a small tangent break there.
+* The upper edge of a housed board after a corner post is still clamped flush to the neighbour's top end
+  (`clampCrossSegmentOvershoot`); the lower edge is not (it used to be, which made a beak at the start of a
+  steep board). That top clamp can shave ~1 mm off the local depth of a housed board there — `localDepthMm`
+  is measured before the end clamps and does not include it.
 * `localDepthMm` is measured before the end clamps, so it does not reflect them.
 * Overrides are not yet exposed in the UI (data, events and view model only).

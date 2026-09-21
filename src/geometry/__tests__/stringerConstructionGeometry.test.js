@@ -368,9 +368,13 @@ test('joint bug fix: a lap-jointed INNER stringer (hasCornerPost: false) also ge
     const a = geometries[i];
     const b = geometries[i + 1];
     if (!a.bottomProfile || !b.bottomProfile) continue;
-    const aEnd = a.bottomProfile[a.bottomProfile.length - 1];
-    const bStart = b.bottomProfile[0];
-    assert.ok(Math.abs(aEnd.v - bStart.v) < 1e-6, `${a.segmentId}/${b.segmentId}: gap of ${(aEnd.v - bStart.v).toFixed(1)}mm at the lap joint`);
+    // A postless lap joint makes the boards OVERLAP by one board thickness, so the two ends are
+    // not at the same place; the joint itself is the plane at a's length / b's u=0 — compare the
+    // two lower edges THERE.
+    const jointU = a.pitchProfile[a.pitchProfile.length - 1].u;
+    const aAtJoint = valueAtU(a.bottomProfile, jointU);
+    const bAtJoint = valueAtU(b.bottomProfile, 0);
+    assert.ok(Math.abs(aAtJoint - bAtJoint) < 1e-6, `${a.segmentId}/${b.segmentId}: gap of ${(aAtJoint - bAtJoint).toFixed(1)}mm at the lap joint`);
   }
 });
 
@@ -456,19 +460,43 @@ test('spike bug fix: the profile never overshoots more than roughly one riser he
 // below where it physically belongs: reported as one board's end visibly drooping/stretching
 // past where the post-jointed neighbour's own end already sits.
 
-test('overshoot bug fix: a narrow-tread inner segment\'s bottom start never drops below the previous segment\'s own bottom end', () => {
-  const { config, planLayout } = build({ ...REALISTIC_WINDER, hasCornerPost: true, stringerConstructionType: 'cut' });
-  const model = buildStringerModel(planLayout, config, 'inner');
-  const geometries = buildStringerConstructionGeometry(model, config);
-  for (let i = 1; i < geometries.length; i++) {
-    const prev = geometries[i - 1];
-    const curr = geometries[i];
-    if (!prev.bottomProfile || !curr.bottomProfile) continue;
-    const prevEnd = prev.bottomProfile[prev.bottomProfile.length - 1];
-    const currStart = curr.bottomProfile[0];
-    assert.ok(currStart.v >= prevEnd.v - 1e-6, `${curr.segmentId}'s bottom start (${currStart.v}) drops below ${prev.segmentId}'s bottom end (${prevEnd.v})`);
-  }
-});
+// SUPERSEDED. This test used to assert the opposite — that such a board's bottom start is raised to
+// the previous board's bottom end. That clamp turned the start of a steep board (narrow dusza treads
+// after a winder post) into a beak and pushed the local depth below the minimum (reported with a
+// screenshot of inner-seg-1). The lower edge now runs straight to the start face, lower than the
+// neighbour's end if it must; the post covers the difference.
+for (const constructionType of ['cut', 'closed']) {
+  test(`start-of-board fix (${constructionType}): a post-jointed steep board's lower edge runs straight to its start face — no beak, never shallower than the minimum depth`, () => {
+    const layouts = [
+      build({ ...REALISTIC_WINDER, hasCornerPost: true, stringerConstructionType: constructionType }),
+      build({ stairType: 'L', treadsLegA: 5, treadsLegB: 5, windersPerTurn: 5, totalRise: 2800, treadGoing: 270, hasCornerPost: true, stringerConstructionType: constructionType }),
+    ];
+    for (const { config, planLayout } of layouts) {
+      const model = buildStringerModel(planLayout, config, 'inner');
+      const geometries = buildStringerConstructionGeometry(model, config);
+      assert.ok(geometries.length > 1);
+      for (let i = 1; i < geometries.length; i++) {
+        const g = geometries[i];
+        // Measured from the pitch curve R (the reference the lower edge is generated from). A housed board's
+        // upper edge sits topMargin above R, so its lower edge is (depth - topMargin) from R.
+        const required = config.minimumStringerDepthMm - (constructionType === 'closed' ? config.stringerTopMarginMm : 0);
+        // every point of the lower edge, INCLUDING the start face, keeps that depth
+        for (const p of g.bottomProfile) {
+          const depth = distancePointToPolyline(p, g.pitchProfile);
+          assert.ok(depth >= required - 1e-3, `${g.segmentId}: lower edge point (${p.u.toFixed(0)},${p.v.toFixed(0)}) is only ${depth.toFixed(1)} mm deep`);
+        }
+        // the start of the lower edge is on the SAME straight line as the next control vertex (no kink at the start)
+        if (g.bottomProfile.length >= 3) {
+          const [a, b, c] = g.bottomProfile;
+          const dirA = Math.atan2(b.v - a.v, b.u - a.u);
+          const dirB = Math.atan2(c.v - b.v, c.u - b.u);
+          const bendDeg = Math.abs(((dirB - dirA) * 180) / Math.PI);
+          assert.ok(bendDeg < 45, `${g.segmentId}: the lower edge bends ${bendDeg.toFixed(0)} degrees right after its start (a beak)`);
+        }
+      }
+    }
+  });
+}
 
 test('overshoot bug fix: clamping does not touch a lap-jointed pair (already exactly continuous)', () => {
   const { config, planLayout } = build(REALISTIC_WINDER); // outer side is always a lap joint

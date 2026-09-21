@@ -634,12 +634,12 @@ function clampCrossSegmentOvershoot(orderedGeometries) {
     if (!prev.bottomProfile || !curr.bottomProfile) continue;
     let changed = false;
 
-    const prevBottomEnd = prev.bottomProfile[prev.bottomProfile.length - 1];
-    const currBottomStart = curr.bottomProfile[0];
-    if (currBottomStart.v < prevBottomEnd.v) {
-      currBottomStart.v = prevBottomEnd.v; // mutates the shared point object — see outerContour note below
-      changed = true;
-    }
+    // The LOWER contour is deliberately NOT clamped to the neighbour's end. It used to be raised to
+    // the previous board's bottom end, which turned the start of a steep board (the narrow "dusza"
+    // treads after a winder post) into a beak: the first edge no longer followed the board's own
+    // straight line, and the local depth there fell BELOW the minimum. The lower edge now runs
+    // straight to the start face, lower than the neighbour's end if it must — the post covers the
+    // difference. (Reported with a screenshot of inner-seg-1; see the regression test.)
 
     if (prev.topProfile && curr.topProfile) {
       const prevTopEnd = prev.topProfile[prev.topProfile.length - 1];

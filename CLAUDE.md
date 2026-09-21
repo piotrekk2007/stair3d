@@ -189,6 +189,13 @@ segment's own boundary so it never crosses past the immediately preceding segmen
 corresponding boundary — a sanity bound, not a continuity requirement, so a `LAP_JOINT` pair
 (already exactly continuous) is untouched. See §15 of the same doc.
 
+**Superseded (start of a post-jointed board):** the lower contour is no longer clamped up to the
+previous board's bottom end. That clamp turned the start of a steep board (the narrow "dusza" treads
+after a winder post) into a beak — the first edge left its own straight line and the local depth there
+fell below the minimum (reported with a screenshot of `inner-seg-1`). The lower edge now runs straight
+to the start face, lower than the neighbour's end if it must (the post covers it); only the upper edge of a
+housed board is still clamped flush to the neighbour's top end.
+
 **Fifth follow-up: the very first segment's own bottom extended below the floor.** Unlike a
 joint, the very first segment of a run has no preceding segment to clamp against — reaching its
 own start boundary extrapolates its local pitch slope backward past the first real bearing,
