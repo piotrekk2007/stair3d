@@ -40,7 +40,10 @@ export function checkWalklineConsistency(walklineModel, treadModels) {
   for (let i = 0; i < walklineModel.points.length - 1; i++) {
     const a = walklineModel.points[i];
     const b = walklineModel.points[i + 1];
-    if (!pointsEqual(a.back, b.front)) {
+    // Wysunięcie krawędzi jednego stopnia zmienia jego szerokość, więc ten sam odsunięcie od duszy
+    // wypada w innym punkcie niż u sąsiada — to skutek celowej edycji, nie niespójność linii biegu.
+    const overhungNeighbour = treadModels[i].overhang || treadModels[i + 1].overhang;
+    if (!overhungNeighbour && !pointsEqual(a.back, b.front)) {
       diags.push(
         finding(
           'ERROR',

@@ -214,8 +214,12 @@ export function checkTopologicalContinuity(treadModels) {
   for (let i = 0; i < treadModels.length - 1; i++) {
     const a = treadModels[i];
     const b = treadModels[i + 1];
-    const innerOk = pointsEqual(a.backEdge.final[0], b.frontEdge.final[0]);
-    const outerOk = pointsEqual(a.backEdge.final[1], b.frontEdge.final[1]);
+    // Celowe wysunięcie krawędzi bocznej JEDNEGO stopnia (manualTreadOverhangs) z definicji nie
+    // dzieli punktu z sąsiadem po tej stronie — to nie jest przerwa w ciągłości biegu.
+    const innerOverhung = a.overhang?.side === 'inner' || b.overhang?.side === 'inner';
+    const outerOverhung = a.overhang?.side === 'outer' || b.overhang?.side === 'outer';
+    const innerOk = innerOverhung || pointsEqual(a.backEdge.final[0], b.frontEdge.final[0]);
+    const outerOk = outerOverhung || pointsEqual(a.backEdge.final[1], b.frontEdge.final[1]);
     if (!innerOk || !outerOk) {
       diags.push(
         err('CONSTRAINT-TOPOLOGY-CONTINUITY', 'tread', b.stepId, `Granica między stopniem ${a.stepId} a ${b.stepId} nie jest ciągła (${!innerOk ? 'strona wewnętrzna' : ''}${!innerOk && !outerOk ? ' i ' : ''}${!outerOk ? 'strona zewnętrzna' : ''}).`, {

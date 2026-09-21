@@ -104,3 +104,21 @@ test('manualEdgeOverrides and manualTreadOverhangs can be combined without inter
   assert.deepEqual(edited.treads[3].outline, base.treads[3].outline, 'tread 3 is untouched by either edit');
   assert.deepEqual(edited.treads[5].outline, base.treads[5].outline, 'tread 5 is untouched by either edit');
 });
+
+test('an intentional overhang is NOT reported as a topology/walkline discontinuity, but is reported as a manual edit', async () => {
+  const { validateStaircase } = await import('../../validator/StaircaseValidator.js');
+  const config = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, openingLength: 6000, manualTreadOverhangs: { 4: { side: 'inner', offsetMm: 85 } } };
+  const { diagnostics } = validateStaircase(config);
+  const ids = diagnostics.map((d) => d.ruleId);
+  assert.ok(!ids.includes('CONSTRAINT-TOPOLOGY-CONTINUITY'), 'overhang must not read as a broken boundary');
+  assert.ok(!ids.includes('VALIDATOR-WALKLINE-CONTINUITY'), 'overhang must not read as a broken walkline');
+  assert.ok(ids.includes('VALIDATOR-MANUAL-OVERRIDE'), 'the edit must still be announced as a manual change');
+});
+
+test('a genuinely broken shared boundary (no overhang involved) is still reported', async () => {
+  const { checkTopologicalContinuity } = await import('../../constraints/geometricConstraints.js');
+  const mk = (id, back, front) => ({ stepId: id, overhang: null, frontEdge: { final: front }, backEdge: { final: back } });
+  const a = mk('step-0', [{ x: 0, y: 1 }, { x: 9, y: 1 }], [{ x: 0, y: 0 }, { x: 9, y: 0 }]);
+  const b = mk('step-1', [{ x: 0, y: 2 }, { x: 9, y: 2 }], [{ x: 5, y: 1 }, { x: 9, y: 1 }]);
+  assert.equal(checkTopologicalContinuity([a, b]).length, 1);
+});

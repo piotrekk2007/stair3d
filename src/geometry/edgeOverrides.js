@@ -170,6 +170,10 @@ export function applyTreadOverhangs(treads, overhangs) {
       retargetPoint(tread, front.newPoint, front.oldPoint);
       retargetPoint(tread, back.newPoint, back.oldPoint);
       console.warn(`Pominięto wysunięcie krawędzi stopnia ${treadIndex}: wynikowy kształt byłby niepoprawny.`);
+    } else {
+      // Znacznik dla dalszych warstw (TreadModel -> walidator): ta krawędź została WYSUNIĘTA
+      // celowo, więc brak ciągłości z sąsiadem po tej stronie nie jest defektem geometrii.
+      tread.overhang = { side: overhang.side === 'inner' ? 'inner' : 'outer', offsetMm: overhang.offsetMm };
     }
   }
 

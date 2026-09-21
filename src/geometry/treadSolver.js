@@ -33,6 +33,10 @@ import { shiftFrontEdge } from './nosingUtils.js';
  * @property {{atFront:number, atBack:number}} widths
  * @property {TreadEdgeInfo} frontEdge
  * @property {TreadEdgeInfo} backEdge
+ * @property {{side:'inner'|'outer', offsetMm:number}|null} overhang  Set only when a manual
+ *   per-tread overhang (config.manualTreadOverhangs) was actually applied — an INTENTIONAL
+ *   lateral extension of this one tread, so validators must not read the resulting mismatch with
+ *   the neighbour's shared edge as a discontinuity.
  * @property {object|null} winderInfo  Passthrough of tread.winderInfo (planLayout.js) — null
  *   for straight/landing treads.
  * @property {{x:number,y:number}[]} outline  FINAL, nosed footprint — the real as-built shape.
@@ -124,6 +128,7 @@ export function buildTreadModel(tread, config) {
     frontEdge,
     backEdge,
     winderInfo: tread.winderInfo || null,
+    overhang: tread.overhang ?? null,
     outline: applyNosing(tread, effectiveNosing),
   };
 }
