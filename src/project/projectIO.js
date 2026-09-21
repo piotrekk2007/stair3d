@@ -17,19 +17,30 @@ export const CURRENT_PROJECT_VERSION = 2;
 // oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
 // środowiska przeglądarki (downloadTextFile potrzebuje document/Blob, których nie ma w
 // środowisku testowym node:test).
-export function buildProjectPayloadV2(config) {
+//
+// `meta` (opcjonalne, etap 10): metadane projektu NIEBĘDĄCE parametrami geometrii — nazwa,
+// notatki oraz ustawienia wyceny (cennik, odpady). Trafiają jako osobne top-level pola pliku,
+// obok `config`/`edgeOverrides` (tak samo jak wcześniej edgeOverrides) — nigdy do `config`, bo
+// cena/notatka nie jest wejściem solvera i nie ma wchodzić do historii modelu. Pola są
+// OPCJONALNE, więc starszy plik v2 bez nich nadal się wczytuje (brak pola ≠ błąd) i wersja
+// schematu się nie zmienia.
+export function buildProjectPayloadV2(config, meta = {}) {
   const { manualEdgeOverrides, ...configWithoutOverrides } = config;
-  return {
+  const payload = {
     _type: PROJECT_TYPE,
     _version: CURRENT_PROJECT_VERSION,
     savedAt: new Date().toISOString(),
     config: configWithoutOverrides,
     edgeOverrides: manualEdgeOverrides || {},
   };
+  if (meta.projectName) payload.projectName = meta.projectName;
+  if (meta.notes) payload.notes = meta.notes;
+  if (meta.takeoffSettings) payload.takeoffSettings = meta.takeoffSettings;
+  return payload;
 }
 
-export function exportProjectJSON(config, filename = 'schody_projekt.json') {
-  const payload = buildProjectPayloadV2(config);
+export function exportProjectJSON(config, filename = 'schody_projekt.json', meta = {}) {
+  const payload = buildProjectPayloadV2(config, meta);
   downloadTextFile(JSON.stringify(payload, null, 2), filename, 'application/json');
 }
 
@@ -55,6 +66,12 @@ const MIGRATIONS = {
 // go zmigrować do bieżącej wersji. Zwraca PŁASKI config gotowy do użycia w runtime (z
 // manualEdgeOverrides z powrotem zagnieżdżonym — patrz uwaga o zakresie na górze pliku).
 export function parseProjectJSON(text) {
+  return parseProjectFile(text).config;
+}
+
+// Pełny odczyt pliku: płaski config (jak parseProjectJSON) + metadane (nazwa, notatki, ustawienia
+// wyceny, wersja schematu pliku, czas zapisu). Brakujące pola metadanych => wartości puste.
+export function parseProjectFile(text) {
   let data;
   try {
     data = JSON.parse(text);
@@ -73,5 +90,14 @@ export function parseProjectJSON(text) {
     version = data._version;
   }
 
-  return { ...data.config, manualEdgeOverrides: data.edgeOverrides || {} };
+  return {
+    config: { ...data.config, manualEdgeOverrides: data.edgeOverrides || {} },
+    meta: {
+      projectName: typeof data.projectName === 'string' ? data.projectName : '',
+      notes: typeof data.notes === 'string' ? data.notes : '',
+      takeoffSettings: data.takeoffSettings && typeof data.takeoffSettings === 'object' ? data.takeoffSettings : null,
+      schemaVersion: version,
+      savedAt: typeof data.savedAt === 'string' ? data.savedAt : null,
+    },
+  };
 }

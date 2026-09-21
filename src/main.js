@@ -2,38 +2,35 @@ import * as THREE from 'three';
 import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase } from './geometry/buildStaircase.js';
+import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
 import { buildDebugOverlay } from './scene/debugOverlay.js';
 import { resolveTraceability } from './scene/elementInspector.js';
-import {
-  createUI,
-  createInfoPanel,
-  updateInfoPanel,
-  createStepInfoPanel,
-  updateStepInfoPanel,
-  createValidatorPanel,
-  updateValidatorPanel,
-  createElementInspectorPanel,
-  updateElementInspectorPanel,
-  refreshUI,
-} from './ui/ui.js';
-import { validateModels } from './validator/StaircaseValidator.js';
+import { applySelectionHighlight } from './scene/selectionHighlight.js';
+import { createUI, createInfoPanel, updateInfoPanel, createValidatorPanel, updateValidatorPanel, markValidatorSelection, refreshUI } from './ui/ui.js';
+import { createWorkspace } from './ui/workspace.js';
+import { createInspectorPanel, updateInspectorPanel, selectionLabel } from './ui/inspectorPanel.js';
+import { createTakeoffPanel, updateTakeoffPanel, markTakeoffSelection } from './ui/takeoffPanel.js';
+import { createViewportHud, LAYERS_3D } from './ui/viewportHud.js';
+import { GROUP_BY } from './ui/takeoffView.js';
+import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
+import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffToTextReport } from './takeoff/index.js';
+import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
+import { downloadTextFile } from './export/downloadTextFile.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
-import { exportProjectJSON, parseProjectJSON } from './project/projectIO.js';
+import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
 
+// ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
+// a wszystkie panele/widoki są renderowane z już-rozwiązanych modeli. Żaden panel ani interakcja
+// nie liczy geometrii: model -> rebuild() -> modele -> (2D SVG | 3D renderer | walidacja | kosztorys).
 const app = document.getElementById('app');
-const viewport = document.createElement('div');
-viewport.id = 'viewport';
-app.appendChild(viewport);
-
-const { scene, camera, renderer } = createScene(viewport);
 
 const config = createDefaultConfig();
 const viewState = {
@@ -42,13 +39,17 @@ const viewState = {
   showStringerLengths: false,
   showWinderBlanks: false,
   // Debug mode (src/scene/debugOverlay.js): reference lines, construction points,
-  // intersections, normals, bearing positions — pure visualization of already-solved model
-  // data, never a second geometry computation.
+  // intersections, normals, bearing positions, naruszenia reguł — czysta wizualizacja
+  // już-rozwiązanych danych modelu, nigdy drugie liczenie geometrii.
   showDebug: false,
   plan2dShowWinderBlanks: true,
   plan2dEditMode: false,
-  // Warstwy linii konstrukcyjnych na planie 2D (wymaganie 5 i 7) — czysto wizualne, nie
-  // zapisywane w projekcie (to nie jest część modelu geometrycznego, jak manualEdgeOverrides).
+  // Tryb prezentacji: czysto wizualny (chowa panele i nakładki techniczne) — NIE dotyka `config`.
+  clientMode: false,
+  view: '2d', // '2d' | '3d' — 2D jest głównym środowiskiem technicznym
+  // Widoczność warstw 3D (grupy Three.js po nazwie) — tylko podgląd, eksport OBJ/DAE ich nie widzi.
+  layers3d: Object.fromEntries(LAYERS_3D.map(([key]) => [key, true])),
+  // Warstwy linii konstrukcyjnych na planie 2D — czysto wizualne, nie zapisywane w projekcie.
   plan2dLayers: {
     grid: false,
     axes: false,
@@ -57,24 +58,93 @@ const viewState = {
     runBoundaries: true,
     stepBoundaries: false,
     stringers: true,
+    winderWidth: false,
+    stringerSpacing: false,
   },
 };
 const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: true };
 
-// Historia cofania (wymaganie 12) działa WYŁĄCZNIE na modelu (config) — nigdy na widoku
-// (kamera 3D, pan/zoom planu, zaznaczenie) ani na wyrenderowanych meshach.
+// Wycena to warstwa Material Takeoff, NIE parametr geometrii: osobny stan, poza `config` i poza
+// historią modelu (zmiana ceny nie jest "cofnięciem schodów"), ale zapisywany w pliku projektu.
+const takeoffSettings = {
+  priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
+  wasteFactors: { ...DEFAULT_WASTE_FACTORS },
+};
+const projectMeta = { name: '', notes: '', lastFileNote: '' };
+let takeoffGroupBy = GROUP_BY.ELEMENT;
+
+// Zaznaczenie (wspólne dla 2D, 3D, Walidacji i Kosztorysu) — kształt z ui/selection.js. Nie jest
+// stanem modelu: nie trafia do historii ani do pliku projektu.
+let selection = null;
+let selectedStepIndex = null; // pochodna `selection` dla tread/riser — używana przez plan 2D
+let selectedDiagnostic = null;
+let selectedTakeoffItemId = null;
+
+// Historia cofania działa WYŁĄCZNIE na modelu (config) — nigdy na widoku, zaznaczeniu ani meshach.
 const history = createHistory(config);
+
+let currentRoot = null;
+let currentCeiling = null;
+let currentDimLabels = null;
+let currentStringerLengthLabels = null;
+let currentWinderBlankLabels = null;
+let currentDebugOverlay = null;
+let currentPlanLayout = null;
+let currentDerived = null;
+let currentPlan2DSVG = '';
+let lastModels = null;
+let lastDiagnostics = [];
+let lastTakeoff = null;
+let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
+
+const PLAN_VIEW_MARGIN_MM = 600;
+
+// ---------------------------------------------------------------------------------------------
+// Workspace (layout) + widok 3D
+// ---------------------------------------------------------------------------------------------
+const ws = createWorkspace(app, {
+  onNew: handleNewProject,
+  onSave: handleSaveProject,
+  onLoad: () => fileInput.click(),
+  onUndo: handleUndo,
+  onRedo: handleRedo,
+  onViewChange: (view) => setView(view),
+  onToggleClientMode: () => setClientMode(!viewState.clientMode),
+  onProjectNameChange: (name) => {
+    projectMeta.name = name;
+    document.title = name ? `${name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
+  },
+  onProjectNotesChange: (notes) => {
+    projectMeta.notes = notes;
+  },
+});
+
+const viewport = document.createElement('div');
+viewport.id = 'viewport';
+ws.mainEl.appendChild(viewport);
+
+const sceneApi = createScene(viewport);
+const { scene, renderer } = sceneApi;
+
+// ---------------------------------------------------------------------------------------------
+// Historia (undo/redo na poziomie modelu)
+// ---------------------------------------------------------------------------------------------
+function updateHistoryButtons() {
+  ws.setHistoryState({ canUndo: canUndo(history), canRedo: canRedo(history) });
+}
 
 function commitHistory() {
   commit(history, config);
+  updateHistoryButtons();
 }
 
 function restoreFromHistory(snapshot) {
   if (!snapshot) return;
   Object.assign(config, snapshot);
   refreshUI(gui);
-  selectedStepIndex = null;
+  clearSelectionState();
   rebuild();
+  updateHistoryButtons();
 }
 
 function handleUndo() {
@@ -85,6 +155,9 @@ function handleRedo() {
 }
 
 window.addEventListener('keydown', (e) => {
+  // W polach tekstowych (nazwa/notatki projektu) Ctrl+Z ma cofać tekst, nie model schodów.
+  const tag = e.target?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
   const isRedo = ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y');
   if (isUndo) {
@@ -96,132 +169,122 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-let currentRoot = null;
-let currentCeiling = null;
-let currentDimLabels = null;
-let currentStringerLengthLabels = null;
-let currentWinderBlankLabels = null;
-let currentDebugOverlay = null;
-let currentPlanLayout = null;
-let currentDerived = null;
-let currentPlan2DSVG = '';
-let selectedStepIndex = null;
-let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
-
-const PLAN_VIEW_MARGIN_MM = 600;
-
+// ---------------------------------------------------------------------------------------------
+// rebuild(): model -> solvery -> render 3D / plan 2D / walidacja / kosztorys / panele
+// ---------------------------------------------------------------------------------------------
 function rebuild() {
-  if (currentRoot) {
-    scene.remove(currentRoot);
-    disposeGroup(currentRoot);
-  }
-  if (currentCeiling) {
-    scene.remove(currentCeiling);
-    disposeGroup(currentCeiling);
-  }
-  if (currentDimLabels) {
-    scene.remove(currentDimLabels);
-    disposeGroup(currentDimLabels);
-  }
-  if (currentStringerLengthLabels) {
-    scene.remove(currentStringerLengthLabels);
-    disposeGroup(currentStringerLengthLabels);
-  }
-  if (currentWinderBlankLabels) {
-    scene.remove(currentWinderBlankLabels);
-    disposeGroup(currentWinderBlankLabels);
-  }
-  if (currentDebugOverlay) {
-    scene.remove(currentDebugOverlay);
-    disposeGroup(currentDebugOverlay);
+  for (const group of [currentRoot, currentCeiling, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay]) {
+    if (!group) continue;
+    scene.remove(group);
+    disposeGroup(group);
   }
 
-  // Kolejność zgodna z wymaganiem 11: solver 2D (planLayout) -> wangi -> podstopnie -> 3D.
-  // buildStaircase.js woła buildPlanLayout() jako pierwszy krok, potem buildStringerGeometries,
-  // potem buildRiserBoards, i dopiero na końcu składa wszystko w drzewo Three.js — patrz
-  // src/geometry/buildStaircase.js.
-  const { root, ceilingMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = buildStaircase(config);
+  // Kolejność zgodna z architekturą: solver 2D (planLayout) -> wangi -> podstopnie -> słupy ->
+  // 3D. buildStaircase.js jest jedynym miejscem, które składa modele w drzewo Three.js.
+  const built = buildStaircase(config);
+  const { root, ceilingMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = built;
+  lastModels = built;
+
   scene.add(root);
   scene.add(ceilingMesh);
-  ceilingMesh.visible = viewState.showCeiling;
   currentRoot = root;
   currentCeiling = ceilingMesh;
 
   currentDimLabels = buildDimensionLabels(planLayout, config, derived);
-  currentDimLabels.visible = viewState.showDimensions;
   scene.add(currentDimLabels);
-
   currentStringerLengthLabels = buildStringerLengthLabels(planLayout, config, derived);
-  currentStringerLengthLabels.visible = viewState.showStringerLengths;
   scene.add(currentStringerLengthLabels);
-
   currentWinderBlankLabels = buildWinderBlankLabels(planLayout, config, derived);
-  currentWinderBlankLabels.visible = viewState.showWinderBlanks;
   scene.add(currentWinderBlankLabels);
 
-  currentDebugOverlay = buildDebugOverlay({ planLayout, treadModels, stringerModels });
-  currentDebugOverlay.visible = viewState.showDebug;
+  // Walidacja + kosztorys z JEDNEGO wywołania fasady: buildPricedMaterialTakeoff() najpierw
+  // przepuszcza modele przez bramkę walidacji (StaircaseValidator + diagnostyki konstrukcji
+  // wang), więc jej diagnostyki są kompletnym wynikiem walidacji — panel Walidacji i Kosztorys
+  // zawsze pokazują ten sam stan (bez drugiego, osobnego przebiegu walidatora). Nic z tego nie
+  // liczy geometrii: wszystko czyta te modele, które buildStaircase() już policzył.
+  lastTakeoff = computeTakeoff();
+  lastDiagnostics = lastTakeoff.diagnostics;
+
+  currentDebugOverlay = buildDebugOverlay({ planLayout, treadModels, stringerModels, diagnostics: lastDiagnostics });
   scene.add(currentDebugOverlay);
 
-  // Zaznaczenie wskazuje na konkretny stopień (obiekt logiczny) po jego indeksie — jeśli
-  // liczba stopni się zmieniła i stary indeks już nie istnieje, zaznaczenie znika zamiast
-  // wskazywać na przypadkowy inny stopień.
-  if (selectedStepIndex !== null && !planLayout.treads.some((t) => t.index === selectedStepIndex)) {
-    selectedStepIndex = null;
-  }
+  // Zaznaczenie wskazuje element po ID — jeśli po zmianie parametrów stary element nie istnieje
+  // (np. mniej stopni), zaznaczenie znika zamiast wskazywać przypadkowy inny.
+  if (selection && !selectionStillExists(selection, built)) clearSelectionState();
 
   currentPlanLayout = planLayout;
   currentDerived = derived;
   if (!planViewport) fitPlanView();
-  regeneratePlan2D();
-  updateStepInfoPanel(stepInfoPanel, planLayout.treads.find((t) => t.index === selectedStepIndex), { ...config, riserHeight: derived.riserHeight }, config.manualEdgeOverrides);
 
   updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit);
+  const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic });
+  renderTakeoffPanel();
 
-  // Walidator (src/validator/StaircaseValidator.js) OCENIA wynik — nigdy go nie zmienia i
-  // nigdy nie liczy geometrii sam: dostaje DOKŁADNIE te modele, które buildStaircase() już
-  // policzył powyżej. Panel pokazuje się obok widoku 2D/3D (patrz style.css #validator-panel —
-  // z-index ponad #plan2d-panel), niezależnie od tego, który z nich jest aktualnie widoczny.
-  const validation = validateModels({ config: fullConfig, derived, planLayout, treadModels, riserModels, stringerModels });
-  updateValidatorPanel(validatorPanel, validation.diagnostics);
+  applyOverlayVisibility();
+  applyLayerVisibility();
+  refreshSelectionViews();
+  updateStatus(counts);
 }
 
-function fitPlanView() {
-  if (!currentPlanLayout) return;
-  const bounds = planSvgBounds(currentPlanLayout);
-  const rect = plan2dPanel.getBoundingClientRect();
-  const w = rect.width || 800;
-  const h = rect.height || 600;
-  planViewport = fitToBounds(bounds, w, h, PLAN_VIEW_MARGIN_MM);
-  regeneratePlan2D();
-}
-
-function updateScaleReadout() {
-  if (!planViewport) return;
-  const rect = plan2dPanel.getBoundingClientRect();
-  const pxPerMm = pixelsPerMm(planViewport, rect.width || 800);
-  // "1 mm na ekranie" jest umowne (zależy od fizycznego DPI wyświetlacza, którego strona
-  // WWW nie może wiarygodnie odczytać) — patrz komentarz w viewport.js/pixelsPerMm. Pokazujemy
-  // więc nominalną skalę zaokrągloną do konwencjonalnych podziałek rysunku technicznego, z
-  // jawnym zastrzeżeniem, zamiast udawać skalibrowaną dokładność, której nie mamy.
-  const rawDenominator = 1 / pxPerMm;
-  const nice = nearestStandardScale(rawDenominator);
-  scaleReadout.textContent = `Skala (orientacyjna): 1:${nice}`;
-}
-
-function regeneratePlan2D() {
-  if (!currentPlanLayout || !planViewport) return;
-  currentPlan2DSVG = renderPlan2DSVG(currentPlanLayout, config, currentDerived, {
-    viewport: planViewport,
-    showWinderBlanks: viewState.plan2dShowWinderBlanks,
-    editMode: viewState.plan2dEditMode,
-    selectedStepIndex,
-    layers: viewState.plan2dLayers,
-  });
-  if (plan2dPanel.classList.contains('visible')) {
-    plan2dSvgContainer.innerHTML = currentPlan2DSVG;
-    updateScaleReadout();
+function selectionStillExists(sel, built) {
+  switch (sel.elementType) {
+    case 'tread':
+    case 'riser':
+      return built.planLayout.treads.some((t) => t.index === sel.stepIndex);
+    case 'stringer':
+      return !!built.stringerModels[sel.stringerId];
+    case 'post':
+      return !sel.postId || built.postModels.some((p) => p.postId === sel.postId);
+    default:
+      return false;
   }
+}
+
+// Kosztorys liczony z TYCH SAMYCH modeli co reszta (bez drugiego rozwiązywania geometrii).
+function computeTakeoff() {
+  return buildPricedMaterialTakeoff(lastModels, {
+    priceList: takeoffSettings.priceList,
+    wasteFactors: takeoffSettings.wasteFactors,
+  });
+}
+
+// Zmiana cen/odpadów przelicza tylko kosztorys — geometria i historia modelu zostają nietknięte.
+function refreshTakeoff() {
+  if (!lastModels) return;
+  lastTakeoff = computeTakeoff();
+  renderTakeoffPanel();
+}
+
+function renderTakeoffPanel() {
+  updateTakeoffPanel(takeoffPanel, lastTakeoff, {
+    groupBy: takeoffGroupBy,
+    selectedItemId: selectedTakeoffItemId,
+    priceList: takeoffSettings.priceList,
+    wasteFactors: takeoffSettings.wasteFactors,
+  });
+  if (lastTakeoff.status === 'BLOCKED') ws.setTabBadge('takeoff', '!', 'error');
+  else ws.setTabBadge('takeoff', `≈${Math.round(lastTakeoff.totalCost).toLocaleString('pl-PL')} zł`, lastTakeoff.status === 'WARNING' ? 'warning' : 'info');
+}
+
+function manualEditCount() {
+  return Object.keys(config.manualEdgeOverrides || {}).length + Object.keys(config.manualTreadOverhangs || {}).length;
+}
+
+function updateStatus(counts) {
+  let level = 'ok';
+  let text = '● Geometria poprawna';
+  if (counts.ERROR > 0) {
+    level = 'error';
+    text = `● Geometria z błędami: ${counts.ERROR}`;
+  } else if (counts.WARNING > 0) {
+    level = 'warning';
+    text = `● Geometria z ostrzeżeniami: ${counts.WARNING}`;
+  }
+  const manual = manualEditCount();
+  ws.setStatus({ validity: { level, html: `${text}${manual ? ` · ✎ ręcznych zmian: ${manual}` : ''}` } });
+  if (counts.ERROR > 0) ws.setTabBadge('validation', String(counts.ERROR), 'error');
+  else if (counts.WARNING > 0) ws.setTabBadge('validation', String(counts.WARNING), 'warning');
+  else ws.setTabBadge('validation', '', 'info');
 }
 
 function disposeGroup(group) {
@@ -233,6 +296,197 @@ function disposeGroup(group) {
   });
 }
 
+// ---------------------------------------------------------------------------------------------
+// Widoczność nakładek / warstw 3D / tryb prezentacji (czysty widok — model nietknięty)
+// ---------------------------------------------------------------------------------------------
+function applyOverlayVisibility() {
+  const technical = !viewState.clientMode;
+  if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
+  if (currentDimLabels) currentDimLabels.visible = viewState.showDimensions && technical;
+  if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical;
+  if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical;
+  if (currentDebugOverlay) currentDebugOverlay.visible = viewState.showDebug && technical;
+  sceneApi.helpers.grid.visible = technical;
+  sceneApi.helpers.axes.visible = technical;
+  sceneApi.helpers.ground.visible = !technical;
+}
+
+function applyLayerVisibility() {
+  if (!currentRoot) return;
+  for (const child of currentRoot.children) {
+    if (child.name in viewState.layers3d) child.visible = viewState.layers3d[child.name];
+  }
+}
+
+let ceilingBeforeClientMode = true;
+
+function setClientMode(on) {
+  viewState.clientMode = on;
+  ws.setClientMode(on);
+  // Strop przesłaniałby czysty widok schodów — na czas prezentacji jest domyślnie ukryty (można go
+  // włączyć w HUD), a po wyjściu wraca poprzedni wybór użytkownika.
+  if (on) {
+    ceilingBeforeClientMode = viewState.showCeiling;
+    handleViewChange('showCeiling', false);
+    setView('3d');
+  } else {
+    handleViewChange('showCeiling', ceilingBeforeClientMode);
+  }
+  refreshUI(gui); // suwaki/checkboxy w panelu parametrów odzwierciedlają zmiany viewState
+  sceneApi.setBackground(on ? viewportHudApi.hud.querySelector('[data-bg]').value : '#eef1f5');
+  applyOverlayVisibility();
+  refreshSelectionViews();
+}
+
+function frameStandardView(view) {
+  if (!lastModels) return;
+  const b = lastModels.planLayout.bounds;
+  const rise = lastModels.fullConfig.totalRise;
+  const center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
+  const radius = 0.5 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
+  sceneApi.frameView(view, center, radius);
+  ws.setStatus({ view: `3D: ${sceneApi.getCameraMode() === 'orthographic' ? 'ortogonalny' : 'perspektywa'} · widok ${view}` });
+}
+
+const viewportHudApi = createViewportHud(ws.mainEl, {
+  layers: viewState.layers3d,
+  viewState,
+  onLayerChange: () => applyLayerVisibility(),
+  onStandardView: frameStandardView,
+  onCameraMode: (mode) => {
+    sceneApi.setCameraMode(mode);
+    ws.setStatus({ view: `3D: ${mode === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
+  },
+  onCeilingChange: (visible) => handleViewChange('showCeiling', visible),
+  onBackgroundChange: (hex) => sceneApi.setBackground(hex),
+});
+
+// ---------------------------------------------------------------------------------------------
+// Zaznaczenie: jedno źródło prawdy, wiele widoków (2D, 3D, Inspektor, Walidacja, Kosztorys)
+// ---------------------------------------------------------------------------------------------
+function clearSelectionState() {
+  selection = null;
+  selectedStepIndex = null;
+  selectedDiagnostic = null;
+  selectedTakeoffItemId = null;
+}
+
+function setSelection(sel, { diagnostic = null, takeoffItem = null } = {}) {
+  selection = sel;
+  selectedStepIndex = sel && (sel.elementType === 'tread' || sel.elementType === 'riser') ? sel.stepIndex : null;
+  selectedDiagnostic = diagnostic;
+  selectedTakeoffItemId = takeoffItem ? takeoffItem.itemId : null;
+  refreshSelectionViews();
+}
+
+function refreshSelectionViews() {
+  regeneratePlan2D();
+  // W trybie prezentacji nic nie jest podświetlone — klient widzi czysty model.
+  applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
+  if (lastModels) {
+    updateInspectorPanel(inspectorPanel, {
+      selection,
+      diagnostics: lastDiagnostics,
+      config,
+      derived: lastModels.derived,
+      planLayout: lastModels.planLayout,
+      treadModels: lastModels.treadModels,
+      stringerModels: lastModels.stringerModels,
+      postModels: lastModels.postModels,
+      manualCount: manualEditCount(),
+    });
+  }
+  markValidatorSelection(validatorPanel, selectedDiagnostic);
+  markTakeoffSelection(takeoffPanel, selectedTakeoffItemId);
+  ws.setStatus({ selection: selectionLabel(selection) });
+}
+
+// Diagnostyka -> zaznaczenie. Diagnostic niesie tylko elementType/elementId (bez ID meshów),
+// więc podświetlamy wyłącznie to, co da się wskazać jednoznacznie po ID modelu; resztę
+// (diagnostyki ogólne) tylko zaznaczamy na liście i mówimy o tym w statusie.
+function handleSelectDiagnostic(d) {
+  const stepIndex = stepIndexFromElementId(d.elementId);
+  if (stepIndex !== null) {
+    setSelection({ elementType: 'tread', stepIndex }, { diagnostic: d });
+    return;
+  }
+  if (d.elementType === 'stringer') {
+    const side = ['outer', 'inner'].find((s) => d.elementId?.includes(s));
+    if (side) {
+      setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }, { diagnostic: d });
+      return;
+    }
+  }
+  if (d.elementType === 'post' && lastModels?.postModels.some((p) => p.postId === d.elementId)) {
+    setSelection({ elementType: 'post', postId: d.elementId }, { diagnostic: d });
+    return;
+  }
+  setSelection(null, { diagnostic: d });
+  ws.setStatus({ selection: 'Ta diagnostyka dotyczy całych schodów/parametrów — brak konkretnego elementu do podświetlenia' });
+}
+
+function handleSelectTakeoffItem(item) {
+  const sel = selectionFromTakeoffSourceId(item.sourceElementId);
+  setSelection(sel, { takeoffItem: item });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Plan 2D
+// ---------------------------------------------------------------------------------------------
+function fitPlanView() {
+  if (!currentPlanLayout) return;
+  const bounds = planSvgBounds(currentPlanLayout);
+  const rect = plan2dPanel.getBoundingClientRect();
+  planViewport = fitToBounds(bounds, rect.width || 800, rect.height || 600, PLAN_VIEW_MARGIN_MM);
+  regeneratePlan2D();
+}
+
+function updateScaleReadout() {
+  if (!planViewport) return;
+  const rect = plan2dPanel.getBoundingClientRect();
+  const pxPerMm = pixelsPerMm(planViewport, rect.width || 800);
+  // "1 mm na ekranie" jest umowne (zależy od fizycznego DPI wyświetlacza, którego strona WWW nie
+  // może wiarygodnie odczytać) — pokazujemy nominalną skalę zaokrągloną do podziałek rysunku
+  // technicznego, z jawnym zastrzeżeniem, zamiast udawać skalibrowaną dokładność.
+  const nice = nearestStandardScale(1 / pxPerMm);
+  scaleReadout.textContent = `Skala (orientacyjna): 1:${nice}`;
+  if (viewState.view === '2d') ws.setStatus({ view: `Plan 2D · skala orientacyjna 1:${nice}` });
+}
+
+function regeneratePlan2D() {
+  if (!currentPlanLayout || !planViewport) return;
+  currentPlan2DSVG = renderPlan2DSVG(currentPlanLayout, config, currentDerived, {
+    viewport: planViewport,
+    showWinderBlanks: viewState.plan2dShowWinderBlanks,
+    editMode: viewState.plan2dEditMode,
+    selectedStepIndex,
+    selection,
+    layers: viewState.plan2dLayers,
+  });
+  if (plan2dPanel.classList.contains('visible')) {
+    plan2dSvgContainer.innerHTML = currentPlan2DSVG;
+    updateScaleReadout();
+  }
+}
+
+function setView(view) {
+  viewState.view = view;
+  app.dataset.view = view;
+  ws.setView(view);
+  const show2d = view === '2d';
+  plan2dPanel.classList.toggle('visible', show2d);
+  if (show2d) {
+    if (!planViewport) fitPlanView();
+    plan2dSvgContainer.innerHTML = currentPlan2DSVG;
+    updateScaleReadout();
+  } else {
+    ws.setStatus({ view: `3D: ${sceneApi.getCameraMode() === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Zmiany parametrów / widoku / projektu
+// ---------------------------------------------------------------------------------------------
 function handleLiveChange() {
   rebuild();
 }
@@ -243,14 +497,9 @@ function handleCommitChange() {
 
 function handleViewChange(key, value) {
   viewState[key] = value;
-  if (key === 'showCeiling' && currentCeiling) currentCeiling.visible = value;
-  if (key === 'showDimensions' && currentDimLabels) currentDimLabels.visible = value;
-  if (key === 'showStringerLengths' && currentStringerLengthLabels) currentStringerLengthLabels.visible = value;
-  if (key === 'showWinderBlanks' && currentWinderBlankLabels) currentWinderBlankLabels.visible = value;
-  if (key === 'showDebug' && currentDebugOverlay) currentDebugOverlay.visible = value;
-  if (key === 'plan2dShowWinderBlanks') regeneratePlan2D();
-  if (key === 'plan2dEditMode') regeneratePlan2D();
-  if (key === 'plan2dLayers') regeneratePlan2D();
+  if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
+  if (['showCeiling', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug'].includes(key)) applyOverlayVisibility();
+  if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
 }
 
 function handleResetEdgeOverrides() {
@@ -261,8 +510,7 @@ function handleResetEdgeOverrides() {
 }
 
 // Zbiera wszystkie punkty graniczne (front/back, wewnętrzny+zewnętrzny) obecnego planu, do
-// przyciągania "do wyrównania" podczas przeciągania uchwytu — patrz planInteractions.js
-// snapToAlignment()/snapPoint(), które same odfiltrowują punkt aktualnie przeciągany.
+// przyciągania "do wyrównania" podczas przeciągania uchwytu — patrz planInteractions.js.
 function getSnapPoints() {
   if (!currentPlanLayout) return [];
   const points = [];
@@ -275,31 +523,48 @@ function getSnapPoints() {
   return points;
 }
 
-function handleReset() {
+function resetTakeoffSettings() {
+  const fresh = DEFAULT_PRICE_LIST;
+  for (const price of takeoffSettings.priceList) {
+    const def = fresh.find((p) => p.materialId === price.materialId);
+    if (def) Object.assign(price, def);
+  }
+  Object.assign(takeoffSettings.wasteFactors, DEFAULT_WASTE_FACTORS);
+}
+
+function handleNewProject() {
+  if (!window.confirm('Rozpocząć nowy projekt? Bieżące parametry i ręczne edycje zostaną zastąpione domyślnymi (można to cofnąć przyciskiem Cofnij).')) return;
   Object.assign(config, createDefaultConfig());
+  resetTakeoffSettings();
+  projectMeta.name = '';
+  projectMeta.notes = '';
+  projectMeta.lastFileNote = 'Nowy projekt';
+  ws.setProjectMeta({ name: '', notes: '', lastFileNote: projectMeta.lastFileNote });
+  document.title = 'Kalkulator schodów 3D';
   refreshUI(gui);
-  selectedStepIndex = null;
+  clearSelectionState();
   planViewport = null;
   rebuild();
   commitHistory();
 }
 
-function togglePlan2D() {
-  const willShow = !plan2dPanel.classList.contains('visible');
-  plan2dPanel.classList.toggle('visible', willShow);
-  if (willShow) {
-    if (!planViewport) fitPlanView();
-    plan2dSvgContainer.innerHTML = currentPlan2DSVG;
-    updateScaleReadout();
-  }
+function fileBaseName() {
+  const slug = projectMeta.name
+    .trim()
+    .replace(/[^\p{L}\p{N}_-]+/gu, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'schody';
 }
 
 function handleSaveProject() {
-  exportProjectJSON(config);
-}
-
-function handleLoadProject() {
-  fileInput.click();
+  const filename = `${fileBaseName()}_projekt.json`;
+  exportProjectJSON(config, filename, {
+    projectName: projectMeta.name,
+    notes: projectMeta.notes,
+    takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors },
+  });
+  projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
+  ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
 }
 
 function handleFileSelected(event) {
@@ -309,10 +574,23 @@ function handleFileSelected(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const loadedConfig = parseProjectJSON(reader.result);
+      const { config: loadedConfig, meta } = parseProjectFile(reader.result);
       Object.assign(config, createDefaultConfig(), loadedConfig);
+      projectMeta.name = meta.projectName;
+      projectMeta.notes = meta.notes;
+      resetTakeoffSettings();
+      if (meta.takeoffSettings) {
+        for (const incoming of meta.takeoffSettings.priceList || []) {
+          const price = takeoffSettings.priceList.find((p) => p.materialId === incoming.materialId);
+          if (price) Object.assign(price, incoming);
+        }
+        Object.assign(takeoffSettings.wasteFactors, meta.takeoffSettings.wasteFactors || {});
+      }
+      projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
+      ws.setProjectMeta({ name: projectMeta.name, notes: projectMeta.notes, lastFileNote: projectMeta.lastFileNote });
+      document.title = projectMeta.name ? `${projectMeta.name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
       refreshUI(gui);
-      selectedStepIndex = null;
+      clearSelectionState();
       planViewport = null;
       rebuild();
       commitHistory();
@@ -330,53 +608,78 @@ fileInput.style.display = 'none';
 fileInput.addEventListener('change', handleFileSelected);
 document.body.appendChild(fileInput);
 
-const infoPanel = createInfoPanel();
-const stepInfoPanel = createStepInfoPanel();
-const validatorPanel = createValidatorPanel();
-const elementInspectorPanel = createElementInspectorPanel();
+// Eksport OBJ/DAE zawsze z czystych materiałów (bez podświetlenia zaznaczenia) — widok i eksport
+// nie mogą na siebie wpływać.
+function withoutHighlight(fn) {
+  applySelectionHighlight(currentRoot, null);
+  try {
+    fn();
+  } finally {
+    applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
+  }
+}
 
-// Click-to-inspect (traceability): raycast against whatever buildStaircase() actually rendered
-// (currentRoot only — never the debug overlay, ceiling, grid, or dimension labels, none of
-// which are traceable elements), resolve the hit mesh's userData via elementInspector.js, and
-// show it in the inspector panel. If the hit element has a stepId, also select that step the
-// SAME way clicking it in the 2D plan would (regeneratePlan2D + updateStepInfoPanel) — this is
-// the "point at a 3D element, get back to its 2D source" requirement.
+function exportTakeoff(kind) {
+  if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
+  const base = fileBaseName();
+  if (kind === 'csv') downloadTextFile(takeoffToCSV(lastTakeoff.items), `${base}_zestawienie.csv`, 'text/csv');
+  else downloadTextFile(takeoffToTextReport(lastTakeoff.items, { title: `Zestawienie materiałowe — ${projectMeta.name || 'schody'}` }), `${base}_zestawienie.txt`, 'text/plain');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Panele
+// ---------------------------------------------------------------------------------------------
+const infoPanel = createInfoPanel(ws.leftEl);
+const inspectorPanel = createInspectorPanel(ws.tabBody('inspector'));
+const validatorPanel = createValidatorPanel(ws.tabBody('validation'), { onSelect: handleSelectDiagnostic });
+const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
+  onSelectItem: handleSelectTakeoffItem,
+  onGroupChange: (groupBy) => {
+    takeoffGroupBy = groupBy;
+    refreshTakeoff();
+  },
+  onExportCSV: () => exportTakeoff('csv'),
+  onExportTXT: () => exportTakeoff('txt'),
+});
+
+// Raycaster nie zna `visible` — ukryta warstwa (checkbox w HUD) nie może być zaznaczalna.
+function isEffectivelyVisible(obj) {
+  for (let o = obj; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
+// Klik w 3D: raycast tylko w to, co buildStaircase() faktycznie wyrenderował (currentRoot —
+// nigdy debug/strop/siatka/etykiety), a tożsamość elementu pochodzi z userData.geometrySourceId
+// (jawne ID modelu), nie z odgadywania geometrii. Przeciągnięcie (orbit) nie jest kliknięciem.
 const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
+let pointerDownAt = null;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerDownAt = { x: e.clientX, y: e.clientY };
+});
 renderer.domElement.addEventListener('click', (event) => {
-  if (!currentRoot) return;
+  if (!currentRoot || viewState.clientMode) return;
+  if (pointerDownAt && Math.hypot(event.clientX - pointerDownAt.x, event.clientY - pointerDownAt.y) > 4) return;
   const rect = renderer.domElement.getBoundingClientRect();
   pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointerNdc, camera);
-  const hits = raycaster.intersectObject(currentRoot, true);
+  raycaster.setFromCamera(pointerNdc, sceneApi.getCamera());
+  const hits = raycaster.intersectObject(currentRoot, true).filter((h) => isEffectivelyVisible(h.object));
   const traceabilityData = hits.length > 0 ? resolveTraceability(hits[0].object) : null;
-  updateElementInspectorPanel(elementInspectorPanel, traceabilityData);
-
-  if (traceabilityData?.stepId) {
-    const index = Number(traceabilityData.stepId.replace('step-', ''));
-    selectedStepIndex = Number.isInteger(index) ? index : selectedStepIndex;
-    regeneratePlan2D();
-    updateStepInfoPanel(stepInfoPanel, currentPlanLayout?.treads.find((t) => t.index === selectedStepIndex), { ...config, riserHeight: currentDerived?.riserHeight }, config.manualEdgeOverrides);
-  }
+  setSelection(traceabilityData ? selectionFromTakeoffSourceId(traceabilityData.geometrySourceId) : null);
 });
 
 const plan2dPanel = document.createElement('div');
 plan2dPanel.id = 'plan2d-panel';
-app.appendChild(plan2dPanel);
+ws.mainEl.appendChild(plan2dPanel);
 
-// Architektura DOM planu 2D (naprawa punktu 7 konsolidacji): plan2dPanel ma DWA stałe,
-// rozłączne dzieci — kontener SVG (jedyne miejsce, które regeneratePlan2D() nadpisuje przez
-// innerHTML=) i HUD (przyciski/skala/legenda, tworzony RAZ i nigdy nieusuwany). Wcześniej HUD
-// był dzieckiem TEGO SAMEGO węzła, który dostawał innerHTML= przy każdym przerysowaniu planu —
-// każde regenerowanie SVG kasowało cały HUD. Rozdzielenie na dwa stałe kontenery usuwa ten
-// błąd strukturalnie, zamiast odtwarzać HUD po każdym renderze.
+// Architektura DOM planu 2D: plan2dPanel ma DWA stałe, rozłączne dzieci — kontener SVG (jedyne
+// miejsce, które regeneratePlan2D() nadpisuje przez innerHTML=) i HUD (przyciski/skala/legenda,
+// tworzony RAZ i nigdy nieusuwany). Warstwy: viewport panelu -> rysunek SVG -> nakładka HUD.
 const plan2dSvgContainer = document.createElement('div');
 plan2dSvgContainer.id = 'plan2d-svg-container';
 plan2dPanel.appendChild(plan2dSvgContainer);
 
-// HUD planu 2D — przyciski zoom/dopasuj, odczyt skali, legenda auto/ręczne (wymagania 1, 3,
-// 6, 14). Żyje POZA generowanym SVG, więc nigdy nie przesuwa/skaluje się razem z planem.
 const plan2dHud = document.createElement('div');
 plan2dHud.id = 'plan2d-hud';
 plan2dHud.innerHTML = `
@@ -391,6 +694,7 @@ plan2dHud.innerHTML = `
     <div><span class="swatch" style="border-color:#e08214"></span>krawędź ręcznie zmieniona</div>
     <div><span class="swatch" style="border-color:#c0392b;border-top-style:dashed"></span>linia biegu (walkline)</div>
     <div><span class="swatch" style="border-color:#0f7a3d"></span>granica biegu</div>
+    <div><span class="swatch" style="border-color:#1a5fb4"></span>zaznaczony element</div>
   </div>
 `;
 plan2dPanel.appendChild(plan2dHud);
@@ -408,10 +712,9 @@ plan2dHud.querySelector('[data-action="zoom-out"]').addEventListener('click', ()
   regeneratePlan2D();
 });
 
-// Cała interakcja wskaźnikiem/kołem/klawiaturą na planie 2D — wymagania 1, 2, 8, 9, 10.
-// Przeciąganie uchwytu krawędzi modyfikuje WYŁĄCZNIE config.manualEdgeOverrides (dane 2D),
-// nigdy siatki Three.js — main.js dowiaduje się o tym tylko przez te callbacki i za każdym
-// razem wywołuje pełne rebuild() (patrz wymaganie 11).
+// Cała interakcja wskaźnikiem/kołem/klawiaturą na planie 2D. Przeciąganie uchwytów modyfikuje
+// WYŁĄCZNIE config (manualEdgeOverrides / manualTreadOverhangs) — nigdy siatki Three.js;
+// main.js dowiaduje się o tym tylko przez te callbacki i za każdym razem woła pełne rebuild().
 attachPlanInteractions({
   panelEl: plan2dPanel,
   getViewport: () => planViewport,
@@ -456,41 +759,35 @@ attachPlanInteractions({
       commitHistory();
     }
   },
-  onStepClick: (stepIndex) => {
-    selectedStepIndex = stepIndex;
-    regeneratePlan2D();
-    updateStepInfoPanel(
-      stepInfoPanel,
-      currentPlanLayout?.treads.find((t) => t.index === selectedStepIndex),
-      { ...config, riserHeight: currentDerived?.riserHeight },
-      config.manualEdgeOverrides
-    );
-  },
+  // Kliknięcia ustawiają WYŁĄCZNIE zaznaczenie (nie model, nie historia).
+  onStepClick: (stepIndex) => setSelection(stepIndex === null ? null : { elementType: 'tread', stepIndex }),
+  onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),
+  onPostClick: (postId) => setSelection({ elementType: 'post', postId }),
 });
 
 const gui = createUI({
   config,
+  container: ws.leftEl,
   onChange: handleLiveChange,
   onCommit: handleCommitChange,
-  onReset: handleReset,
   viewState,
   onViewChange: handleViewChange,
-  onTogglePlan2D: togglePlan2D,
   onFitPlanView: fitPlanView,
   onResetEdgeOverrides: handleResetEdgeOverrides,
-  onSaveProject: handleSaveProject,
-  onLoadProject: handleLoadProject,
-  onUndo: handleUndo,
-  onRedo: handleRedo,
   exportSelection,
+  takeoffSettings,
+  onTakeoffSettingsChange: refreshTakeoff,
   exportHandlers: {
-    onExportOBJ: () => exportStaircaseToOBJ(currentRoot, 'schody.obj', exportSelection),
-    onExportDAE: () => exportStaircaseToDAE(currentRoot, 'schody.dae', exportSelection),
+    onExportOBJ: () => withoutHighlight(() => exportStaircaseToOBJ(currentRoot, 'schody.obj', exportSelection)),
+    onExportDAE: () => withoutHighlight(() => exportStaircaseToDAE(currentRoot, 'schody.dae', exportSelection)),
   },
   onExportPlan2D: () => exportPlan2DSVG(currentPlan2DSVG),
 });
 
+setView(viewState.view);
 rebuild();
+updateHistoryButtons();
+ws.setProjectMeta({ name: '', notes: '', lastFileNote: '' });
 
 window.addEventListener('resize', () => {
   if (plan2dPanel.classList.contains('visible')) updateScaleReadout();

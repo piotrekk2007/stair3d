@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildProjectPayloadV2, parseProjectJSON, CURRENT_PROJECT_VERSION } from '../projectIO.js';
+import { buildProjectPayloadV2, parseProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from '../projectIO.js';
 import { createDefaultConfig } from '../../config/schema.js';
 
 test('buildProjectPayloadV2: edgeOverrides live at the top level, not inside config', () => {
@@ -72,4 +72,26 @@ test('parseProjectJSON: rejects invalid JSON', () => {
 
 test('CURRENT_PROJECT_VERSION is 2', () => {
   assert.equal(CURRENT_PROJECT_VERSION, 2);
+});
+
+test('project metadata (name, notes, takeoff settings) round-trips at the top level, outside config', () => {
+  const meta = { projectName: 'Dom Kowalskich', notes: 'Klient chce dąb', takeoffSettings: { priceList: [{ materialId: 'timber-c24', price: 5000, currency: 'PLN', unit: 'volume' }], wasteFactors: { TREAD: 0.12 } } };
+  const payload = buildProjectPayloadV2(createDefaultConfig(), meta);
+  assert.equal(payload.config.projectName, undefined, 'metadata must never leak into config (it is not a solver input)');
+  assert.equal(payload._version, CURRENT_PROJECT_VERSION, 'adding optional metadata must not bump the schema version');
+
+  const { config, meta: restored } = parseProjectFile(JSON.stringify(payload));
+  assert.equal(config.stairType, createDefaultConfig().stairType);
+  assert.equal(restored.projectName, 'Dom Kowalskich');
+  assert.equal(restored.notes, 'Klient chce dąb');
+  assert.equal(restored.takeoffSettings.wasteFactors.TREAD, 0.12);
+  assert.equal(restored.schemaVersion, CURRENT_PROJECT_VERSION);
+});
+
+test('an older v2 file without metadata still loads, with empty metadata', () => {
+  const payload = buildProjectPayloadV2(createDefaultConfig());
+  const { meta } = parseProjectFile(JSON.stringify(payload));
+  assert.equal(meta.projectName, '');
+  assert.equal(meta.notes, '');
+  assert.equal(meta.takeoffSettings, null);
 });

@@ -79,3 +79,7 @@ export function treadGoingAtOffsetFromInner(tread, offsetMm) {
   const p = walklinePointFor(tread, offsetMm);
   return Math.hypot(p.back.x - p.front.x, p.back.y - p.front.y);
 }
+
+// Stały punkt pomiaru szerokości stopnia zabiegowego (odległość od duszy) — jedno źródło
+// prawdy dla walidatora (validation/facts.js, PL-LEGAL-C-01) i wymiarów planu 2D.
+export const WINDER_WIDTH_MEASURE_OFFSET_MM = 400;

@@ -28,6 +28,8 @@ const COLOR = Object.freeze({
   intersection: 0xffeb3b,
   normal: 0x4caf50,
   bearing: 0xff9800,
+  violationError: 0xe53935,
+  violationWarning: 0xffa000,
 });
 
 const MARKER_RADIUS = 22;
@@ -135,14 +137,46 @@ function buildBearingPositions(stringerModels) {
   return group;
 }
 
+// --- Naruszenia reguł (diagnostyki ERROR/WARNING przypięte do stopnia) -------------------------
+// Pozycja = środek frontEdge.final stopnia wskazanego przez Diagnostic.elementId ('step-N') —
+// dane z już policzonego TreadModel, nic nie jest liczone od nowa. Diagnostyki bez stopnia
+// (ogólne, wangi, słupy) nie mają tu pozycji i nie są rysowane (patrz zakładka Walidacja).
+const VIOLATION_MARKER_RADIUS = 55;
+const violationGeometry = new THREE.SphereGeometry(VIOLATION_MARKER_RADIUS, 12, 8);
+
+function buildViolations(treadModels, diagnostics) {
+  const group = new THREE.Group();
+  group.name = 'DebugViolations';
+  const byStep = new Map(treadModels.map((t) => [t.stepId, t]));
+  const seen = new Set();
+  for (const d of diagnostics) {
+    if (d.severity === 'INFO' || !d.elementId) continue;
+    const t = byStep.get(d.elementId);
+    if (!t) continue;
+    const key = `${d.elementId}|${d.severity}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const [inner, outer] = t.frontEdge.final;
+    const mid = { x: (inner.x + outer.x) / 2, y: (inner.y + outer.y) / 2 };
+    const color = d.severity === 'ERROR' ? COLOR.violationError : COLOR.violationWarning;
+    const mesh = new THREE.Mesh(violationGeometry, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.85 }));
+    mesh.position.copy(planToWorld(mid.x, mid.y, t.elevation.top + 120));
+    mesh.renderOrder = 1000;
+    group.add(mesh);
+  }
+  return group;
+}
+
 /**
  * @param {Object} models
  * @param {import('../geometry/planLayout.js').PlanLayout} models.planLayout
  * @param {import('../geometry/treadSolver.js').TreadModel[]} models.treadModels
  * @param {{outer, inner}} models.stringerModels
+ * @param {import('../diagnostics/diagnostic.js').Diagnostic[]} [models.diagnostics]  Ostatni wynik walidatora;
+ *   gdy podany, naruszenia przypięte do stopni są zaznaczone w 3D.
  * @returns {THREE.Group}  name 'DebugOverlay' — add/remove or toggle `.visible` from main.js.
  */
-export function buildDebugOverlay({ planLayout, treadModels, stringerModels }) {
+export function buildDebugOverlay({ planLayout, treadModels, stringerModels, diagnostics = [] }) {
   const group = new THREE.Group();
   group.name = 'DebugOverlay';
   group.add(buildReferenceLines(stringerModels));
@@ -150,5 +184,6 @@ export function buildDebugOverlay({ planLayout, treadModels, stringerModels }) {
   group.add(buildIntersections(planLayout, stringerModels));
   group.add(buildNormals(treadModels));
   group.add(buildBearingPositions(stringerModels));
+  if (diagnostics.length > 0) group.add(buildViolations(treadModels, diagnostics)); // bez diagnostyk grupa nie powstaje
   return group;
 }

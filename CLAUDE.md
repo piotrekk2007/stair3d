@@ -67,9 +67,8 @@ through the segment's first/last bearing, then either a stepped-top/straight-bot
 (`cut`, "wanga nakładana") with separate `cleats[]`, or a plain-rectangle contour (`closed`,
 "wanga wpuszczana") with separate `housings[]` recessed into the inner face — never the old
 per-bearing rectangle stack whose bottom edge sawtoothed along with the top. Diagnostics
-(`STRINGER-MIN-SECTION`, `STRINGER-CONTOUR-SELF-INTERSECTION`) are computed but **not yet wired
-into the Staircase Validator UI** — same deliberate staging pattern used throughout this
-project. `stringerRenderer.js` now takes both `StringerModel` and this construction geometry
+(`STRINGER-MIN-SECTION`, `STRINGER-CONTOUR-SELF-INTERSECTION`) are computed by this layer and
+surface in the Walidacja tab since stage 10 (via the takeoff validation gate — see "Workspace UI"). `stringerRenderer.js` now takes both `StringerModel` and this construction geometry
 and decides nothing itself — one continuous board mesh per segment, plus one small mesh per
 cleat/housing, each tagged with the same traceability `userData` scheme as every other element.
 Tests: [src/geometry/__tests__/stringerConstructionGeometry.test.js](src/geometry/__tests__/stringerConstructionGeometry.test.js).
@@ -308,6 +307,78 @@ offsetMm }` (positive = away from the dusza/overhanging, negative = recessed).
   showing why a point snapped — the snapping itself works, but that visual feedback is a
   separate, not-yet-requested follow-up.
 
+## Workspace UI (stage 10, implemented)
+
+The UI is a coherent workspace **around** the unchanged engine (`PARAMETRIC MODEL → 2D GEOMETRY →
+TREAD/RISER/STRINGER/POST MODELS → VALIDATION → MATERIAL TAKEOFF → 3D`). It only consumes solved
+models: UI → `config` change → `rebuild()` → models → (2D SVG | 3D renderer | validation | takeoff).
+No panel or interaction computes geometry.
+
+- **Layout** (`src/ui/workspace.js`, CSS grid in `style.css`): `#toolbar` (project name/notes,
+  New/Save/Load, Undo/Redo, **Plan 2D | Widok 3D** tab switch, client mode) · `#sidebar-left`
+  (`#info-panel` + the lil-gui parameter panel mounted via `new GUI({container})`) · `#main-view`
+  (`#viewport` 3D and `#plan2d-panel` 2D — one visible at a time, 2D is the default) ·
+  `#sidebar-right` with three tabs **Inspektor / Walidacja / Kosztorys** (badges show error count /
+  estimated cost) · `#statusbar` (validity, manual-edit count, selection, scale/camera). Below
+  ~1180px the sidebars narrow; below ~860px the grid becomes a single scrolling column.
+- **One shared selection** (`main.js` `setSelection()`, shape from `src/ui/selection.js`; pure
+  parsers `stepIndexFromElementId`/`selectionFromTakeoffSourceId`): a click in the 2D plan (step,
+  `.stringer-path[data-side]`, `.post-marker[data-post-id]`), a 3D click (via
+  `mesh.userData.geometrySourceId` — explicit model IDs, never geometry reverse-engineering), a
+  diagnostic in Walidacja, or a row in Kosztorys all set the same selection, which then updates the
+  2D highlight, the 3D highlight (`src/scene/selectionHighlight.js`: per-mesh material clone with
+  emission, restored on clear; exports run without it), the Inspektor and the status bar.
+  Selection is view state: never in history or the project file. Diagnostics carry only
+  `elementType`/`elementId` (no `geometrySourceId`), so only `step-N`, stringer sides and known
+  post IDs can be highlighted; stair-wide diagnostics are only marked in the list.
+- **Value states** (`src/ui/valueState.js`): `AUTO` / `USER` (locked field) / `RĘCZNA` (manual
+  geometry edit, from `TreadModel.overridden` + `config.manualTreadOverhangs`) / `UWAGA` /
+  `BŁĄD` / `INFO` badges in the parameter rows, info panel and Inspektor.
+- **Inspektor** (`inspectorPanel.js`): project summary when nothing is selected; for a step:
+  elevation, widths, front/back edge coordinates with AUTO/RĘCZNA + displacement from nominal,
+  overhang, that step's diagnostics, source ID; also stringer segments and posts.
+- **Walidacja** (`ui.js`): findings grouped ERROR/WARNING/INFO with element, rule ID,
+  measured/expected, message; click → selection. Its data comes from the **takeoff validation
+  gate** (`buildPricedMaterialTakeoff(...).diagnostics` = `StaircaseValidator` + stringer
+  construction diagnostics), so Walidacja and Kosztorys can never disagree and validation runs once.
+- **Kosztorys** (`takeoffPanel.js` + pure `takeoffView.js` grouping/summing): NET (finished
+  element) and STOCK/ORDER (raw + catalog size) shown side by side, group by element/material/
+  construction, cost summary with explicit assumptions (illustrative prices, waste, no labour)
+  and "≈" — never presented as exact; BLOCKED gate shows why instead of numbers; CSV/TXT export
+  via the existing `takeoff/export/`. **Prices and waste factors are NOT `config`**: separate
+  `takeoffSettings` state (edited in the "Materiały i ceny" folder), outside model history, saved in
+  the project file as an optional top-level field.
+- **2D** additions: selectable stringers/posts (`onStringerClick`/`onPostClick` in
+  `planInteractions.js`), dimension layers `winderWidth` (width of each winder tread at the fixed
+  `WINDER_WIDTH_MEASURE_OFFSET_MM` line — now the single source of truth shared with
+  `validation/facts.js`) and `stringerSpacing` (stringer spacing + min. remaining section), both read
+  from model data. **Fixed in this stage:** handle drags recomputed pointer→plan coordinates with the
+  `<svg>` captured at pointerdown, which is detached after the first live redraw (its screen matrix
+  is meaningless), so edge/overhang drags jumped to garbage offsets — `liveSvg()` now always uses the
+  current `<svg>`. Also fixed: an intentional overhang (`TreadModel.overhang`) was reported as
+  `CONSTRAINT-TOPOLOGY-CONTINUITY`/`VALIDATOR-WALKLINE-CONTINUITY` ERRORs (blocking the takeoff); those
+  checks now skip the overhung side while a genuinely broken shared edge is still reported.
+- **3D view**: `#viewport-hud` (layer toggles by group name Treads/RiserBoards/StringerOuter/
+  StringerInner/Posts + ceiling, standard views Przód/Tył/Lewy/Prawy/Góra/Izo, perspective ↔
+  orthographic in `sceneSetup.js` `setCameraMode`/`frameView`/`computeStandardView` — camera math
+  only). Debug mode also marks ERROR/WARNING diagnostics pinned to a step (`DebugViolations`, only
+  created when diagnostics are passed).
+- **Client mode** (`viewState.clientMode`, toolbar "Prezentacja"): hides toolbar/sidebars/status and
+  all technical overlays (grid, axes, dimension labels, debug, selection highlight), shows a ground
+  plane, hides the ceiling (restored on exit), background colour picker. `config` untouched.
+- **Project** (`projectIO.js`): optional top-level `projectName`, `notes`, `takeoffSettings` next to
+  `config`/`edgeOverrides` (never inside `config`); `parseProjectFile()` returns `{config, meta}`
+  (`parseProjectJSON` unchanged); schema version stays 2 — older files load with empty metadata.
+- **Tests**: `ui/__tests__/selection.test.js`, `takeoffView.test.js`,
+  `scene/__tests__/selectionHighlight.test.js`, project metadata tests in `projectIO.test.js`,
+  overhang-validation tests in `geometry/__tests__/edgeOverrides.test.js`. DOM-bound behaviour was
+  verified in the browser (2D edit/undo/redo, 2D↔3D selection, validation/takeoff panels, save/load
+  round trip, OBJ/DAE export, client mode, ortho/standard views/layer toggles, narrow window).
+- **Known limitations**: no split 2D+3D view (tabs by design); no minimum-depth envelope / support
+  zone debug overlays; client mode has no material presets (realistic wood is not modelled);
+  diagnostics without a step/stringer/post ID can't be highlighted; the plan is not auto-refit on
+  window resize; SketchUp workflow beyond the existing OBJ/DAE export is not addressed.
+
 ## Winder riser fix (implemented)
 
 `planLayout.js`'s `buildTurnLocal` attaches a `tread.winderInfo` object to every winder
@@ -407,14 +478,14 @@ Tests: [src/validator/__tests__/checks.test.js](src/validator/__tests__/checks.t
 specifically so `main.js`'s `rebuild()` can call `validateModels(...)` on the EXACT same
 models, never solving geometry a second time just to validate it. Results render in a new
 floating panel — `createValidatorPanel()`/`updateValidatorPanel()` in `src/ui/ui.js`,
-`#validator-panel` in `style.css` — docked bottom-right with a higher z-index than
-`#plan2d-panel`, so it stays visible **next to whichever of the 2D plan or 3D view is
-currently shown**, not only one of them. It lists every finding (ERROR/WARNING/INFO, sorted by
+`#validator-panel` in `style.css` — since stage 10 the "Walidacja" tab of the workspace's right
+sidebar (previously a floating bottom-right panel), visible next to whichever of the 2D plan or 3D
+view is shown. It lists every finding (ERROR/WARNING/INFO, sorted by
 severity, each showing its step, message, and value/expected when present), a live
 ERROR/WARNING/INFO count in the header, and a collapse toggle. `ui.js` only renders what it's
 given — no validation logic lives there.
 
-## Material Takeoff Layer (implemented, not yet wired into the UI)
+## Material Takeoff Layer (implemented; wired into the UI — see "Workspace UI (stage 10)")
 
 `src/takeoff/` computes a bill-of-quantities from the same constructional model as everything
 above (`TreadModel[]`/`RiserModel[]`/`StringerModel`+`StringerConstructionGeometry`/
@@ -500,8 +571,8 @@ mirroring the Validator's own composition:
   and `toTextReport.js` (the intended PDF export point; an INVALID/UNSUPPORTED item is reported
   as "BRAK WYLICZONEJ ILOŚCI" with its diagnostics, never a fabricated number).
 
-**Not yet wired into the UI** — same deliberate staging as the Validator was before its own UI
-stage; wiring it in later needs no new plumbing.
+**Wired into the UI in stage 10** (the "Kosztorys" tab — see the Workspace section below); the
+facade needed no new plumbing, exactly as staged.
 Tests: [src/takeoff/__tests__/materialTakeoff.test.js](src/takeoff/__tests__/materialTakeoff.test.js)
 (scenarios A/B/C/D/E/G/H/I/J/K plus waste/posts/risers),
 [src/takeoff/__tests__/pricing.test.js](src/takeoff/__tests__/pricing.test.js),

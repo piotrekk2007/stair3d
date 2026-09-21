@@ -95,6 +95,9 @@ function midpoint(a, b) {
  * @param {(boundaryIndex: number) => void} opts.onEdgeContextMenu  Right-click on a handle —
  *   caller resets that boundary's override.
  * @param {(stepIndex: number|null) => void} opts.onStepClick  null = clicked empty background.
+ * @param {(side: 'outer'|'inner') => void} [opts.onStringerClick]  Click on a stringer path
+ *   (`.stringer-path[data-side]`). Omit and a stringer click falls through as a background click.
+ * @param {(postId: string) => void} [opts.onPostClick]  Click on a post (`.post-marker[data-post-id]`).
  * @param {() => {x:number,y:number}[]} [opts.getSnapPoints]  Optional — every OTHER point on
  *   the current plan a dragged corner may snap into exact alignment with (see snapPoint above).
  *   Omit to fall back to grid-only snapping.
@@ -116,6 +119,8 @@ export function attachPlanInteractions(opts) {
     onEdgeDragEnd,
     onEdgeContextMenu,
     onStepClick,
+    onStringerClick,
+    onPostClick,
     getSnapPoints,
     onOverhangDragMove,
     onOverhangDragEnd,
@@ -125,7 +130,7 @@ export function attachPlanInteractions(opts) {
   let spacePressed = false;
   let panState = null; // { pointerId, lastX, lastY }
   let dragState = null; // edge-handle drag
-  let clickCandidate = null; // { pointerId, downX, downY, stepIndex|null }
+  let clickCandidate = null; // { pointerId, downX, downY, hit:{kind:'step'|'stringer'|'post', ...} }
   const activePointers = new Map(); // pointerId -> {x, y} in CLIENT (screen) coords
   let pinchState = null; // { initialDistance, initialViewport }
 
@@ -233,11 +238,29 @@ export function attachPlanInteractions(opts) {
     }
 
     if (e.button === 0) {
-      const stepEl = e.target.closest('.step-object');
+      // Kolejność = kolejność rysowania w SVG (słupy nad wangami nad stopniami): to, co
+      // użytkownik widzi na wierzchu, jest tym, co zaznacza. Identyfikatory pochodzą z
+      // data-* wystawionych przez renderer (model), nie z geometrii.
+      const postEl = e.target.closest('.post-marker');
+      const stringerEl = postEl ? null : e.target.closest('.stringer-path');
+      const stepEl = postEl || stringerEl ? null : e.target.closest('.step-object');
       const stepIndex = stepEl ? Number(stepEl.dataset.stepIndex) : null;
-      clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, stepIndex };
+      const hit = postEl
+        ? { kind: 'post', postId: postEl.dataset.postId }
+        : stringerEl
+          ? { kind: 'stringer', side: stringerEl.dataset.side }
+          : { kind: 'step', stepIndex };
+      clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit };
     }
   });
+
+  // Każdy live-podgląd przeciągania kończy się przerysowaniem planu (rebuild -> innerHTML), więc
+  // <svg> zapamiętany w pointerdown jest po pierwszym ruchu ODPIĘTY od dokumentu, a jego
+  // getScreenCTM() nie opisuje już ekranu — współrzędne myszy byłyby przeliczane na śmieci
+  // (uchwyt "uciekał" w przeciwną stronę). Zawsze przeliczamy względem aktualnego <svg>.
+  function liveSvg() {
+    return getSvg() || dragState.svg;
+  }
 
   panelEl.addEventListener('pointermove', (e) => {
     if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -266,7 +289,7 @@ export function attachPlanInteractions(opts) {
     }
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
-      const raw = screenToPlanPoint(dragState.svg, e.clientX, e.clientY);
+      const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       const references = (getSnapPoints ? getSnapPoints() : []).filter((ref) => distance(ref, raw) > 1e-6);
       const { point: p } = snapPoint(raw, references);
       dragState.currentPoint = p;
@@ -277,7 +300,7 @@ export function attachPlanInteractions(opts) {
     }
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'overhang') {
-      const raw = screenToPlanPoint(dragState.svg, e.clientX, e.clientY);
+      const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       // Project the raw drag point onto the handle's own 1D axis (dot product with its unit
       // direction) — this is the ONLY thing that can change here, since an overhang has no
       // meaningful second degree of freedom. Grid-snapped to the same 5mm step as a corner
@@ -324,7 +347,13 @@ export function attachPlanInteractions(opts) {
 
     if (clickCandidate && e.pointerId === clickCandidate.pointerId) {
       const moved = Math.hypot(e.clientX - clickCandidate.downX, e.clientY - clickCandidate.downY);
-      if (moved < 4) onStepClick(clickCandidate.stepIndex); // treat as a click, not a drag
+      if (moved < 4) {
+        // treat as a click, not a drag
+        const { hit } = clickCandidate;
+        if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
+        else if (hit.kind === 'stringer' && onStringerClick) onStringerClick(hit.side);
+        else onStepClick(hit.kind === 'step' ? hit.stepIndex : null);
+      }
       clickCandidate = null;
     }
   }

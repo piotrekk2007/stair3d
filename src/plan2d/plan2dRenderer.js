@@ -10,6 +10,7 @@
 
 import { computeWinderBlank } from '../geometry/winderBlank.js';
 import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
+import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -218,6 +219,40 @@ function stepsXML(planLayout, selectedStepIndex) {
     .join('');
 }
 
+// Odcinek pomiarowy z etykietą — do wymiarów, które nie leżą w poziomie/pionie (szerokość
+// stopnia zabiegowego, rozstaw wang). Punkty z modelu, współrzędne planu (odwrócone Y jak reszta).
+function measureLineXML(a, b, label, color) {
+  const mx = (a.x + b.x) / 2;
+  const my = -(a.y + b.y) / 2;
+  return `
+    <g class="dim">
+      <line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="10"/>
+      <circle cx="${fmt(a.x)}" cy="${fmt(-a.y)}" r="24" fill="${color}"/>
+      <circle cx="${fmt(b.x)}" cy="${fmt(-b.y)}" r="24" fill="${color}"/>
+      <text x="${fmt(mx)}" y="${fmt(my)}" font-size="85" fill="${color}" text-anchor="middle" dy="-30" stroke="#fff" stroke-width="14" paint-order="stroke">${label}</text>
+    </g>`;
+}
+
+// Szerokość każdego stopnia ZABIEGOWEGO na stałej linii pomiarowej (WINDER_WIDTH_MEASURE_OFFSET_MM
+// od duszy — ten sam punkt, w którym waliduje ją PL-LEGAL-C-01). Punkty czyta z walklineModel.js.
+function winderWidthXML(planLayout, config) {
+  const model = buildWalklineModel(planLayout, { ...config, walklineOffset: WINDER_WIDTH_MEASURE_OFFSET_MM });
+  return model.points
+    .filter((p) => planLayout.treads[Number(p.stepId.replace('step-', ''))]?.type === 'winder')
+    .map((p) => measureLineXML(p.front, p.back, `${fmt(Math.hypot(p.back.x - p.front.x, p.back.y - p.front.y))} mm`, '#b8860b'))
+    .join('');
+}
+
+// Rozstaw wang (odległość zewn.↔wewn. na pierwszej granicy, z nominalnej geometrii) oraz
+// minimalny przekrój drewna wangi z parametrów — wymiary z modelu, nie ze współrzędnych ekranu.
+function stringerSpacingXML(planLayout, config) {
+  const boundary = getNominalBoundaryPoints(planLayout.treads, 0);
+  if (!boundary) return '';
+  const [inner, outer] = boundary;
+  const spacing = Math.hypot(outer.x - inner.x, outer.y - inner.y);
+  return measureLineXML(inner, outer, `rozstaw wang ${fmt(spacing)} mm · min. drewno ${config.stringerMinRemainingSectionMm} mm`, '#6a3fb5');
+}
+
 /**
  * @param {import('../geometry/planLayout.js').PlanLayout} planLayout
  * @param {object} config
@@ -229,11 +264,14 @@ function stepsXML(planLayout, selectedStepIndex) {
  * @param {boolean} [options.showWinderBlanks]
  * @param {boolean} [options.editMode]
  * @param {number|null} [options.selectedStepIndex]
+ * @param {{elementType:string, stringerId?:string, postId?:string}|null} [options.selection]  Zaznaczenie
+ *   wangi/słupa (kształt z ui/selection.js) — tylko podświetlenie, renderer niczego nie wybiera sam.
  * @param {{grid?:boolean, axes?:boolean, widths?:boolean, walkline?:boolean,
- *   runBoundaries?:boolean, stepBoundaries?:boolean, stringers?:boolean}} [options.layers]
+ *   runBoundaries?:boolean, stepBoundaries?:boolean, stringers?:boolean,
+ *   winderWidth?:boolean, stringerSpacing?:boolean}} [options.layers]
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, layers = {} } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {} } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -252,26 +290,42 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
         })
         .join('');
 
-  const stringersXML = layers.stringers === false ? '' : `
-    <polyline points="${polygonPoints(planLayout.outerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>
-    <polyline points="${polygonPoints(planLayout.innerFullPath)}" fill="none" stroke="#8a5a34" stroke-width="30"/>`;
+  // Wangi są zaznaczalne (etap 10): niewidoczna, szeroka nakładka ułatwia trafienie kliknięciem,
+  // a data-side (outer|inner) to jawny identyfikator modelu — main.js nie zgaduje go z geometrii.
+  const stringerPath = (side, pts) => {
+    const selected = selection?.elementType === 'stringer' && selection.stringerId === side;
+    return `
+    <g class="stringer-path${selected ? ' selected' : ''}" data-side="${side}">
+      <polyline points="${polygonPoints(pts)}" fill="none" stroke="${selected ? '#1a5fb4' : '#8a5a34'}" stroke-width="${selected ? 46 : 30}"/>
+      <polyline points="${polygonPoints(pts)}" fill="none" stroke="transparent" stroke-width="110" pointer-events="stroke"/>
+    </g>`;
+  };
+  const stringersXML = layers.stringers === false ? '' : stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath);
 
+  // ID słupa = ten sam co w postSolver.js (post-start / post-end / post-corner-<indeks zakrętu>;
+  // przy "1 dużym podeście" drugi zakręt ma ten sam róg, więc dostaje ID pierwszego).
+  const postRect = (postId, x, y, size) => {
+    const selected = selection?.elementType === 'post' && selection.postId === postId;
+    return `<rect class="post-marker${selected ? ' selected' : ''}" data-post-id="${postId}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(size)}" height="${fmt(size)}" fill="${selected ? '#1a5fb4' : '#5a3d24'}" stroke="${selected ? '#1a5fb4' : 'none'}" stroke-width="30"/>`;
+  };
+  const cornerIds = [];
   const postsXML = planLayout.turns
-    .map((t) => {
+    .map((t, i) => {
       const s = config.postSize;
-      const x = t.innerCorner.x - s / 2;
-      const y = -t.innerCorner.y - s / 2;
-      return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(s)}" height="${fmt(s)}" fill="#5a3d24"/>`;
+      const first = cornerIds.find((c) => Math.hypot(c.p.x - t.innerCorner.x, c.p.y - t.innerCorner.y) < 1);
+      const postId = first ? first.id : `post-corner-${i}`;
+      if (!first) cornerIds.push({ p: t.innerCorner, id: postId });
+      return postRect(postId, t.innerCorner.x - s / 2, -t.innerCorner.y - s / 2, s);
     })
     .join('');
 
   const startPost = planLayout.innerFullPath[0];
   const endPost = planLayout.innerFullPath[planLayout.innerFullPath.length - 1];
-  const startEndPostsXML = [startPost, endPost]
-    .map((p) => {
-      const s = config.postSize;
-      return `<rect x="${fmt(p.x - s / 2)}" y="${fmt(-p.y - s / 2)}" width="${fmt(s)}" height="${fmt(s)}" fill="#5a3d24"/>`;
-    })
+  const startEndPostsXML = [
+    ['post-start', startPost],
+    ['post-end', endPost],
+  ]
+    .map(([postId, p]) => postRect(postId, p.x - config.postSize / 2, -p.y - config.postSize / 2, config.postSize))
     .join('');
 
   const footprintX = b.maxX - b.minX;
@@ -300,6 +354,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const walklineXMLStr = layers.walkline ? walklineXML(planLayout, config) : '';
   const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
   const stepBoundariesXMLStr = layers.stepBoundaries || editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
+  const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
+  const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
@@ -316,6 +372,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${startEndPostsXML}
     ${arrowXML}
     ${widthsXML}
+    ${winderWidthXMLStr}
+    ${stringerSpacingXMLStr}
     ${legendXML}
     ${stepBoundariesXMLStr}
     ${editXML}

@@ -13,7 +13,7 @@
 
 import { treadGoingAtOffsetFromInner } from '../geometry/walklineModel.js';
 
-const WINDER_WIDTH_LEGAL_OFFSET_MM = 400; // § 69 ust. 5 — fixed measurement point, not config.walklineOffset
+import { WINDER_WIDTH_MEASURE_OFFSET_MM as WINDER_WIDTH_LEGAL_OFFSET_MM } from '../geometry/walklineModel.js'; // § 69 ust. 5 — fixed measurement point, not config.walklineOffset
 
 /**
  * @param {Object} config       Full config, including `riserHeight` (as buildStaircase.js merges it)

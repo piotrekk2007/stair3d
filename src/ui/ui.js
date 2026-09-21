@@ -1,5 +1,11 @@
 import GUI from 'lil-gui';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
+import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
+import { DEFAULT_MATERIAL_CATALOG } from '../takeoff/materialCatalog.js';
+import { elementLabelPl } from './takeoffView.js';
+import { stepIndexFromElementId } from './selection.js';
+
+const AUTO_BADGE = stateBadgeHTML('auto');
 
 // Dopina przycisk kłódki do wiersza kontrolki lil-gui — realizuje wymaganie 13 (blokowanie
 // wybranych parametrów). Blokada to WYŁĄCZNIE wyłączenie kontrolki w UI (config.lockedFields,
@@ -9,10 +15,14 @@ function makeLockable(controller, config, fieldName) {
   btn.type = 'button';
   btn.className = 'lock-toggle';
   btn.title = 'Zablokuj/odblokuj to pole przed przypadkową zmianą';
+  // Znacznik stanu wartości (etap 10, sekcja 3): AUTO = pole nie jest zablokowane, wartość może
+  // być swobodnie zmieniana; USER = użytkownik świadomie zablokował (ustalił) tę wartość.
+  const badge = stateBadgeElement('auto');
   const sync = () => {
     const locked = config.lockedFields.includes(fieldName);
     btn.textContent = locked ? '🔒' : '🔓';
     btn.classList.toggle('locked', locked);
+    setStateBadge(badge, locked ? 'user' : 'auto');
     controller.disable(locked);
   };
   btn.addEventListener('click', (e) => {
@@ -23,6 +33,7 @@ function makeLockable(controller, config, fieldName) {
     else config.lockedFields.push(fieldName);
     sync();
   });
+  controller.domElement.appendChild(badge);
   controller.domElement.appendChild(btn);
   sync();
   return controller;
@@ -45,8 +56,14 @@ export function createUI({
   onUndo,
   onRedo,
   onFitPlanView,
+  container,
+  takeoffSettings,
+  onTakeoffSettingsChange,
 }) {
-  const gui = new GUI({ title: 'Parametry schodów' });
+  // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
+  // do rogu body (stary układ). Grupy poniżej odpowiadają sekcjom specyfikacji etapu 10:
+  // OGÓLNE / GEOMETRIA BIEGU / KONSTRUKCJA / MATERIAŁY.
+  const gui = new GUI({ title: 'Parametry schodów', container });
 
   // Pole jest "na żywo" podczas przeciągania suwaka (onChange -> tylko przebudowa, bez
   // wpisu do historii) i "zatwierdzane" dopiero po puszczeniu (onFinishChange -> wpis do
@@ -72,7 +89,7 @@ export function createUI({
     gui.add({ load: onLoadProject }, 'load').name('📂 Wczytaj projekt (JSON)');
   }
 
-  gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
+  if (onReset) gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
 
   live(gui.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
   live(gui.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
@@ -120,6 +137,26 @@ export function createUI({
   lockable(ceiling.add(config, 'openingOffsetX', -2000, 2000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
   lockable(ceiling.add(config, 'openingOffsetY', -2000, 2000, 10).name('Otwór: offset Y [mm]'), 'openingOffsetY');
 
+  // MATERIAŁY (sekcja 2 specyfikacji): gatunek/katalog (tylko odczyt) + ceny i współczynniki
+  // odpadu. To NIE jest `config` (warstwa Material Takeoff, nie parametr geometrii) — zmiana
+  // przelicza wyłącznie kosztorys, nie wchodzi do historii modelu i nie dotyka solverów.
+  if (takeoffSettings) {
+    const materials = gui.addFolder('Materiały i ceny');
+    materials.close();
+    const notify = () => onTakeoffSettingsChange?.();
+    for (const price of takeoffSettings.priceList) {
+      const entry = DEFAULT_MATERIAL_CATALOG[price.materialId];
+      const unitLabel = price.unit === 'volume' ? 'm³' : price.unit === 'area' ? 'm²' : 'szt.';
+      const label = `${entry?.label ?? price.materialId} [${price.currency}/${unitLabel}]`;
+      materials.add(price, 'price', 0, price.unit === 'area' ? 500 : 12000, price.unit === 'area' ? 1 : 50).name(label).onChange(notify);
+      if (entry?.species) materials.add({ species: entry.species }, 'species').name('  gatunek').disable();
+    }
+    const wasteFolder = materials.addFolder('Odpady / zapas materiałowy');
+    for (const type of Object.keys(takeoffSettings.wasteFactors)) {
+      wasteFolder.add(takeoffSettings.wasteFactors, type, 0, 0.4, 0.01).name(`${elementLabelPl(type)} [ułamek]`).onChange(notify);
+    }
+  }
+
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));
   view.add(viewState, 'showDimensions').name('Pokaż wymiary').onChange((v) => onViewChange('showDimensions', v));
@@ -149,6 +186,8 @@ export function createUI({
     ['runBoundaries', 'Granice biegów'],
     ['stepBoundaries', 'Granice stopni'],
     ['stringers', 'Wangi'],
+    ['winderWidth', 'Szer. zabiegu na linii pomiaru'],
+    ['stringerSpacing', 'Rozstaw wang / min. głębokość'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));
@@ -180,10 +219,10 @@ export function refreshUI(gui) {
   gui.controllersRecursive().forEach((c) => c.updateDisplay());
 }
 
-export function createInfoPanel() {
+export function createInfoPanel(container = document.body) {
   const panel = document.createElement('div');
   panel.id = 'info-panel';
-  document.body.appendChild(panel);
+  container.appendChild(panel);
   return panel;
 }
 
@@ -191,17 +230,17 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit) 
   const rows = [];
   rows.push(`<div class="row"><span>Liczba stopni</span><b>${derived.numTreads}</b></div>`);
   rows.push(`<div class="row"><span>Głębokość stopnia (prosty)</span><b>${config.treadGoing.toFixed(0)} mm</b></div>`);
-  rows.push(`<div class="row resultant"><span>Wysokość podstopnia <i>(wyliczone)</i></span><b>${derived.riserHeight.toFixed(1)} mm</b></div>`);
+  rows.push(`<div class="row resultant"><span>Wysokość podstopnia ${AUTO_BADGE}</span><b>${derived.riserHeight.toFixed(1)} mm</b></div>`);
   rows.push(`<div class="row"><span>Wysokość kondygnacji</span><b>${config.totalRise.toFixed(0)} mm</b></div>`);
 
   if (planLayout) {
     const footprintX = planLayout.bounds.maxX - planLayout.bounds.minX;
     const footprintY = planLayout.bounds.maxY - planLayout.bounds.minY;
-    rows.push(`<div class="row resultant"><span>Rzut klatki (dł. × szer.) <i>(wyliczone)</i></span><b>${footprintY.toFixed(0)} × ${footprintX.toFixed(0)} mm</b></div>`);
+    rows.push(`<div class="row resultant"><span>Rzut klatki (dł. × szer.) ${AUTO_BADGE}</span><b>${footprintY.toFixed(0)} × ${footprintX.toFixed(0)} mm</b></div>`);
   }
 
   const blondelClass = derived.blondelOk ? 'ok' : 'warn';
-  rows.push(`<div class="row resultant ${blondelClass}"><span>Wzór Blondela (2h+e) <i>(wyliczone)</i></span><b>${derived.blondel.toFixed(0)} mm</b></div>`);
+  rows.push(`<div class="row resultant ${blondelClass}"><span>Wzór Blondela (2h+e) ${AUTO_BADGE}</span><b>${derived.blondel.toFixed(0)} mm</b></div>`);
   if (!derived.blondelOk) rows.push(`<div class="note warn">Poza zalecanym zakresem 600-650mm</div>`);
 
   const riserClass = derived.riserRangeOk ? 'ok' : 'warn';
@@ -209,7 +248,7 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit) 
 
   if (derived.minInnerSegment !== null) {
     const innerClass = derived.minInnerWidthOk ? 'ok' : 'warn';
-    rows.push(`<div class="row resultant ${innerClass}"><span>Szer. przy duszy <i>(wyliczone)</i></span><b>${derived.minInnerSegment.toFixed(0)} mm</b></div>`);
+    rows.push(`<div class="row resultant ${innerClass}"><span>Szer. przy duszy ${AUTO_BADGE}</span><b>${derived.minInnerSegment.toFixed(0)} mm</b></div>`);
   }
 
   if (!derived.turnFeasible) {
@@ -233,163 +272,113 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit) 
   panel.innerHTML = rows.join('');
 }
 
-// Panel szczegółów zaznaczonego stopnia (wymaganie 9). `tread` to obiekt z
-// planLayout.treads (patrz geometry/planLayout.js) — pokazujemy go bezpośrednio jako
-// niezależny obiekt logiczny (wymaganie 8), nie odczytujemy niczego z siatki Three.js.
-export function createStepInfoPanel() {
-  const panel = document.createElement('div');
-  panel.id = 'step-info-panel';
-  panel.hidden = true;
-  document.body.appendChild(panel);
-  return panel;
+
+// --- Panel WALIDACJI (zakładka prawego panelu; Staircase Validator — src/validator/StaircaseValidator.js) ---
+// Czysto prezentacyjne: ten plik nigdy nie liczy diagnostyki sam, tylko renderuje to, co
+// przyszło z zewnątrz (main.js woła validateModels() i przekazuje wynik). Diagnostyki są
+// grupowane wg poziomu (ERROR/WARNING/INFO); każda pokazuje element, ID reguły, wartość
+// zmierzoną vs oczekiwaną i komunikat. Kliknięcie diagnostyki woła onSelect(diagnostic) —
+// main.js decyduje, co podświetlić (UI nie zgaduje geometrii).
+const SEVERITY_LABEL_PL = { ERROR: 'BŁĘDY', WARNING: 'OSTRZEŻENIA', INFO: 'INFORMACJE' };
+const SEVERITY_BADGE_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
+const SEVERITY_ORDER = ['ERROR', 'WARNING', 'INFO'];
+const ELEMENT_TYPE_LABEL_PL = { tread: 'Stopień', riser: 'Podstopień', stringer: 'Wanga', post: 'Słup', stair: 'Schody', config: 'Parametry' };
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
 
-// --- Panel wyników walidatora (Staircase Validator — src/validator/StaircaseValidator.js) ---
-// Czysto prezentacyjne: ten plik nigdy nie liczy diagnostyki sam, tylko renderuje to, co
-// przyszło z zewnątrz (main.js woła validateModels() i przekazuje wynik). Panel pokazuje się
-// OBOK widoku 2D/3D — jest overlayem niezależnym od tego, który z nich jest aktualnie
-// wyświetlony (patrz style.css, z-index wyższy niż #plan2d-panel), nie zastępuje żadnego z nich.
-const SEVERITY_LABEL_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
-const SEVERITY_ORDER = { ERROR: 0, WARNING: 1, INFO: 2 };
+// Czytelna nazwa elementu: 'step-6' -> 'Stopień 7' (numer jak na planie 2D, 1-based).
+export function describeDiagnosticElement(d) {
+  const stepIndex = stepIndexFromElementId(d.elementId);
+  if (stepIndex !== null) return `Stopień ${stepIndex + 1}`;
+  const typeLabel = ELEMENT_TYPE_LABEL_PL[d.elementType] || d.elementType;
+  return d.elementId ? `${typeLabel} ${d.elementId}` : typeLabel;
+}
 
-export function createValidatorPanel() {
+export function createValidatorPanel(container, { onSelect } = {}) {
   const panel = document.createElement('div');
   panel.id = 'validator-panel';
-  panel.innerHTML = `
-    <div id="validator-panel-header">
-      <span id="validator-panel-title">Walidacja</span>
-      <span id="validator-panel-summary"></span>
-      <button type="button" id="validator-panel-toggle" title="Zwiń/rozwiń panel">▾</button>
-    </div>
-    <div id="validator-panel-body"></div>
-  `;
-  document.body.appendChild(panel);
-
-  const body = panel.querySelector('#validator-panel-body');
-  const toggle = panel.querySelector('#validator-panel-toggle');
-  toggle.addEventListener('click', () => {
-    const collapsed = panel.classList.toggle('collapsed');
-    toggle.textContent = collapsed ? '▸' : '▾';
-    body.hidden = collapsed;
+  panel.innerHTML = `<div id="validator-panel-summary"></div><div id="validator-panel-body"></div>`;
+  container.appendChild(panel);
+  panel._diagnostics = [];
+  panel.querySelector('#validator-panel-body').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-diag-index]');
+    if (!el) return;
+    const d = panel._diagnostics[Number(el.dataset.diagIndex)];
+    if (d && onSelect) onSelect(d);
   });
-
   return panel;
 }
 
 function formatValueExpected(d) {
   if (d.value === null && d.expected === null) return '';
-  const unit = d.unit ? d.unit : '';
-  const value = d.value === null ? null : typeof d.value === 'object' ? JSON.stringify(d.value) : `${d.value}${unit}`;
-  const expected = d.expected === null ? null : typeof d.expected === 'object' ? JSON.stringify(d.expected) : `${d.expected}${unit}`;
+  const unit = d.unit ? ` ${d.unit}` : '';
+  const fmt = (v) => (typeof v === 'object' ? JSON.stringify(v) : typeof v === 'number' ? `${Number(v.toFixed(2))}${unit}` : `${v}${unit}`);
   const parts = [];
-  if (value !== null) parts.push(`wartość: ${value}`);
-  if (expected !== null) parts.push(`oczekiwano: ${expected}`);
-  return parts.length ? `<div class="validator-finding-detail">${parts.join(' · ')}</div>` : '';
+  if (d.value !== null) parts.push(`zmierzono: <b>${escapeHtml(fmt(d.value))}</b>`);
+  if (d.expected !== null) parts.push(`oczekiwano: <b>${escapeHtml(fmt(d.expected))}</b>`);
+  return `<div class="validator-finding-detail">${parts.join(' · ')}</div>`;
 }
 
-// `diagnostics` — Diagnostic[] z src/diagnostics/diagnostic.js (ERROR/WARNING/INFO), dokładnie
-// jak zwraca StaircaseValidator.validateModels()/validateStaircase(). Element/step/parametr są
-// tu tylko WYŚWIETLANE — żadna logika oceny nie żyje w tym pliku.
-export function updateValidatorPanel(panel, diagnostics) {
+/**
+ * @param {HTMLElement} panel
+ * @param {import('../diagnostics/diagnostic.js').Diagnostic[]} diagnostics
+ * @param {{selectedDiagnostic?: object|null}} [options]
+ * @returns {{ERROR:number, WARNING:number, INFO:number}} liczby wg poziomu (dla znaczników/statusu)
+ */
+export function updateValidatorPanel(panel, diagnostics, { selectedDiagnostic = null } = {}) {
   const summary = panel.querySelector('#validator-panel-summary');
   const body = panel.querySelector('#validator-panel-body');
 
   const counts = { ERROR: 0, WARNING: 0, INFO: 0 };
   for (const d of diagnostics) counts[d.severity] = (counts[d.severity] || 0) + 1;
   summary.innerHTML = `
-    <span class="validator-count error">${counts.ERROR} 🛑</span>
-    <span class="validator-count warning">${counts.WARNING} ⚠️</span>
-    <span class="validator-count info">${counts.INFO} ℹ️</span>
+    <span class="validator-count error">${counts.ERROR} błędów</span>
+    <span class="validator-count warning">${counts.WARNING} ostrzeżeń</span>
+    <span class="validator-count info">${counts.INFO} informacji</span>
   `;
 
+  // Indeks w panel._diagnostics = kolejność wyświetlania (po posortowaniu wg poziomu), żeby
+  // data-diag-index z kliknięcia zawsze wskazywał dokładnie tę diagnostykę, którą widać.
+  const ordered = [];
+  for (const severity of SEVERITY_ORDER) ordered.push(...diagnostics.filter((d) => d.severity === severity));
+  panel._diagnostics = ordered;
+
   if (diagnostics.length === 0) {
-    body.innerHTML = `<div class="validator-empty">Brak zastrzeżeń — model spełnia wszystkie sprawdzone reguły.</div>`;
-    return;
+    body.innerHTML = `<div class="validator-empty">✔ Brak zastrzeżeń — model spełnia wszystkie sprawdzone reguły.</div>`;
+    return counts;
   }
 
-  const sorted = [...diagnostics].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
-  body.innerHTML = sorted
-    .map((d) => {
-      const location = d.elementId || d.elementType;
-      return `
-        <div class="validator-finding ${d.severity.toLowerCase()}">
+  let index = 0;
+  body.innerHTML = SEVERITY_ORDER.map((severity) => {
+    const group = diagnostics.filter((d) => d.severity === severity);
+    if (group.length === 0) return '';
+    const items = group
+      .map((d) => {
+        const i = index++;
+        const selected = d === selectedDiagnostic ? ' selected' : '';
+        return `
+        <div class="validator-finding ${severity.toLowerCase()}${selected}" data-diag-index="${i}" title="Kliknij, aby podświetlić element">
           <div class="validator-finding-head">
-            <span class="validator-badge ${d.severity.toLowerCase()}">${SEVERITY_LABEL_PL[d.severity]}</span>
-            <span class="validator-finding-location">${location}</span>
+            <span class="validator-badge ${severity.toLowerCase()}">${SEVERITY_BADGE_PL[severity]}</span>
+            <span class="validator-finding-location">${escapeHtml(describeDiagnosticElement(d))}</span>
+            <code class="validator-rule">${escapeHtml(d.ruleId)}</code>
           </div>
-          <div class="validator-finding-message">${d.message}</div>
+          <div class="validator-finding-message">${escapeHtml(d.message)}</div>
           ${formatValueExpected(d)}
-        </div>
-      `;
-    })
-    .join('');
+        </div>`;
+      })
+      .join('');
+    return `<div class="validator-group ${severity.toLowerCase()}"><div class="validator-group-title">${SEVERITY_LABEL_PL[severity]} <span>${group.length}</span></div>${items}</div>`;
+  }).join('');
+  return counts;
 }
 
-// --- Panel inspektora elementu 3D (traceability — src/scene/traceability.js/elementInspector.js) ---
-// Kliknięcie dowolnego traceable elementu w 3D (stopień/podstopień/panel wangi/słup) pokazuje
-// tu jego surowe dane źródłowe: typ elementu, ID stopnia, ID wangi, geometrySourceId — czysto
-// prezentacyjne, żadna logika rozpoznawania kliknięcia nie żyje w tym pliku (patrz main.js).
-const ELEMENT_TYPE_LABEL_PL = { tread: 'Stopień', riser: 'Podstopień', stringer: 'Panel wangi', post: 'Słup' };
-
-export function createElementInspectorPanel() {
-  const panel = document.createElement('div');
-  panel.id = 'element-inspector-panel';
-  panel.hidden = true;
-  document.body.appendChild(panel);
-  return panel;
-}
-
-/**
- * @param {HTMLElement} panel
- * @param {import('../diagnostics/diagnostic.js').Diagnostic|import('../scene/traceability.js').traceability|null} traceabilityData
- *   null hides the panel (e.g. the user clicked empty space or a non-traceable object like the grid).
- */
-export function updateElementInspectorPanel(panel, traceabilityData) {
-  if (!traceabilityData) {
-    panel.hidden = true;
-    panel.innerHTML = '';
-    return;
+// Przełącza tylko klasę .selected na już wyrenderowanych diagnostykach — bez przebudowy listy,
+// więc scroll i stan panelu zostają, gdy zmienia się samo zaznaczenie.
+export function markValidatorSelection(panel, selectedDiagnostic) {
+  for (const el of panel.querySelectorAll('[data-diag-index]')) {
+    el.classList.toggle('selected', selectedDiagnostic !== null && panel._diagnostics[Number(el.dataset.diagIndex)] === selectedDiagnostic);
   }
-  panel.hidden = false;
-  const { elementType, stepId, stringerId, geometrySourceId } = traceabilityData;
-  const rows = [];
-  rows.push(`<div class="title">${ELEMENT_TYPE_LABEL_PL[elementType] || elementType}</div>`);
-  rows.push(`<div class="row"><span>Element type</span><b>${elementType}</b></div>`);
-  if (stepId) rows.push(`<div class="row"><span>Step ID</span><b>${stepId}</b></div>`);
-  if (stringerId) rows.push(`<div class="row"><span>Stringer ID</span><b>${stringerId}</b></div>`);
-  rows.push(`<div class="row"><span>Geometry source ID</span><b>${geometrySourceId}</b></div>`);
-  panel.innerHTML = rows.join('');
-}
-
-export function updateStepInfoPanel(panel, tread, config, overrides) {
-  if (!tread) {
-    panel.hidden = true;
-    panel.innerHTML = '';
-    return;
-  }
-  panel.hidden = false;
-
-  const boundaryBefore = tread.index;
-  const boundaryAfter = tread.index + 1;
-  const beforeManual = !!(overrides && overrides[boundaryBefore]);
-  const afterManual = !!(overrides && overrides[boundaryAfter]);
-
-  const typeLabelMap = { straight: 'prosty', winder: 'zabiegowy', landing: 'podest' };
-  const rows = [];
-  rows.push(`<div class="title">Stopień nr ${tread.index + 1}</div>`);
-  rows.push(`<div class="row"><span>Typ</span><b>${typeLabelMap[tread.type] || tread.type}</b></div>`);
-  rows.push(`<div class="row resultant"><span>Wysokość góry stopnia <i>(wyliczone)</i></span><b>${((tread.index + 1) * config.riserHeight).toFixed(1)} mm</b></div>`);
-
-  if (tread.winderInfo) {
-    rows.push(`<div class="row resultant"><span>Szerokość czoło <i>(wyliczone)</i></span><b>${tread.winderInfo.widths.atFront.toFixed(0)} mm</b></div>`);
-    rows.push(`<div class="row resultant"><span>Szerokość tył <i>(wyliczone)</i></span><b>${tread.winderInfo.widths.atBack.toFixed(0)} mm</b></div>`);
-    rows.push(`<div class="row"><span>Pozycja na walkline</span><b>${tread.winderInfo.stationStart.toFixed(0)}–${tread.winderInfo.stationEnd.toFixed(0)} mm</b></div>`);
-  } else {
-    rows.push(`<div class="row"><span>Głębokość (czoło→tył)</span><b>${config.treadGoing.toFixed(0)} mm</b></div>`);
-  }
-
-  rows.push(`<div class="row ${beforeManual ? 'manual' : 'auto'}"><span>Krawędź czoła</span><b>${beforeManual ? '🖊 ręczna' : '⚙ automatyczna'}</b></div>`);
-  rows.push(`<div class="row ${afterManual ? 'manual' : 'auto'}"><span>Krawędź tyłu</span><b>${afterManual ? '🖊 ręczna' : '⚙ automatyczna'}</b></div>`);
-
-  panel.innerHTML = rows.join('');
 }
