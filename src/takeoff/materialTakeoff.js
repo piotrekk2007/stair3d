@@ -19,7 +19,7 @@
 import { signedPolygonArea } from '../geometry/pathUtils.js';
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
-import { boundingRectAlong } from './stockGeometry.js';
+import { boundingRectAlong, minAreaRectUV } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
 import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
 
@@ -187,23 +187,23 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
   const netAreaMm2 = Math.abs(signedPolygonArea(geo.outerContour.map((p) => ({ x: p.u, y: p.v }))));
   const netVolumeMm3 = netAreaMm2 * geo.thicknessMm;
 
-  // STOCK: the plain rectangular board this would actually be cut FROM — length is the TRUE
-  // physical length of geo.pitchProfile (arc length in the (u,v) plane, where u = plan
-  // distance along the board and v = world elevation — its hypotenuse, not just its u-extent:
-  // a raked board is measurably longer than its horizontal plan projection). NOT the bounding
-  // box of geo.outerContour: the contour's top/bottom edges are now genuine PERPENDICULAR
-  // offsets of the pitch profile (see stringerConstructionGeometry.js), so the contour itself
-  // is a sheared quadrilateral whose axis-aligned bounding box doesn't equal true board length
-  // either. WIDTH is the DESIGN parameter (boardWidthMm) — the offset distance IS the true
-  // perpendicular board depth now, so this is no longer an approximation.
-  const lengthMm = profileLength(geo.pitchProfile);
-  const stockAreaMm2 = lengthMm * geo.boardWidthMm;
+  // STOCK: the plain rectangular BLANK this board is cut FROM — the smallest rectangle covering
+  // the whole solved contour (stockGeometry.js minAreaRectUV), not the design depth. It covers the
+  // stepped comb, the slanted ends, and any deeper local profile (a winder, a corner radius), so
+  // it is what the sawmill list and the price must use. The NOMINAL length stays the true arc
+  // length of the pitch profile (the finished board's length), the nominal width the design depth.
+  const nominalLengthMm = profileLength(geo.pitchProfile);
+  const blank = minAreaRectUV(geo.outerContour);
+  const lengthMm = blank.lengthMm;
+  const blankDepthMm = blank.widthMm;
+  const stockAreaMm2 = lengthMm * blankDepthMm;
   const stockVolumeMm3 = stockAreaMm2 * geo.thicknessMm;
 
   const notes = [];
   if (geo.diagnostics.length > 0) notes.push(`Diagnostyka konstrukcyjna: ${geo.diagnostics.map((d) => d.ruleId).join(', ')}`);
-  const { catalogStock, notes: catalogNotes } = buildCatalogStock(materialId, { lengthMm, widthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm });
+  const { catalogStock, notes: catalogNotes } = buildCatalogStock(materialId, { lengthMm, widthMm: blankDepthMm, thicknessMm: geo.thicknessMm });
   notes.push(...catalogNotes);
+  notes.push(`Formatka wangi (min. prostokąt opisujący kontur): ${Math.round(lengthMm)} × ${Math.round(blankDepthMm)} mm (głębokość projektowa ${Math.round(geo.boardWidthMm)} mm).`);
 
   return createTakeoffItem({
     itemId: `stringer-${side}-${segment.id}`,
@@ -214,8 +214,8 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
     materialId,
     quantity: 1,
     unit: 'szt',
-    nominalDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm, netAreaMm2 },
-    calculatedDimensions: { lengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm },
+    nominalDimensions: { lengthMm: nominalLengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm, netAreaMm2 },
+    calculatedDimensions: { lengthMm, boardWidthMm: blankDepthMm, thicknessMm: geo.thicknessMm },
     catalogStock,
     netVolume: netVolumeMm3 * MM3_TO_M3,
     netArea: netAreaMm2 * MM2_TO_M2,

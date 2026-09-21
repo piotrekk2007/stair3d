@@ -30,7 +30,7 @@ shape, arc strings, CNC/DXF output. This model gives Stair3D the same *level of 
 | **Housing** | A recess in the inner face (`closed` only). |
 | **Local stringer depth** | See §3. |
 | **Board thickness** | The board's dimension across the profile (`stringerThickness`, 40 mm). A different quantity. **Never call the depth "thickness".** |
-| **Blank depth** | Width of the raw board needed to cut the profile. Derived, not a parameter; the takeoff still reads the nominal depth (deliberately not changed yet). |
+| **Blank depth** | Width of the raw board needed to cut the profile. Derived, not a parameter: the smallest rectangle covering the solved contour (`minAreaRectUV`); the takeoff STOCK and the price use it. |
 
 ## 3. Local stringer depth — the mathematical definition
 
@@ -174,6 +174,25 @@ tangent, length), which today is straight and is **not modified by any profile p
 (tested). A curved plan path (Tier 3) would change only the path, the end cuts and the takeoff (bent or
 laminated board) — not the profile solver. Nothing curves the plan to solve the profile.
 
+## 11a. Board ends (implemented)
+
+Specified by the user: **floor** — a horizontal cut along the floor line; **post and joint with another
+stringer** — a vertical cut; **top, at the landing** — a vertical cut, as if the board rests against a beam
+or the floor slab.
+
+* Every end of a board is a **plumb face**. A board's span is its segment's `[0, length]` widened to also
+  cover the first/last tread seat (at a postless lap joint that seat reaches one board thickness past the
+  segment end); the lower and upper contours are cut at the *same* two planes. Before this, the top ran on
+  while the lower contour stopped, giving a slanted end face at lap joints. A tread seat that stops short of
+  a face continues flat to it.
+* **Foot**: the first board of a stringer stands on the floor. Its lower contour is cut where it meets `v = 0`
+  and the contour then runs *along the floor* back to a vertical start face (previously a slanted line from
+  the floor point to the top of the start face).
+* `StringerSegmentConstructionGeometry.ends = { start: {u, cut}, end: {u, cut} }`, `cut` = `VERTICAL` |
+  `FLOOR_HORIZONTAL`.
+* Not built: a tenon/housing where a board enters a post (only the plumb face), a cut that adapts to a
+  tilted beam, and a board whose lower contour never reaches the floor (it simply ends in a vertical face).
+
 ## 12. Parameters
 
 | Config key | Default | Meaning |
@@ -205,8 +224,8 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
   drops *every* leading point below the floor, not just the boundary point).
 * `sliceOffsetProfile` was removed (superseded by `sliceCurveByU` + `mergeCollinearLines`); its regression
   test moved to `profileCurve.test.js`.
-* The takeoff still reads the nominal depth for the stringer stock width. Deriving a **blank depth** from the
-  solved profile (and pricing from it) is the next stage, to be done once the geometry is stable.
+* The takeoff STOCK/price for a stringer now uses the **blank** (smallest covering rectangle of the solved
+  contour): unchanged for straight flights, deeper for winder boards.
 * Older docs (`docs/model/STAIRCASE_DATA_MODEL.md`, the rules catalogue text) still say `stringerHeight`; the
   code and project files use `minimumStringerDepthMm`.
 

@@ -108,7 +108,7 @@ test('totalCost sums calculatedCost across items, treating unpriced items as 0',
   const items = buildItems({ stairType: 'straight', treadsLegA: 6 });
   const treadMaterialId = items.find((i) => i.elementType === ELEMENT_TYPES.TREAD).materialId;
   const priced = applyPricing(items, [{ materialId: treadMaterialId, price: 4200, currency: 'PLN', unit: PRICE_UNITS.VOLUME }]); // only tread material priced
-  const expected = priced.filter((i) => i.materialId === treadMaterialId).reduce((sum, i) => sum + (i.calculatedCost || 0), 0);
+  const expected = Math.round(priced.filter((i) => i.materialId === treadMaterialId).reduce((sum, i) => sum + (i.calculatedCost || 0), 0) * 100) / 100; // total is rounded to grosze
   assert.equal(totalCost(priced), expected);
   assert.ok(priced.some((i) => i.materialId !== treadMaterialId && i.calculatedCost === null));
 });

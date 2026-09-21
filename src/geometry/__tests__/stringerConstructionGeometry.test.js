@@ -61,17 +61,18 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
 
   assert.equal(geo.constructionType, CONSTRUCTION_TYPES.CUT);
   const bearingCount = model.segments[0].treadBearings.length;
-  // Exactly 2 top points per bearing (the step) + 2 bottom corners — ONE polygon, not N
+  // Exactly 2 top points per bearing (the step) + 2 bottom corners + 1 floor-foot corner (the
+  // board's foot is cut horizontally on the floor with a vertical start face) — ONE polygon, not N
   // disconnected rectangles (which would instead be 4*N unrelated points with no shared edges).
-  assert.equal(geo.outerContour.length, bearingCount * 2 + 2);
+  assert.equal(geo.outerContour.length, bearingCount * 2 + 3);
   assert.equal(geo.diagnostics.length, 0, `expected no diagnostics on a realistic config, got: ${JSON.stringify(geo.diagnostics)}`);
   assert.ok(isSimplePolygon(geo.outerContour), 'outer contour must not self-intersect');
   assert.ok(geo.minRemainingSectionMm > 0, 'material thickness must be positive everywhere');
 
   // The bottom edge is a SINGLE straight line: its two endpoints' slope must match the pitch
   // line's own slope (continuity — not per-bearing steps on the bottom).
-  const bottomEnd = geo.outerContour[geo.outerContour.length - 2];
-  const bottomStart = geo.outerContour[geo.outerContour.length - 1];
+  const bottomEnd = geo.outerContour[geo.outerContour.length - 3];
+  const bottomStart = geo.outerContour[geo.outerContour.length - 2];
   const bottomSlope = (bottomEnd.v - bottomStart.v) / (bottomEnd.u - bottomStart.u);
   assert.ok(Math.abs(bottomSlope - geo.pitchLine.slope) < 1e-9);
 
@@ -83,19 +84,22 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
 // --- B. Straight housed (closed) stringer -------------------------------------------------------
 
 test('B. straight housed: outer contour is a plain 4-point parallelogram regardless of tread count, housings are separate', () => {
-  // 300 mm deep, so the lower edge stays above the floor: a deeper board (the 350 mm default) is
-  // legitimately cut flush with the floor at the bottom of the flight and becomes a pentagon —
-  // see the floor-trim tests below.
+  // At the bottom of the flight the board's foot is cut HORIZONTALLY on the floor line with a vertical
+  // start face, so the silhouette is a parallelogram plus that one foot corner (5 points).
   const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
 
   assert.equal(geo.constructionType, CONSTRUCTION_TYPES.CLOSED);
-  assert.equal(geo.outerContour.length, 4, 'a housed board is one plain rectangle in profile, independent of how many treads it supports');
+  assert.equal(geo.outerContour.length, 5, 'a housed board is one plain parallelogram in profile + the floor foot, independent of how many treads it supports');
   assert.ok(isSimplePolygon(geo.outerContour));
 
   // Both top and bottom edges are straight and PARALLEL to the pitch line.
-  const [p0, p1, p2, p3] = geo.outerContour;
+  const [p0, p1, p2, p3, foot] = geo.outerContour;
+  // The foot: horizontal along the floor (v = 0), start face vertical (same u as the top start).
+  assert.equal(p3.v, 0);
+  assert.equal(foot.v, 0);
+  assert.equal(foot.u, p0.u);
   const topSlope = (p1.v - p0.v) / (p1.u - p0.u);
   const bottomSlope = (p2.v - p3.v) / (p2.u - p3.u);
   assert.ok(Math.abs(topSlope - geo.pitchLine.slope) < 1e-9);

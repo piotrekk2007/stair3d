@@ -430,3 +430,64 @@ test('view model: carries treads, contours, the minimum-depth envelope, depth sa
   }
   assert.ok(views.some((v) => v.arcs.length > 0));
 });
+
+// --- board ends: floor foot horizontal, every other end a plumb face -------------------------------
+
+const END_CASES = [
+  ['straight cut', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'cut' }],
+  ['straight closed', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'closed' }],
+  ['L cut, corner post', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut' }],
+  ['L cut, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut', hasCornerPost: false }],
+  ['L closed, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'closed', hasCornerPost: false }],
+  ['U cut', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionType: 'cut' }],
+  ['U closed with radius', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionType: 'closed', stringerCornerRadiusMm: 100, stringerRadiusScope: 'BOTH' }],
+];
+
+for (const [label, patch] of END_CASES) {
+  test(`board ends — ${label}: both end faces are vertical (plumb) planes, on every board`, () => {
+    const { geo } = flight(patch);
+    for (const side of ['outer', 'inner']) {
+      for (const g of geo[side]) {
+        const us = g.outerContour.map((p) => p.u);
+        const minU = Math.min(...us);
+        const maxU = Math.max(...us);
+        // nothing sticks out past a face, and the faces are where `ends` says
+        assert.ok(Math.abs(maxU - g.ends.end.u) < 1e-6, `${side}/${g.segmentId}: end face at ${maxU}, ends says ${g.ends.end.u}`);
+        // a vertical edge exists at each end (two contour points share that u and are joined by an edge)
+        const n = g.outerContour.length;
+        const hasVerticalEdgeAt = (u) => g.outerContour.some((p, i) => Math.abs(p.u - u) < 1e-6 && Math.abs(g.outerContour[(i + 1) % n].u - u) < 1e-6 && Math.abs(g.outerContour[(i + 1) % n].v - p.v) > 1e-6);
+        assert.ok(hasVerticalEdgeAt(maxU), `${side}/${g.segmentId}: the end at u=${maxU} is not a vertical face`);
+        if (g.ends.start.cut === 'VERTICAL') {
+          assert.ok(Math.abs(minU - g.ends.start.u) < 1e-6);
+          assert.ok(hasVerticalEdgeAt(minU), `${side}/${g.segmentId}: the start at u=${minU} is not a vertical face`);
+        }
+      }
+    }
+  });
+
+  test(`board ends — ${label}: the foot is cut horizontally along the floor line and nothing goes below the floor`, () => {
+    const { geo } = flight(patch);
+    for (const side of ['outer', 'inner']) {
+      const first = geo[side][0];
+      const vs = first.outerContour.map((p) => p.v);
+      assert.ok(Math.min(...vs) >= -1e-9, `${side}: the first board dips below the floor`);
+      assert.equal(first.ends.start.cut, 'FLOOR_HORIZONTAL');
+      const n = first.outerContour.length;
+      const horizontalOnFloor = first.outerContour.some((p, i) => Math.abs(p.v) < 1e-9 && Math.abs(first.outerContour[(i + 1) % n].v) < 1e-9 && Math.abs(first.outerContour[(i + 1) % n].u - p.u) > 1e-6);
+      assert.ok(horizontalOnFloor, `${side}: no horizontal edge on the floor line`);
+      // only the very first board is a foot; later boards keep plain vertical faces
+      for (const later of geo[side].slice(1)) assert.equal(later.ends.start.cut, 'VERTICAL');
+      assert.ok(isSimplePolygon(first.outerContour));
+    }
+  });
+}
+
+test('board ends: at a postless lap joint the top and the lower contour end at the SAME plane (no slanted end face)', () => {
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut', hasCornerPost: false });
+  const [a, b] = geo.outer;
+  // the first board's end is the lap: its top ran one board thickness past the segment end, and the lower contour must too
+  assert.ok(a.ends.end.u > a.pitchProfile[a.pitchProfile.length - 1].u + 1, 'the board reaches past the segment end (the lap)');
+  assert.ok(b.ends.start.u < -1);
+  const lowEnd = a.lowerCurve[a.lowerCurve.length - 1].b;
+  assert.ok(Math.abs(lowEnd.u - a.ends.end.u) < 1e-6);
+});

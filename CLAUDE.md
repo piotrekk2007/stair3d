@@ -237,6 +237,12 @@ RULES #5 — and is never touched by any profile parameter or override).
   `stringerRadiusScope`, `stringerTransitionStyle`, `stringerNotchRadiusMm` (cut inside corners),
   `manualStringerProfileOverrides`. Defaults keep straight lines. **Project file schema v3**
   (migration v2->v3 renames `stringerHeight`; `stringerProfileOverrides` is a top-level field).
+- **Board ends**: every end is a plumb (vertical) face; the first board's foot is cut horizontally along the
+  floor line (`ends.start.cut = 'FLOOR_HORIZONTAL'`), with a vertical start face. Both contours are cut at the
+  same planes, so a postless lap joint no longer has a slanted end. See STRINGER_PROFILE_MODEL.md §11a.
+- **Takeoff blank**: a stringer's STOCK is now the smallest rectangle covering the whole solved contour
+  (`stockGeometry.js` `minAreaRectUV`) — the real board to buy/price — not the design depth. Straight
+  flights stay at the design depth; winder boards come out deeper. `totalCost` is rounded to grosze.
 - **Diagnostics**: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO),
   `STRINGER-OVERRIDE-ORPHANED`/`-REJECTED` (WARNING). An explicit override radius or moved point that
   breaks the minimum depth is KEPT and reported, not silently corrected.

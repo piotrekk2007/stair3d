@@ -251,6 +251,18 @@ function buildOverlayTop(effective) {
 // material (never thins the board), while the outside corner at each tread's front edge stays
 // sharp because that is the tread's own edge. With radius 0 the polygon is the comb exactly as
 // buildOverlayTop() made it.
+// A tread seat that stops short of a vertical end face (its own bearing starts/ends inside the
+// board's span — e.g. the first seat of a board after a post) continues FLAT at its own elevation
+// out to that face: the top edge never rises above a seat that is there, and the end face stays a
+// plumb line from the lower contour up to it.
+function extendCombToSpan(top, spanStart, spanEnd) {
+  const out = top.slice();
+  if (out[0].u > spanStart + GEOMETRY_EPS) out.unshift({ u: spanStart, v: out[0].v });
+  const last = out[out.length - 1];
+  if (last.u < spanEnd - GEOMETRY_EPS) out.push({ u: spanEnd, v: last.v });
+  return out;
+}
+
 const NOTCH_INSIDE_TURN = 1;
 function buildCombCurve(top, notchRadiusMm) {
   const points = top.filter((p, i) => i === 0 || Math.hypot(p.u - top[i - 1].u, p.v - top[i - 1].v) > GEOMETRY_EPS);
@@ -437,9 +449,18 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // join (see groupSegmentsByLapJoint).
     const toLocal = (p) => ({ u: p.u - segStart, v: p.v });
     const pitchProfile = slicePolylineByU(groupKnots, segStart, segEnd).map(toLocal);
-    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart, segEnd));
+    // END FACES. Every end of a board is cut VERTICALLY (a plumb plane at a post, at another
+    // stringer, against the landing/beam at the top): the board's span is the segment's own [0, length]
+    // widened to also cover the tread seats — at a postless lap joint the first/last seat reaches one
+    // board thickness past the segment end, and if the lower contour stopped at the segment end while
+    // the top ran on, the end face would be slanted. Both contours are cut at the SAME two planes.
+    const spanStart = Math.min(0, effective[0].uStart);
+    const spanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd);
+    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart + spanStart, segStart + spanEnd));
     const lowerCurve = translateCurveU(lowerGroupSlice, -segStart);
-    const upperCurveSolved = solved.upperCurve ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart, segEnd)), -segStart) : null;
+    const upperCurveSolved = solved.upperCurve
+      ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart + spanStart, segStart + spanEnd)), -segStart)
+      : null;
     // Arcs become chords only here, at the edge of the profile model, never inside it.
     const bottomPolyline = curveToPolyline(lowerCurve);
     const topPolyline = upperCurveSolved ? curveToPolyline(upperCurveSolved) : null;
@@ -450,7 +471,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     let housings;
     let upperCurve = upperCurveSolved;
     if (constructionType === CONSTRUCTION_TYPES.CUT) {
-      const comb = buildCombCurve(buildOverlayTop(effective), params.notchRadiusMm);
+      const comb = buildCombCurve(extendCombToSpan(buildOverlayTop(effective), spanStart, spanEnd), params.notchRadiusMm);
       upperCurve = comb.curve;
       outerContour = [...comb.polyline, ...bottomPolyline.slice().reverse()];
       diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
@@ -539,6 +560,9 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       lowerControl: localControl(solved.lowerControl),
       upperControl: localControl(solved.upperControl),
       outerContour,
+      // How each end of the board is cut. Always a vertical face at the span ends; the very first
+      // board's foot is then re-cut to a horizontal line on the floor (clampFirstSegmentToFloor).
+      ends: { start: { u: spanStart, cut: 'VERTICAL' }, end: { u: spanEnd, cut: 'VERTICAL' } },
       housings,
       boardWidthMm: boardWidth,
       thicknessMm: segment.thickness,
@@ -692,6 +716,19 @@ function clampFirstSegmentToFloor(orderedGeometries) {
     first.topProfile = trimmedTop;
     first.upperCurve = sliceCurveByU(first.upperCurve, trimmedTop[0].u, first.upperCurve[first.upperCurve.length - 1].b.u);
     changed = true;
+  }
+
+  // THE FOOT: the board stands on the floor with a HORIZONTAL cut along the floor line, and its
+  // start face is vertical. Where the lower contour was cut at the floor (u = floorU), the contour
+  // therefore continues along the floor back to the start face — not a slanted line from the floor
+  // point up to the top of the start face. If the top edge itself begins on the floor (a housed
+  // board whose upper edge is below the floor at its start) the floor line already closes it.
+  if (trimmedBottom) {
+    const startU = first.ends.start.u;
+    const floorU = trimmedBottom[0].u;
+    const topStartV = first.topProfile ? first.topProfile[0].v : oc[0].v;
+    if (floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS) oc.push({ u: startU, v: 0 });
+    first.ends.start = { u: floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS ? startU : Math.min(floorU, trimmedTop ? trimmedTop[0].u : floorU), cut: 'FLOOR_HORIZONTAL', floorU };
   }
 
   if (changed) recheckSelfIntersection(first);

@@ -80,5 +80,7 @@ export function applyPricing(items, priceList = DEFAULT_PRICE_LIST) {
  * @returns {number} Sum of calculatedCost across every priced item (unpriced items contribute 0).
  */
 export function totalCost(items) {
-  return items.reduce((sum, item) => sum + (item.calculatedCost || 0), 0);
+  // Rounded to whole grosze: a sum of many rounded item prices must not carry float noise
+  // (13329.400000000001) into the total shown to the customer.
+  return Math.round(items.reduce((sum, item) => sum + (item.calculatedCost || 0), 0) * 100) / 100;
 }
