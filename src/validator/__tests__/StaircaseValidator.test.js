@@ -20,7 +20,7 @@ import {
 } from '../StaircaseValidator.js';
 
 function config(patch) {
-  return { ...createDefaultConfig(), ...patch };
+  return { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...patch };
 }
 
 test('validateStaircase never mutates the config it is given', () => {

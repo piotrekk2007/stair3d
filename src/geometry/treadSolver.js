@@ -10,6 +10,7 @@
 import { pointsEqual, normalizeVector } from './pathUtils.js';
 import { shiftFrontEdge } from './nosingUtils.js';
 import { computeWinderBlank } from './winderBlank.js';
+import { recessedEdge, housingRecessMm } from './edgeOverrides.js';
 
 /**
  * @typedef {Object} TreadEdgeInfo
@@ -54,11 +55,20 @@ export function edgesEqual(a, b) {
   return pointsEqual(a[0], b[0]) && pointsEqual(a[1], b[1]);
 }
 
-// Exported — THE canonical "what was this tread's boundary BEFORE any manual edit" answer,
+// Exported — THE canonical "what was this tread's boundary BEFORE any MANUAL edit" answer,
 // for both front and back. riserSolver.js reuses this directly (rather than re-deriving its
 // own notion of "nominal") so there is exactly one nominal/final split per tread, not one per
 // consumer — see docs/architecture/CONSTRAINTS_AND_VALIDATION.md "RiserModel nominal/final".
-export function nominalEdgesOf(tread) {
+//
+// `config` is required so the automatic housing recess (edgeOverrides.js applyHousingRecess) can
+// be folded into "nominal" too: a housed wanga narrows a tread's own edge as a CONSEQUENCE of the
+// chosen construction type, not because anyone dragged anything, so it must never make
+// TreadEdgeInfo.overridden (final !== nominal) read as true — that badge/diagnostic is reserved
+// for a genuine manual edit (manualEdgeOverrides / manualTreadOverhangs). recessedEdge() applies
+// the exact same per-side depth/formula applyHousingRecess uses on `final`, so an unedited tread's
+// nominal and final match bit-for-bit; a tread that WAS also manually edited still correctly
+// differs (both are recessed by the same amount, but from different starting points).
+export function nominalEdgesOf(tread, config) {
   // Podest ma PUSTY innerChain (patrz planLayout.js buildLandingLocal — punkt wejścia-wewnątrz
   // i wyjścia-wewnątrz to ten sam punkt Ic, zerowa długość, więc nie ma osobnego surowego
   // łańcucha). Bez niezależnego źródła nie da się odróżnić "nominalnej" pozycji od "final" na
@@ -69,7 +79,14 @@ export function nominalEdgesOf(tread) {
 
   const front = [tread.innerChain[0], tread.outerChain[0]];
   const back = [tread.innerChain[tread.innerChain.length - 1], tread.outerChain[tread.outerChain.length - 1]];
-  return { front, back };
+  if (!config) return { front, back };
+
+  const recessMm = housingRecessMm(config);
+  if (recessMm.inner === 0 && recessMm.outer === 0) return { front, back };
+  return {
+    front: recessedEdge(front, recessMm.inner, recessMm.outer),
+    back: recessedEdge(back, recessMm.inner, recessMm.outer),
+  };
 }
 
 // Stopień prosty nie ma jednego globalnego "kierunku wchodzenia" w danych — da się go jednak
@@ -107,7 +124,7 @@ export function buildTreadModel(tread, config) {
   const isLanding = tread.type === 'landing';
   const effectiveNosing = isLanding ? 0 : nosing; // podest to płaska płyta, bez wysuniętego noska
 
-  const { front: frontNominal, back: backNominal } = nominalEdgesOf(tread);
+  const { front: frontNominal, back: backNominal } = nominalEdgesOf(tread, config);
   const frontEdge = { nominal: frontNominal, final: tread.frontEdge, overridden: !edgesEqual(frontNominal, tread.frontEdge) };
   const backEdge = { nominal: backNominal, final: tread.backEdge, overridden: !edgesEqual(backNominal, tread.backEdge) };
 

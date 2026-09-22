@@ -68,7 +68,7 @@ test('a BLOCKED takeoff stays untouched by manual items (no partial total from i
 });
 
 test('category summary: housings are left out and winder treads are separate', () => {
-  const t = realTakeoff({ stringerConstructionType: 'closed' });
+  const t = realTakeoff({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   assert.ok(t.items.some((i) => i.elementType === 'STRINGER_HOUSING'));
   const s = summarizeByCategory(t.items);
   assert.ok(!s.lines.some((l) => /wpusty/i.test(l.label)));

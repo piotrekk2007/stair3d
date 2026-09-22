@@ -9,7 +9,7 @@ import { buildPlanLayout } from '../planLayout.js';
 import { buildTreadModel, buildTreadModels } from '../treadSolver.js';
 
 function build(configPatch) {
-  const config = { ...createDefaultConfig(), ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);

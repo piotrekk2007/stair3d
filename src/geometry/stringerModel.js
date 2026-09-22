@@ -41,6 +41,14 @@ export const CONSTRUCTION_TYPE_LABELS_PL = Object.freeze({
   [CONSTRUCTION_TYPES.CLOSED]: 'wanga wpuszczana',
 });
 
+// THE one place that decides which side reads which config field — each wanga can be a different
+// construction type (e.g. outer housed, inner cut), so every consumer must go through this rather
+// than reading `config.stringerConstructionTypeOuter/Inner` directly at the call site.
+export function constructionTypeForSide(config, side) {
+  const value = side === 'outer' ? config.stringerConstructionTypeOuter : config.stringerConstructionTypeInner;
+  return value === CONSTRUCTION_TYPES.CUT ? CONSTRUCTION_TYPES.CUT : CONSTRUCTION_TYPES.CLOSED;
+}
+
 export const CONNECTION_TYPES = Object.freeze({
   NEWEL_TENON: 'newel-tenon', // string end (top/bottom of flight) tenoned into a newel post mortice
   CORNER_POST: 'corner-post', // intermediate newel at a winder/landing turn

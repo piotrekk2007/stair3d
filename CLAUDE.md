@@ -315,6 +315,76 @@ as the optional top-level `postOverrides` in the project file (no schema bump �
 post-jointed); use the global "Słup konstrukcyjny na zakręcie" switch for that. Tests:
 `geometry/__tests__/postOverrides.test.js`.
 
+## Per-side stringer construction type + automatic housing recess (implemented)
+
+Two, independently-swappable config fields replace the old single `stringerConstructionType`:
+`config.stringerConstructionTypeOuter`/`stringerConstructionTypeInner` (`'closed'`/wpuszczana or
+`'cut'`/nakładana), read via `stringerModel.js`'s `constructionTypeForSide(config, side)` — so an
+L-winder can genuinely have, say, a housed outer wanga and an overlay inner one. UI: two separate
+lil-gui dropdowns ("Typ wangi zewn." / "Typ wangi wewn.", `ui.js`); the Inspektor's per-stringer
+view resolves the field for the SELECTED side, and its project-summary view shows both, combined
+into one string only when they're equal. **Project file schema v4** (`projectIO.js`,
+`CURRENT_PROJECT_VERSION = 4`): `migrateV3ToV4` copies an old shared `stringerConstructionType`
+onto both new fields (and splits it out of `config.lockedFields` if present) so a v1..v3 file
+loads unchanged in effect.
+
+**A housed ("closed") wanga now genuinely narrows the tread on that side**, per the user's own
+description of how a wpuszczana wanga is built: the tread's finished edge sits at the bottom of a
+pocket routed `housingDepthFor(stringerThickness)` mm into the wanga's inner face, so a 900mm
+stair with one housed side is really an ~884mm-wide tread there (900 − 16mm at the default 40mm
+stringer thickness) — an overlay ("cut") side is untouched, exactly as before (the tread simply
+rests on top, no cleats needed, per the earlier "cleats removed" stage). This is
+`edgeOverrides.js`'s new `applyHousingRecess(treads, config)`: same mechanism as
+`applyTreadOverhangs` (`shiftEdgeCorner`/`retargetPoint`, degenerate-shape revert-with-warning),
+wired into `planLayout.js`'s `buildPlanLayout()` between `applyManualEdgeOverrides` and
+`applyTreadOverhangs` (a manually-moved shared corner is what gets recessed; the recess result is
+then what an overhang, if any, is measured from). It **never touches `innerChain`/`outerChain`**
+— the wanga's own reference line is provably unaffected — locked in by a dedicated test comparing
+`StringerModel.segments[0].referenceLine` before/after.
+
+**A housed wanga's automatic recess must never look like a manual edit.** The first working
+version moved `tread.frontEdge`/`backEdge` exactly like a real manual override, which meant
+`TreadModel.frontEdge.overridden` (computed as `final !== nominal`, per its own doc contract) read
+`true` for every ordinary tread whenever a stringer side is `'closed'` — the DEFAULT — showing a
+misleading "RĘCZNA" badge in the Inspektor and a false `VALIDATOR-MANUAL-OVERRIDE` INFO
+diagnostic ("Wprowadzono ręczną korektę geometrii...") for geometry nobody actually edited. Fixed
+by folding the recess into what counts as **nominal**, not into the override delta:
+`edgeOverrides.js` exports `housingRecessMm(config)` (the `{inner, outer}` depths) and
+`recessedEdge([inner, outer], innerDepthMm, outerDepthMm)` (a pure, tread-free version of the same
+per-corner shift), and `treadSolver.js`'s `nominalEdgesOf(tread, config)` now takes `config` and
+applies the identical `recessedEdge` to the raw chain endpoints before comparing against `final` —
+so an unedited tread's nominal and final match bit-for-bit (no false RĘCZNA/INFO), while a tread
+that ALSO got a genuine manual edit still correctly reads `overridden: true` (both nominal and
+final are recessed by the same amount, from different starting points, so they still differ).
+`riserSolver.js`'s `buildFrontEdgeInfo` was updated to pass `config` through to the same shared
+`nominalEdgesOf` for the identical reason (a `RiserModel.frontEdge.overridden` must not be
+mislabeled either).
+
+**Removed the profile editor's schematic housing-rectangle overlay** ("Profil wangi" tab): a flat
+2D rectangle marking "a housing exists somewhere here" was found more confusing than useful (per
+user feedback) — this side view has no third axis to show a real into-the-face recess depth. The
+real, depth-accurate consequence of a housed wanga (a narrower tread on that side) already shows
+up automatically in the Plan 2D and 3D views via `applyHousingRecess` above, so nothing was
+recreated in its place: `stringerProfileView.js` no longer exposes `housings` on its view model,
+`profileEditorRenderer.js` no longer draws `.pe-housing` rectangles, and `profileEditorPanel.js`
+dropped the "wręgi" layer checkbox. `StringerSegmentConstructionGeometry.housings[]` itself
+(recesses cut into the wanga's own face, for the 3D indicator meshes and the material takeoff) is
+untouched — only this one 2D schematic depiction was removed.
+
+**Context menu "ghost" bug fixed**: `#profile-panel .pe-ctx-menu` had `display: flex` on the base
+class, which beat the browser's default `[hidden] { display: none }` UA rule in specificity — so
+after choosing a menu option (`hideCtxMenu()` sets `hidden = true` and clears `innerHTML`), the
+now-empty menu stayed rendered as a thin, option-less flex box. Fixed with an explicit
+`#profile-panel .pe-ctx-menu[hidden] { display: none; }` rule in `style.css`, ahead of the
+`display: flex` rule.
+
+Tests: `geometry/__tests__/edgeOverrides.test.js` (`applyHousingRecess`: both-sides narrows both
+by the exact depth; mixed construction recesses only the housed side; reference line unaffected;
+composes with manual overhang; degenerate config safely reverts; landing tread doesn't throw),
+`project/__tests__/projectIO.test.js` (v3→v4 migration, v1→v4 chain),
+`profileEditor/__tests__/profileEditorRenderer.test.js` (never draws a housing indicator, whatever
+the construction type).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

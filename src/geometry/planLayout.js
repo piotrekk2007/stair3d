@@ -1,5 +1,5 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
-import { applyManualEdgeOverrides, applyTreadOverhangs } from './edgeOverrides.js';
+import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs } from './edgeOverrides.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
 // Metoda zabiegu: PROPORCJONALNA (linia podziału) — punkty podziału na linii biegu są
@@ -26,6 +26,11 @@ export function buildPlanLayout(config) {
   if (config.manualEdgeOverrides && Object.keys(config.manualEdgeOverrides).length > 0) {
     layout.treads = applyManualEdgeOverrides(layout.treads, config.manualEdgeOverrides);
   }
+  // Automatyczne wgłębienie po stronie wpuszczanej — konsekwencja typu konstrukcji wangi, nie
+  // ręczna edycja, więc stosowane zawsze, PO ręcznym przesunięciu wspólnego rogu (edytowany róg to
+  // "prawdziwa" krawędź, którą dopiero wgłębiamy) i PRZED ewentualnym ręcznym wysunięciem stopnia
+  // (patrz edgeOverrides.js applyHousingRecess — oba mechanizmy się swobodnie składają).
+  layout.treads = applyHousingRecess(layout.treads, config);
   // Stosowane PO manualEdgeOverrides (a nie zamiast) — kolejność nie ma tu znaczenia
   // geometrycznego (obie edycje operują na rozłącznych aspektach: wspólny róg vs własny,
   // niedzielony róg jednego stopnia), ale trzyma obie ręczne edycje razem, w jednym miejscu.

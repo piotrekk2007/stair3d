@@ -84,9 +84,11 @@ export function buildProfileViewModel(geometries, model, config) {
       requiredDepthMm: g.requiredDepthMm,
       controlPoints: [...controlPoints(g.lowerControl, 'lower'), ...controlPoints(g.upperControl, 'upper')],
       arcs: [...g.lowerCurve, ...(g.upperCurve || [])].filter((p) => p.type === 'arc').map((a) => ({ center: a.center, radiusMm: a.radius, startAngle: a.startAngle, sweep: a.sweep })),
-      // 'closed' only — a recess into the INNER FACE, so it never shows as a change to this side view's
-      // silhouette; drawn schematically (this 2D side view has no third axis to show real recess depth).
-      housings: g.housings || [],
+      // Housings ('closed' only, StringerSegmentConstructionGeometry.housings) are deliberately NOT
+      // exposed here: this side view has no third axis to show a real into-the-face recess depth, and
+      // a flat 2D rectangle marking "somewhere in here" was found more confusing than useful — the real,
+      // depth-accurate consequence of a housed wanga (a narrower tread on that side) already shows up
+      // automatically in the Plan 2D and 3D views, via edgeOverrides.js applyHousingRecess.
       diagnostics: g.diagnostics,
     };
   });

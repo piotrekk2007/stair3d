@@ -122,3 +122,82 @@ test('a genuinely broken shared boundary (no overhang involved) is still reporte
   const b = mk('step-1', [{ x: 0, y: 2 }, { x: 9, y: 2 }], [{ x: 5, y: 1 }, { x: 9, y: 1 }]);
   assert.equal(checkTopologicalContinuity([a, b]).length, 1);
 });
+
+// --- applyHousingRecess: a housed wanga takes a bite out of the tread, an overlay one does not ---
+//
+// On the 'closed' (wpuszczana) side, the tread's edge sits at the BOTTOM of a pocket routed
+// housingDepth mm into the wanga's own inner face — its finished edge is narrower than the nominal
+// stairWidth boundary by exactly that much, on that side only. On the 'cut' (nakładana) side the
+// tread rests ON the wanga, unchanged. This is a geometric CONSEQUENCE of the construction type
+// choice — never a manual edit — so it applies automatically, to every tread, on both sides
+// independently (each wanga has its own construction type — see stringerModel.js
+// constructionTypeForSide).
+
+import { housingDepthFor } from '../stringerModel.js';
+
+test('both wangi housed: every tread narrows by the housing depth on BOTH sides, front and back', () => {
+  const cut = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
+  const closed = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
+  const depth = housingDepthFor(createDefaultConfig().stringerThickness);
+  assert.ok(depth > 0);
+
+  for (const i of [0, 2, 5]) {
+    for (const edgeKey of ['frontEdge', 'backEdge']) {
+      const [cutInner, cutOuter] = cut.treads[i][edgeKey];
+      const [closedInner, closedOuter] = closed.treads[i][edgeKey];
+      assert.ok(Math.abs(Math.hypot(closedInner.x - cutInner.x, closedInner.y - cutInner.y) - depth) < 1e-6, `${edgeKey} inner corner of tread ${i} did not recess by exactly the housing depth`);
+      assert.ok(Math.abs(Math.hypot(closedOuter.x - cutOuter.x, closedOuter.y - cutOuter.y) - depth) < 1e-6, `${edgeKey} outer corner of tread ${i} did not recess by exactly the housing depth`);
+    }
+    const cutWidth = Math.hypot(cut.treads[i].frontEdge[1].x - cut.treads[i].frontEdge[0].x, cut.treads[i].frontEdge[1].y - cut.treads[i].frontEdge[0].y);
+    const closedWidth = Math.hypot(closed.treads[i].frontEdge[1].x - closed.treads[i].frontEdge[0].x, closed.treads[i].frontEdge[1].y - closed.treads[i].frontEdge[0].y);
+    assert.ok(Math.abs(cutWidth - closedWidth - 2 * depth) < 1e-6, 'width shrinks by depth on EACH side, i.e. 2x depth total');
+  }
+});
+
+test('mixed construction: only the HOUSED side recesses, the OVERLAY side stays at its nominal position', () => {
+  const cut = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
+  const mixed = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'cut' });
+  const depth = housingDepthFor(createDefaultConfig().stringerThickness);
+
+  const [cutInner, cutOuter] = cut.treads[2].frontEdge;
+  const [mixedInner, mixedOuter] = mixed.treads[2].frontEdge;
+  assert.ok(pointsEqual(cutInner, mixedInner), 'inner (overlay) side must not move');
+  assert.ok(Math.abs(Math.hypot(mixedOuter.x - cutOuter.x, mixedOuter.y - cutOuter.y) - depth) < 1e-6, 'outer (housed) side must recess by exactly the housing depth');
+});
+
+test('the wanga reference geometry is completely unaffected by housing recess — routing a pocket never moves the board', () => {
+  const closedConfig = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' };
+  const cutConfig = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
+  const derived = deriveStairData(closedConfig);
+  const fullClosed = { ...closedConfig, riserHeight: derived.riserHeight };
+  const fullCut = { ...cutConfig, riserHeight: derived.riserHeight };
+
+  const outerClosed = buildStringerModelsForFlight(buildPlanLayout(fullClosed), fullClosed).outer;
+  const outerCut = buildStringerModelsForFlight(buildPlanLayout(fullCut), fullCut).outer;
+  assert.deepEqual(outerClosed.segments[0].referenceLine, outerCut.segments[0].referenceLine, 'the wanga stays on its nominal line regardless of construction type');
+});
+
+test('housing recess composes with a manual overhang: the overhang is measured from the ALREADY-recessed edge', () => {
+  const recessedOnly = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
+  const withOverhang = build({
+    stairType: 'straight',
+    treadsLegA: 6,
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
+    manualTreadOverhangs: { 2: { side: 'outer', offsetMm: 30 } },
+  });
+  const a = recessedOnly.treads[2].frontEdge[1];
+  const b = withOverhang.treads[2].frontEdge[1];
+  assert.ok(Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - 30) < 1e-6, 'the overhang moves exactly 30mm further from the already-recessed position');
+});
+
+test('a housing depth that would collapse the tread (absurdly narrow stairWidth) is safely reverted, not silently applied', () => {
+  const cut = build({ stairType: 'straight', treadsLegA: 4, stairWidth: 20, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
+  const closed = build({ stairType: 'straight', treadsLegA: 4, stairWidth: 20, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
+  // 2x housing depth (32mm) against a 20mm-wide stair would invert the tread — reverted to nominal.
+  assert.deepEqual(closed.treads[2].outline, cut.treads[2].outline);
+});
+
+test('a landing tread (turn type "landing") is handled without error under a housed construction', () => {
+  assert.doesNotThrow(() => build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 3, treadsLegB: 3, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }));
+});

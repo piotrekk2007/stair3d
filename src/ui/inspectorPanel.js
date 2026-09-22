@@ -87,7 +87,8 @@ function stringerHTML(ctx) {
   const { selection, config, stringerModels, diagnostics } = ctx;
   const model = stringerModels?.[selection.stringerId];
   const segment = model?.segments.find((s) => s.id === selection.segmentId) ?? null;
-  const typeLabel = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionType] || config.stringerConstructionType;
+  const typeField = selection.stringerId === 'outer' ? 'stringerConstructionTypeOuter' : 'stringerConstructionTypeInner';
+  const typeLabel = CONSTRUCTION_TYPE_LABELS_PL[config[typeField]] || config[typeField];
   const locked = (f) => (config.lockedFields?.includes(f) ? 'user' : 'auto');
   const rows = [];
   rows.push(`<div class="insp-title">Wanga ${selection.stringerId === 'outer' ? 'zewnętrzna' : 'wewnętrzna (dusza)'}${segment ? ` <small>${segment.id}</small>` : ''}</div>`);
@@ -160,7 +161,9 @@ function summaryHTML(ctx) {
   rows.push(row('Liczba stopni', String(derived.numTreads), 'auto'));
   rows.push(row('Wysokość podstopnia', mm(derived.riserHeight, 1), 'auto'));
   rows.push(row('Rzut klatki (dł. × szer.)', `${l.toFixed(0)} × ${w.toFixed(0)} mm`, 'auto'));
-  rows.push(row('Typ wangi', CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionType] || config.stringerConstructionType, 'user'));
+  const outerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeOuter] || config.stringerConstructionTypeOuter;
+  const innerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeInner] || config.stringerConstructionTypeInner;
+  rows.push(row('Typ wangi', outerType === innerType ? outerType : `zewn.: ${outerType} · wewn.: ${innerType}`, 'user'));
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);
   return rows.join('');

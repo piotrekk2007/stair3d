@@ -14,7 +14,7 @@ import { buildRiserModel } from '../riserSolver.js';
 import { buildRiserMeshGeometries } from '../riserRenderer.js';
 
 function build(configPatch) {
-  const config = { ...createDefaultConfig(), hasRiserBoards: true, ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasRiserBoards: true, ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);

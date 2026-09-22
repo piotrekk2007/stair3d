@@ -1,4 +1,5 @@
 import { pointsEqual, signedPolygonArea, normalizeVector } from './pathUtils.js';
+import { CONSTRUCTION_TYPES, constructionTypeForSide, housingDepthFor } from './stringerModel.js';
 
 // Każda z (numTreads + 1) granic między stopniami jest adresowana "indeksem granicy":
 // 0 = krawędź czołowa pierwszego stopnia (jego frontEdge), N = krawędź tylna ostatniego
@@ -136,6 +137,75 @@ function shiftEdgeCorner(tread, edgeKey, sideIdx, offsetMm) {
   const newPoint = { x: point.x + dir.x * offsetMm, y: point.y + dir.y * offsetMm };
   retargetPoint(tread, point, newPoint);
   return { oldPoint: point, newPoint };
+}
+
+// Ile (mm, per strona) wpuszczana wanga wcina się w stopień — same reguły co
+// applyHousingRecess niżej, jako czysta funkcja config -> { inner, outer } (bez treads), żeby
+// treadSolver.js mogło policzyć DOKŁADNIE to samo wgłębienie przy budowaniu "nominal" (patrz
+// recessedEdge niżej) bez duplikowania warunku CLOSED/housingDepthFor w dwóch miejscach.
+export function housingRecessMm(config) {
+  return {
+    inner: constructionTypeForSide(config, 'inner') === CONSTRUCTION_TYPES.CLOSED ? housingDepthFor(config.stringerThickness) : 0,
+    outer: constructionTypeForSide(config, 'outer') === CONSTRUCTION_TYPES.CLOSED ? housingDepthFor(config.stringerThickness) : 0,
+  };
+}
+
+// Czysta wersja shiftEdgeCorner powyżej, operująca na SAMEJ parze punktów [wewnętrzny,
+// zewnętrzny] zamiast na całym stopniu — ten sam wzór (przesunięcie od zawiasu w stronę
+// przesuwanego rogu o `depth`), więc dla nieedytowanego stopnia recessedEdge(nominalRaw, ...)
+// w treadSolver.js daje BINARNIE ten sam punkt co applyHousingRecess poniżej. Dzięki temu
+// automatyczne wgłębienie wpuszczanej wangi liczy się do "nominal", a nie do "final vs nominal"
+// — więc NIE jest raportowane jako "RĘCZNA" edycja (patrz treadSolver.js nominalEdgesOf).
+export function recessedEdge([inner, outer], innerDepthMm, outerDepthMm) {
+  const shiftToward = (point, hinge, depth) => {
+    if (!(depth > 0)) return point;
+    const dir = normalizeVector({ x: point.x - hinge.x, y: point.y - hinge.y });
+    return { x: point.x - dir.x * depth, y: point.y - dir.y * depth };
+  };
+  return [shiftToward(inner, outer, innerDepthMm), shiftToward(outer, inner, outerDepthMm)];
+}
+
+// Automatyczne wgłębienie krawędzi stopnia po stronie WPUSZCZANEJ (housed) wangi — konsekwencja
+// wybranego typu konstrukcji, NIE ręczna edycja użytkownika (patrz stringerModel.js
+// constructionTypeForSide). Na wandze wpuszczanej stopień jest wsuwany w gniazdo wyfrezowane w
+// jej licu wewnętrznym na głębokość housingDepthFor(stringerThickness) — jego widoczna/gotowa
+// krawędź nie sięga więc do nominalnej szerokości biegu, tylko kończy się `depth` mm wcześniej.
+// Na wandze nakładanej stopień LEŻY na wandze (nie jest w nic wpuszczany) — ta strona zostaje
+// nietknięta, dokładnie jak dotychczas.
+//
+// Działa jak `shiftEdgeCorner`/`applyTreadOverhangs` poniżej (ten sam mechanizm, offsetMm < 0 =
+// "cofnięte" = zwężenie), ale automatycznie dla KAŻDEGO stopnia, niezależnie od
+// config.manualTreadOverhangs — więc oba mechanizmy się swobodnie składają (ręczne wysunięcie,
+// jeśli jest, liczy się od już-wgłębionej krawędzi). Nigdy nie dotyka innerChain/outerChain — wanga
+// nie przesuwa się ani o milimetr tylko dlatego, że wyfrezowano w niej gniazdo.
+//
+// UWAGA: to jest jedyne miejsce, które faktycznie PRZESUWA frontEdge/backEdge stopnia z tego
+// powodu — treadSolver.js nominalEdgesOf() nigdy nie woła tej funkcji (musiałaby dostać treads
+// jako tablicę i zwrócić nową), tylko liczy TEN SAM wynik od razu na surowych punktach przez
+// recessedEdge() powyżej, żeby "nominal" już zawierał wgłębienie i nie wyszło ono jako "RĘCZNA".
+export function applyHousingRecess(treads, config) {
+  const recessMm = housingRecessMm(config);
+  if (recessMm.inner === 0 && recessMm.outer === 0) return treads;
+
+  const result = treads.map(cloneTread);
+  for (const tread of result) {
+    if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
+
+    const before = signedArea(tread);
+    const moved = [];
+    for (const [side, sideIdx] of [['inner', 0], ['outer', 1]]) {
+      if (recessMm[side] === 0) continue;
+      moved.push(shiftEdgeCorner(tread, 'frontEdge', sideIdx, -recessMm[side]));
+      moved.push(shiftEdgeCorner(tread, 'backEdge', sideIdx, -recessMm[side]));
+    }
+    const after = signedArea(tread);
+
+    if (Math.abs(after) < 1 || Math.sign(after) !== Math.sign(before)) {
+      for (const m of moved) retargetPoint(tread, m.newPoint, m.oldPoint);
+      console.warn(`Pominięto automatyczne wgłębienie stopnia ${tread.index}: przy tej szerokości biegu i głębokości wręgi stopień stałby się niepoprawny.`);
+    }
+  }
+  return result;
 }
 
 // Ręczne "wysunięcie" bocznej krawędzi POJEDYNCZEGO stopnia — patrz schema.js/

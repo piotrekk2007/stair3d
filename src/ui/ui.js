@@ -111,7 +111,8 @@ export function createUI({
 
   const build = gui.addFolder('Konstrukcja');
   const stringerConstructionOptions = Object.fromEntries(Object.entries(CONSTRUCTION_TYPE_LABELS_PL).map(([value, label]) => [label, value]));
-  live(build.add(config, 'stringerConstructionType', stringerConstructionOptions)).name('Typ wangi');
+  live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name('Typ wangi zewn.');
+  live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name('Typ wangi wewn.');
   lockable(build.add(config, 'treadThickness', 20, 60, 1).name('Grubość stopnia [mm]'), 'treadThickness');
   lockable(build.add(config, 'nosing', 0, 40, 1).name('Nosek [mm]'), 'nosing');
   lockable(build.add(config, 'minimumStringerDepthMm', 150, 600, 10).name('Min. głębokość wangi [mm]'), 'minimumStringerDepthMm');

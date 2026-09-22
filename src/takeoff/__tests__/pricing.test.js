@@ -73,7 +73,7 @@ test('applyPricing leaves an item with no matching materialId unpriced, rather t
 });
 
 test('a STRINGER_HOUSING item (materialId: null — not a separate purchase) is never priced, even with a full price list', () => {
-  const items = buildItems({ stairType: 'straight', treadsLegA: 6, stringerConstructionType: 'closed' });
+  const items = buildItems({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   const housings = items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING);
   if (housings.length > 0) {
     const priced = applyPricing(items);

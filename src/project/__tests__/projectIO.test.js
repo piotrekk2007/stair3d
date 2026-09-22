@@ -70,8 +70,35 @@ test('parseProjectJSON: rejects invalid JSON', () => {
   assert.throws(() => parseProjectJSON('{not json'), /JSON/i);
 });
 
-test('CURRENT_PROJECT_VERSION is 3', () => {
-  assert.equal(CURRENT_PROJECT_VERSION, 3);
+test('CURRENT_PROJECT_VERSION is 4', () => {
+  assert.equal(CURRENT_PROJECT_VERSION, 4);
+});
+
+test('migration v3 -> v4: one shared stringerConstructionType becomes the same value on both sides', () => {
+  const v3 = {
+    _type: 'schody3d-project',
+    _version: 3,
+    config: { ...createDefaultConfig(), stringerConstructionType: 'cut', lockedFields: ['stringerConstructionType', 'nosing'] },
+    edgeOverrides: {},
+  };
+  delete v3.config.stringerConstructionTypeOuter;
+  delete v3.config.stringerConstructionTypeInner;
+  const { config, meta } = parseProjectFile(JSON.stringify(v3));
+  assert.equal(config.stringerConstructionTypeOuter, 'cut');
+  assert.equal(config.stringerConstructionTypeInner, 'cut');
+  assert.equal(config.stringerConstructionType, undefined, 'the old shared name is gone, no alias is kept');
+  assert.deepEqual(config.lockedFields, ['stringerConstructionTypeOuter', 'stringerConstructionTypeInner', 'nosing']);
+  assert.equal(meta.schemaVersion, 4);
+});
+
+test('migration v1 -> v4 chains through v2 and v3', () => {
+  const v1 = { _type: 'schody3d-project', _version: 1, config: { ...createDefaultConfig(), stringerConstructionType: 'closed', manualEdgeOverrides: { 2: { movedEndpoint: 'outer', point: { x: 1, y: 1 } } } } };
+  delete v1.config.stringerConstructionTypeOuter;
+  delete v1.config.stringerConstructionTypeInner;
+  const config = parseProjectJSON(JSON.stringify(v1));
+  assert.equal(config.stringerConstructionTypeOuter, 'closed');
+  assert.equal(config.stringerConstructionTypeInner, 'closed');
+  assert.deepEqual(config.manualEdgeOverrides, { 2: { movedEndpoint: 'outer', point: { x: 1, y: 1 } } });
 });
 
 test('v3: manual stringer PROFILE overrides live at the top level, outside config, and round-trip', () => {
@@ -104,7 +131,7 @@ test('migration v2 -> v3: stringerHeight becomes minimumStringerDepthMm (value a
   assert.equal(config.stringerHeight, undefined, 'the old name is gone, no alias is kept');
   assert.deepEqual(config.lockedFields, ['minimumStringerDepthMm', 'nosing']);
   assert.deepEqual(config.manualStringerProfileOverrides, {});
-  assert.equal(meta.schemaVersion, 3);
+  assert.equal(meta.schemaVersion, CURRENT_PROJECT_VERSION);
 });
 
 test('migration v1 -> v3 chains through v2', () => {

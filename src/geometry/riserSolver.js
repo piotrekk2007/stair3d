@@ -115,8 +115,8 @@ export function angleBetweenDeg(a, b) {
  *   problem geometryczny zanim powstanie jakikolwiek mesh.
  */
 
-function buildFrontEdgeInfo(tread) {
-  const nominal = nominalEdgesOf(tread).front;
+function buildFrontEdgeInfo(tread, config) {
+  const nominal = nominalEdgesOf(tread, config).front;
   const final = tread.frontEdge;
   return { nominal, final, overridden: !edgesEqual(nominal, final) };
 }
@@ -175,7 +175,7 @@ export function buildRiserModel(tread, config) {
   const top = tread.index * riserHeight + riserHeight - treadThickness;
   const bottom = tread.index * riserHeight - treadThickness;
 
-  const frontEdge = buildFrontEdgeInfo(tread);
+  const frontEdge = buildFrontEdgeInfo(tread, config);
   const { panels, directionSpreadDeg } = tread.type === 'winder' ? buildWinderPanels(tread, frontEdge.final) : buildStraightOrLandingPanel(tread, frontEdge.final);
 
   return {

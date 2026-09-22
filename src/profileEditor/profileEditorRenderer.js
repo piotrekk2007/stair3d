@@ -129,7 +129,7 @@ function rulerXML(viewport, pxToMm) {
  * @param {number} options.pxToMm  how many mm of SVG space one screen pixel covers — keeps handles and text a
  *   constant on-screen size whatever the zoom
  * @param {{id:string, contour:string}|null} [options.selected]  the selected control point
- * @param {{reference?:boolean, envelope?:boolean, treads?:boolean, housings?:boolean, ruler?:boolean}} [options.layers]
+ * @param {{reference?:boolean, envelope?:boolean, treads?:boolean, ruler?:boolean}} [options.layers]
  * @param {Object[]|null} [options.nominalViews]  buildProfileViewModel() output with this stringer's
  *   overrides stripped — drawn as a dashed "AUTO" comparison underneath the edited contour. Same
  *   segment order as `views`; a missing/differently-ordered entry is simply skipped.
@@ -164,15 +164,6 @@ export function renderProfileEditorSVG(views, options) {
         const a = toSvg(seg, r.u, r.zTop);
         const b = toSvg(seg, r.u, r.zBottom);
         g.push(`<line class="pe-riser" x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}"/>`);
-      }
-    }
-
-    // housings ('closed' only) — SCHEMATIC: this side view has no third axis to show the real
-    // into-the-face recess depth, so this just marks WHERE one is cut, not how deep.
-    if (layers.housings !== false) {
-      for (const h of view.housings || []) {
-        const a = toSvg(seg, h.uStart, h.topV);
-        g.push(`<rect class="pe-housing" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, h.uEnd - h.uStart))}" height="${fmt(h.topV - h.bottomV)}"/>`);
       }
     }
 

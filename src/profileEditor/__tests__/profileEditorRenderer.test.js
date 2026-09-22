@@ -111,16 +111,15 @@ test('renderProfileEditorSVG: draws mm ruler ticks along the top and left edges 
   assert.ok(!off.includes('pe-ruler'));
 });
 
-test('renderProfileEditorSVG: a closed stringer draws its housings; a cut one has none to draw', () => {
-  const closed = views({ stringerConstructionType: 'closed' }).views;
-  assert.ok(closed.some((v) => v.housings.length > 0));
-  const svgClosed = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
-  assert.ok(svgClosed.includes('pe-housing'));
-  const svgOff = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10, layers: { housings: false } }).svg;
-  assert.ok(!svgOff.includes('pe-housing'));
-
-  const cut = views({ stringerConstructionType: 'cut' }).views;
-  assert.ok(cut.every((v) => v.housings.length === 0));
+// Housings are deliberately NOT drawn in this side view (no third axis to show real recess depth —
+// a flat rectangle was more confusing than useful, per user feedback); the view model doesn't even
+// expose them any more. The real, depth-accurate consequence — a narrower tread on the housed side
+// — is geometry/edgeOverrides.js's applyHousingRecess, tested there.
+test('renderProfileEditorSVG: never draws a housing indicator, whatever the construction type', () => {
+  const closed = views({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }).views;
+  assert.ok(!('housings' in closed[0]));
+  const svg = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
+  assert.ok(!svg.includes('pe-housing'));
 });
 
 test('renderProfileEditorSVG: with nominalViews, draws a dashed AUTO comparison contour distinct from the edited one', () => {

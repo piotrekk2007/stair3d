@@ -11,7 +11,7 @@ import { buildPlanLayout } from '../planLayout.js';
 import { buildRiserModel, buildRiserModels, angleBetweenDeg, WINDER_RISER_FAN_PANELS } from '../riserSolver.js';
 
 function build(configPatch) {
-  const config = { ...createDefaultConfig(), hasRiserBoards: true, ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasRiserBoards: true, ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);

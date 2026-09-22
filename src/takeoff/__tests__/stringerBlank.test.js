@@ -54,7 +54,7 @@ function stringerItems(patch) {
 
 test('straight flight: the stringer blank is exactly the design depth wide (nothing hidden in the comb or the slanted ends)', () => {
   for (const type of ['cut', 'closed']) {
-    for (const item of stringerItems({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionType: type })) {
+    for (const item of stringerItems({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionTypeOuter: type, stringerConstructionTypeInner: type })) {
       assert.equal(item.calculatedDimensions.boardWidthMm, 350, type);
       assert.equal(item.nominalDimensions.boardWidthMm, 350, 'the nominal (design) depth is kept separately');
       assert.ok(item.notes.some((n) => /Formatka wangi/.test(n)));
@@ -63,7 +63,7 @@ test('straight flight: the stringer blank is exactly the design depth wide (noth
 });
 
 test('winder: the stringer blank is deeper than the design depth — the real board that must be bought', () => {
-  const items = stringerItems({ stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 5, totalRise: 2700, treadGoing: 280, stringerConstructionType: 'cut' });
+  const items = stringerItems({ stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 5, totalRise: 2700, treadGoing: 280, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   assert.ok(items.length >= 2);
   assert.ok(items.every((i) => i.calculatedDimensions.boardWidthMm >= 350 - 0.01));
   assert.ok(items.some((i) => i.calculatedDimensions.boardWidthMm > 400), 'at least one winder board needs a wider blank than the design depth');

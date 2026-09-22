@@ -22,6 +22,7 @@ import {
   CONSTRUCTION_TYPES,
   CONNECTION_TYPES,
   housingDepthFor,
+  constructionTypeForSide,
   MIN_NEWEL_TENON_THICKNESS_MM,
   MIN_NEWEL_TENON_LENGTH_MM,
   assertReferenceLineIsStraight,
@@ -166,7 +167,7 @@ export function buildStringerModel(planLayout, config, side) {
   // The nominal depth the lower contour is generated at (minimum depth + profile offset) — the
   // segment's "width" is that board depth, one definition shared with the profile solver.
   const boardDepth = profileParamsFromConfig(config).nominalDepthMm;
-  const constructionType = config.stringerConstructionType || CONSTRUCTION_TYPES.CLOSED;
+  const constructionType = constructionTypeForSide(config, side);
 
   const walks = buildRawWalks(planLayout.treads, chainKey);
 

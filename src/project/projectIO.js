@@ -18,8 +18,11 @@ import { sanitizePostOverrides } from '../geometry/postSolver.js';
 // — ten moduł konwertuje między dwoma reprezentacjami przy zapisie/odczycie. Rozdzielenie
 // runtime'owego kształtu configu to osobny, większy refaktor modelu danych, świadomie
 // zostawiony na później (poza zakresem etapu konsolidacji — patrz CLAUDE.md).
+// Wersja 4: `stringerConstructionType` (jeden typ dla obu wang) rozdzielony na
+// `stringerConstructionTypeOuter`/`stringerConstructionTypeInner` — każda wanga może mieć inny typ
+// konstrukcji. Migracja v3 -> v4 kopiuje starą wartość na obie strony (zachowanie sprzed zmiany).
 const PROJECT_TYPE = 'schody3d-project';
-export const CURRENT_PROJECT_VERSION = 3;
+export const CURRENT_PROJECT_VERSION = 4;
 
 // Buduje payload bieżącej wersji z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
 // oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
@@ -86,9 +89,26 @@ function migrateV2ToV3(data) {
   return { ...data, _version: 3, config, stringerProfileOverrides: data.stringerProfileOverrides || {} };
 }
 
+// v3 -> v4: one shared stringerConstructionType becomes two independent ones; an old project's
+// single value applies to both sides, exactly reproducing its previous geometry.
+function migrateV3ToV4(data) {
+  const { stringerConstructionType, ...config } = data.config || {};
+  if (stringerConstructionType !== undefined) {
+    if (config.stringerConstructionTypeOuter === undefined) config.stringerConstructionTypeOuter = stringerConstructionType;
+    if (config.stringerConstructionTypeInner === undefined) config.stringerConstructionTypeInner = stringerConstructionType;
+  }
+  if (Array.isArray(config.lockedFields)) {
+    config.lockedFields = config.lockedFields.flatMap((f) =>
+      f === 'stringerConstructionType' ? ['stringerConstructionTypeOuter', 'stringerConstructionTypeInner'] : [f]
+    );
+  }
+  return { ...data, _version: 4, config };
+}
+
 const MIGRATIONS = {
   1: migrateV1ToV2,
   2: migrateV2ToV3,
+  3: migrateV3ToV4,
 };
 
 // Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d albo nie da się

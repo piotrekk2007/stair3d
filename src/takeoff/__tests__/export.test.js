@@ -67,7 +67,7 @@ test('takeoffToCSV: escapes commas/quotes in field values', () => {
 });
 
 test('takeoffToCSV: exposes the catalog order size for a stringer, blank for elements with no catalogStock', () => {
-  const items = buildItems({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionType: 'cut', stringerThickness: 50 });
+  const items = buildItems({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerThickness: 50 });
   const csv = takeoffToCSV(items);
   const lines = csv.split('\n');
   const header = lines[0].split(',');

@@ -6,7 +6,7 @@ import { buildPlanLayout } from '../planLayout.js';
 import { buildWalklineModel, treadGoingAtOffsetFromInner } from '../walklineModel.js';
 
 function build(configPatch) {
-  const config = { ...createDefaultConfig(), ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);

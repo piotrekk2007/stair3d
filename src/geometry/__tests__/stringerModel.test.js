@@ -17,7 +17,7 @@ import { buildStringerModel } from '../stringerSolver.js';
 import { checkParallelAndSpaced, CONSTRUCTION_TYPES, housingDepthFor } from '../stringerModel.js';
 
 function buildModel(configPatch, side) {
-  const config = { ...createDefaultConfig(), ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);
@@ -154,13 +154,13 @@ test('bearing elevation derives from riser height / tread thickness, unaffected 
 });
 
 test('manufacturing constraints: housing depth follows max(12mm, 0.4*thickness) for a closed string', () => {
-  const { model } = buildModel({ stairType: 'straight', treadsLegA: 4, stringerThickness: 40, stringerConstructionType: 'closed' }, 'outer');
+  const { model } = buildModel({ stairType: 'straight', treadsLegA: 4, stringerThickness: 40, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }, 'outer');
   assert.equal(model.manufacturing.housingDepth, housingDepthFor(40));
   assert.equal(model.manufacturing.housingDepth, 16); // max(12, 0.4*40) = 16
 });
 
 test('manufacturing constraints: a cut string has no housing depth', () => {
-  const { model } = buildModel({ stairType: 'straight', treadsLegA: 4, stringerConstructionType: 'cut' }, 'outer');
+  const { model } = buildModel({ stairType: 'straight', treadsLegA: 4, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }, 'outer');
   assert.equal(model.constructionType === undefined, true); // constructionType lives per-segment, not on the model root
   assert.equal(model.segments[0].constructionType, CONSTRUCTION_TYPES.CUT);
   assert.equal(model.manufacturing.housingDepth, null);

@@ -82,7 +82,12 @@ export function createDefaultConfig() {
     // Nominal -> Override -> Final, klucz = 'outer' | 'inner'. Patrz stringerProfileModel.js.
     manualStringerProfileOverrides: {},
     stringerThickness: 40, // mm — GRUBOŚĆ deski ("thickness" w StringerModel), osobna wielkość od głębokości
-    stringerConstructionType: 'closed', // 'closed' (wanga wpuszczana/wcinana, schowana) | 'cut' (wanga nakładana/wycinana, otwarta) — patrz stringerModel.js CONSTRUCTION_TYPES i stringerConstructionGeometry.js
+    // Typ konstrukcji NIEZALEŻNIE dla każdej wangi — np. zewnętrzna wpuszczana, wewnętrzna nakładana.
+    // 'closed' (wpuszczana/wcinana, schowana) | 'cut' (nakładana/wycinana, otwarta) — patrz
+    // stringerModel.js CONSTRUCTION_TYPES i stringerConstructionGeometry.js. Formerly one shared
+    // `stringerConstructionType` (migracja pliku projektu v3 -> v4, patrz projectIO.js).
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
     // wartości domyślne to jawnie oznaczone założenia produkcyjne (MANUFACTURING_ASSUMPTION),
     // NIE liczby z normy — patrz docs/architecture/STRINGER_CONSTRUCTION_MODEL.md.

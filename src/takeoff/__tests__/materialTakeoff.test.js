@@ -18,7 +18,7 @@ import { computeMaterialTakeoff } from '../materialTakeoff.js';
 import { ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from '../takeoffTypes.js';
 
 function build(configPatch) {
-  const config = { ...createDefaultConfig(), ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);
@@ -98,7 +98,7 @@ test('scenario A (straight): one STRINGER item per side, quantity 1 (a straight 
 // --- Scenario B: straight overlay (cut) stringer ---------------------------------------------------
 
 test('scenario B (straight, overlay/cut stringer): the board items exist and there are NO separate sub-items (no cleats, no housings)', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', minimumStringerDepthMm: 450 });
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', minimumStringerDepthMm: 450 });
   const items = compute(scenario);
   assert.ok(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER));
   assert.equal(items.some((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING), false);
@@ -108,7 +108,7 @@ test('scenario B (straight, overlay/cut stringer): the board items exist and the
 // --- Scenario C: straight housed (closed) stringer -----------------------------------------------
 
 test('scenario C (straight, housed/closed stringer): produces informational STRINGER_HOUSING items, never counted as separate boards', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'closed' });
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   const items = compute(scenario);
   const outerGeo = scenario.models.stringerConstruction.outer[0];
   if (outerGeo.constructionType === 'closed') {
@@ -331,7 +331,7 @@ test('scenario F: a manual edge override changes only the affected tread/riser/s
 // --- Catalog stock rounding — "what do I actually order" for linear timber members -------------
 
 test('catalog stock: a stringer\'s computed length is rounded UP to the nearest real catalog length', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionType: 'cut', stringerThickness: 50 });
+  const scenario = build({ stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerThickness: 50 });
   const items = compute(scenario);
   const stringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER);
   assert.ok(stringer.catalogStock, 'expected a catalogStock entry for a timber-c24 stringer');
@@ -341,7 +341,7 @@ test('catalog stock: a stringer\'s computed length is rounded UP to the nearest 
 });
 
 test('catalog stock: a board width/thickness that exceeds every catalog size is reported as unsupported, never invented', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionType: 'cut', minimumStringerDepthMm: 450 }); // catalog tops out at 350mm width
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', minimumStringerDepthMm: 450 }); // catalog tops out at 350mm width
   const items = compute(scenario);
   const stringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER);
   assert.equal(stringer.catalogStock.widthMm, null, 'no catalog width covers 450mm — must be null, not a guessed number');
@@ -362,7 +362,7 @@ test('catalog stock: a post\'s square cross-section is checked against BOTH cata
 });
 
 test('catalog stock: risers and housings never get a catalogStock (sheet-nesting / not a purchasable board)', () => {
-  const scenario = build({ stairType: 'straight', treadsLegA: 5, hasRiserBoards: true, stringerConstructionType: 'closed' });
+  const scenario = build({ stairType: 'straight', treadsLegA: 5, hasRiserBoards: true, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   const items = compute(scenario);
   for (const riser of items.filter((i) => i.elementType === ELEMENT_TYPES.RISER)) assert.equal(riser.catalogStock, null);
   for (const housing of items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING)) assert.equal(housing.catalogStock, null);

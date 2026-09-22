@@ -132,7 +132,7 @@ test('sanitizeBoardPricing survives garbage and keeps valid parts', () => {
 // ---- integracja z takeoffem ----
 
 function models(configPatch = {}) {
-  const config = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, openingLength: 6000, ...configPatch };
+  const config = { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stairType: 'straight', treadsLegA: 14, totalRise: 2600, treadGoing: 280, openingLength: 6000, ...configPatch };
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);
@@ -272,7 +272,7 @@ test('posts: the smallest listed section >= the post section is used; a bigger p
 });
 
 test('the cost covers material only: housings are excluded, not priced', () => {
-  const m = models({ stringerConstructionType: 'closed' });
+  const m = models({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   const t = buildPricedMaterialTakeoff(m, { boardPricing: createDefaultBoardPricing() });
   const extras = t.items.filter((i) => i.elementType === 'STRINGER_HOUSING');
   assert.ok(extras.length > 0, 'the scenario must actually produce housings');

@@ -69,7 +69,7 @@ test('every riser panel mesh carries stepId + a panel-indexed geometrySourceId',
 });
 
 test('every stringer board mesh carries the correct side as stringerId, and every housing sub-mesh carries its own supported tread as stepId', () => {
-  const { stringerModels, stringerConstruction } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5, stringerConstructionType: 'cut' });
+  const { stringerModels, stringerConstruction } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   for (const side of ['outer', 'inner']) {
     const group = renderStringers(stringerModels[side], stringerConstruction[side], MATERIAL, `Stringer${side}`);
     assert.ok(group.children.length > 0);

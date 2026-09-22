@@ -50,12 +50,12 @@ const REALISTIC_WINDER = { stairType: 'L', turn1Type: 'winder', treadsLegA: 4, t
 // 'cut' specifically — its outer contour reflects EVERY bearing's own u-range individually
 // (the notched top edge), unlike 'closed' (a plain rectangle from only the first/last bearing)
 // — the right construction type for proving a single interior tread's edit reaches the contour.
-const REALISTIC_STRAIGHT_CUT = { ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut' };
+const REALISTIC_STRAIGHT_CUT = { ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
 
 // --- A. Straight overlay (cut) stringer -------------------------------------------------------
 
 test('A. straight overlay: one continuous polygon, stepped top + single straight bottom edge, no disconnected blocks', () => {
-  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut' });
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
 
@@ -86,7 +86,7 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
 test('B. straight housed: outer contour is a plain 4-point parallelogram regardless of tread count, housings are separate', () => {
   // At the bottom of the flight the board's foot is cut HORIZONTALLY on the floor line with a vertical
   // start face, so the silhouette is a parallelogram plus that one foot corner (5 points).
-  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300 });
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
 
@@ -128,7 +128,7 @@ for (const [label, constructionType] of [
   ['D. L-winder housed', 'closed'],
 ]) {
   test(`${label}: every segment produces a continuous, non-self-intersecting contour`, () => {
-    const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionType: constructionType });
+    const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionTypeOuter: constructionType, stringerConstructionTypeInner: constructionType });
     for (const side of ['outer', 'inner']) {
       const model = buildStringerModel(planLayout, config, side);
       const geometries = buildStringerConstructionGeometry(model, config);
@@ -213,8 +213,8 @@ test('G. changed stringer width (board depth) changes the bottom edge by exactly
   // above the floor (v >= 0) — clampFirstSegmentToFloor (a separate, deliberate behavior; see
   // its own tests) would otherwise trim that corner flush with the floor instead of keeping it
   // at a pure perpendicular offset, which is specifically what this test checks.
-  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', minimumStringerDepthMm: 80 });
-  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'cut', minimumStringerDepthMm: 100 });
+  const narrow = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', minimumStringerDepthMm: 80 });
+  const wide = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', minimumStringerDepthMm: 100 });
   const geoNarrow = buildStringerConstructionGeometry(buildStringerModel(narrow.planLayout, narrow.config, 'outer'), narrow.config)[0];
   const geoWide = buildStringerConstructionGeometry(buildStringerModel(wide.planLayout, wide.config, 'outer'), wide.config)[0];
 
@@ -233,8 +233,8 @@ test('G. changed stringer width (board depth) changes the bottom edge by exactly
 // --- H. Changed board thickness -------------------------------------------------------------
 
 test('H. changed board thickness is reflected in thicknessMm and in the housed diagnostic (thinner board = less remaining section)', () => {
-  const thin = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 30 });
-  const thick = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: 'closed', stringerThickness: 60 });
+  const thin = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerThickness: 30 });
+  const thick = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerThickness: 60 });
   const geoThin = buildStringerConstructionGeometry(buildStringerModel(thin.planLayout, thin.config, 'outer'), thin.config)[0];
   const geoThick = buildStringerConstructionGeometry(buildStringerModel(thick.planLayout, thick.config, 'outer'), thick.config)[0];
 
@@ -247,7 +247,7 @@ test('H. changed board thickness is reflected in thicknessMm and in the housed d
 
 test('paired stringers remain parallel and correctly spaced after building construction geometry (both construction types)', () => {
   for (const constructionType of ['cut', 'closed']) {
-    const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionType: constructionType, stairWidth: 1000 });
+    const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: constructionType, stringerConstructionTypeInner: constructionType, stairWidth: 1000 });
     const models = buildStringerModelsForFlight(planLayout, config);
     // Building construction geometry must not mutate the underlying model.
     buildStringerConstructionGeometry(models.outer, config);
@@ -264,7 +264,7 @@ test('a remaining section below the configured minimum threshold is flagged, not
   // Raise the REQUIRED minimum past the board's own actual remaining section (rather than
   // shrinking the board itself, which for a 'cut' stringer's notch geometry quickly becomes
   // self-intersecting instead of merely thin — a different, ERROR-level failure mode).
-  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionType: 'cut', stringerMinRemainingSectionMm: 320 });
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerMinRemainingSectionMm: 320 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
   assert.ok(geo.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-SECTION'), 'expected a remaining section below the configured minimum to trip the diagnostic');
@@ -291,7 +291,7 @@ test('a steep but UNIFORM straight flight reports the real notch-throat thicknes
   const totalRise = 2800;
   const treadGoing = 270;
   const treadsLegA = 6;
-  const { config, planLayout } = build({ stairType: 'straight', treadsLegA, totalRise, treadGoing, stringerConstructionType: 'cut' });
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA, totalRise, treadGoing, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
   const riserHeight = totalRise / (treadsLegA + 1);
@@ -303,7 +303,7 @@ test('a steep but UNIFORM straight flight reports the real notch-throat thicknes
 // --- THE reported bug: winder tread widths must not disconnect the board from the treads --------
 
 test('winder bug fix: every bearing on a winder segment is fully contained within the solved board envelope (no floating tread)', () => {
-  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionType: 'closed' });
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   for (const side of ['outer', 'inner']) {
     const model = buildStringerModel(planLayout, config, side);
     const geometries = buildStringerConstructionGeometry(model, config);
@@ -468,8 +468,8 @@ test('spike bug fix: the profile never overshoots more than roughly one riser he
 for (const constructionType of ['cut', 'closed']) {
   test(`start-of-board fix (${constructionType}): a post-jointed steep board's lower edge runs straight to its start face — no beak, never shallower than the minimum depth`, () => {
     const layouts = [
-      build({ ...REALISTIC_WINDER, hasCornerPost: true, stringerConstructionType: constructionType }),
-      build({ stairType: 'L', treadsLegA: 5, treadsLegB: 5, windersPerTurn: 5, totalRise: 2800, treadGoing: 270, hasCornerPost: true, stringerConstructionType: constructionType }),
+      build({ ...REALISTIC_WINDER, hasCornerPost: true, stringerConstructionTypeOuter: constructionType, stringerConstructionTypeInner: constructionType }),
+      build({ stairType: 'L', treadsLegA: 5, treadsLegB: 5, windersPerTurn: 5, totalRise: 2800, treadGoing: 270, hasCornerPost: true, stringerConstructionTypeOuter: constructionType, stringerConstructionTypeInner: constructionType }),
     ];
     for (const { config, planLayout } of layouts) {
       const model = buildStringerModel(planLayout, config, 'inner');
@@ -519,7 +519,7 @@ test('overshoot bug fix: clamping does not touch a lap-jointed pair (already exa
 // through the floor into a long pointed spike.
 
 test('floor bug fix: the very first segment of a stringer never extends below the floor (v < 0)', () => {
-  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionType: 'cut', hasRiserBoards: true, hasCornerPost: true });
+  const { config, planLayout } = build({ ...REALISTIC_WINDER, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasRiserBoards: true, hasCornerPost: true });
   for (const side of ['outer', 'inner']) {
     const model = buildStringerModel(planLayout, config, side);
     const geometries = buildStringerConstructionGeometry(model, config);

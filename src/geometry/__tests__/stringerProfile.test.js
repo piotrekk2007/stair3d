@@ -59,7 +59,7 @@ for (const [geoName, geoPatch] of Object.entries(GEOMETRIES)) {
         for (const constructionType of ['cut', 'closed']) {
           const label = `${geoName}/${incName}/${constructionType}: min depth ${minDepth}, corner radius ${radius}`;
           test(`profile grid — ${label}`, (t) => {
-            const patch = { ...geoPatch, totalRise, stringerConstructionType: constructionType, minimumStringerDepthMm: minDepth, stringerCornerRadiusMm: radius, stringerRadiusScope: 'BOTH' };
+            const patch = { ...geoPatch, totalRise, stringerConstructionTypeOuter: constructionType, stringerConstructionTypeInner: constructionType, minimumStringerDepthMm: minDepth, stringerCornerRadiusMm: radius, stringerRadiusScope: 'BOTH' };
             const derived = deriveStairData({ ...createDefaultConfig(), ...patch });
             if (!derived.turnFeasible) return t.skip('geometry not feasible');
             const { models, geo } = flight(patch);
@@ -116,14 +116,14 @@ test('the plan reference path is untouched by any profile parameter or override 
 });
 
 test('the profile solve is deterministic: two runs give deeply equal geometry', () => {
-  const patch = { ...GEOMETRIES.U, totalRise: 2900, stringerCornerRadiusMm: 100, stringerRadiusScope: 'BOTH', stringerConstructionType: 'closed' };
+  const patch = { ...GEOMETRIES.U, totalRise: 2900, stringerCornerRadiusMm: 100, stringerRadiusScope: 'BOTH', stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' };
   assert.deepEqual(flight(patch).geo, flight(patch).geo);
 });
 
 // --- defaults preserve the old behaviour -----------------------------------------------------
 
 test('with default profile parameters the lower contour is the plain straight offset — no arcs, one line per straight flight', () => {
-  const { geo } = flight({ ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'cut' });
+  const { geo } = flight({ ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   for (const g of geo.outer) {
     assert.equal(g.lowerCurve.length, 1);
     assert.equal(g.lowerCurve[0].type, 'line');
@@ -222,7 +222,7 @@ test('winder: a rounded lower contour stays tangent-continuous (G1) at every arc
 });
 
 test('the mesh polygon is the same curve as chords: arcs deviate from their chords by at most 0.1 mm', () => {
-  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerCornerRadiusMm: 150, stringerRadiusScope: 'BOTTOM', stringerConstructionType: 'closed' });
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerCornerRadiusMm: 150, stringerRadiusScope: 'BOTTOM', stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   for (const g of [...geo.outer, ...geo.inner]) {
     const chords = curveToPolyline(g.lowerCurve, 0.1);
     for (const p of chords) {
@@ -233,7 +233,7 @@ test('the mesh polygon is the same curve as chords: arcs deviate from their chor
 });
 
 test('housed board: scope TOP rounds only the upper contour, scope BOTTOM only the lower', () => {
-  const base = { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'closed', stringerCornerRadiusMm: 100 };
+  const base = { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerCornerRadiusMm: 100 };
   const top = flight({ ...base, stringerRadiusScope: 'TOP' }).geo.outer;
   const bottom = flight({ ...base, stringerRadiusScope: 'BOTTOM' }).geo.outer;
   assert.ok(top.some((g) => g.upperCurve.some((p) => p.type === 'arc')));
@@ -250,7 +250,7 @@ test('transition style SHARP switches the rounding off whatever the radius says'
 // --- notch (cut string) inside-corner radius ----------------------------------------------------
 
 test('cut string: the notch radius rounds only the INSIDE corners of the comb; 0 leaves the comb exactly as before', () => {
-  const base = { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'cut' };
+  const base = { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
   const sharp = flight(base).geo.outer[0];
   const round = flight({ ...base, stringerNotchRadiusMm: 12 }).geo.outer[0];
   const arcs = round.upperCurve.filter((p) => p.type === 'arc');
@@ -265,7 +265,7 @@ test('cut string: the notch radius rounds only the INSIDE corners of the comb; 0
 
 // --- manual override layer --------------------------------------------------------------------
 
-const STRAIGHT_CUT = { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'cut' };
+const STRAIGHT_CUT = { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
 
 test('override: with an override present every tread is an addressable control point', () => {
   const overrides = setVertexOverride({}, 'outer', 'lower', anchorIdForTread(5), { dn: 0.0001 });
@@ -356,7 +356,7 @@ test('override: composes with a manual tread-edge override — both apply, geome
   const edge = { 4: { movedEndpoint: 'outer', point: null } };
   void edge;
   const overrides = setVertexOverride({}, 'outer', 'lower', anchorIdForTread(4), { dn: 30 });
-  const patch = { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut', manualStringerProfileOverrides: overrides, manualTreadOverhangs: { 3: { side: 'outer', offsetMm: 30 } } };
+  const patch = { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', manualStringerProfileOverrides: overrides, manualTreadOverhangs: { 3: { side: 'outer', offsetMm: 30 } } };
   const { geo } = flight(patch);
   assert.deepEqual(errorsOf(geo.outer).filter((d) => d.ruleId === 'STRINGER-MIN-DEPTH'), []);
   assert.ok(geo.outer.every((g) => isSimplePolygon(g.outerContour)));
@@ -434,13 +434,13 @@ test('view model: carries treads, contours, the minimum-depth envelope, depth sa
 // --- board ends: floor foot horizontal, every other end a plumb face -------------------------------
 
 const END_CASES = [
-  ['straight cut', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'cut' }],
-  ['straight closed', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionType: 'closed' }],
-  ['L cut, corner post', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut' }],
-  ['L cut, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut', hasCornerPost: false }],
-  ['L closed, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'closed', hasCornerPost: false }],
-  ['U cut', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionType: 'cut' }],
-  ['U closed with radius', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionType: 'closed', stringerCornerRadiusMm: 100, stringerRadiusScope: 'BOTH' }],
+  ['straight cut', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }],
+  ['straight closed', { ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }],
+  ['L cut, corner post', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }],
+  ['L cut, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasCornerPost: false }],
+  ['L closed, NO post (lap joint)', { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', hasCornerPost: false }],
+  ['U cut', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }],
+  ['U closed with radius', { ...GEOMETRIES.U, totalRise: 2900, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerCornerRadiusMm: 100, stringerRadiusScope: 'BOTH' }],
 ];
 
 for (const [label, patch] of END_CASES) {
@@ -483,7 +483,7 @@ for (const [label, patch] of END_CASES) {
 }
 
 test('board ends: at a postless lap joint the top and the lower contour end at the SAME plane (no slanted end face)', () => {
-  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'cut', hasCornerPost: false });
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasCornerPost: false });
   const [a, b] = geo.outer;
   // the first board's end is the lap: its top ran one board thickness past the segment end, and the lower contour must too
   assert.ok(a.ends.end.u > a.pitchProfile[a.pitchProfile.length - 1].u + 1, 'the board reaches past the segment end (the lap)');
@@ -504,7 +504,7 @@ const TIGHT_WINDER = { stairType: 'L', turn1Type: 'winder', turnDirection: 'righ
 for (const type of ['closed', 'cut']) {
   for (const risers of [false, true]) {
     test(`tight winder (${type}, ${risers ? 'with' : 'without'} risers): every board's lower and upper contour reach their start/end faces and never go below the floor`, () => {
-      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionType: type, hasRiserBoards: risers });
+      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionTypeOuter: type, stringerConstructionTypeInner: type, hasRiserBoards: risers });
       for (const side of ['outer', 'inner']) {
         for (const g of geo[side]) {
           assert.ok(Math.min(...g.outerContour.map((p) => p.v)) >= -1e-6, `${side}/${g.segmentId}: dips below the floor`);
@@ -539,7 +539,7 @@ test('sliceCurveByU: an end edge steeper than the limit is capped flat instead o
 for (const type of ['closed', 'cut']) {
   for (const risers of [false, true]) {
     test(`steep start blend (${type}, ${risers ? 'with' : 'without'} risers): starts at the previous board's lower end, never below it, and joins the steep edge tangent-continuously`, () => {
-      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionType: type, hasRiserBoards: risers });
+      const { geo } = flight({ ...TIGHT_WINDER, stringerConstructionTypeOuter: type, stringerConstructionTypeInner: type, hasRiserBoards: risers });
       const prev = geo.inner[0];
       const g = geo.inner[1];
       assert.equal(g.ends.start.blendedToPreviousEnd, true, 'the capped start was replaced by the transition');
@@ -570,7 +570,7 @@ for (const type of ['closed', 'cut']) {
 }
 
 test('steep start blend: a start that is NOT steep is untouched (no blend, no cap) — the ordinary winder', () => {
-  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionType: 'closed' });
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
   for (const g of [...geo.outer, ...geo.inner]) {
     assert.ok(!g.ends.start.blendedToPreviousEnd);
     assert.ok(!g.ends.start.capped);

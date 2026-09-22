@@ -10,7 +10,7 @@ import { createDefaultConfig } from '../../config/schema.js';
 import { runValidationPipeline, VALIDATION_STAGES, checkBasicNumericValidity, checkTopologyValidity } from '../pipeline.js';
 
 function config(patch) {
-  return { ...createDefaultConfig(), ...patch };
+  return { ...createDefaultConfig(), stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', ...patch };
 }
 
 test('VALIDATION_STAGES is the documented, deterministic 8-stage order', () => {
