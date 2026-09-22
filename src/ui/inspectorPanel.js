@@ -140,6 +140,7 @@ function postHTML(ctx) {
       rows.push(row('Wysokość (od–do)', `${post.elevation.bottom.toFixed(0)}–${post.elevation.top.toFixed(0)} mm (${(post.elevation.top - post.elevation.bottom).toFixed(0)} mm)`, post.overridden ? 'manual' : 'auto'));
       if (post.overridden) rows.push(row('Wysokość nominalna', `${post.nominalElevation.bottom.toFixed(0)}–${post.nominalElevation.top.toFixed(0)} mm`, 'auto'));
       if (post.overrideRejected) rows.push(`<div class="insp-diag warning"><b>UWAGA</b><div>Ta zmiana długości została zignorowana — słup byłby krótszy niż ${MIN_POST_HEIGHT_MM} mm.</div></div>`);
+      rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-post-dxf="${post.postId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego słupa — prosty prostokąt przekrój × długość, do wycięcia w warsztacie">Eksportuj słup (DXF 1:1)</button></div>`);
     }
     rows.push(postEditFormHTML(post, config.manualPostOverrides?.[post.postId] || {}));
   }

@@ -1,9 +1,9 @@
 // DXF EXPORT — a real-size (1:1, mm), production-ready cutting/marking drawing of one stringer
-// board, or of every board of one stringer side laid out on one sheet. Pure serialization: every
-// number comes straight from an already-solved StringerSegmentConstructionGeometry (see
-// stringerConstructionGeometry.js) plus, for tread-position markers, the matching StringerModel
-// segment — nothing here decides any geometry, exactly like the other export/ adapters
-// (objExporter.js, daeExporter.js, takeoff/export/). No DOM.
+// board (or every board of one stringer side laid out on one sheet), or of one post/every post
+// (PostModel, postSolver.js). Pure serialization: every number comes straight from already-solved
+// geometry (StringerSegmentConstructionGeometry for boards, PostModel for posts) — nothing here
+// decides any geometry, exactly like the other export/ adapters (objExporter.js, daeExporter.js,
+// takeoff/export/). No DOM.
 //
 // This is deliberately a DIFFERENT, richer consumer than the profile editor's view model
 // (geometry/stringerProfileView.js), which no longer exposes housings at all (a flat 2D
@@ -221,5 +221,66 @@ export function buildStringerAllBoardsDXF(geometries, { model, config } = {}) {
     entities.push(...titleEntities(titleLines(geometry, config), boundsOf(shifted)));
   }
   if (!any) return null;
+  return wrapDxf(entities);
+}
+
+// --- posts (slupy) ---------------------------------------------------------------------------------
+//
+// A post (PostModel, postSolver.js) is deliberately a plain square prism — position, a square
+// section (config.postSize) and a top/bottom elevation, no joinery geometry — so its production
+// drawing is just that: a rectangle (section width x real length), no curves, no housings.
+
+const POST_KIND_LABELS_PL = Object.freeze({ start: 'poczatkowy', end: 'koncowy', corner: 'narozny' });
+// Real gap (mm) between posts laid out on one sheet — same spirit as BOARD_GAP_MM above, its own
+// constant because a post's own footprint (its section width) is much smaller than a board's.
+const POST_GAP_MM = 150;
+
+function postRectEntities(post, offsetU) {
+  const height = post.elevation.top - post.elevation.bottom;
+  const corners = [
+    { u: offsetU, v: 0 },
+    { u: offsetU + post.size, v: 0 },
+    { u: offsetU + post.size, v: height },
+    { u: offsetU, v: height },
+  ];
+  const out = [];
+  for (let i = 0; i < 4; i++) out.push(lineEntity(corners[i], corners[(i + 1) % 4], 'OUTLINE'));
+  return out;
+}
+
+function postTitleLines(post) {
+  const height = post.elevation.top - post.elevation.bottom;
+  return [
+    `Slup: ${post.postId}`,
+    `Rodzaj: ${POST_KIND_LABELS_PL[post.kind] || post.kind}`,
+    `Przekroj: ${post.size} x ${post.size} mm`,
+    `Dlugosc: ${Math.round(height)} mm`,
+    'Skala 1:1 - wszystkie wymiary w mm',
+  ];
+}
+
+function isValidPost(post) {
+  return !!post && !post.removed && post.elevation?.top > post.elevation?.bottom && post.size > 0;
+}
+
+/** One post, full size, as a standalone DXF: a plain section-width x length rectangle + title block. */
+export function buildPostDXF(post) {
+  if (!isValidPost(post)) return null;
+  const height = post.elevation.top - post.elevation.bottom;
+  const entities = [...postRectEntities(post, 0), ...titleEntities(postTitleLines(post), { minU: 0, maxV: height })];
+  return wrapDxf(entities);
+}
+
+/** Every post the stair actually has (removed ones excluded), laid out side by side on one sheet. */
+export function buildAllPostsDXF(posts) {
+  const valid = (posts || []).filter(isValidPost);
+  if (valid.length === 0) return null;
+  const entities = [];
+  let cursor = 0;
+  for (const post of valid) {
+    const height = post.elevation.top - post.elevation.bottom;
+    entities.push(...postRectEntities(post, cursor), ...titleEntities(postTitleLines(post), { minU: cursor, maxV: height }));
+    cursor += post.size + POST_GAP_MM;
+  }
   return wrapDxf(entities);
 }

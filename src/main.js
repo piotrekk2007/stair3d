@@ -28,6 +28,7 @@ import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
 import { downloadTextFile } from './export/downloadTextFile.js';
+import { buildPostDXF, buildAllPostsDXF } from './export/dxfExport.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
@@ -706,6 +707,17 @@ function withoutHighlight(fn) {
   }
 }
 
+function exportPostDXF(postId) {
+  const post = lastModels?.allPostModels?.find((p) => p.postId === postId);
+  const dxf = post ? buildPostDXF(post) : null;
+  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slup_${postId}.dxf`, 'application/dxf');
+}
+
+function exportAllPostsDXF() {
+  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels) : null;
+  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slupy.dxf`, 'application/dxf');
+}
+
 function exportTakeoff(kind) {
   if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
   const base = fileBaseName();
@@ -729,6 +741,8 @@ inspectorPanel.addEventListener('change', (e) => {
 inspectorPanel.addEventListener('click', (e) => {
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
   if (action && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { action });
+  const dxfPostId = e.target?.closest?.('[data-post-dxf]')?.dataset.postDxf;
+  if (dxfPostId) exportPostDXF(dxfPostId);
 });
 const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onSelect: handleSelectDiagnostic,
@@ -744,6 +758,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   },
   onExportCSV: () => exportTakeoff('csv'),
   onExportTXT: () => exportTakeoff('txt'),
+  onExportPostsDXF: () => exportAllPostsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.

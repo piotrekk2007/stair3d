@@ -562,6 +562,37 @@ exactly (same y/height) with the "stopnie" boxes, extended left by the nosing am
 contour line now visibly clears the tread TOP boxes rather than running through their lower-left
 corner.
 
+## 1:1 DXF export extended to posts (słupy)
+
+Same 1:1 production-drawing idea as the stringer board export above, applied to `PostModel`
+(`postSolver.js`). A post is deliberately a plain square prism (position, `config.postSize`
+section, a top/bottom elevation — no joinery geometry), so its drawing is correspondingly simple:
+a rectangle (section width × real length) plus a small title block, no curves, no housings —
+`src/export/dxfExport.js` gained `buildPostDXF(post)` (one post) and `buildAllPostsDXF(posts)`
+(every post that actually exists, `removed` ones excluded, laid out side by side with a
+`POST_GAP_MM = 150` gap — the same "one sheet" idea as `buildStringerAllBoardsDXF`, its own gap
+constant since a post's own footprint is much smaller than a board's).
+
+- **Per-post export**: the Inspektor's post view (`inspectorPanel.js` `postHTML()`) gained an
+  "Eksportuj słup (DXF 1:1)" button (`data-post-dxf`, only shown for a post that exists — not a
+  removed ghost), delegated in `main.js`'s existing `inspectorPanel` click listener to a new
+  `exportPostDXF(postId)` (looks the post up in `lastModels.allPostModels`, downloads via the
+  existing `downloadTextFile` Blob+`<a download>` pattern).
+- **All-posts export**: the Kosztorys tab's toolbar (`takeoffPanel.js`) gained a "Słupy (DXF 1:1)"
+  button (`createTakeoffPanel`'s new `onExportPostsDXF` callback), wired in `main.js` to a new
+  `exportAllPostsDXF()` reading `lastModels.postModels` (already-filtered, existing posts only —
+  the same list rendered/priced/validated). Deliberately independent of the takeoff validation
+  gate (`GATE_STATUS.BLOCKED`, etc.) — a post's own geometry has nothing to validate beyond
+  position/size/elevation (see `postSolver.js`'s own header), so there is no reason its export
+  should be blocked by an unrelated tread/stringer diagnostic.
+
+Tests: `export/__tests__/dxfExport.test.js` (`buildPostDXF`: exact rectangle dimensions from
+`post.size`/`elevation`, title content, `null` for a removed or degenerate post;
+`buildAllPostsDXF`: one title per existing post, removed ones excluded, laid out left to right,
+`null` when nothing to draw). Browser-verified: selecting each of `post-start`/`post-end`/
+`post-corner-0` in the Plan 2D and exporting produces a well-formed DXF with the expected title;
+the Kosztorys button's DXF contains one title per existing post.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

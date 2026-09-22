@@ -5,7 +5,8 @@ import { createDefaultConfig, deriveStairData } from '../../config/schema.js';
 import { buildPlanLayout } from '../../geometry/planLayout.js';
 import { buildStringerModelsForFlight } from '../../geometry/stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../../geometry/stringerConstructionGeometry.js';
-import { buildStringerBoardDXF, buildStringerAllBoardsDXF, buildBoardOutlineCurve } from '../dxfExport.js';
+import { buildAllPostModels } from '../../geometry/postSolver.js';
+import { buildStringerBoardDXF, buildStringerAllBoardsDXF, buildBoardOutlineCurve, buildPostDXF, buildAllPostsDXF } from '../dxfExport.js';
 
 function build(configPatch, side = 'outer') {
   const config = { ...createDefaultConfig(), ...configPatch };
@@ -144,4 +145,54 @@ test('buildStringerAllBoardsDXF: returns null when there is nothing to draw', ()
     buildStringerAllBoardsDXF([{ lowerCurve: [], upperCurve: [] }]),
     null
   );
+});
+
+function buildPosts(configPatch) {
+  const config = { ...createDefaultConfig(), ...configPatch };
+  const derived = deriveStairData(config);
+  const fullConfig = { ...config, riserHeight: derived.riserHeight };
+  const planLayout = buildPlanLayout(fullConfig);
+  return buildAllPostModels(planLayout, fullConfig);
+}
+
+test('buildPostDXF: a plain section-width x length rectangle, with a title block', () => {
+  const posts = buildPosts({});
+  const post = posts.find((p) => p.postId === 'post-start');
+  const dxf = buildPostDXF(post);
+  assert.ok(dxf.startsWith('0\nSECTION'));
+  assert.ok(dxf.trim().endsWith('0\nEOF'));
+  assert.ok(dxf.includes('8\nOUTLINE'));
+  const lines = [...dxf.matchAll(/0\nLINE\n8\nOUTLINE\n10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n11\n(-?[\d.]+)\n21\n(-?[\d.]+)\n31\n0/g)];
+  assert.equal(lines.length, 4, 'a plain rectangle is exactly 4 lines');
+  const us = lines.flatMap((m) => [+m[1], +m[3]]);
+  const vs = lines.flatMap((m) => [+m[2], +m[4]]);
+  assert.equal(Math.max(...us) - Math.min(...us), post.size);
+  assert.equal(Math.max(...vs) - Math.min(...vs), post.elevation.top - post.elevation.bottom);
+  assert.ok(dxf.includes(`Slup: ${post.postId}`));
+  assert.ok(dxf.includes('Skala 1:1'));
+});
+
+test('buildPostDXF: null for a removed post or a degenerate one', () => {
+  const posts = buildPosts({});
+  const post = posts.find((p) => p.postId === 'post-start');
+  assert.equal(buildPostDXF({ ...post, removed: true }), null);
+  assert.equal(buildPostDXF({ ...post, elevation: { bottom: 100, top: 100 } }), null);
+  assert.equal(buildPostDXF({ ...post, size: 0 }), null);
+  assert.equal(buildPostDXF(null), null);
+});
+
+test('buildAllPostsDXF: every existing post laid out side by side, removed ones excluded', () => {
+  const posts = buildPosts({ hasCornerPost: true });
+  assert.ok(posts.length >= 3, 'an L-winder with a corner post should have start/end/corner posts');
+  const withOneRemoved = posts.map((p, i) => (i === 0 ? { ...p, removed: true } : p));
+  const dxf = buildAllPostsDXF(withOneRemoved);
+  const titlePositions = [...dxf.matchAll(/10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n40\n[\d.]+\n1\nSlup: /g)].map((m) => Number(m[1]));
+  assert.equal(titlePositions.length, posts.length - 1, 'the removed post is excluded');
+  for (let i = 1; i < titlePositions.length; i++) assert.ok(titlePositions[i] > titlePositions[i - 1], 'each post is laid out further right than the previous one');
+});
+
+test('buildAllPostsDXF: returns null when there is nothing to draw', () => {
+  assert.equal(buildAllPostsDXF([]), null);
+  assert.equal(buildAllPostsDXF(null), null);
+  assert.equal(buildAllPostsDXF([{ removed: true, elevation: { bottom: 0, top: 1000 }, size: 100 }]), null);
 });
