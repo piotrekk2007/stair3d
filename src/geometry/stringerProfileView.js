@@ -84,6 +84,9 @@ export function buildProfileViewModel(geometries, model, config) {
       requiredDepthMm: g.requiredDepthMm,
       controlPoints: [...controlPoints(g.lowerControl, 'lower'), ...controlPoints(g.upperControl, 'upper')],
       arcs: [...g.lowerCurve, ...(g.upperCurve || [])].filter((p) => p.type === 'arc').map((a) => ({ center: a.center, radiusMm: a.radius, startAngle: a.startAngle, sweep: a.sweep })),
+      // 'closed' only — a recess into the INNER FACE, so it never shows as a change to this side view's
+      // silhouette; drawn schematically (this 2D side view has no third axis to show real recess depth).
+      housings: g.housings || [],
       diagnostics: g.diagnostics,
     };
   });

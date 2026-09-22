@@ -234,17 +234,38 @@ RULES #5 — and is never touched by any profile parameter or override).
 - **`stringerProfileView.js`** — `buildProfileViewModel()`: plain data for the side-view editor
   (treads, contours, silhouette, board span, minimum-depth envelope, depth samples, control points).
 - **Side-view editor ("Profil wangi" tab, implemented)**: `profileEditor/profileEditorRenderer.js` (pure: board
-  layout side by side, `toSvg`/`fromSvg`, SVG string — tested without a DOM) + `ui/profileEditorPanel.js`
+  layout side by side, `toSvg`/`fromSvg`, SVG string, mm ruler ticks (`niceGridStepMm`/`tickPositions`), housing
+  rectangles, the dashed AUTO comparison contour, `renderPositionRibbonSVG` — all tested without a DOM) +
+  `profileEditor/profileEditorSnapping.js` (pure: `snapDragTarget`, `roundToGrid`) + `ui/profileEditorPanel.js`
   (interactions) wired in `main.js`. Gestures only become `PROFILE_EDITS` events (`applyProfileEdit`) that change
   `config.manualStringerProfileOverrides`, then the normal `rebuild()` (which refreshes the editor while it is
-  visible); undo/redo and the project file cover it like any other config field. Drag a control point
-  (`offsetFromDrag` -> ds/dn from the NOMINAL position), double-click a contour to insert a point, right-click /
-  Delete to remove an inserted point or undo an anchored one, exact numbers (offset, position on the edge, corner
-  radius) in the form under the drawing, AUTO/RĘCZNY switch and "Resetuj profil wangi" per stringer, wheel zoom, pan,
-  "Deska" selector (the view fits ONE board by default — a whole flight is too small to edit). The editor never
-  computes geometry. **Limits:** control points outside a board's end faces (e.g. a contour's own end vertex past the
-  board) have no handle — use a double-click to insert one; the first edit of a stringer turns every tread into an
-  addressable control point; the cut string's notched top edge is derived and has no handles.
+  visible); undo/redo and the project file cover it like any other config field.
+  - **Drag** a control point: snaps to another control point's own elevation, then to the minimum-depth envelope
+    (`snapDragTarget`, both exact — never both at once, point wins), else rounds to a 5 mm grid; a tooltip at the
+    cursor shows the live `ds`/`dn` and, if snapped, what it snapped to. **Arrow keys** nudge the selected point
+    (1 mm, 10 mm with Shift) without a mouse. **Double-click** a contour inserts a point there; **right-click**
+    opens a small menu (insert / remove / reset / focus the radius field) instead of an immediate action; **Delete**
+    removes the selected point. Exact numbers (offset, position on the edge, corner radius) are always in the form
+    under the drawing too.
+  - **"Profil AUTO (porównanie)"** layer: a dashed comparison contour from re-solving the SAME real solver with this
+    stringer's overrides stripped (a genuine second solve, read-only, never mutates config) — only computed while
+    there is something to compare against.
+  - **"Wręgi"** layer: closed-string housings drawn schematically (this 2D side view has no third axis to show the
+    real into-the-face recess depth — it only marks where one is cut).
+  - **Pasek pozycji** under the drawing: every board of the stringer compressed into a strip, the one currently
+    fitted highlighted; click a board there to jump to it — orientation aid since the main view fits one board by
+    design (a whole flight is too small to edit).
+  - **"Kopiuj profil na drugą wangę"**: re-applies the same `(ds, dn, radius)` values, keyed by the SAME
+    `anchorIdForTread` ids, onto the other stringer — a repeat of the numbers, not a geometric mirror (the two
+    stringers' local shapes at the same tread can differ, especially in a winder). A point that is orphaned or
+    folds the other stringer's contour is safely skipped by the solver exactly like any other override, and the
+    toolbar reports how many were skipped so this never looks like a silent no-op.
+  - **AUTO/RĘCZNY switch** and **"Resetuj profil wangi"** per stringer; wheel zoom, pan, **"Deska"** selector (the
+    view fits ONE board by default — a whole flight is too small to edit). The editor never computes geometry
+    itself. **Limits:** control points outside a board's end faces (e.g. a contour's own end vertex past the board)
+    have no handle — use a double-click to insert one; the first edit of a stringer turns every tread into an
+    addressable control point; the cut string's notched top edge is derived and has no handles; a copied point that
+    the target stringer rejects has no per-point indicator beyond the one-time toast and the Walidacja tab.
 - **`stringerConstructionGeometry.js`** is now the adapter: it decides the reference (bearings,
   lap-joint grouping, riser recess), calls the solver once per group, slices per board, builds the
   comb/housings/diagnostics. Its output gained `lowerCurve`/`upperCurve` (lines + arcs),

@@ -8,6 +8,7 @@
 // SVG space: x = u + segment.offsetX, y = -v (SVG's y axis points down, elevation points up).
 
 import { curveToPolyline } from '../geometry/profileCurve.js';
+import { niceGridStepMm, tickPositions } from './profileEditorSnapping.js';
 
 // Chord tolerance used when the contours are drawn (mm in profile space) — drawing only.
 export const EDITOR_CHORD_TOLERANCE_MM = 0.5;
@@ -96,6 +97,31 @@ function polylinePoints(seg, points) {
 
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+// Ruler ticks along the top (u, "distance along the wanga") and left (v, "elevation") edges of the
+// current viewport, at a grid spacing that stays readable at any zoom (see niceGridStepMm). Pure
+// geometry — screen position only comes from the SAME viewBox every other element uses, so the
+// ticks are exact at whatever pan/zoom is active, not a separately-drawn overlay that could drift.
+function rulerXML(viewport, pxToMm) {
+  const stepMm = niceGridStepMm(pxToMm);
+  const tickLenMm = 8 * pxToMm;
+  const labelOffsetMm = 14 * pxToMm;
+  const fontPx = fmt(11 * pxToMm);
+  const parts = [`<g class="pe-ruler">`];
+  for (const u of tickPositions(viewport.x, viewport.x + viewport.width, stepMm)) {
+    const y0 = viewport.y;
+    parts.push(`<line x1="${fmt(u)}" y1="${fmt(y0)}" x2="${fmt(u)}" y2="${fmt(y0 + tickLenMm)}"/>`);
+    parts.push(`<text x="${fmt(u + 3 * pxToMm)}" y="${fmt(y0 + labelOffsetMm)}" font-size="${fontPx}">${fmt(u)}</text>`);
+  }
+  for (const v of tickPositions(-(viewport.y + viewport.height), -viewport.y, stepMm)) {
+    const y = -v;
+    const x0 = viewport.x;
+    parts.push(`<line x1="${fmt(x0)}" y1="${fmt(y)}" x2="${fmt(x0 + tickLenMm)}" y2="${fmt(y)}"/>`);
+    parts.push(`<text x="${fmt(x0 + labelOffsetMm)}" y="${fmt(y - 3 * pxToMm)}" font-size="${fontPx}">${fmt(v)}</text>`);
+  }
+  parts.push('</g>');
+  return parts.join('');
+}
+
 /**
  * @param {Object[]} views  buildProfileViewModel() output for ONE stringer
  * @param {Object} options
@@ -103,11 +129,14 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
  * @param {number} options.pxToMm  how many mm of SVG space one screen pixel covers — keeps handles and text a
  *   constant on-screen size whatever the zoom
  * @param {{id:string, contour:string}|null} [options.selected]  the selected control point
- * @param {{reference?:boolean, envelope?:boolean, treads?:boolean}} [options.layers]
+ * @param {{reference?:boolean, envelope?:boolean, treads?:boolean, housings?:boolean, ruler?:boolean}} [options.layers]
+ * @param {Object[]|null} [options.nominalViews]  buildProfileViewModel() output with this stringer's
+ *   overrides stripped — drawn as a dashed "AUTO" comparison underneath the edited contour. Same
+ *   segment order as `views`; a missing/differently-ordered entry is simply skipped.
  * @returns {{svg:string, layout:Object[]}}
  */
 export function renderProfileEditorSVG(views, options) {
-  const { viewport, pxToMm, selected = null, layers = {} } = options;
+  const { viewport, pxToMm, selected = null, layers = {}, nominalViews = null } = options;
   const layout = layoutSegments(views);
   const px = (n) => fmt(n * pxToMm);
   const bounds = contentBounds(layout);
@@ -136,6 +165,25 @@ export function renderProfileEditorSVG(views, options) {
         const b = toSvg(seg, r.u, r.zBottom);
         g.push(`<line class="pe-riser" x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}"/>`);
       }
+    }
+
+    // housings ('closed' only) — SCHEMATIC: this side view has no third axis to show the real
+    // into-the-face recess depth, so this just marks WHERE one is cut, not how deep.
+    if (layers.housings !== false) {
+      for (const h of view.housings || []) {
+        const a = toSvg(seg, h.uStart, h.topV);
+        g.push(`<rect class="pe-housing" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, h.uEnd - h.uStart))}" height="${fmt(h.topV - h.bottomV)}"/>`);
+      }
+    }
+
+    // the nominal (AUTO) contour, for comparison against the edited one — drawn first so the real,
+    // edited contour always sits visually on top of it.
+    const nominal = nominalViews ? nominalViews.find((v) => v.segmentId === view.segmentId) : null;
+    if (nominal) {
+      const nLower = draw(nominal.lowerCurve);
+      if (nLower.length >= 2) g.push(`<polyline class="pe-nominal" points="${polylinePoints(seg, nLower)}"/>`);
+      const nUpper = nominal.upperCurve ? draw(nominal.upperCurve) : [];
+      if (nUpper.length >= 2) g.push(`<polyline class="pe-nominal" points="${polylinePoints(seg, nUpper)}"/>`);
     }
 
     // reference curve and the minimum-depth envelope
@@ -176,6 +224,39 @@ export function renderProfileEditorSVG(views, options) {
     parts.push(g.join(''));
   });
 
+  if (layers.ruler !== false) parts.push(rulerXML(viewport, pxToMm));
+
   const svg = `<svg class="pe-svg" xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" preserveAspectRatio="xMidYMid meet">${parts.join('')}</svg>`;
   return { svg, layout };
+}
+
+/**
+ * A small "you are here" strip: every board of the stringer compressed to fit `widthPx`, with the
+ * currently focused one highlighted — for orienting yourself when the main view is zoomed into one
+ * board (a whole flight is metres long; the main view fits one board at a time by design). Pure
+ * layout math, same idea as plan2d's HUD scale readout: a tiny, separate SVG, not part of the main
+ * viewBox, so panning/zooming the main view never has to touch it.
+ *
+ * @param {Object[]} views
+ * @param {string|null} focusSegmentId  'all' or null highlights nothing
+ * @param {number} widthPx
+ * @param {number} [heightPx]
+ * @returns {string}
+ */
+export function renderPositionRibbonSVG(views, focusSegmentId, widthPx, heightPx = 22) {
+  const layout = layoutSegments(views);
+  const bounds = contentBounds(layout);
+  const totalU = Math.max(1e-6, bounds.maxX - bounds.minX);
+  const scale = widthPx / totalU;
+  const parts = [`<svg class="pe-ribbon-svg" width="${fmt(widthPx)}" height="${fmt(heightPx)}" viewBox="0 0 ${fmt(widthPx)} ${fmt(heightPx)}">`];
+  layout.forEach((seg, i) => {
+    const x = (seg.offsetX + seg.uMin - bounds.minX) * scale;
+    const w = Math.max(1, (seg.uMax - seg.uMin) * scale);
+    const isFocused = focusSegmentId === seg.segmentId;
+    parts.push(
+      `<rect class="pe-ribbon-seg${isFocused ? ' focused' : ''}" data-seg-id="${escapeHtml(seg.segmentId)}" x="${fmt(x)}" y="2" width="${fmt(w)}" height="${heightPx - 4}"/>`
+    );
+  });
+  parts.push('</svg>');
+  return parts.join('');
 }

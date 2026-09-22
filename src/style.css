@@ -1385,3 +1385,57 @@ code {
 #profile-panel .pe-diag.error { background: #fdeaea; }
 #profile-panel .pe-diag.warning { background: #fff5e0; }
 #profile-panel .pe-hint { padding: 4px 12px 8px; font-size: 11px; color: #6b7684; }
+#profile-panel .pe-hint.toast { color: #8a5a00; font-weight: 600; }
+
+/* Linijka, wręgi, podgląd AUTO */
+.pe-ruler line { stroke: #b7bec7; stroke-width: 1; }
+.pe-ruler text { fill: #8a93a0; font-family: inherit; }
+.pe-housing { fill: rgba(180, 60, 60, 0.12); stroke: #b43c3c; stroke-width: 1; stroke-dasharray: 4 3; }
+.pe-nominal { fill: none; stroke: #9aa3ad; stroke-width: 1.5; stroke-dasharray: 5 4; pointer-events: none; }
+
+/* Dymek z liczbami podczas przeciągania */
+#profile-panel .pe-drag-tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  transform: translate(14px, -30px);
+  background: #2b2f36;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+#profile-panel .pe-drag-tooltip.snap { background: #1a5fb4; }
+
+/* Menu kontekstowe (prawy klik) */
+#profile-panel .pe-ctx-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  background: #fff;
+  border: 1px solid #c9ced6;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  padding: 4px;
+}
+#profile-panel .pe-ctx-menu button {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+}
+#profile-panel .pe-ctx-menu button:hover { background: #eef4fc; }
+
+/* Pasek pozycji ("gdzie jestem na całej wandze") */
+#profile-panel .pe-ribbon { padding: 4px 12px; border-top: 1px solid #e3e7eb; background: #fafbfc; }
+.pe-ribbon-svg { display: block; width: 100%; }
+.pe-ribbon-seg { fill: #e4e8ed; stroke: #c9ced6; stroke-width: 1; cursor: pointer; }
+.pe-ribbon-seg:hover { fill: #d7dee6; }
+.pe-ribbon-seg.focused { fill: #a9c6ec; stroke: #1a5fb4; }

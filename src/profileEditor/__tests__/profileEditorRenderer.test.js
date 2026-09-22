@@ -7,7 +7,7 @@ import { buildStringerModelsForFlight } from '../../geometry/stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../../geometry/stringerConstructionGeometry.js';
 import { buildProfileViewModel, offsetFromDrag } from '../../geometry/stringerProfileView.js';
 import { applyProfileEdit, PROFILE_EDITS, anchorIdForTread } from '../../geometry/stringerProfileModel.js';
-import { layoutSegments, contentBounds, toSvg, fromSvg, renderProfileEditorSVG, SEGMENT_GAP_MM } from '../profileEditorRenderer.js';
+import { layoutSegments, contentBounds, toSvg, fromSvg, renderProfileEditorSVG, renderPositionRibbonSVG, SEGMENT_GAP_MM } from '../profileEditorRenderer.js';
 
 function views(patch = {}, side = 'outer') {
   const config = { ...createDefaultConfig(), stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 5, totalRise: 2700, treadGoing: 280, ...patch };
@@ -100,6 +100,44 @@ test('view model: the silhouette and the board span are provided, and an inserte
   assert.ok(v[0].outline.length >= 4 && v[0].span.uEnd > v[0].span.uStart);
   const ins = v.flatMap((x) => x.controlPoints).find((c) => c.id === 'manual-1');
   assert.ok(ins && ins.kind === 'inserted' && ins.t === 0.4 && ins.edgeLength > 0);
+});
+
+test('renderProfileEditorSVG: draws mm ruler ticks along the top and left edges by default, and can be switched off', () => {
+  const { views: v } = views();
+  const vp = { x: 0, y: -3000, width: 6000, height: 3500 };
+  const on = renderProfileEditorSVG(v, { viewport: vp, pxToMm: 10 }).svg;
+  assert.ok(on.includes('class="pe-ruler"') && (on.match(/<line/g) || []).length > 0);
+  const off = renderProfileEditorSVG(v, { viewport: vp, pxToMm: 10, layers: { ruler: false } }).svg;
+  assert.ok(!off.includes('pe-ruler'));
+});
+
+test('renderProfileEditorSVG: a closed stringer draws its housings; a cut one has none to draw', () => {
+  const closed = views({ stringerConstructionType: 'closed' }).views;
+  assert.ok(closed.some((v) => v.housings.length > 0));
+  const svgClosed = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
+  assert.ok(svgClosed.includes('pe-housing'));
+  const svgOff = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10, layers: { housings: false } }).svg;
+  assert.ok(!svgOff.includes('pe-housing'));
+
+  const cut = views({ stringerConstructionType: 'cut' }).views;
+  assert.ok(cut.every((v) => v.housings.length === 0));
+});
+
+test('renderProfileEditorSVG: with nominalViews, draws a dashed AUTO comparison contour distinct from the edited one', () => {
+  const edited = views({ manualStringerProfileOverrides: applyProfileEdit({}, { type: PROFILE_EDITS.MOVE_VERTEX, side: 'outer', contour: 'lower', anchorId: anchorIdForTread(2), ds: 0, dn: 60 }) });
+  const nominal = views();
+  const svg = renderProfileEditorSVG(edited.views, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10, nominalViews: nominal.views }).svg;
+  assert.ok(svg.includes('pe-nominal'));
+  const without = renderProfileEditorSVG(edited.views, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
+  assert.ok(!without.includes('pe-nominal'), 'no nominalViews given -> no comparison line drawn');
+});
+
+test('renderPositionRibbonSVG: one rectangle per board, spanning the strip width, with the focused one flagged', () => {
+  const { views: v } = views();
+  const svg = renderPositionRibbonSVG(v, v[1].segmentId, 200);
+  assert.equal((svg.match(/pe-ribbon-seg/g) || []).length, v.length);
+  assert.ok(svg.includes(`data-seg-id="${v[1].segmentId}"`) && svg.includes('focused'));
+  assert.ok(svg.startsWith('<svg'));
 });
 
 test('applyProfileEdit RESET_SIDE clears one stringer and leaves the other', () => {
