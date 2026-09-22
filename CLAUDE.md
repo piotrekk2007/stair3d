@@ -593,6 +593,84 @@ Tests: `export/__tests__/dxfExport.test.js` (`buildPostDXF`: exact rectangle dim
 `post-corner-0` in the Plan 2D and exporting produces a well-formed DXF with the expected title;
 the Kosztorys button's DXF contains one title per existing post.
 
+## SPLINE transition style — a whole contour as one smooth curve (Tier 2, implemented)
+
+The first Tier 2 profile-editor item (see "1:1 DXF export" above for the other): `stringerTransitionStyle`
+gains a third value, `'SPLINE'`, alongside `'SHARP'`/`'TANGENT_ARC'` — instead of rounding (or not)
+each corner independently with a single tangent arc, the WHOLE contour (lower, and a closed board's
+upper) becomes one continuous, flowing curve through every one of its control points, exactly the
+kind of profile professional/CNC stair software shows. UI: "Kształt profilu wangi" dropdown gained
+"Spline (gładka, do CNC)"; `stringerRadiusScope` (BOTTOM/TOP/BOTH) still decides which contour(s) it
+applies to — the exact same field TANGENT_ARC's own radius already used, so no new "which side"
+config was needed. A cut board's stepped/notched top ("the comb") is a separate code path
+(`stringerConstructionGeometry.js` `buildOverlayTop`/`buildCombCurve`) that `solveStringerProfile`
+never produces, so SPLINE structurally cannot touch it — correctly: those notches are where a tread
+physically rests and must never be smoothed away.
+
+- **`src/geometry/profileCurve.js`** gained `splinePointsThrough(points, sampleStepMm)` /
+  `splineThroughPoints(...)`: a **centripetal Catmull-Rom** spline (Barry-Goldman), sampled densely
+  and returned as ordinary `'line'` primitives (`SPLINE_SAMPLE_STEP_MM = 15`,
+  `SPLINE_MIN_SAMPLES_PER_SEGMENT = 6`) — every other consumer (`curveDistance`, `sliceCurveByU`,
+  `curveToPolyline`, the DXF exporter, the 3D renderer) already handles an arbitrary sequence of
+  line/arc primitives, so a spline needed no new primitive type or special-casing anywhere
+  downstream, exactly as the field's own long-standing comment predicted ("one more entry ... one
+  more branch ... nothing else in the model would change"). **Centripetal, not uniform**, on
+  purpose: tread spacing along a real winder board can jump from ~15mm to ~270mm between
+  neighbours, and uniform Catmull-Rom loops/cusps badly on exactly that kind of unevenly-spaced
+  data (see Yuksel/Schaefer/Keyser 2011) — centripetal stays well-behaved across it, verified by a
+  dedicated grid test (below) built specifically around that spacing pattern. The spline is
+  interpolating (passes through every knot exactly, never approximates one away) and returns `null`
+  — never a folded/backward-in-u curve, the one hard invariant every other function in this file
+  relies on — when a local turn is genuinely too sharp for a smooth curve to pass through without
+  doubling back; the caller falls back to the ordinary sharp/fillet path for that contour (reported
+  as `STRINGER-SPLINE-REJECTED`, WARNING) rather than ever risk silently corrupting the contour.
+- **`src/geometry/stringerProfileSolver.js`**'s `solveContour()` branches to the spline path when
+  `params.transitionStyle === SPLINE` and the contour is in `radiusScope`. **A spline has no
+  per-corner radius to shrink** the way a fillet arc does (`largestRadiusKeepingDepth`'s bisection),
+  so it can cut inside the nominal control polygon at a sharp turn exactly like an un-clamped fillet
+  would, with no local lever to reduce. The fix reuses the SAME idea `stringerProfileOffsetMm`
+  already uses globally ("a positive offset makes the board deeper everywhere"): measure the
+  spline's actual local depth against `opposite`, and if it undershoots
+  `params.minimumDepthMm`, push the WHOLE curve away from `opposite` along its own local normal
+  (`polylineProfile.js`'s existing `offsetPolylineByNormal` — the same primitive `lowerNominal`/
+  `upperNominal` are already built with) by the shortfall, then re-measure; a few iterations
+  (`SPLINE_DEPTH_CORRECTION_ITERATIONS = 6`, converges in far fewer for any realistically smooth
+  curve) close the gap. Pushing AWAY from `opposite` (down for the lower contour, up for the upper)
+  only ever adds material, so this can never remove support a tread needs — confirmed by the same
+  grid test asserting `localDepthMm` never undershoots the configured minimum across straight/
+  L-winder/U-double-winder x flat/medium/steep x cut/closed. The self-intersection check
+  (`STRINGER-CONTOUR-SELF-INTERSECTION`) already runs on the final contour regardless of how it was
+  produced, so a pathological spline that loops is still caught the same way an unsafe manual
+  override is — no separate check was needed for that either.
+- **Manual point editing composes unchanged**: dragging a control point, inserting one, or an
+  override surviving a tread-count change all still work exactly as before — `buildControlPolygon()`
+  (nominal position, tangent/normal, override application) is untouched; SPLINE only changes which
+  function turns the resulting vertex list into a curve. The one thing that stops applying in SPLINE
+  mode is a per-point corner radius (there is no discrete corner to round any more) — `controlPointsFrom()`
+  (a small helper factored out of the existing fillet-path code, shared by both paths) reports
+  `radius: 0` for every point when the spline path produced the curve.
+- **Everything downstream needed zero changes**: the DXF exporter, the 3D renderer, the profile
+  editor's own rendering, and every min-depth/support/self-intersection diagnostic all already treat
+  a curve as "some sequence of line/arc primitives" and don't know or care that this one happens to
+  approximate a smooth spline — verified in the browser (a real L-winder project's board renders and
+  exports correctly with visibly denser line-segment output, both in the editor's SVG and in the
+  exported DXF).
+- **Not done (remaining Tier 2 item)**: a multi-arc transition (an intermediate style between one
+  tangent arc and a full spline) stays unimplemented.
+
+Tests: `geometry/__tests__/profileCurve.test.js` (`splineThroughPoints`: passes exactly through
+every knot; stays u-monotonic across a deliberately winder-like uneven spacing; degenerates
+correctly for <3 points; returns `null` rather than a folded curve for a genuine hairpin),
+`geometry/__tests__/stringerProfile.test.js` (a dedicated SPLINE grid across every geometry ×
+inclination × construction-type combination the main grid already covers, checking simple/
+non-self-intersecting contours, the minimum depth is never undershot, no lost tread support, and
+u-monotonicity on both contours; plus dedicated tests for visibly-denser-than-SHARP output, a
+perfectly straight flight correctly staying a single line, the cut comb staying untouched, and
+`stringerRadiusScope` correctly gating which contour gets splined). Browser-verified: DXF export
+of a splined board produces a valid, well-formed file; the 3D view renders without error; the
+Walidacja tab shows no spline-specific findings on a realistic project (the warnings present are
+pre-existing and config-only, unrelated to transition style).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

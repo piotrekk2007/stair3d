@@ -17,6 +17,7 @@ import {
   pointToCurveDistance,
   mergeCollinearLines,
   reverseCurve,
+  splineThroughPoints,
 } from '../profileCurve.js';
 
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} != ${b} (eps ${eps})`);
@@ -244,3 +245,50 @@ test('reverseCurve: traversing a mixed line/arc curve backwards visits the same 
 function dist2(a, b) {
   return Math.hypot(a.u - b.u, a.v - b.v);
 }
+
+test('splineThroughPoints: passes exactly through every given point', () => {
+  const points = [{ u: 0, v: 0 }, { u: 100, v: 40 }, { u: 250, v: 30 }, { u: 400, v: 90 }, { u: 600, v: 100 }];
+  const curve = splineThroughPoints(points);
+  assert.ok(curve && curve.length > 0);
+  near(curveStart(curve).u, 0);
+  near(curveStart(curve).v, 0);
+  near(curveEnd(curve).u, 600);
+  near(curveEnd(curve).v, 100);
+  // every input point must appear as a vertex somewhere along the sampled curve
+  const chord = curveToPolyline(curve);
+  for (const p of points) {
+    assert.ok(chord.some((q) => Math.hypot(q.u - p.u, q.v - p.v) < 1e-6), `missing knot (${p.u},${p.v})`);
+  }
+});
+
+test('splineThroughPoints: stays u-monotonic across widely varying segment lengths (a winder-like spacing)', () => {
+  // Tread spacing along a real winder board can jump from ~15mm to ~270mm between neighbours —
+  // exactly the case UNIFORM Catmull-Rom loops/cusps on; centripetal must stay well-behaved.
+  const points = [
+    { u: 0, v: 0 }, { u: 270, v: 30 }, { u: 540, v: 60 }, { u: 555, v: 90 }, { u: 585, v: 120 },
+    { u: 630, v: 150 }, { u: 900, v: 180 }, { u: 1170, v: 210 },
+  ];
+  const curve = splineThroughPoints(points);
+  assert.ok(curve !== null, 'this spacing is realistic, not pathological — must not be rejected');
+  const chord = curveToPolyline(curve);
+  for (let i = 1; i < chord.length; i++) assert.ok(chord[i].u >= chord[i - 1].u - 1e-6, `u went backward at index ${i}`);
+});
+
+test('splineThroughPoints: fewer than 3 points is just a straight line, not a degenerate spline', () => {
+  const curve = splineThroughPoints([{ u: 0, v: 0 }, { u: 100, v: 50 }]);
+  assert.equal(curve.length, 1);
+  assert.equal(curve[0].type, 'line');
+});
+
+test('splineThroughPoints: returns null (never a folded/backward curve) for a genuinely too-sharp reversal', () => {
+  // A near-180-degree hairpin between three points packed very close together in u: any smooth
+  // interpolating curve through them would have to double back on itself.
+  const points = [{ u: 0, v: 0 }, { u: 10, v: 0 }, { u: 10.5, v: 200 }, { u: 11, v: 0 }, { u: 300, v: 5 }];
+  const curve = splineThroughPoints(points);
+  if (curve !== null) {
+    const chord = curveToPolyline(curve);
+    for (let i = 1; i < chord.length; i++) assert.ok(chord[i].u >= chord[i - 1].u - 1e-6);
+  }
+  // Either outcome (null, or a curve that stayed monotonic anyway) is acceptable — the invariant
+  // this test actually protects is "never silently return a folded curve".
+});

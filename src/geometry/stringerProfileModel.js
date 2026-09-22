@@ -29,10 +29,17 @@ export const PROFILE_MODES = Object.freeze({ AUTO: 'AUTO', MANUAL: 'MANUAL' });
 // Which contour(s) the corner radius applies to.
 export const RADIUS_SCOPES = Object.freeze({ TOP: 'TOP', BOTTOM: 'BOTTOM', BOTH: 'BOTH' });
 
-// How a corner of a contour is turned. Only the two styles below exist today; a multi-arc or a
-// spline transition would be one more entry here and one more branch in stringerProfileSolver.js
-// — nothing else in the model would change (Tier 2, deliberately not implemented).
-export const TRANSITION_STYLES = Object.freeze({ SHARP: 'SHARP', TANGENT_ARC: 'TANGENT_ARC' });
+// How a contour is shaped. SHARP/TANGENT_ARC round (or don't) each corner independently, one
+// discrete radius at a time — SPLINE replaces that with ONE continuous smooth curve through every
+// control point of the WHOLE contour (Tier 2 "spline transition" — see stringerProfileSolver.js
+// solveContour and profileCurve.js splineThroughPoints). SPLINE only ever applies to a contour that
+// is a plain offset curve (a closed board's upper/lower edge, or a cut board's lower edge) — a cut
+// board's stepped/notched top ("the comb") is a different, separate code path
+// (stringerConstructionGeometry.js buildOverlayTop/buildCombCurve) that solveStringerProfile never
+// produces, so it is structurally unaffected by this setting, correctly: those notches are where a
+// tread physically rests and can never be smoothed away. A multi-arc transition (an intermediate
+// style between a single tangent arc and a full spline) remains Tier 2, not implemented.
+export const TRANSITION_STYLES = Object.freeze({ SHARP: 'SHARP', TANGENT_ARC: 'TANGENT_ARC', SPLINE: 'SPLINE' });
 
 export const PROFILE_CONTOURS = Object.freeze({ LOWER: 'lower', UPPER: 'upper' });
 

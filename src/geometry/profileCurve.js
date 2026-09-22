@@ -117,6 +117,93 @@ export function curveLength(curve) {
   return total;
 }
 
+// --- spline --------------------------------------------------------------------------------------
+//
+// A smooth curve through a control polygon's own points (never a fillet-rounded corner — the
+// whole contour is one continuous, flowing curve instead), for TRANSITION_STYLES.SPLINE. Produced
+// as a CENTRIPETAL Catmull-Rom spline (Barry-Goldman), sampled densely and returned as ordinary
+// 'line' primitives — every other consumer (curveDistance, sliceCurveByU, curveToPolyline, the DXF
+// exporter, the 3D renderer) already handles an arbitrary sequence of line/arc primitives, so a
+// spline needs no new primitive type or special-casing anywhere downstream.
+//
+// UNIFORM Catmull-Rom (equal-time knots) loops and cusps badly when consecutive segments have very
+// different lengths — exactly the case here: a winder's tread spacing along a board can jump from
+// ~15mm to ~270mm between neighbours. The CENTRIPETAL variant (knot spacing by
+// distance^0.5 rather than a constant) is the standard fix and stays well-behaved across that
+// range; see e.g. Yuksel/Schaefer/Keyser 2011 "Parameterization and Applications of Catmull-Rom
+// Curves".
+
+const CATMULL_ROM_ALPHA = 0.5; // centripetal
+// One sample every this many mm of (approximate) segment length — a rendering/analysis
+// resolution, not a design tolerance: fine enough to look and measure smooth, coarse enough that
+// a realistic multi-tread board doesn't turn every downstream curve-distance check (O(n*m) over
+// primitive pairs) into thousands of comparisons.
+const SPLINE_SAMPLE_STEP_MM = 15;
+const SPLINE_MIN_SAMPLES_PER_SEGMENT = 6;
+
+function lerp2(a, b, ta, tb, t) {
+  if (Math.abs(tb - ta) < 1e-9) return { u: a.u, v: a.v };
+  const s = (t - ta) / (tb - ta);
+  return { u: a.u + (b.u - a.u) * s, v: a.v + (b.v - a.v) * s };
+}
+
+// One point of the centripetal Catmull-Rom curve between p1 (local t=0) and p2 (local t=1), using
+// neighbours p0/p3 for tangent shaping. p0===p1 or p2===p3 (the phantom duplicate endpoint at the
+// very start/end of the whole polyline) degenerates cleanly to a straight blend of p1->p2 — no
+// divide-by-zero special case needed beyond lerp2's own guard.
+function centripetalSegmentPoint(p0, p1, p2, p3, t) {
+  // A coincident neighbour (a===b, the phantom duplicate endpoint at the very start/end of the
+  // whole polyline) contributes a zero-length knot span; lerp2's own near-equal guard handles that
+  // cleanly (returns the single remaining point) without any special-casing here.
+  const knot = (prev, a, b) => prev + Math.pow(dist(a, b), CATMULL_ROM_ALPHA);
+  const t0 = 0;
+  const t1 = knot(t0, p0, p1);
+  const t2 = knot(t1, p1, p2);
+  const t3 = knot(t2, p2, p3);
+  const tt = t1 + t * (t2 - t1);
+  const a1 = lerp2(p0, p1, t0, t1, tt);
+  const a2 = lerp2(p1, p2, t1, t2, tt);
+  const a3 = lerp2(p2, p3, t2, t3, tt);
+  const b1 = lerp2(a1, a2, t0, t2, tt);
+  const b2 = lerp2(a2, a3, t1, t3, tt);
+  return lerp2(b1, b2, t1, t2, tt);
+}
+
+/**
+ * A smooth curve through EVERY point of `points`, exactly (Catmull-Rom is interpolating — a knot
+ * is never approximated away). Returns `null` when the result would turn back on itself in u (a
+ * genuinely too-sharp local turn for a smooth curve to pass through without folding) — u-monotonic
+ * is a hard invariant every other function in this file relies on, so the caller must fall back to
+ * something else (stringerProfileSolver.js falls back to its ordinary sharp/fillet path) rather
+ * than ever receive a folded curve. Returns the dense POINT list (not yet a curve) — a caller that
+ * needs to safety-offset the result (e.g. to guarantee a minimum depth, the way a fillet's own
+ * radius is depth-clamped) can do so with polylineProfile.js's offsetPolylineByNormal on this
+ * before converting it with polylineToCurve; `splineThroughPoints` below does that conversion for
+ * anyone who just wants the curve as-is.
+ */
+export function splinePointsThrough(points, sampleStepMm = SPLINE_SAMPLE_STEP_MM) {
+  if (points.length < 3) return points.map(pt); // nothing to smooth with fewer than 3 knots
+  const dense = [pt(points[0])];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const segLen = dist(p1, p2);
+    const samples = Math.max(SPLINE_MIN_SAMPLES_PER_SEGMENT, Math.ceil(segLen / sampleStepMm));
+    for (let k = 1; k <= samples; k++) dense.push(centripetalSegmentPoint(p0, p1, p2, p3, k / samples));
+  }
+  for (let i = 1; i < dense.length; i++) {
+    if (dense[i].u < dense[i - 1].u - GEOMETRY_EPS) return null;
+  }
+  return dense;
+}
+
+export function splineThroughPoints(points, sampleStepMm = SPLINE_SAMPLE_STEP_MM) {
+  const dense = splinePointsThrough(points, sampleStepMm);
+  return dense && polylineToCurve(dense);
+}
+
 // --- fillet ------------------------------------------------------------------------------------
 
 /**

@@ -94,6 +94,107 @@ for (const [geoName, geoPatch] of Object.entries(GEOMETRIES)) {
   }
 }
 
+// --- SPLINE transition style: a smaller, dedicated grid ---------------------------------------
+//
+// TRANSITION_STYLES.SPLINE (profileCurve.js splineThroughPoints, centripetal Catmull-Rom) is
+// exercised across the same variety of real geometry as the grid above (straight/L-winder/
+// U-double-winder, flat/medium/steep, cut/closed) — the exact case it must be robust to is a
+// winder's widely varying tread spacing along one board, which is precisely what a centripetal
+// (not uniform) parameterization is for. A narrower grid than the one above (one radius value,
+// since SPLINE ignores stringerCornerRadiusMm) to keep the suite fast.
+for (const [geoName, geoPatch] of Object.entries(GEOMETRIES)) {
+  for (const [incName, totalRise] of Object.entries(INCLINATIONS)) {
+    for (const constructionType of ['cut', 'closed']) {
+      const label = `${geoName}/${incName}/${constructionType}`;
+      test(`spline grid — ${label}`, (t) => {
+        const patch = {
+          ...geoPatch,
+          totalRise,
+          stringerConstructionTypeOuter: constructionType,
+          stringerConstructionTypeInner: constructionType,
+          stringerTransitionStyle: 'SPLINE',
+          stringerRadiusScope: 'BOTH',
+        };
+        const derived = deriveStairData({ ...createDefaultConfig(), ...patch });
+        if (!derived.turnFeasible) return t.skip('geometry not feasible');
+        const { geo } = flight(patch);
+
+        for (const side of ['outer', 'inner']) {
+          for (const g of geo[side]) {
+            assert.ok(g.outerContour.length >= 4, `${side}/${g.segmentId}: contour has points`);
+            assert.ok(isSimplePolygon(g.outerContour), `${side}/${g.segmentId}: spline contour is self-intersecting`);
+            assert.ok(g.localDepthMm >= 350 - 1e-3, `${side}/${g.segmentId}: local depth ${g.localDepthMm} below the default minimum`);
+            assert.ok(!ruleIds([g]).includes('STRINGER-TREAD-SUPPORT'), `${side}/${g.segmentId}: a tread lost its support`);
+            // The lower contour is continuous end to end.
+            for (let i = 0; i < g.lowerCurve.length - 1; i++) {
+              assert.ok(Math.hypot(g.lowerCurve[i].b.u - g.lowerCurve[i + 1].a.u, g.lowerCurve[i].b.v - g.lowerCurve[i + 1].a.v) < 1e-6);
+            }
+            // u never goes backward anywhere along either contour (the hard invariant every
+            // downstream slicing function relies on).
+            for (const curve of [g.lowerCurve, g.upperCurve].filter(Boolean)) {
+              const chord = curveToPolyline(curve);
+              for (let i = 1; i < chord.length; i++) assert.ok(chord[i].u >= chord[i - 1].u - 1e-6, `${side}/${g.segmentId}: u went backward`);
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+test('SPLINE: a winder board is visibly smooth (many short segments) compared to the same board with SHARP corners', () => {
+  const sharp = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SHARP' });
+  const spline = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SPLINE', stringerRadiusScope: 'BOTH' });
+  for (let i = 0; i < sharp.geo.outer.length; i++) {
+    assert.ok(
+      spline.geo.outer[i].lowerCurve.length > sharp.geo.outer[i].lowerCurve.length,
+      `${sharp.geo.outer[i].segmentId}: spline (${spline.geo.outer[i].lowerCurve.length} segments) should be visibly denser than sharp (${sharp.geo.outer[i].lowerCurve.length})`
+    );
+  }
+});
+
+// A perfectly straight, uniform flight's bearing points are exactly collinear, so a spline
+// through them degenerates back to a straight line — same as SHARP/TANGENT_ARC at radius 0 — and
+// stringerConstructionGeometry.js's own mergeCollinearLines correctly collapses it to ONE line,
+// same as the existing "with default profile parameters..." test above. That is the CORRECT
+// behaviour (a straight input has no reason to wiggle), not a sign SPLINE silently did nothing —
+// the winder test above is the one that actually exercises curvature.
+test('SPLINE: a perfectly straight flight stays a single straight line (a spline through collinear points has nothing to smooth)', () => {
+  const { geo } = flight({ ...GEOMETRIES.straight, totalRise: 2600, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SPLINE', stringerRadiusScope: 'BOTH' });
+  for (const g of geo.outer) {
+    assert.equal(g.lowerCurve.length, 1);
+    assert.ok(Math.abs(g.localDepthMm - 350) < 1e-6, 'still meets the minimum depth exactly, no spurious safety push on an already-safe straight profile');
+  }
+});
+
+test('SPLINE only reshapes a plain offset contour — a cut board\'s stepped/notched top comb is untouched', () => {
+  const sharp = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SHARP' });
+  const spline = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SPLINE', stringerRadiusScope: 'BOTH' });
+  for (let i = 0; i < sharp.geo.outer.length; i++) {
+    assert.deepEqual(spline.geo.outer[i].upperCurve, sharp.geo.outer[i].upperCurve, `${sharp.geo.outer[i].segmentId}: the comb must not change under SPLINE`);
+  }
+});
+
+test('SPLINE respects stringerRadiusScope — BOTTOM smooths the lower contour but leaves the upper one exactly as SHARP would', () => {
+  const patchFor = (transitionStyle) => ({
+    ...GEOMETRIES.L,
+    totalRise: 2700,
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
+    stringerTransitionStyle: transitionStyle,
+    stringerRadiusScope: 'BOTTOM',
+  });
+  const sharp = flight(patchFor('SHARP'));
+  const spline = flight(patchFor('SPLINE'));
+  for (let i = 0; i < sharp.geo.outer.length; i++) {
+    assert.ok(
+      spline.geo.outer[i].lowerCurve.length > sharp.geo.outer[i].lowerCurve.length,
+      `${sharp.geo.outer[i].segmentId}: lower contour should be smoothed`
+    );
+    assert.deepEqual(spline.geo.outer[i].upperCurve, sharp.geo.outer[i].upperCurve, `${sharp.geo.outer[i].segmentId}: upper contour is out of scope — must be untouched`);
+  }
+});
+
 // --- reference path stability and determinism ----------------------------------------------
 
 test('the plan reference path is untouched by any profile parameter or override (still straight, RULES #5)', () => {

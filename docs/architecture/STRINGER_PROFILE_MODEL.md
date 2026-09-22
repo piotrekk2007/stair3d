@@ -213,9 +213,13 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 
 * **Tier 1 (done):** contour offset, corner radius, top/bottom/both scope, minimum local depth, manual control
   points + radii, side-view data model, edit events, project file v3.
-* **Tier 2:** multi-arc/spline transitions, free-form profiles, templates (not built); **1:1 DXF export**
+* **Tier 2:** multi-arc transitions, free-form profiles, templates (not built); **1:1 DXF export**
   (implemented — see CLAUDE.md "1:1 DXF export", `src/export/dxfExport.js`). The data was already
   export-ready (unfolded frame, real arcs), so this was serialization only, no new geometry.
+  **SPLINE transition style** (implemented — see CLAUDE.md "SPLINE transition style",
+  `TRANSITION_STYLES.SPLINE`, `profileCurve.js` `splineThroughPoints`): a whole contour as one
+  continuous centripetal-Catmull-Rom curve instead of per-corner rounding, exactly the "one more
+  entry, one more branch" this doc predicted for it.
 * **Tier 3 (not built):** curved plan path, multi-floor arcs, CNC/CAM.
 
 ## 14. Migration notes

@@ -118,8 +118,8 @@ export function createUI({
   lockable(build.add(config, 'minimumStringerDepthMm', 150, 600, 10).name('Min. głębokość wangi [mm]'), 'minimumStringerDepthMm');
   lockable(build.add(config, 'stringerProfileOffsetMm', 0, 200, 5).name('Pogłębienie profilu [mm]'), 'stringerProfileOffsetMm');
   lockable(build.add(config, 'stringerCornerRadiusMm', 0, 300, 10).name('Promień narożników profilu [mm]'), 'stringerCornerRadiusMm');
-  live(build.add(config, 'stringerRadiusScope', { 'Dół': 'BOTTOM', 'Góra': 'TOP', 'Góra i dół': 'BOTH' })).name('Zaokrąglaj kontur');
-  live(build.add(config, 'stringerTransitionStyle', { 'Łuk styczny': 'TANGENT_ARC', 'Ostry narożnik': 'SHARP' })).name('Przejście w narożniku');
+  live(build.add(config, 'stringerRadiusScope', { 'Dół': 'BOTTOM', 'Góra': 'TOP', 'Góra i dół': 'BOTH' })).name('Zaokrąglaj/wygładzaj kontur');
+  live(build.add(config, 'stringerTransitionStyle', { 'Łuk styczny': 'TANGENT_ARC', 'Ostry narożnik': 'SHARP', 'Spline (gładka, do CNC)': 'SPLINE' })).name('Kształt profilu wangi');
   lockable(build.add(config, 'stringerNotchRadiusMm', 0, 30, 1).name('Promień wewn. wcięcia (nakładana) [mm]'), 'stringerNotchRadiusMm');
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad stopniem (wpuszczana) [mm]'), 'stringerTopMarginMm');

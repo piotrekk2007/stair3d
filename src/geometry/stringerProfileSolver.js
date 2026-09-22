@@ -36,6 +36,7 @@ import {
   polylineToCurve,
   curveDistance,
   pointToCurveDistance,
+  splinePointsThrough,
 } from './profileCurve.js';
 import { CONSTRUCTION_TYPES } from './stringerModel.js';
 import { PROFILE_CONTOURS, TRANSITION_STYLES, DEPTH_TOLERANCE_MM, MIN_VERTEX_SPACING_MM, scopeIncludes } from './stringerProfileModel.js';
@@ -44,6 +45,9 @@ const BISECTION_ITERATIONS = 50;
 const MIN_PROBE_RADIUS_MM = 1e-6;
 // A radius reduced by less than this is not worth reporting.
 const CLAMP_REPORT_MM = 0.5;
+// A spline's minimum-depth safety push (see solveContour's SPLINE branch) converges in very few
+// steps for any realistically smooth curve; this is a generous cap, not a tuned/expected count.
+const SPLINE_DEPTH_CORRECTION_ITERATIONS = 6;
 
 // Left turns (+1) round off a convex corner of the board below the lower contour; right turns
 // (-1) of the board above the upper contour. See the header.
@@ -235,8 +239,70 @@ function largestRadiusKeepingDepth(points, i, radius, opposite, minDepth) {
   return lo;
 }
 
+// Shared shape between the spline path and the fillet path below — an editor needs the SAME
+// per-point metadata (nominal position, tangent/normal for its ds/dn drag math, whether it's an
+// override) regardless of which path produced the curve; `applied` (per-vertex radius) is simply
+// absent (every point reads radius 0) when there is no discrete corner-rounding concept at all.
+function controlPointsFrom(vertices, applied) {
+  return vertices.map((v, i) => ({
+    id: v.id,
+    u: v.u,
+    v: v.v,
+    radius: applied ? applied[i] || 0 : 0,
+    overridden: !!v.override || v.explicitRadius !== undefined,
+    inserted: v.inserted,
+    t: v.t,
+    edgeLength: v.edgeLength,
+    nominal: v.nominal ? { u: v.nominal.u, v: v.nominal.v } : null,
+    tangent: v.tangent,
+    normal: v.normal,
+  }));
+}
+
 function solveContour({ vertices, contour, params, opposite, findings }) {
   const points = vertices.map((v) => ({ u: v.u, v: v.v }));
+
+  // SPLINE replaces per-corner rounding with ONE smooth curve through the whole contour — reuses
+  // `stringerRadiusScope` (BOTTOM/TOP/BOTH) to decide which contour(s) it applies to, exactly like
+  // TANGENT_ARC's own radius already does, so no new "which side" config field is needed. A locally
+  // too-sharp turn (splinePointsThrough returning null — see its own doc) falls through to the
+  // ordinary path below instead of ever producing a folded/self-crossing contour.
+  //
+  // Unlike a fillet arc (one tunable radius per corner, bisected down until it stops eating into
+  // the minimum depth — see largestRadiusKeepingDepth below), an interpolating spline has no local
+  // "shrink this corner" lever: it must pass through every knot exactly, so at a sharp turn it can
+  // cut inside the nominal control polygon exactly the way a fillet does, but with no per-corner
+  // radius to reduce. The fix is the same one profileOffsetMm already uses globally (a positive
+  // offset "makes the board deeper everywhere"): measure the spline's actual local depth and, if it
+  // undershoots, push the WHOLE curve away from `opposite` along its own local normal (the exact
+  // same primitive `lowerNominal`/`upperNominal` were built with, `offsetPolylineByNormal`) by the
+  // shortfall, then re-measure — a couple of iterations converge well inside DEPTH_TOLERANCE_MM for
+  // any realistically smooth curve. Pushing AWAY from `opposite` (down for the lower contour, up
+  // for the upper) only ever ADDS material, so this can never remove support a tread needs.
+  if (params.transitionStyle === TRANSITION_STYLES.SPLINE && scopeIncludes(params.radiusScope, contour)) {
+    let dense = splinePointsThrough(points);
+    if (dense) {
+      const pushDirection = contour === PROFILE_CONTOURS.LOWER ? 'down' : 'up';
+      let curve = polylineToCurve(dense);
+      for (let iter = 0; iter < SPLINE_DEPTH_CORRECTION_ITERATIONS; iter++) {
+        const deficit = params.minimumDepthMm - curveDistance(curve, opposite);
+        if (deficit <= DEPTH_TOLERANCE_MM) break;
+        dense = offsetPolylineByNormal(dense, deficit, pushDirection);
+        curve = polylineToCurve(dense);
+      }
+      return { curve, control: controlPointsFrom(vertices, null) };
+    }
+    findings.push(
+      finding({
+        ruleId: 'STRINGER-SPLINE-REJECTED',
+        severity: 'WARNING',
+        parameter: 'stringerTransitionStyle',
+        contour,
+        message: `Profil (kontur ${contour === PROFILE_CONTOURS.LOWER ? 'dolny' : 'górny'}) ma lokalnie zbyt ostry zwrot na gładką krzywą spline — ten fragment pozostał bez niej.`,
+      })
+    );
+  }
+
   const requested = requestedRadii(vertices, contour, params);
   const feasible = feasibleRadii(points, requested);
   const applied = feasible.slice();
@@ -276,19 +342,7 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
     );
   }
   const { curve } = filletPolyline(points, applied);
-  return { curve, control: vertices.map((v, i) => ({
-      id: v.id,
-      u: v.u,
-      v: v.v,
-      radius: applied[i] || 0,
-      overridden: !!v.override || v.explicitRadius !== undefined,
-      inserted: v.inserted,
-      t: v.t,
-      edgeLength: v.edgeLength,
-      nominal: v.nominal ? { u: v.nominal.u, v: v.nominal.v } : null,
-      tangent: v.tangent,
-      normal: v.normal,
-    })) };
+  return { curve, control: controlPointsFrom(vertices, applied) };
 }
 
 // --- public API ----------------------------------------------------------------------------------
