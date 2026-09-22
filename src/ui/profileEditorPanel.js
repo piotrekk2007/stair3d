@@ -32,6 +32,8 @@ import {
 } from '../profileEditor/profileEditorRenderer.js';
 import { snapDragTarget, roundToGrid } from '../profileEditor/profileEditorSnapping.js';
 import { fitToBounds, zoomAt, panBy, screenToViewportPoint } from '../plan2d/viewport.js';
+import { buildStringerBoardDXF, buildStringerAllBoardsDXF } from '../export/dxfExport.js';
+import { downloadTextFile } from '../export/downloadTextFile.js';
 
 const SIDE_LABELS = { outer: 'Wanga zewnętrzna', inner: 'Wanga wewnętrzna (dusza)' };
 const OTHER_SIDE = { outer: 'inner', inner: 'outer' };
@@ -65,6 +67,8 @@ export function createProfileEditor(container, handlers) {
       <button type="button" data-pe="mode" title="AUTO: profil w pełni wyliczony, ręczne punkty są nieaktywne. RĘCZNY: ręczne punkty i promienie działają."></button>
       <button type="button" data-pe="reset" title="Usuwa wszystkie ręczne zmiany profilu tej wangi">Resetuj profil wangi</button>
       <button type="button" data-pe="mirror" title="Kopiuje ustawienia profilu (te same przesunięcia i promienie, przypisane do tych samych stopni) na drugą wangę — to nie jest lustrzane odbicie geometrii, tylko powtórzenie tych samych wartości.">Kopiuj profil na drugą wangę</button>
+      <button type="button" data-pe="export-board" title="Rzeczywisty (skala 1:1) rysunek DXF widocznej deski — kontur, wręgi (jeśli wpuszczana) i pozycje stopni — do wycięcia w warsztacie">Eksportuj deskę (DXF 1:1)</button>
+      <button type="button" data-pe="export-all" title="Wszystkie deski tej wangi na jednym arkuszu DXF, w skali 1:1, ułożone obok siebie">Eksportuj całą wangę (DXF 1:1)</button>
       <button type="button" data-pe="fit">⤢ Dopasuj</button>
       <span class="pe-layers">
         <label><input type="checkbox" data-pe-layer="reference" checked> oś odniesienia</label>
@@ -567,6 +571,42 @@ export function createProfileEditor(container, handlers) {
           : `Skopiowano profil na ${SIDE_LABELS[otherSide].toLowerCase()}.`
       );
     }
+  });
+  // Rzeczywiste (1:1) DXF-y do warsztatu — czysta serializacja tego, co solver już policzył
+  // (export/dxfExport.js), nigdy nie liczy geometrii samo; patrz jego nagłówek, dlaczego to inny
+  // (bogatszy — wręgi, pozycje stopni) konsument niż view model tego edytora.
+  $('[data-pe="export-board"]').addEventListener('click', () => {
+    const ctx = handlers.getContext();
+    if (!ctx) return;
+    const geo = ctx.models.stringerConstruction[state.side];
+    const model = ctx.models.stringerModels[state.side];
+    const config = ctx.models.fullConfig || ctx.config;
+    const segmentId = state.focus !== 'all' ? state.focus : state.views[0]?.segmentId;
+    const geometry = geo?.find((g) => g.segmentId === segmentId);
+    if (!geometry) {
+      showToast('Brak wybranej deski do wyeksportowania — wybierz konkretną deskę.');
+      return;
+    }
+    const segment = model?.segments.find((s) => s.id === segmentId);
+    const dxf = buildStringerBoardDXF(geometry, { segment, config });
+    if (!dxf) {
+      showToast('Tej deski nie da się wyeksportować — brak policzonej geometrii (sprawdź Walidację).');
+      return;
+    }
+    downloadTextFile(dxf, `wanga-${state.side}-${segmentId}.dxf`, 'application/dxf');
+  });
+  $('[data-pe="export-all"]').addEventListener('click', () => {
+    const ctx = handlers.getContext();
+    if (!ctx) return;
+    const geo = ctx.models.stringerConstruction[state.side];
+    const model = ctx.models.stringerModels[state.side];
+    const config = ctx.models.fullConfig || ctx.config;
+    const dxf = geo ? buildStringerAllBoardsDXF(geo, { model, config }) : null;
+    if (!dxf) {
+      showToast('Brak policzonej geometrii tej wangi do wyeksportowania (sprawdź Walidację).');
+      return;
+    }
+    downloadTextFile(dxf, `wanga-${state.side}-wszystkie-deski.dxf`, 'application/dxf');
   });
   ribbon.addEventListener('click', (e) => {
     const id = e.target?.closest?.('[data-seg-id]')?.dataset.segId;

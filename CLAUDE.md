@@ -385,6 +385,63 @@ composes with manual overhang; degenerate config safely reverts; landing tread d
 `profileEditor/__tests__/profileEditorRenderer.test.js` (never draws a housing indicator, whatever
 the construction type).
 
+## 1:1 DXF export (Tier 2, implemented — see STRINGER_PROFILE_MODEL.md §13)
+
+The first Tier 2 item from the profile model's roadmap: a real-size (1:1, mm), production-ready
+drawing of a stringer board, for the workshop rather than the screen. `src/export/dxfExport.js`
+is a pure serializer — no DOM, no geometry decisions — with two entry points:
+`buildStringerBoardDXF(geometry, {segment, config})` (one board) and
+`buildStringerAllBoardsDXF(geometries, {model, config})` (every board of one stringer side, laid
+out left to right with a real `350mm` gap, one DXF file, one sheet). Wired into the "Profil wangi"
+tab's toolbar as "Eksportuj deskę (DXF 1:1)" / "Eksportuj całą wangę (DXF 1:1)"
+(`ui/profileEditorPanel.js`, using the existing `export/downloadTextFile.js` Blob+`<a download>`
+pattern already used elsewhere).
+
+**A deliberately different, richer consumer than the profile editor's own view model.** The
+editor's `stringerProfileView.js` no longer exposes `housings` at all — a flat 2D rectangle was
+found confusing on an interactive screen (see the housing-recess section above). A production
+drawing is not an interactive screen: marking exactly where a housing sits (with its real depth)
+is the entire point of sending this to a workshop, so `dxfExport.js` reads the RAW
+`StringerSegmentConstructionGeometry` (`lowerCurve`/`upperCurve`/`housings`) directly, plus the
+matching `StringerModel` segment's `treadBearings` for tread-position tick marks — the same
+already-solved data every other consumer (renderer, takeoff, editor) reads, just a different
+combination of it.
+
+- **The outline keeps real arcs, never chords.** `buildBoardOutlineCurve()` stitches the board's
+  top and bottom edges (both already lines+arcs, `profileCurve.js` primitives) into ONE closed
+  loop: top edge, a vertical line down to the bottom edge's matching end, the bottom edge
+  traversed backwards (the new `profileCurve.js` `reverseCurve()` — reverses primitive order and,
+  for an arc, negates its sweep so it still lands on the same points), a vertical line back up to
+  the top edge's start. This is generically useful (any two same-direction curves that need
+  stitching into a loop) and independently tested, but was written for this exporter — nothing
+  else needed it yet. Falls back to the chorded `outerContour` only if a raw curve is
+  unexpectedly missing.
+- **DXF format**: a minimal, valid ASCII DXF R12 (`AC1009`) — `HEADER`/`TABLES`/`ENTITIES`
+  sections, `$INSUNITS = 4` (mm), four layers (`OUTLINE`, `HOUSINGS`, `BEARINGS`, `TEXT`, colour-
+  coded, all `CONTINUOUS` — no custom linetypes, for maximum reader compatibility). `LINE`/`ARC`
+  entities per curve primitive (a DXF `ARC` is always CCW start→end; a negative-sweep primitive
+  has its two angles swapped, which lands on the identical set of points — outline shape is all
+  that matters here, not traversal direction). `TEXT` entities for a housing's depth, a tread
+  index at its bearing mark, and a small title block (board id, construction type, local minimum
+  depth, material thickness, an explicit "Skala 1:1 — wszystkie wymiary w mm" line). All DXF
+  `TEXT` content has Polish diacritics stripped (`stripDiacritics`) — plain ASCII sidesteps any
+  codepage ambiguity in a file meant to be portable to arbitrary CAD/CNC software, even though the
+  rest of the app is Polish throughout.
+- **Missing geometry never produces a fabricated drawing**: an empty/invalid segment (no
+  `lowerCurve`) makes both functions return `null`, and the UI shows a toast pointing at Walidacja
+  instead of downloading a broken or empty file.
+- **Not done (later Tier 2 items)**: multi-arc/spline transitions, free-form profile templates.
+  `MAX_END_EXTENSION_SLOPE`-capped end faces and the profile solver's own diagnostics are exported
+  as-is (a `STRINGER-MIN-DEPTH`/`-CONTOUR-SELF-INTERSECTION` finding on a segment is not specially
+  called out in its DXF — check Walidacja before sending a flagged board to production).
+
+Tests: `geometry/__tests__/profileCurve.test.js` (`reverseCurve`),
+`export/__tests__/dxfExport.test.js` (closed-loop outline construction, well-formed DXF
+structure, housing depth markings, tread-bearing markings, multi-board layout with no overlap,
+graceful `null` on missing geometry). Browser-verified: both toolbar buttons produce a
+well-formed, non-empty DXF (captured via `URL.createObjectURL` in a live session) with the
+expected `OUTLINE`/title content.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

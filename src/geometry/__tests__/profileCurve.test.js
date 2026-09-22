@@ -16,6 +16,7 @@ import {
   lineSegment,
   pointToCurveDistance,
   mergeCollinearLines,
+  reverseCurve,
 } from '../profileCurve.js';
 
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} != ${b} (eps ${eps})`);
@@ -218,3 +219,28 @@ test('mergeCollinearLines never merges across a real corner or an arc', () => {
   const { curve } = filletPolyline([{ u: 0, v: 0 }, { u: 200, v: 0 }, { u: 400, v: 150 }, { u: 600, v: 150 }], [0, 60, 0, 0]);
   assert.equal(mergeCollinearLines(curve).length, curve.length);
 });
+
+test('reverseCurve: traversing a mixed line/arc curve backwards visits the same points, endpoints swapped', () => {
+  const { curve } = filletPolyline([{ u: 0, v: 0 }, { u: 200, v: 0 }, { u: 400, v: 150 }, { u: 600, v: 150 }], [0, 60, 0, 0]);
+  const reversed = reverseCurve(curve);
+  near(reversed[0].a.u, curveEnd(curve).u);
+  near(reversed[0].a.v, curveEnd(curve).v);
+  near(curveEnd(reversed).u, curveStart(curve).u);
+  near(curveEnd(reversed).v, curveStart(curve).v);
+  // reversing twice gets back the original curve, primitive for primitive
+  const roundTrip = reverseCurve(reversed);
+  assert.equal(roundTrip.length, curve.length);
+  for (let i = 0; i < curve.length; i++) {
+    near(roundTrip[i].a.u, curve[i].a.u);
+    near(roundTrip[i].a.v, curve[i].a.v);
+    near(roundTrip[i].b.u, curve[i].b.u);
+    near(roundTrip[i].b.v, curve[i].b.v);
+    if (curve[i].type === 'arc') near(roundTrip[i].sweep, curve[i].sweep);
+  }
+  // consecutive primitives still connect after reversing
+  for (let i = 0; i < reversed.length - 1; i++) near(dist2(reversed[i].b, reversed[i + 1].a), 0);
+});
+
+function dist2(a, b) {
+  return Math.hypot(a.u - b.u, a.v - b.v);
+}

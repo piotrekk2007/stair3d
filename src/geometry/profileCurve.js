@@ -77,6 +77,18 @@ export function curveEnd(curve) {
   return curve.length > 0 ? curve[curve.length - 1].b : null;
 }
 
+// The same curve traversed the other way (end -> start) — same shape, same set of points, just
+// b/a and the primitive order swapped; an arc's startAngle/sweep are recomputed so its own a/b
+// still match. Used by exporters that need to stitch a curve running one direction (e.g. a
+// board's top edge) to one running the other way (its bottom edge, reversed) into a single closed
+// loop — never by the solver itself, which always produces its curves already u-increasing.
+export function reverseCurve(curve) {
+  return curve
+    .slice()
+    .reverse()
+    .map((prim) => (prim.type === 'line' ? lineSegment(prim.b, prim.a) : makeArc(prim.center, prim.radius, prim.startAngle + prim.sweep, -prim.sweep)));
+}
+
 function primPointAt(prim, t) {
   if (prim.type === 'line') return { u: prim.a.u + (prim.b.u - prim.a.u) * t, v: prim.a.v + (prim.b.v - prim.a.v) * t };
   return arcPoint(prim.center, prim.radius, prim.startAngle + prim.sweep * t);
