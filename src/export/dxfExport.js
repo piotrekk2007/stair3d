@@ -107,7 +107,22 @@ export function buildBoardOutlineCurve(geometry) {
   parts.push(...reverseCurve(bottom));
   const bottomStart = curveStart(bottom);
   const topStart = curveStart(top);
-  if (dist(bottomStart, topStart) > GEOMETRY_EPS) parts.push(lineSegment(bottomStart, topStart));
+  // The very first board of a run has its bottom-front corner trimmed flush with the floor
+  // (stringerConstructionGeometry.js clampFirstSegmentToFloor): the lower curve's own drawn start
+  // no longer reaches the board's real start face at ends.start.u — the board's foot instead sits
+  // flat on the floor (v=0) from there back to the start face. A direct line from bottomStart to
+  // topStart would cut that corner off as a false diagonal instead of the real floor+vertical-face
+  // right angle, which is exactly the shape the profile editor (built from the same solved
+  // outerContour) shows. Route through the floor/face corner point in that case.
+  const startU = geometry.ends?.start?.u;
+  const startsAtFloor = geometry.ends?.start?.cut === 'FLOOR_HORIZONTAL' && Number.isFinite(startU) && Math.abs(bottomStart.v) < GEOMETRY_EPS && Math.abs(bottomStart.u - startU) > GEOMETRY_EPS;
+  if (startsAtFloor) {
+    const corner = { u: startU, v: 0 };
+    if (dist(bottomStart, corner) > GEOMETRY_EPS) parts.push(lineSegment(bottomStart, corner));
+    if (dist(corner, topStart) > GEOMETRY_EPS) parts.push(lineSegment(corner, topStart));
+  } else if (dist(bottomStart, topStart) > GEOMETRY_EPS) {
+    parts.push(lineSegment(bottomStart, topStart));
+  }
   return parts;
 }
 

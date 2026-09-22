@@ -94,6 +94,50 @@ test('buildStringerAllBoardsDXF: lays every board out with a real gap so none ov
   for (let i = 1; i < titlePositions.length; i++) assert.ok(titlePositions[i] > titlePositions[i - 1], 'each board is laid out further right than the previous one');
 });
 
+// Regression: the very first board of a run has its bottom-front corner trimmed flush with the
+// floor (stringerConstructionGeometry.js clampFirstSegmentToFloor), so the lower curve's own
+// drawn start no longer reaches the board's real start face — a naive direct line from that point
+// to the top curve's start cut the corner off as a false diagonal instead of the real right-angle
+// (floor, then vertical face) the profile editor shows (same solved outerContour).
+test('buildBoardOutlineCurve: a floor-trimmed first board keeps the real floor + vertical-face corner, not a diagonal shortcut', () => {
+  const { geometries } = build({
+    stairType: 'L',
+    treadsLegA: 4,
+    treadsLegB: 4,
+    windersPerTurn: 5,
+    totalRise: 2700,
+    treadGoing: 280,
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
+  });
+  const g = geometries[0];
+  assert.equal(g.ends.start.cut, 'FLOOR_HORIZONTAL', 'this scenario only demonstrates the bug when the first board is floor-trimmed');
+  const outline = buildBoardOutlineCurve(g);
+  const startU = g.ends.start.u;
+  const hasFloorCorner = outline.some((prim) => prim.type === 'line' && Math.abs(prim.a.v) < 1e-6 && Math.abs(prim.b.v) < 1e-6 && Math.abs(prim.b.u - startU) < 1e-6);
+  assert.ok(hasFloorCorner, 'the outline must include the flat floor segment ending at the start face, not skip straight to the top curve');
+  // The corner point itself must be a genuine polygon vertex (both edges connect through it).
+  const cornerCount = outline.filter((prim) => Math.abs(prim.a.u - startU) < 1e-6 && Math.abs(prim.a.v) < 1e-6).length + outline.filter((prim) => Math.abs(prim.b.u - startU) < 1e-6 && Math.abs(prim.b.v) < 1e-6).length;
+  assert.ok(cornerCount >= 2, 'the floor/start-face corner point must connect two primitives, not float in the middle of a single diagonal');
+});
+
+// Regression: a tread's nosing is milled into the SAME physical board, overhanging past its
+// structural front edge — the housing that receives that board end-on must be long enough for the
+// nosing too, or the workshop cuts a slot 25mm too short for the real board (reported: the DXF
+// housing showed only the nominal tread-going width, ignoring the 25mm nosing visible in 3D).
+test('buildStringerBoardDXF / housings: the owned front corner of a housing extends by config.nosing, the back corner does not', () => {
+  const { geometries, model, config } = build({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 25 });
+  const g = geometries.find((geo) => (geo.housings || []).length > 0);
+  assert.ok(g);
+  const segment = model.segments.find((s) => s.id === g.segmentId);
+  for (const h of g.housings) {
+    const bearing = segment.treadBearings.find((b) => b.treadIndex === h.treadIndex);
+    const expectedStart = bearing.finalUStart + (bearing.ownsStart && bearing.riserRecess > 0 ? bearing.riserRecess : 0);
+    assert.equal(h.uStart, bearing.ownsStart ? expectedStart - config.nosing : expectedStart);
+    assert.equal(h.uEnd, bearing.finalUEnd, 'the back corner is never extended — nosing only overhangs at the front');
+  }
+});
+
 test('buildStringerAllBoardsDXF: returns null when there is nothing to draw', () => {
   assert.equal(buildStringerAllBoardsDXF([]), null);
   assert.equal(

@@ -283,11 +283,28 @@ function buildCombCurve(top, notchRadiusMm) {
 // model, config.treadThickness) — the slot the tread's end actually sits in — never an
 // invented number; housing DEPTH (how far it's routed into the board's face) reuses the
 // existing BWF-cited housingDepthFor() (see stringerModel.js), unchanged from before this file.
+//
+// uStart/uEnd extend `bearing.uStart`/`.uEnd` (the tread's STRUCTURAL, non-nosed front/back
+// corners) backward by config.nosing on the OWNED front corner only: the tread is one physical
+// board, and its nosing is milled into that SAME board, overhanging past the structural front
+// edge — so the housing that receives the board end-on must be as long as the whole board,
+// nosing included, not just the structural going. Left at the structural width, the housing (and
+// its 3D indicator mesh / this file's DXF export) understated the real board length by exactly
+// the nosing amount, visibly inconsistent with the nosed tread mesh shown everywhere else.
+// Guarded by `ownsStart` for the same reason effectiveBearings() guards riserRecess: a bearing
+// split across a lap joint (partial) only extends on the copy that owns the tread's true front
+// corner, never on the copy that continues across the joint.
+// Known, deliberate limitation: this uses config.nosing directly rather than threading tread type
+// through this file, so a landing tread's housing (which has no nosing — treadSolver.js zeroes it
+// for landings) is very slightly over-extended here too. Housings are informational only (never
+// priced, never a purchasable item — see materialTakeoff.js), so this is a cosmetic imprecision
+// on an already-rare tread type, not a structural or costing error.
 function buildHousings(effective, config) {
   const depth = housingDepthFor(config.stringerThickness);
+  const nosing = config.nosing > 0 ? config.nosing : 0;
   return effective.map((b) => ({
     treadIndex: b.treadIndex,
-    uStart: b.uStart,
+    uStart: b.ownsStart ? b.uStart - nosing : b.uStart,
     uEnd: b.uEnd,
     topV: b.bearingElevation,
     bottomV: b.bearingElevation - config.treadThickness,

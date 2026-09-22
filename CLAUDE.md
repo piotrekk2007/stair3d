@@ -435,12 +435,51 @@ combination of it.
   as-is (a `STRINGER-MIN-DEPTH`/`-CONTOUR-SELF-INTERSECTION` finding on a segment is not specially
   called out in its DXF — check Walidacja before sending a flagged board to production).
 
+**Two real bugs found via the user's own project file, right after shipping this** (both fixed,
+neither is a Tier 2 scope item — genuine defects):
+
+1. **The floor-trimmed first board's outline had a false diagonal corner instead of the real
+   floor+vertical-face right angle.** `stringerConstructionGeometry.js`'s `clampFirstSegmentToFloor()`
+   trims only the LOWER curve flush with the floor (see the "Fifth follow-up" section above) — its
+   drawn start no longer reaches the board's real start face (`ends.start.u`), while the upper
+   curve's own start is untouched, so the two curves' start points no longer share a u. The first
+   version of `buildBoardOutlineCurve()` connected them with one direct diagonal line — a shortcut
+   that cut off the real corner shape (the profile editor, built from the SAME solved geometry but
+   via the already-correct chorded `outerContour`, showed the true right angle, so the export
+   visibly disagreed with the editor for this exact board). Fixed by checking
+   `geometry.ends.start.cut === 'FLOOR_HORIZONTAL'` and, when so, routing through the explicit
+   `{u: ends.start.u, v: 0}` corner point (floor segment, then a vertical face) instead of jumping
+   straight to the top curve's start.
+2. **A closed (housed) construction's housing width ignored nosing entirely.** A tread's nosing
+   (`config.nosing`) is milled into the SAME physical board, overhanging past its structural front
+   edge (`treadSolver.js`'s `applyNosing`/`nosingUtils.js` never touch `frontEdge`/`backEdge`,
+   only the visual `outline` — see "Terminology" above) — so the board that slides into a housing
+   is `nosing` mm longer at its front than the bearing's own `finalUStart`/`finalUEnd` suggest. The
+   3D tread mesh already shows this (25mm default nosing), but `buildHousings()` sized every
+   housing to the bare structural bearing width, silently understating the real board length by
+   the full nosing amount — visible once the DXF put exact numbers on it (reported: a 3D nosing of
+   25mm next to a housing marked with the bare nominal going). Fixed in `buildHousings()`: the
+   `ownsStart` corner (the tread's real front edge, guarded the same way `effectiveBearings()`
+   already guards `riserRecess` — a bearing split across a lap joint only extends on the copy that
+   owns the true front corner) now subtracts `config.nosing` from `uStart`; `uEnd` (the back) is
+   never touched, since nosing only overhangs at the front. This also makes the pre-existing 3D
+   housing INDICATOR mesh (`stringerRenderer.js`'s `buildHousingIndicatorMeshes`, unchanged code —
+   it just consumes `housings[]`) correctly wider, not just the DXF. **Known, deliberate
+   limitation**: this uses `config.nosing` directly rather than threading tread type through the
+   file, so a landing tread's housing (nosing is already 0 there by definition) is technically
+   over-extended by the same amount if a landing ever gets one — housings are informational only
+   (never priced, never a purchasable item), so this is a cosmetic imprecision on an already-rare
+   tread type, documented inline rather than fixed by a larger plumbing change.
+
 Tests: `geometry/__tests__/profileCurve.test.js` (`reverseCurve`),
 `export/__tests__/dxfExport.test.js` (closed-loop outline construction, well-formed DXF
 structure, housing depth markings, tread-bearing markings, multi-board layout with no overlap,
-graceful `null` on missing geometry). Browser-verified: both toolbar buttons produce a
-well-formed, non-empty DXF (captured via `URL.createObjectURL` in a live session) with the
-expected `OUTLINE`/title content.
+graceful `null` on missing geometry, the floor-corner regression, the nosing-extension
+regression), `geometry/__tests__/stringerConstructionGeometry.test.js` ("B2." — the same
+nosing-extension behaviour verified at the solver level, independent of the DXF exporter, plus the
+existing no-nosing case unchanged). Browser-verified: both toolbar buttons produce a well-formed,
+non-empty DXF (captured via `URL.createObjectURL` in a live session) whose floor corner and first
+housing's `uStart` now match the fixed values exactly.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

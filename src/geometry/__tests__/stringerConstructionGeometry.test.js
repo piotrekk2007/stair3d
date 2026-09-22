@@ -121,6 +121,30 @@ test('B. straight housed: outer contour is a plain 4-point parallelogram regardl
   }
 });
 
+// Regression: a tread's nosing is milled into the SAME physical board as the tread, overhanging
+// past its structural front edge — the housing that receives that board end-on must be as long as
+// the whole board, nosing included, or a workshop cuts a slot too short for the real board
+// (reported: a 3D view showing 25mm nosing next to a housing marking only the nominal going).
+test('B2. housed: a housing extends by config.nosing on its own front (ownsStart) corner, never on the back', () => {
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 25 });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  const bearings = model.segments[0].treadBearings;
+  assert.equal(geo.housings.length, bearings.length);
+  for (const h of geo.housings) {
+    const b = bearings.find((bb) => bb.treadIndex === h.treadIndex);
+    const nominalStart = b.finalUStart + (b.ownsStart && b.riserRecess > 0 ? b.riserRecess : 0);
+    assert.equal(h.uStart, b.ownsStart ? nominalStart - config.nosing : nominalStart);
+    assert.equal(h.uEnd, b.finalUEnd);
+  }
+  // With nosing=0 the housing is exactly the structural bearing width (no regression for the
+  // existing, already-tested no-nosing case).
+  const zeroNosing = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 0 });
+  const modelNoNosing = buildStringerModel(zeroNosing.planLayout, zeroNosing.config, 'outer');
+  const [geoNoNosing] = buildStringerConstructionGeometry(modelNoNosing, zeroNosing.config);
+  assert.equal(geoNoNosing.housings[0].uStart, modelNoNosing.segments[0].treadBearings[0].finalUStart);
+});
+
 // --- C/D. L-winder, both construction types ----------------------------------------------------
 
 for (const [label, constructionType] of [
