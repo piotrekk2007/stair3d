@@ -22,6 +22,9 @@ const WHEEL_ZOOM_STEP = 1.15;
 // A point closer than this (in u, mm) to the end of an edge is not a place to insert a new control point.
 const MIN_INSERT_DISTANCE_MM = 5;
 const MIN_INSERTED_T = 0.02;
+// Ruch mniejszy niż to (px ekranu) po pointerdown poza punktem kontrolnym to jeszcze nie przesuwanie
+// widoku — dopiero powyżej tego progu przechwytujemy wskaźnik (patrz komentarz przy pointerdown).
+const PAN_START_THRESHOLD_PX = 3;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -208,9 +211,13 @@ export function createProfileEditor(container, handlers) {
       e.preventDefault();
       return;
     }
-    state.pan = { x: e.clientX, y: e.clientY };
-    canvas.classList.add('panning');
-    capture(e);
+    // Nie przechwytujemy wskaźnika tutaj: setPointerCapture natychmiast po pointerdown przenosi CEL
+    // późniejszych zdarzeń 'click'/'dblclick' na element canvas (a nie na kontur pod kursorem), więc
+    // dwuklik na wandze przestawał trafiać w `.pe-hit` i wstawianie punktu milczkiem nic nie robiło —
+    // kursor 'copy' i tak się pokazywał, bo to sama stylistyka CSS, niezależna od przechwycenia.
+    // Przesuwanie startuje dopiero po realnym ruchu (patrz pointermove), więc zwykły klik/dwuklik na
+    // miejscu nadal trafia we właściwy element.
+    state.panStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
   });
 
   canvas.addEventListener('pointermove', (e) => {
@@ -225,6 +232,14 @@ export function createProfileEditor(container, handlers) {
       state.drag.moved = true;
       handlers.applyEdit(edit);
       return;
+    }
+    if (state.panStart && !state.pan && e.pointerId === state.panStart.pointerId) {
+      const dx = e.clientX - state.panStart.x;
+      const dy = e.clientY - state.panStart.y;
+      if (Math.hypot(dx, dy) < PAN_START_THRESHOLD_PX) return;
+      state.pan = { x: e.clientX, y: e.clientY };
+      canvas.classList.add('panning');
+      capture(e);
     }
     if (state.pan) {
       const s = panelSize();
@@ -247,6 +262,7 @@ export function createProfileEditor(container, handlers) {
       canvas.classList.remove('panning');
       release(e);
     }
+    state.panStart = null;
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
