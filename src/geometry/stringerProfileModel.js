@@ -81,7 +81,12 @@ export function profileParamsFromConfig(config) {
     minimumDepthMm,
     profileOffsetMm,
     nominalDepthMm: minimumDepthMm + profileOffsetMm,
+    // config.stringerTopMarginMm is specified relative to the TREAD'S OWN TOP (the walking
+    // surface) — see stringerProfileSolver.js's solveStringerProfile for why the reference curve
+    // itself (through bearingElevation, the tread's own BOTTOM) is never moved for this: only
+    // where the closed contour's upper offset is measured FROM shifts, by treadThicknessMm.
     topMarginMm: Math.max(0, finiteOr(config.stringerTopMarginMm, 0)),
+    treadThicknessMm: Math.max(0, finiteOr(config.treadThickness, 0)),
     cornerRadiusMm: Math.max(0, finiteOr(config.stringerCornerRadiusMm, d.stringerCornerRadiusMm)),
     radiusScope: scope,
     transitionStyle: style,

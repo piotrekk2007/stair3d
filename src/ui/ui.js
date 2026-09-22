@@ -122,7 +122,7 @@ export function createUI({
   live(build.add(config, 'stringerTransitionStyle', { 'Łuk styczny': 'TANGENT_ARC', 'Ostry narożnik': 'SHARP' })).name('Przejście w narożniku');
   lockable(build.add(config, 'stringerNotchRadiusMm', 0, 30, 1).name('Promień wewn. wcięcia (nakładana) [mm]'), 'stringerNotchRadiusMm');
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
-  lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad linią (wpuszczana) [mm]'), 'stringerTopMarginMm');
+  lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad stopniem (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');

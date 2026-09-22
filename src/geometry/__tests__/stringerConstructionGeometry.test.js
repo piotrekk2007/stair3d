@@ -145,6 +145,25 @@ test('B2. housed: a housing extends by config.nosing on its own front (ownsStart
   assert.equal(geoNoNosing.housings[0].uStart, modelNoNosing.segments[0].treadBearings[0].finalUStart);
 });
 
+// Regression: bearingElevation is world Z of the TOP OF THE BEARING SURFACE the tread rests on
+// (the tread's own BOTTOM — see StringerTreadBearing's doc comment and stringerSolver.js's own
+// `(index+1)*riserHeight - treadThickness` formula, matching TreadModel.elevation.bottom and
+// stringerProfileView.js's `treads` array). A housing marking that same tread must span UP from
+// bearingElevation, not down — spanning down put every housing/tread marker a whole treadThickness
+// too low (worse the higher up a sloped board, since the misalignment compounds visually with the
+// slope) — reported against a real project's DXF export where the board line ran through the
+// wrong corner of every housing box.
+test('B3. housed: a housing spans UP from bearingElevation (the tread\'s own bottom), matching TreadModel/stringerProfileView\'s own convention', () => {
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  for (const h of geo.housings) {
+    const b = model.segments[0].treadBearings.find((bb) => bb.treadIndex === h.treadIndex);
+    assert.equal(h.bottomV, b.bearingElevation);
+    assert.equal(h.topV, b.bearingElevation + config.treadThickness);
+  }
+});
+
 // --- C/D. L-winder, both construction types ----------------------------------------------------
 
 for (const [label, constructionType] of [
@@ -501,9 +520,12 @@ for (const constructionType of ['cut', 'closed']) {
       assert.ok(geometries.length > 1);
       for (let i = 1; i < geometries.length; i++) {
         const g = geometries[i];
-        // Measured from the pitch curve R (the reference the lower edge is generated from). A housed board's
-        // upper edge sits topMargin above R, so its lower edge is (depth - topMargin) from R.
-        const required = config.minimumStringerDepthMm - (constructionType === 'closed' ? config.stringerTopMarginMm : 0);
+        // Measured from the pitch curve R (the reference the lower edge is generated from, through
+        // bearingElevation — the tread's own BOTTOM). A housed board's upper edge sits topMarginMm
+        // above the tread's own TOP, i.e. (topMarginMm + treadThickness) above R (see
+        // stringerProfileSolver.js solveStringerProfile), so its lower edge is
+        // (depth - topMarginMm - treadThickness) from R.
+        const required = config.minimumStringerDepthMm - (constructionType === 'closed' ? config.stringerTopMarginMm + config.treadThickness : 0);
         // every point of the lower edge, INCLUDING the start face, keeps that depth
         for (const p of g.bottomProfile) {
           const depth = distancePointToPolyline(p, g.pitchProfile);

@@ -91,7 +91,9 @@ export function createDefaultConfig() {
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
     // wartości domyślne to jawnie oznaczone założenia produkcyjne (MANUFACTURING_ASSUMPTION),
     // NIE liczby z normy — patrz docs/architecture/STRINGER_CONSTRUCTION_MODEL.md.
-    stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje nad linię schodkową (osłania noski stopni od zewnątrz)
+    stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje NAD GÓRNĄ PŁASZCZYZNĘ STOPNIA
+    // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
+    // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).
     stringerMinRemainingSectionMm: 30, // mm, próg diagnostyczny — minimalna dopuszczalna grubość drewna w najcieńszym miejscu (nad wcięciem/pod wręgą)
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 

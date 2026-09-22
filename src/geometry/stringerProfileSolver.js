@@ -310,9 +310,23 @@ export function solveStringerProfile({ reference, constructionType, params, over
   const closed = constructionType === CONSTRUCTION_TYPES.CLOSED;
   const referenceCurve = polylineToCurve(reference);
 
-  const lowerDistance = closed ? params.nominalDepthMm - params.topMarginMm : params.nominalDepthMm;
+  // `reference` runs through bearingElevation (the tread's own BOTTOM — see stringerModel.js) and
+  // must stay there: it is also what the LOWER contour's minimum-depth guarantee is ultimately
+  // anchored to via the total board width below. `params.topMarginMm` is specified relative to the
+  // tread's own TOP (the walking surface) instead — the quantity that actually matters for "does
+  // the board's visible top edge clear the tread's nosing" — so it is converted to a from-reference
+  // distance here, once, by adding back the tread's own thickness (the gap between its top and
+  // `reference`). The board's TOTAL width (upper to lower) still stays exactly `nominalDepthMm`
+  // either way — only where that fixed-width band sits relative to the tread moves — so this never
+  // weakens the minimum-depth guarantee (measured as upper-to-lower distance, not distance below
+  // `reference`; see `depthReferenceCurve` below).
+  // Clamped to the total board width: an extreme combination (shallow minimum depth, a thick
+  // tread, a large top margin) could otherwise push this past nominalDepthMm and flip the lower
+  // offset's direction (up instead of down), turning the board inside out.
+  const topMarginFromReferenceMm = closed ? Math.min(params.topMarginMm + params.treadThicknessMm, params.nominalDepthMm) : 0;
+  const lowerDistance = closed ? params.nominalDepthMm - topMarginFromReferenceMm : params.nominalDepthMm;
   const lowerNominal = offsetPolylineByNormal(reference, lowerDistance, 'down');
-  const upperNominal = closed ? offsetPolylineByNormal(reference, params.topMarginMm, 'up') : null;
+  const upperNominal = closed ? offsetPolylineByNormal(reference, topMarginFromReferenceMm, 'up') : null;
 
   const lowerVertices = buildControlPolygon({ reference, contour: PROFILE_CONTOURS.LOWER, nominalPoints: lowerNominal, overrides, findings });
   const upperVertices = closed ? buildControlPolygon({ reference, contour: PROFILE_CONTOURS.UPPER, nominalPoints: upperNominal, overrides, findings }) : null;

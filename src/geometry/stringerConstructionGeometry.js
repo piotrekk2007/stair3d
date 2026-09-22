@@ -299,6 +299,15 @@ function buildCombCurve(top, notchRadiusMm) {
 // for landings) is very slightly over-extended here too. Housings are informational only (never
 // priced, never a purchasable item — see materialTakeoff.js), so this is a cosmetic imprecision
 // on an already-rare tread type, not a structural or costing error.
+// `bearingElevation` is world Z of the TOP OF THE BEARING SURFACE the tread rests on — i.e. the
+// tread's own BOTTOM (matching StringerTreadBearing's own doc comment and how bearingElevation is
+// computed in stringerSolver.js: `(index+1)*riserHeight - treadThickness`, the same formula as
+// TreadModel.elevation.bottom). The tread itself therefore spans UP from bearingElevation, the
+// same convention stringerProfileView.js's own `treads` array already uses (`zBottom:
+// bearingElevation, zTop: bearingElevation + treadThickness`). A housing has to mark that SAME
+// span — reported: the housing/tread markers on a real project's DXF export sat visibly BELOW
+// where the treads actually are (worse toward the top of a sloped board), because this function
+// span DOWN from bearingElevation instead.
 function buildHousings(effective, config) {
   const depth = housingDepthFor(config.stringerThickness);
   const nosing = config.nosing > 0 ? config.nosing : 0;
@@ -306,8 +315,8 @@ function buildHousings(effective, config) {
     treadIndex: b.treadIndex,
     uStart: b.ownsStart ? b.uStart - nosing : b.uStart,
     uEnd: b.uEnd,
-    topV: b.bearingElevation,
-    bottomV: b.bearingElevation - config.treadThickness,
+    topV: b.bearingElevation + config.treadThickness,
+    bottomV: b.bearingElevation,
     depth,
   }));
 }

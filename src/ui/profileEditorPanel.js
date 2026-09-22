@@ -74,6 +74,7 @@ export function createProfileEditor(container, handlers) {
         <label><input type="checkbox" data-pe-layer="reference" checked> oś odniesienia</label>
         <label><input type="checkbox" data-pe-layer="envelope" checked> min. głębokość</label>
         <label><input type="checkbox" data-pe-layer="treads" checked> stopnie</label>
+        <label><input type="checkbox" data-pe-layer="housings" checked title="Gdzie jest wycięte gniazdo stopnia, WŁĄCZNIE z noskiem — sprawdź, czy nosek mieści się w wandze">wręgi (z noskiem)</label>
         <label><input type="checkbox" data-pe-layer="nominal" checked> profil AUTO (porównanie)</label>
         <label><input type="checkbox" data-pe-layer="ruler" checked> linijka</label>
       </span>
@@ -114,7 +115,7 @@ export function createProfileEditor(container, handlers) {
     side: 'outer',
     selected: null, // { id, contour }
     viewport: null,
-    layers: { reference: true, envelope: true, treads: true, nominal: true, ruler: true },
+    layers: { reference: true, envelope: true, treads: true, housings: true, nominal: true, ruler: true },
     layout: [],
     views: [],
     drag: null,

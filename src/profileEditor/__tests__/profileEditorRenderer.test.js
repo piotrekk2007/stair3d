@@ -111,15 +111,27 @@ test('renderProfileEditorSVG: draws mm ruler ticks along the top and left edges 
   assert.ok(!off.includes('pe-ruler'));
 });
 
-// Housings are deliberately NOT drawn in this side view (no third axis to show real recess depth —
-// a flat rectangle was more confusing than useful, per user feedback); the view model doesn't even
-// expose them any more. The real, depth-accurate consequence — a narrower tread on the housed side
-// — is geometry/edgeOverrides.js's applyHousingRecess, tested there.
-test('renderProfileEditorSVG: never draws a housing indicator, whatever the construction type', () => {
-  const closed = views({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }).views;
-  assert.ok(!('housings' in closed[0]));
+// Housings were briefly removed from this view (a flat 2D rectangle was confusing on its own) and
+// then reinstated at the user's explicit request: a real housing (StringerSegmentConstructionGeometry's
+// housings, via buildHousings()) now correctly extends to include the tread's nosing overhang, and
+// that is exactly the question a "closed"/wpuszczana wanga needs answered visually — does the nosing
+// stay inside the board, or poke out past it — which the plain "stopnie" (structural bearing) boxes
+// cannot show. A 'cut'/nakładana wanga has no housings (the tread just rests on top), so nothing is
+// drawn there, and the layer can still be switched off like any other.
+test('renderProfileEditorSVG: draws a housing rectangle per tread for a closed wanga (including its nosing extension), none for a cut one', () => {
+  const closed = views({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 25 }).views;
+  assert.ok(closed[0].housings.length > 0);
+  assert.ok(closed[0].housings[0].uStart < 0, 'the first housing extends behind u=0 to cover the nosing');
   const svg = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
-  assert.ok(!svg.includes('pe-housing'));
+  assert.equal((svg.match(/class="pe-housing"/g) || []).length, closed.flatMap((v) => v.housings).length);
+
+  const cut = views({ stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }).views;
+  assert.equal(cut[0].housings.length, 0);
+  const cutSvg = renderProfileEditorSVG(cut, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
+  assert.ok(!cutSvg.includes('pe-housing'));
+
+  const off = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10, layers: { housings: false } }).svg;
+  assert.ok(!off.includes('pe-housing'));
 });
 
 test('renderProfileEditorSVG: with nominalViews, draws a dashed AUTO comparison contour distinct from the edited one', () => {

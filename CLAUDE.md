@@ -470,6 +470,32 @@ neither is a Tier 2 scope item — genuine defects):
    over-extended by the same amount if a landing ever gets one — housings are informational only
    (never priced, never a purchasable item), so this is a cosmetic imprecision on an already-rare
    tread type, documented inline rather than fixed by a larger plumbing change.
+3. **A housing's vertical position was a whole `treadThickness` too low — a pre-existing bug in
+   `buildHousings()`, predating this whole DXF stage, only now made visible.** `bearingElevation`
+   is world Z of the TOP OF THE BEARING SURFACE a tread rests on, i.e. the tread's own BOTTOM (its
+   own doc comment, and `stringerSolver.js`'s formula `(index+1)*riserHeight - treadThickness` —
+   the same quantity as `TreadModel.elevation.bottom`); a tread therefore spans UP from
+   `bearingElevation`, exactly the convention `stringerProfileView.js`'s own `treads` array already
+   uses (`zBottom: bearingElevation, zTop: bearingElevation + treadThickness`). `buildHousings()`
+   instead spanned DOWN (`topV: bearingElevation, bottomV: bearingElevation - treadThickness`) —
+   every housing (and the pre-existing 3D housing indicator mesh, which reads the same field, and
+   now this DXF export) sat a full tread's thickness below where the tread actually is, worse
+   visually the further up a sloped board (reported: the board's own line ran through the wrong
+   corner of every housing box in a real project's DXF). Fixed by swapping to
+   `topV: bearingElevation + treadThickness, bottomV: bearingElevation`. The bug was invisible
+   before because nothing previously put exact, checkable numbers next to the tread markers on
+   screen — the profile editor never drew housings at all (removed earlier this stage), and the 3D
+   indicator's small, semi-transparent recessed box was easy to read as "close enough."
+
+**A related, deliberate (not a bug) design point the user also asked about**: moving the "Nosek"
+config slider while the profile editor is open does not move its "stopnie" (treads) boxes — this
+is unchanged from before all of this stage's work, and intentional: those boxes are the raw
+STRUCTURAL bearing (`stringerProfileView.js`'s `treads`, built from `finalUStart`/`finalUEnd`,
+never touched by nosing), the same schematic markers that were already there when the "wręgi"
+overlay was removed for being confusing on an interactive screen (see above). Only the HOUSING
+(informational, production-facing) reflects nosing, since a housing is specifically about the
+physical board being inserted — exactly the DXF export and the 3D housing indicator, never this
+particular editor layer.
 
 Tests: `geometry/__tests__/profileCurve.test.js` (`reverseCurve`),
 `export/__tests__/dxfExport.test.js` (closed-loop outline construction, well-formed DXF
@@ -477,9 +503,64 @@ structure, housing depth markings, tread-bearing markings, multi-board layout wi
 graceful `null` on missing geometry, the floor-corner regression, the nosing-extension
 regression), `geometry/__tests__/stringerConstructionGeometry.test.js` ("B2." — the same
 nosing-extension behaviour verified at the solver level, independent of the DXF exporter, plus the
-existing no-nosing case unchanged). Browser-verified: both toolbar buttons produce a well-formed,
-non-empty DXF (captured via `URL.createObjectURL` in a live session) whose floor corner and first
-housing's `uStart` now match the fixed values exactly.
+existing no-nosing case unchanged; "B3." — the vertical bearingElevation-direction regression).
+Browser-verified: both toolbar buttons produce a well-formed, non-empty DXF (captured via
+`URL.createObjectURL` in a live session) whose floor corner, first housing's `uStart`, and every
+housing's `[bottomV, topV]` now match the profile editor's own tread boxes exactly (only offset
+horizontally by the intentional nosing extension).
+
+## Housing overlay reinstated in the profile editor; "zapas nad stopniem" now measured from the tread's TOP
+
+Two follow-ups from the DXF work above, both from the same real-project check.
+
+**Housings are back in the "Profil wangi" editor — this time correct, and needed.** The schematic
+`.pe-housing` overlay was removed earlier this stage (a flat 2D rectangle with no way to show a
+real into-the-face recess depth was confusing on an interactive screen). But the user's actual
+need turned out to be a real, structural question the overlay is exactly suited to answer: does a
+tread's nosing (milled into the same board, overhanging past the structural front edge — see
+`buildHousings()`'s nosing extension above) stay inside the wanga's own silhouette, or poke out
+past it? Nothing else in the app shows this (the "stopnie" boxes are deliberately the raw
+structural bearing, unaffected by nosing — that has NOT changed, see below). Reinstated:
+`stringerProfileView.js` exposes `housings` again (`g.housings || []`, now inheriting BOTH DXF
+fixes above — the nosing extension and the corrected vertical position);
+`profileEditorRenderer.js` draws `.pe-housing` rectangles again; `profileEditorPanel.js`'s "wręgi
+(z noskiem)" checkbox (renamed from plain "wręgi" to flag what changed) is back, checked by
+default. `src/profileEditor/__tests__/profileEditorRenderer.test.js` replaces the old "never
+draws a housing indicator" test with one asserting a closed wanga's housing rectangles ARE drawn,
+extend behind `u=0` for the nosing, and can still be toggled off; a cut wanga still draws none (it
+has no housings at all).
+
+**`stringerTopMarginMm` ("Zapas nad stopniem (wpuszczana)") is now measured from the tread's own
+TOP (the walking surface), not its structural bottom — a permanent, requested redefinition, not a
+bug fix.** Previously the closed contour's upper offset was measured from the SAME reference curve
+R the lower contour's depth is measured from (through `bearingElevation`, the tread's own bottom —
+see the housing-vertical-position fix above for why R must stay anchored there for the DEPTH
+guarantee). A margin of "0mm" therefore put the wanga's visible top edge flush with the BOTTOM of
+each tread — with a default 40mm tread thickness, the classic default of 50mm meant only 10mm of
+material actually covered the tread's own top/nosing, not the intuitively-expected 50mm. Fixed in
+`stringerProfileSolver.js`'s `solveStringerProfile`: the upper offset now uses
+`topMarginMm + treadThicknessMm` from R (`profileParamsFromConfig` gained `treadThicknessMm`,
+read straight off `config.treadThickness`), clamped to never exceed the board's total width
+(`nominalDepthMm`) so an extreme combination (shallow minimum depth, thick tread, large margin)
+can't flip the lower offset's direction and turn the board inside out. **This does not weaken the
+minimum-depth guarantee**: the diagnostic measures the TOTAL board width (upper curve to lower
+curve, `depthReferenceCurve = upper.curve` for a closed board — see `solveStringerProfile`'s own
+return value), which stays exactly `nominalDepthMm` regardless of how the margin is split between
+"above the tread" and "below the reference" — only WHERE that fixed-width band sits relative to
+the tread moves. `config.stringerTopMarginMm`'s own comment and the UI label were updated to say
+so explicitly. **This changes the DEFAULT visual result** (a closed wanga's top edge now sits
+`treadThickness` higher than before for the same `stringerTopMarginMm` value) — an intentional,
+requested behavior change, not a value preserved by compensating math.
+`stringerConstructionGeometry.test.js`'s "start-of-board fix (closed)" test's own `required`-depth
+formula was updated to match (it independently re-derives the expected minimum from
+`config.stringerTopMarginMm`, so it needed the same `+ treadThickness` term).
+
+Tests: `profileEditor/__tests__/profileEditorRenderer.test.js` (housing rectangles drawn/toggled
+correctly), `geometry/__tests__/stringerConstructionGeometry.test.js` (the updated "start-of-board
+fix (closed)" depth formula). Browser-verified: a closed wanga's housing rectangles now align
+exactly (same y/height) with the "stopnie" boxes, extended left by the nosing amount; the upper
+contour line now visibly clears the tread TOP boxes rather than running through their lower-left
+corner.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

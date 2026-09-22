@@ -1390,6 +1390,7 @@ code {
 /* Linijka, wręgi, podgląd AUTO */
 .pe-ruler line { stroke: #b7bec7; stroke-width: 1; }
 .pe-ruler text { fill: #8a93a0; font-family: inherit; }
+.pe-housing { fill: rgba(180, 60, 60, 0.12); stroke: #b43c3c; stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
 .pe-nominal { fill: none; stroke: #9aa3ad; stroke-width: 1.5; stroke-dasharray: 5 4; pointer-events: none; }
 
 /* Dymek z liczbami podczas przeciągania */
