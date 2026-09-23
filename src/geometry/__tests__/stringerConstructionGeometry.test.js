@@ -402,6 +402,33 @@ test('joint bug fix: the OUTER stringer (always a lap joint, never a corner post
   }
 });
 
+// Regression: lowerControl/upperControl's `u` is shifted from the GROUP's own u (all boards of a
+// lap-jointed run solved together, see the joint-bug-fix tests above) to each board's own LOCAL u
+// (`localControl()`, so a side view can draw/measure it against that one board alone) — but
+// `nominal.u` (nested inside each control point) was left in the group's u, since it was only
+// ever read as a NESTED object, easy to miss when writing the shift. For the group's FIRST board
+// segStart is ~0, masking the bug entirely; a report ("editing board 1 works, board 2 doesn't
+// move at all") traced to exactly this: stringerProfileView.js's offsetFromDrag() measures a drag
+// from `nominal`, so a still-group-level nominal against a now-local `u` computed a wildly wrong
+// (ds, dn) — off by roughly the previous boards' own combined length — which either silently
+// folded the contour (rejected, point snapping back) or moved it somewhere absurd.
+test('control point bug fix: nominal.u is shifted to the SAME local frame as u on every board, not just the first', () => {
+  const { config, planLayout } = build(REALISTIC_WINDER);
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const geometries = buildStringerConstructionGeometry(model, config);
+  assert.ok(geometries.length > 1, 'need at least 2 boards for segStart to be nonzero anywhere');
+  for (const g of geometries) {
+    for (const list of [g.lowerControl, g.upperControl]) {
+      for (const c of list || []) {
+        if (!c.nominal) continue;
+        // Every point here is unedited (no manualStringerProfileOverrides in this config), so its
+        // CURRENT position must equal its NOMINAL position exactly — in whatever frame `u` is in.
+        assert.ok(Math.abs(c.u - c.nominal.u) < 1e-6, `${g.segmentId}/${c.id}: u=${c.u} but nominal.u=${c.nominal.u} — different frames`);
+      }
+    }
+  }
+});
+
 test('joint bug fix: a lap-jointed INNER stringer (hasCornerPost: false) also gets a continuous profile across the joint', () => {
   const { config, planLayout } = build({ ...REALISTIC_WINDER, hasCornerPost: false });
   const model = buildStringerModel(planLayout, config, 'inner');

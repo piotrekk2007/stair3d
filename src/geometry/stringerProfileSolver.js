@@ -272,25 +272,36 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
   // the minimum depth — see largestRadiusKeepingDepth below), an interpolating spline has no local
   // "shrink this corner" lever: it must pass through every knot exactly, so at a sharp turn it can
   // cut inside the nominal control polygon exactly the way a fillet does, but with no per-corner
-  // radius to reduce. The fix is the same one profileOffsetMm already uses globally (a positive
-  // offset "makes the board deeper everywhere"): measure the spline's actual local depth and, if it
-  // undershoots, push the WHOLE curve away from `opposite` along its own local normal (the exact
-  // same primitive `lowerNominal`/`upperNominal` were built with, `offsetPolylineByNormal`) by the
-  // shortfall, then re-measure — a couple of iterations converge well inside DEPTH_TOLERANCE_MM for
-  // any realistically smooth curve. Pushing AWAY from `opposite` (down for the lower contour, up
-  // for the upper) only ever ADDS material, so this can never remove support a tread needs.
+  // radius to reduce. In pure AUTO (no manual point on this contour), the fix is the same one
+  // profileOffsetMm already uses globally (a positive offset "makes the board deeper everywhere"):
+  // measure the spline's actual local depth and, if it undershoots, push the WHOLE curve away from
+  // `opposite` along its own local normal (the exact same primitive `lowerNominal`/`upperNominal`
+  // were built with, `offsetPolylineByNormal`) by the shortfall, then re-measure — a couple of
+  // iterations converge well inside DEPTH_TOLERANCE_MM for any realistically smooth curve.
+  //
+  // NEVER once the user has manually moved (or set a radius on) a point of THIS contour — a global
+  // push moves EVERY point, not just the one being edited, which is exactly the opposite of what a
+  // manual edit means and, reported by the user, visibly "wrecked" the rest of an intentionally
+  // hand-shaped board just because one dragged point briefly undershot the minimum. This matches
+  // the same rule an explicit fillet radius already follows: "KEPT and reported (STRINGER-MIN-DEPTH),
+  // never silently corrected" — a manual edit is a design decision, not something AUTO gets to
+  // override just because it also happens to run through this function.
   if (params.transitionStyle === TRANSITION_STYLES.SPLINE && scopeIncludes(params.radiusScope, contour)) {
+    const hasManualPoint = vertices.some((v) => v.override || v.explicitRadius !== undefined);
     let dense = splinePointsThrough(points);
     if (dense) {
-      const pushDirection = contour === PROFILE_CONTOURS.LOWER ? 'down' : 'up';
-      let curve = polylineToCurve(dense);
-      for (let iter = 0; iter < SPLINE_DEPTH_CORRECTION_ITERATIONS; iter++) {
-        const deficit = params.minimumDepthMm - curveDistance(curve, opposite);
-        if (deficit <= DEPTH_TOLERANCE_MM) break;
-        dense = offsetPolylineByNormal(dense, deficit, pushDirection);
-        curve = polylineToCurve(dense);
+      if (!hasManualPoint) {
+        const pushDirection = contour === PROFILE_CONTOURS.LOWER ? 'down' : 'up';
+        let curve = polylineToCurve(dense);
+        for (let iter = 0; iter < SPLINE_DEPTH_CORRECTION_ITERATIONS; iter++) {
+          const deficit = params.minimumDepthMm - curveDistance(curve, opposite);
+          if (deficit <= DEPTH_TOLERANCE_MM) break;
+          dense = offsetPolylineByNormal(dense, deficit, pushDirection);
+          curve = polylineToCurve(dense);
+        }
+        return { curve, control: controlPointsFrom(vertices, null) };
       }
-      return { curve, control: controlPointsFrom(vertices, null) };
+      return { curve: polylineToCurve(dense), control: controlPointsFrom(vertices, null) };
     }
     findings.push(
       finding({

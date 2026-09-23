@@ -398,6 +398,45 @@ test('override: moving a control point shallower than the minimum is KEPT and re
   assert.ok(d && d.severity === 'ERROR' && d.unit === 'mm');
 });
 
+// Regression: SPLINE's own AUTO minimum-depth safety net (solveContour pushes the WHOLE curve
+// away from `opposite` when it locally undershoots — see stringerProfileSolver.js) must NEVER
+// run once the user has manually moved a point on that contour. It is a GLOBAL push (every point
+// shifts, not just the one being edited) — applying it after a manual edit undid/distorted a
+// deliberately hand-shaped board the moment it dipped under the minimum, reported as "moving a
+// point wrecks the whole geometry." A manual edit is a design decision: it must be KEPT and
+// reported (STRINGER-MIN-DEPTH), exactly like an explicit fillet radius already is, never
+// silently corrected — and unlike that global push, nothing OTHER than the point actually
+// dragged should move at all.
+test('SPLINE: a manually moved point violating the minimum depth is KEPT and reported, and does not drag the rest of the curve with it', () => {
+  // A perfectly straight/uniform flight's control polygon simplifies down to just its two end
+  // knots (see the "SPLINE: a perfectly straight flight..." test above) — nothing left over to
+  // prove stayed untouched. An L-winder has real interior knots (support:step-4, step-9) to check.
+  const winderPatch = { ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SPLINE', stringerRadiusScope: 'BOTH' };
+  const nominal = flight(winderPatch).geo.outer[0];
+  const overrides = setVertexOverride({}, 'outer', 'lower', anchorIdForTread(4), { dn: -60 });
+  const edited = flight({ ...winderPatch, manualStringerProfileOverrides: overrides }).geo.outer[0];
+
+  // The violation is real and reported, not silently pushed back into compliance.
+  assert.ok(edited.localDepthMm < 350 - 1, `expected a real violation, got localDepthMm=${edited.localDepthMm}`);
+  const d = edited.diagnostics.find((x) => x.ruleId === 'STRINGER-MIN-DEPTH');
+  assert.ok(d && d.severity === 'ERROR');
+
+  // A point far from the one that was dragged is essentially untouched — proof the fix didn't
+  // silently fall back to a global push (which would have moved EVERY point, not just this one).
+  const untouchedId = anchorIdForTread(9);
+  const before = nominal.lowerControl.find((c) => c.id === untouchedId);
+  const after = edited.lowerControl.find((c) => c.id === untouchedId);
+  assert.ok(before && after, 'both solves must have this knot');
+  assert.ok(Math.hypot(after.u - before.u, after.v - before.v) < 1, `an untouched point moved by ${Math.hypot(after.u - before.u, after.v - before.v)} mm — the whole curve was pushed`);
+});
+
+test('SPLINE: with NO manual override, the AUTO safety push still keeps the minimum depth exactly as the grid test already checks', () => {
+  // Same scenario as the test above, minus the override — confirms the guard only skips the push
+  // when there IS a manual point, not unconditionally.
+  const { geo } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', stringerTransitionStyle: 'SPLINE', stringerRadiusScope: 'BOTH' });
+  for (const g of geo.outer) assert.ok(g.localDepthMm >= 350 - 1e-3);
+});
+
 test('override: an explicit corner radius on one control point is honoured (an arc appears there and only there)', () => {
   const overrides = setVertexOverride(setVertexOverride({}, 'outer', 'lower', anchorIdForTread(6), { dn: 80 }), 'outer', 'lower', anchorIdForTread(6), { radiusMm: 60 });
   const { geo } = flight({ ...STRAIGHT_CUT, manualStringerProfileOverrides: overrides });

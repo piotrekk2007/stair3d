@@ -671,6 +671,67 @@ of a splined board produces a valid, well-formed file; the 3D view renders witho
 Walidacja tab shows no spline-specific findings on a realistic project (the warnings present are
 pre-existing and config-only, unrelated to transition style).
 
+## Bug fix: dragging a control point on any board but the group's first didn't move it
+
+Found immediately after shipping SPLINE, but pre-existing and unrelated to it — affects every
+`stringerTransitionStyle` and predates this whole stage. Reported: "editing wanga (board) 0
+works, but I can't move any point on wanga 1."
+
+**Root cause**: a lap-jointed multi-board run (an outer stringer is ALWAYS one — see "Stringer
+profile refactor" above) is solved as ONE continuous profile across the WHOLE GROUP, then sliced
+back into each physical board's own LOCAL `(u,v)` by `stringerConstructionGeometry.js`'s
+`localControl()`, which subtracts that board's own `segStart` from every control point's `u`. It
+did **not** also subtract `segStart` from `c.nominal.u` — a NESTED `{u,v}` object holding the
+point's un-overridden reference position, easy to miss because the shift line only touches the
+top-level `u`. For the group's FIRST board `segStart` is ~0, so nothing looked wrong there; for
+board 2+ it is the combined length of every earlier board (often 2000mm+), so `nominal` stayed in
+GROUP-level coordinates while `u` was now board-LOCAL. `stringerProfileView.js`'s
+`offsetFromDrag()` measures a drag's `(ds, dn)` from `nominal` — with the two fields in different
+frames, a small on-screen drag produced a `ds` off by roughly that same 2000mm+, which either got
+silently REJECTED by the fold-guard (`rejectFoldedOverrides` in `stringerProfileSolver.js` — the
+point visibly snapping back, exactly "can't move it") or landed somewhere absurd.
+
+**Fix**: `localControl()` now also shifts `nominal.u` by the same `-segStart`, keeping it in the
+same local frame as `u` (an unedited point's `u` and `nominal.u` must be identically equal — the
+new regression test's actual invariant). `tangent`/`normal` needed no change: they are direction
+vectors, invariant under a constant-offset shift of the whole group's `u`-origin.
+
+Tests: `geometry/__tests__/stringerConstructionGeometry.test.js` ("control point bug fix" —
+confirmed to fail without the fix, off by exactly the previous board's own length, and pass with
+it). Browser-verified: dragging a control point on the second board of a real L-winder's outer
+stringer now applies a sane, local `(ds, dn)` and the resulting edit is visible exactly where
+dragged, where it previously either refused to move or jumped far away.
+
+## Bug fix: SPLINE's minimum-depth safety push also fired on manually-edited geometry
+
+Reported right after the SPLINE feature shipped: with a low `minimumStringerDepthMm` (e.g.
+200mm), manually dragging a point past it "wrecked the geometry" instead of just doing what was
+asked. Root cause: `solveContour`'s SPLINE branch (see "SPLINE transition style" above) pushes the
+WHOLE curve away from `opposite` whenever it undershoots the configured minimum depth — the right
+behaviour for the AUTO-generated shape (nothing has been asked of it, so keeping the promised
+depth by construction is correct), but it ran UNCONDITIONALLY, including on a contour the user had
+just manually edited. Since the push moves EVERY point on the curve, not just the one near the
+violation, a manual edit that dipped under the minimum got globally "corrected" back into
+compliance — silently undoing the very thing the user just did, and distorting the rest of the
+board along with it.
+
+**Fix**: `solveContour()` now checks whether ANY vertex of the contour carries a manual override
+or an explicit radius (`vertices.some((v) => v.override || v.explicitRadius !== undefined)`)
+before running the safety push. With no manual point, AUTO's guarantee still holds exactly as
+before. With one, the push is skipped entirely — the spline is used as-is, even if it violates the
+minimum, and the violation is reported (`STRINGER-MIN-DEPTH`, ERROR) by the same downstream check
+that already handles this for an explicit fillet radius, per the project's existing rule: a manual
+edit is a design decision to be **kept and reported, never silently corrected**. Browser-verified:
+dragging a single point on a spline contour with `minimumStringerDepthMm` low enough to be
+genuinely violated now shows the edit exactly where dragged (a local dip, not a redrawn board),
+with new `STRINGER-TREAD-SUPPORT` errors appearing in Walidacja for the affected treads — honest
+reporting instead of a silently "fixed" but wrong-looking result.
+
+Tests: `geometry/__tests__/stringerProfile.test.js` (a manual point violating the minimum is kept
+and reported, and a knot far from the dragged one is provably untouched — confirmed to fail
+without the fix, snapping the violation silently back to exactly the configured minimum; a
+sibling test confirms the AUTO safety push still applies with no override present).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

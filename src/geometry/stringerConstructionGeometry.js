@@ -574,8 +574,24 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // curve there — an offset contour's own end vertex sits beyond the plane that cuts the board);
     // `withinSegment` says whether it lies on this board (between its two end faces), for a side view that
     // draws handles.
+    //
+    // `c.nominal.u` must be shifted to local u exactly like `c.u` itself — it is the ORIGIN
+    // stringerProfileView.js's `offsetFromDrag()` measures a drag's (ds, dn) from. Left in the
+    // group's own (unshifted) u, dragging any point on a board other than the group's first (where
+    // segStart happens to be ~0, masking the bug) computed a bogus, huge `ds` — the difference
+    // between the point's now-local `u` and its still-group-level `nominal.u` — which then either
+    // silently folded the contour (rejected, point snapping back — "can't move any point") or
+    // produced a wildly wrong new position. Reported: editing the first board of an outer stringer
+    // worked, the second didn't move at all.
     const localControl = (list) =>
-      list ? list.map((c) => ({ ...c, u: c.u - segStart, withinSegment: c.u - segStart >= spanStart - GEOMETRY_EPS && c.u - segStart <= spanEnd + GEOMETRY_EPS })) : null;
+      list
+        ? list.map((c) => ({
+            ...c,
+            u: c.u - segStart,
+            nominal: c.nominal ? { u: c.nominal.u - segStart, v: c.nominal.v } : c.nominal,
+            withinSegment: c.u - segStart >= spanStart - GEOMETRY_EPS && c.u - segStart <= spanEnd + GEOMETRY_EPS,
+          }))
+        : null;
 
     bySegmentId.set(segment.id, {
       segmentId: segment.id,
