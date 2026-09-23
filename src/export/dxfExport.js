@@ -1,9 +1,10 @@
 // DXF EXPORT — a real-size (1:1, mm), production-ready cutting/marking drawing of one stringer
-// board (or every board of one stringer side laid out on one sheet), or of one post/every post
-// (PostModel, postSolver.js). Pure serialization: every number comes straight from already-solved
-// geometry (StringerSegmentConstructionGeometry for boards, PostModel for posts) — nothing here
-// decides any geometry, exactly like the other export/ adapters (objExporter.js, daeExporter.js,
-// takeoff/export/). No DOM.
+// board (or every board of one stringer side laid out on one sheet), of one post/every post
+// (PostModel, postSolver.js), or of one tread/every tread (TreadModel, treadSolver.js). Pure
+// serialization: every number comes straight from already-solved geometry
+// (StringerSegmentConstructionGeometry for boards, PostModel for posts, TreadModel for treads) —
+// nothing here decides any geometry, exactly like the other export/ adapters (objExporter.js,
+// daeExporter.js, takeoff/export/). No DOM.
 //
 // This is deliberately a DIFFERENT, richer consumer than the profile editor's view model
 // (geometry/stringerProfileView.js), which no longer exposes housings at all (a flat 2D
@@ -71,8 +72,7 @@ function curveToEntities(curve, layer) {
   return curve.map((prim) => (prim.type === 'line' ? lineEntity(prim.a, prim.b, layer) : arcEntity(prim, layer))).join('\n');
 }
 
-function boundsOf(curve) {
-  const pts = curveToPolyline(curve);
+function boundsOfPoints(pts) {
   let minU = Infinity;
   let maxU = -Infinity;
   let minV = Infinity;
@@ -84,6 +84,16 @@ function boundsOf(curve) {
     maxV = Math.max(maxV, p.v);
   }
   return { minU, maxU, minV, maxV };
+}
+
+function boundsOf(curve) {
+  return boundsOfPoints(curveToPolyline(curve));
+}
+
+function polygonEntities(points, layer) {
+  const out = [];
+  for (let i = 0; i < points.length; i++) out.push(lineEntity(points[i], points[(i + 1) % points.length], layer));
+  return out;
 }
 
 // --- the closed board outline --------------------------------------------------------------------
@@ -281,6 +291,76 @@ export function buildAllPostsDXF(posts) {
     const height = post.elevation.top - post.elevation.bottom;
     entities.push(...postRectEntities(post, cursor), ...titleEntities(postTitleLines(post), { minU: cursor, maxV: height }));
     cursor += post.size + POST_GAP_MM;
+  }
+  return wrapDxf(entities);
+}
+
+// --- treads (stopnie) ------------------------------------------------------------------------------
+//
+// TreadModel.outline (treadSolver.js) is the FINAL, nosed footprint — the real as-built shape,
+// already reflecting any manual edge override/overhang, exactly what the 2D plan and 3D view
+// show — so, unlike a post's plain section or a stringer's solved profile, there is no separate
+// "construction geometry" layer to read here: the outline itself IS the cutting contour.
+
+const TREAD_TYPE_LABELS_PL = Object.freeze({ straight: 'prosty', winder: 'zabiegowy', landing: 'podest' });
+// Real gap (mm) between treads laid out on one sheet — its own constant for the same reason
+// BOARD_GAP_MM/POST_GAP_MM are: each element's own footprint sets its own comfortable spacing.
+const TREAD_GAP_MM = 200;
+
+// A tread's outline lives in the STAIR's plan (global x,y), at whatever orientation its own walk
+// direction happens to have (a winder tread can face any angle) — rotated here into the tread's
+// OWN local frame (u along its own walking direction, matching stockGeometry.js's
+// `boundingRectAlong`) and shifted so its own bounding box starts at (0,0), the same convention
+// every other DXF entry point in this file already uses for its own local frame.
+function localTreadOutline(tread) {
+  const forward = tread.direction;
+  const across = { u: -forward.y, v: forward.x };
+  const raw = tread.outline.map((p) => ({ u: p.x * forward.x + p.y * forward.y, v: p.x * across.u + p.y * across.v }));
+  const bounds = boundsOfPoints(raw);
+  return raw.map((p) => ({ u: p.u - bounds.minU, v: p.v - bounds.minV }));
+}
+
+function isValidTread(tread) {
+  return !!tread && Array.isArray(tread.outline) && tread.outline.length >= 3;
+}
+
+function treadTitleLines(tread) {
+  const typeLabel = TREAD_TYPE_LABELS_PL[tread.type] || tread.type;
+  const lines = [
+    `Stopien: ${tread.stepId}`,
+    `Typ: ${typeLabel}`,
+    `Szerokosc (czolo/tyl): ${Math.round(tread.widths.atFront)} / ${Math.round(tread.widths.atBack)} mm`,
+    `Grubosc: ${tread.thickness} mm`,
+  ];
+  // The winder blank (winderBlank.js computeWinderBlank) is the same PRODUCTION rectangle the
+  // takeoff/2D-plan/3D labels already use as the raw board to cut this tread from — worth stating
+  // alongside the finished outline above, not instead of it.
+  if (tread.winderBlank) lines.push(`Formatka surowa: ${Math.round(tread.winderBlank.length)} x ${Math.round(tread.winderBlank.depth)} mm`);
+  lines.push('Skala 1:1 - wszystkie wymiary w mm');
+  return lines;
+}
+
+/** One tread, full size, as a standalone DXF: its real (nosed) outline + a title block. */
+export function buildTreadDXF(tread) {
+  if (!isValidTread(tread)) return null;
+  const local = localTreadOutline(tread);
+  const entities = [...polygonEntities(local, 'OUTLINE'), ...titleEntities(treadTitleLines(tread), boundsOfPoints(local))];
+  return wrapDxf(entities);
+}
+
+/** Every tread the stair has, laid out side by side on one sheet, each in its own local frame. */
+export function buildAllTreadsDXF(treads) {
+  const valid = (treads || []).filter(isValidTread);
+  if (valid.length === 0) return null;
+  const entities = [];
+  let cursor = 0;
+  for (const tread of valid) {
+    const local = localTreadOutline(tread);
+    const bounds = boundsOfPoints(local);
+    const offsetU = cursor - bounds.minU;
+    cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
+    const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
+    entities.push(...polygonEntities(shifted, 'OUTLINE'), ...titleEntities(treadTitleLines(tread), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }

@@ -77,6 +77,8 @@ function treadHTML(ctx) {
     rows.push(row('Krawędzie boczne', 'brak wysunięcia', 'auto'));
   }
 
+  rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-tread-dxf="${t.stepId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego stopnia — gotowy kontur z noskiem, do wycięcia w warsztacie">Eksportuj stopień (DXF 1:1)</button></div>`);
+
   rows.push(section('Walidacja'));
   rows.push(diagnosticsHTML(diagnostics));
   rows.push(`<div class="insp-source">ID źródła: <code>tread:${t.stepId}</code></div>`);

@@ -308,12 +308,23 @@ function buildCombCurve(top, notchRadiusMm) {
 // span — reported: the housing/tread markers on a real project's DXF export sat visibly BELOW
 // where the treads actually are (worse toward the top of a sloped board), because this function
 // span DOWN from bearingElevation instead.
+// Bug fix: `b.uStart` here already carries `effectiveBearings()`'s OWN forward shift by
+// `b.riserRecess` (room for a riser board, a CUT-notch/ledge concern — see stringerSolver.js and
+// the "riser face must be plumb" fix — entirely unrelated to nosing) whenever risers are enabled.
+// Subtracting `nosing` straight from that shifted value silently cancelled the two out whenever
+// `riserRecess` happened to equal `nosing` (which it always does when risers are on — see
+// stringerSolver.js's own `riserRecess = hasRiserBoards ? nosing : 0`), snapping the housing back
+// to its un-extended, structural-only width the moment risers were switched on — reported as
+// "housings/nosing lose their extension when I add risers." Subtracting `b.riserRecess` back out
+// first undoes ONLY that unrelated shift (0 when risers are off, so this is a no-op there) while
+// preserving any OTHER contribution already baked into `uStart` (e.g. a lap-joint corner's own
+// `extendStart`), then the nosing extension applies on top exactly as before.
 function buildHousings(effective, config) {
   const depth = housingDepthFor(config.stringerThickness);
   const nosing = config.nosing > 0 ? config.nosing : 0;
   return effective.map((b) => ({
     treadIndex: b.treadIndex,
-    uStart: b.ownsStart ? b.uStart - nosing : b.uStart,
+    uStart: b.ownsStart ? b.uStart - (b.riserRecess || 0) - nosing : b.uStart,
     uEnd: b.uEnd,
     topV: b.bearingElevation + config.treadThickness,
     bottomV: b.bearingElevation,

@@ -28,7 +28,7 @@ import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
 import { downloadTextFile } from './export/downloadTextFile.js';
-import { buildPostDXF, buildAllPostsDXF } from './export/dxfExport.js';
+import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF } from './export/dxfExport.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
@@ -718,6 +718,17 @@ function exportAllPostsDXF() {
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slupy.dxf`, 'application/dxf');
 }
 
+function exportTreadDXF(stepId) {
+  const tread = lastModels?.treadModels?.find((t) => t.stepId === stepId);
+  const dxf = tread ? buildTreadDXF(tread) : null;
+  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_${stepId}.dxf`, 'application/dxf');
+}
+
+function exportAllTreadsDXF() {
+  const dxf = lastModels?.treadModels ? buildAllTreadsDXF(lastModels.treadModels) : null;
+  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_stopnie.dxf`, 'application/dxf');
+}
+
 function exportTakeoff(kind) {
   if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
   const base = fileBaseName();
@@ -743,6 +754,8 @@ inspectorPanel.addEventListener('click', (e) => {
   if (action && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { action });
   const dxfPostId = e.target?.closest?.('[data-post-dxf]')?.dataset.postDxf;
   if (dxfPostId) exportPostDXF(dxfPostId);
+  const dxfStepId = e.target?.closest?.('[data-tread-dxf]')?.dataset.treadDxf;
+  if (dxfStepId) exportTreadDXF(dxfStepId);
 });
 const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onSelect: handleSelectDiagnostic,
@@ -759,6 +772,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportCSV: () => exportTakeoff('csv'),
   onExportTXT: () => exportTakeoff('txt'),
   onExportPostsDXF: () => exportAllPostsDXF(),
+  onExportTreadsDXF: () => exportAllTreadsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.

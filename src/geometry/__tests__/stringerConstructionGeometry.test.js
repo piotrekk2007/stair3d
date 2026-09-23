@@ -145,6 +145,28 @@ test('B2. housed: a housing extends by config.nosing on its own front (ownsStart
   assert.equal(geoNoNosing.housings[0].uStart, modelNoNosing.segments[0].treadBearings[0].finalUStart);
 });
 
+// Regression: `effectiveBearings()` shifts a bearing's `uStart` forward by `riserRecess` (room for
+// a riser board's plumb cut, a CUT-notch concern — see stringerSolver.js) whenever risers are
+// enabled — and `riserRecess` happens to equal `nosing` exactly whenever it is nonzero. Subtracting
+// `nosing` straight off that ALREADY-SHIFTED value silently cancelled the two out, snapping a
+// housing's nosing extension back to zero the moment risers were switched on (reported: "housings/
+// nosing disappear when I add risers" — riserRecess and nosing extension are unrelated concerns
+// that happen to share config.nosing's value, not the same thing).
+test('B2b. housed: the nosing extension survives switching on riser boards (a previously unrelated shift must not cancel it)', () => {
+  const risersOff = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 25, hasRiserBoards: false });
+  const modelOff = buildStringerModel(risersOff.planLayout, risersOff.config, 'outer');
+  const [geoOff] = buildStringerConstructionGeometry(modelOff, risersOff.config);
+
+  const risersOn = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', nosing: 25, hasRiserBoards: true });
+  const modelOn = buildStringerModel(risersOn.planLayout, risersOn.config, 'outer');
+  const [geoOn] = buildStringerConstructionGeometry(modelOn, risersOn.config);
+
+  assert.ok(geoOff.housings.length > 0 && geoOn.housings.length > 0);
+  for (let i = 0; i < geoOff.housings.length; i++) {
+    assert.equal(geoOn.housings[i].uStart, geoOff.housings[i].uStart, `housing ${i}: nosing extension must be identical whether risers are on or off`);
+  }
+});
+
 // Regression: bearingElevation is world Z of the TOP OF THE BEARING SURFACE the tread rests on
 // (the tread's own BOTTOM — see StringerTreadBearing's doc comment and stringerSolver.js's own
 // `(index+1)*riserHeight - treadThickness` formula, matching TreadModel.elevation.bottom and

@@ -732,6 +732,67 @@ and reported, and a knot far from the dragged one is provably untouched — conf
 without the fix, snapping the violation silently back to exactly the configured minimum; a
 sibling test confirms the AUTO safety push still applies with no override present).
 
+## Bug fix: a housing's nosing extension was cancelled out by enabling riser boards
+
+Reported: "housings show the nosing extension correctly with risers off, but adding risers loses
+both the risers AND the nosing extension." `effectiveBearings()` (stringerConstructionGeometry.js)
+shifts an owned bearing's `uStart` FORWARD by `b.riserRecess` — room for a riser board's plumb cut,
+entirely unrelated to nosing (see the "riser face must be plumb" follow-up, way above) — but
+`riserRecess` is computed in `stringerSolver.js` as `hasRiserBoards ? nosing : 0`: it happens to
+equal `config.nosing` exactly whenever it is nonzero. `buildHousings()`'s own nosing extension
+(see "1:1 DXF export", bug #2) subtracted `nosing` straight off that ALREADY-forward-shifted
+`uStart` — so with risers on, `uStart + riserRecess(=nosing) - nosing` collapses back to the
+UNSHIFTED value, silently cancelling the extension the moment risers were switched on. (The risers
+themselves were never actually missing — the profile editor's `.pe-riser` lines toggle correctly
+with `hasRiserBoards`; what disappeared was specifically the housing's nosing extension reverting
+to its un-extended width, easy to misread as "everything vanished.")
+
+**Fix**: `buildHousings()` now subtracts `b.riserRecess || 0` back out before subtracting nosing
+(`b.uStart - (b.riserRecess || 0) - nosing`) — a no-op when risers are off (`riserRecess` is
+already 0 there), and exactly undoes the unrelated forward shift when they're on, while still
+preserving any OTHER contribution baked into `uStart` (e.g. a lap-joint corner's own
+`extendStart`). Browser-verified: a housing's `x` position in the profile editor now stays
+identical (`-25` at the default 25mm nosing) whether `hasRiserBoards` is on or off.
+
+Tests: `geometry/__tests__/stringerConstructionGeometry.test.js` ("B2b." — confirmed to fail
+without the fix, giving `0` instead of `-25` with risers enabled).
+
+## 1:1 DXF export extended to treads (stopnie)
+
+Same idea as the stringer-board/post DXF export above, applied to `TreadModel`
+(`treadSolver.js`). Unlike a post's plain section or a stringer's solved profile, a tread has no
+separate "construction geometry" layer to read: `TreadModel.outline` (the FINAL, nosed footprint,
+already reflecting any manual edge override/overhang — exactly what the 2D plan and 3D view show)
+already IS the cutting contour, so `dxfExport.js`'s `buildTreadDXF(tread)` /
+`buildAllTreadsDXF(treads)` just serialize it directly.
+
+- **Rotated into the tread's own walking direction**: a tread's `outline` lives in the stair's
+  global plan (x,y) at whatever orientation its own walk direction happens to have (a winder tread
+  can face any angle) — `localTreadOutline()` rotates it into the tread's OWN local frame the same
+  way `takeoff/stockGeometry.js`'s `boundingRectAlong()` already does for the material takeoff,
+  then shifts it so its own bounding box starts at (0,0), the same local-frame convention every
+  other entry point in this file uses.
+- **A winder tread's title block also states its raw production blank** (`TreadModel.winderBlank`,
+  `winderBlank.js` `computeWinderBlank` — the SAME rectangle the 2D plan, 3D labels and material
+  takeoff already treat as the STOCK to cut a winder tread from) alongside the finished outline —
+  useful context for ordering material, never a substitute for the real outline above it. A
+  straight/landing tread has no separate blank concept (its outline is already close to
+  rectangular), so this line is simply omitted there.
+- **Per-tread export**: the Inspektor's tread view (`inspectorPanel.js` `treadHTML()`) gained an
+  "Eksportuj stopień (DXF 1:1)" button (`data-tread-dxf`), delegated in `main.js`'s existing
+  `inspectorPanel` click listener to a new `exportTreadDXF(stepId)` (looks the tread up in
+  `lastModels.treadModels`).
+- **All-treads export**: the Kosztorys tab's toolbar gained a "Stopnie (DXF 1:1)" button
+  (`createTakeoffPanel`'s new `onExportTreadsDXF` callback), wired to `exportAllTreadsDXF()` —
+  every tread (straight, winder AND landing) on one sheet, laid out side by side with a
+  `TREAD_GAP_MM = 200` gap, its own constant for the same reason `BOARD_GAP_MM`/`POST_GAP_MM` are.
+
+Tests: `export/__tests__/dxfExport.test.js` (`buildTreadDXF`: one polygon edge per outline vertex,
+correct title incl. the winder-only blank line, `null` for missing/degenerate input;
+`buildAllTreadsDXF`: one title per tread, laid out left to right with no overlap, `null` when
+nothing to draw). Browser-verified: exporting a straight tread and the whole-stair sheet from a
+live session both produce well-formed DXF files with the expected titles.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

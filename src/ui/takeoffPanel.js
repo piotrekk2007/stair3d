@@ -134,7 +134,7 @@ function summaryHTML(summary, takeoff, settings) {
     </div>`;
 }
 
-export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF }) {
+export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF, onExportTreadsDXF }) {
   const panel = document.createElement('div');
   panel.id = 'takeoff-panel';
   panel.innerHTML = `
@@ -149,6 +149,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
       <button type="button" data-action="csv" title="Pobierz zestawienie jako CSV">CSV</button>
       <button type="button" data-action="txt" title="Pobierz raport tekstowy">Raport TXT</button>
       <button type="button" data-action="posts-dxf" title="Wszystkie słupy tej klatki na jednym arkuszu DXF, w skali 1:1">Słupy (DXF 1:1)</button>
+      <button type="button" data-action="treads-dxf" title="Wszystkie stopnie tej klatki na jednym arkuszu DXF, w skali 1:1">Stopnie (DXF 1:1)</button>
     </div>
     <div id="takeoff-manual"></div>
     <div id="takeoff-pricing"></div>
@@ -162,6 +163,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
   panel.querySelector('[data-action="csv"]').addEventListener('click', () => onExportCSV());
   panel.querySelector('[data-action="txt"]').addEventListener('click', () => onExportTXT());
   panel.querySelector('[data-action="posts-dxf"]').addEventListener('click', () => onExportPostsDXF());
+  panel.querySelector('[data-action="treads-dxf"]').addEventListener('click', () => onExportTreadsDXF());
   panel.querySelector('#takeoff-body').addEventListener('click', (e) => {
     const el = e.target.closest('[data-item-index]');
     if (!el) return;

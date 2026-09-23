@@ -6,7 +6,8 @@ import { buildPlanLayout } from '../../geometry/planLayout.js';
 import { buildStringerModelsForFlight } from '../../geometry/stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../../geometry/stringerConstructionGeometry.js';
 import { buildAllPostModels } from '../../geometry/postSolver.js';
-import { buildStringerBoardDXF, buildStringerAllBoardsDXF, buildBoardOutlineCurve, buildPostDXF, buildAllPostsDXF } from '../dxfExport.js';
+import { buildTreadModels } from '../../geometry/treadSolver.js';
+import { buildStringerBoardDXF, buildStringerAllBoardsDXF, buildBoardOutlineCurve, buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF } from '../dxfExport.js';
 
 function build(configPatch, side = 'outer') {
   const config = { ...createDefaultConfig(), ...configPatch };
@@ -195,4 +196,53 @@ test('buildAllPostsDXF: returns null when there is nothing to draw', () => {
   assert.equal(buildAllPostsDXF([]), null);
   assert.equal(buildAllPostsDXF(null), null);
   assert.equal(buildAllPostsDXF([{ removed: true, elevation: { bottom: 0, top: 1000 }, size: 100 }]), null);
+});
+
+function buildTreads(configPatch) {
+  const config = { ...createDefaultConfig(), ...configPatch };
+  const derived = deriveStairData(config);
+  const fullConfig = { ...config, riserHeight: derived.riserHeight };
+  const planLayout = buildPlanLayout(fullConfig);
+  return buildTreadModels(planLayout, fullConfig);
+}
+
+test('buildTreadDXF: a straight tread is its real nosed outline, one edge per vertex, with a title block', () => {
+  const treads = buildTreads({});
+  const straight = treads.find((t) => t.type === 'straight');
+  assert.ok(straight);
+  const dxf = buildTreadDXF(straight);
+  assert.ok(dxf.startsWith('0\nSECTION'));
+  assert.ok(dxf.trim().endsWith('0\nEOF'));
+  const lines = [...dxf.matchAll(/0\nLINE\n8\nOUTLINE\n10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n11\n(-?[\d.]+)\n21\n(-?[\d.]+)\n31\n0/g)];
+  assert.equal(lines.length, straight.outline.length, 'one edge per outline vertex');
+  assert.ok(dxf.includes(`Stopien: ${straight.stepId}`));
+  assert.ok(dxf.includes('Typ: prosty'));
+  assert.ok(dxf.includes('Skala 1:1'));
+  assert.ok(!dxf.includes('Formatka surowa'), 'a straight tread has no separate production blank to state');
+});
+
+test('buildTreadDXF: a winder tread also states its raw production blank alongside the finished outline', () => {
+  const treads = buildTreads({});
+  const winder = treads.find((t) => t.type === 'winder');
+  assert.ok(winder && winder.winderBlank);
+  const dxf = buildTreadDXF(winder);
+  assert.ok(dxf.includes('Typ: zabiegowy'));
+  assert.ok(dxf.includes(`Formatka surowa: ${Math.round(winder.winderBlank.length)} x ${Math.round(winder.winderBlank.depth)} mm`));
+});
+
+test('buildAllTreadsDXF: every tread laid out side by side without overlap, one title per tread', () => {
+  const treads = buildTreads({});
+  const dxf = buildAllTreadsDXF(treads);
+  assert.ok(dxf);
+  const titlePositions = [...dxf.matchAll(/10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n40\n[\d.]+\n1\nStopien: /g)].map((m) => Number(m[1]));
+  assert.equal(titlePositions.length, treads.length);
+  for (let i = 1; i < titlePositions.length; i++) assert.ok(titlePositions[i] > titlePositions[i - 1], 'each tread is laid out further right than the previous one');
+});
+
+test('buildTreadDXF / buildAllTreadsDXF: null for missing/degenerate input', () => {
+  assert.equal(buildTreadDXF(null), null);
+  assert.equal(buildTreadDXF({ outline: [] }), null);
+  assert.equal(buildTreadDXF({ outline: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }), null);
+  assert.equal(buildAllTreadsDXF([]), null);
+  assert.equal(buildAllTreadsDXF(null), null);
 });
