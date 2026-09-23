@@ -128,6 +128,7 @@ export function createUI({
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');
   lockable(build.add(config, 'riserBoardThickness', 10, 50, 1).name('Grubość podstopnia [mm]'), 'riserBoardThickness');
+  lockable(build.add(config, 'riserTopOverlapMm', 0, 30, 1).name('Zakładka podstopnia w stopień [mm]'), 'riserTopOverlapMm');
 
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');

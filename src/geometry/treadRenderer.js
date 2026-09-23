@@ -4,12 +4,32 @@
 // triangles.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildPrism, planToWorld } from './geometryUtils.js';
 import { traceability } from '../scene/traceability.js';
 
+// No true CSG (see stringerRenderer.js's housing-indicator comment for the same rule-11
+// rationale — this project adds no boolean-geometry dependency without a concrete need): a
+// tread with a notch (TreadModel.notch, treadSolver.js buildNotch) is instead built as TWO plain
+// prisms glued together — a full-footprint slab ABOVE the notch's own height, and a
+// reduced-footprint (notch-receded) slab BELOW it — which is exact for this specific shape (a
+// straight-sided rabbet along one edge, never a curved or undercut groove), unlike the housing
+// indicator's own deliberate approximation.
 export function buildTreadMesh(treadModel) {
   const pts2D = treadModel.outline.map((p) => ({ u: p.x, v: p.y }));
-  return buildPrism(pts2D, (u, v) => planToWorld(u, v, treadModel.elevation.bottom), new THREE.Vector3(0, 1, 0), treadModel.thickness);
+  const up = new THREE.Vector3(0, 1, 0);
+  if (!treadModel.notch) {
+    return buildPrism(pts2D, (u, v) => planToWorld(u, v, treadModel.elevation.bottom), up, treadModel.thickness);
+  }
+  const { depthMm, outline: notchOutline } = treadModel.notch;
+  const upperSlab = buildPrism(pts2D, (u, v) => planToWorld(u, v, treadModel.elevation.bottom + depthMm), up, treadModel.thickness - depthMm);
+  const lowerSlab = buildPrism(
+    notchOutline.map((p) => ({ u: p.x, v: p.y })),
+    (u, v) => planToWorld(u, v, treadModel.elevation.bottom),
+    up,
+    depthMm
+  );
+  return mergeGeometries([upperSlab, lowerSlab]);
 }
 
 export function renderTreads(treadModels, material) {

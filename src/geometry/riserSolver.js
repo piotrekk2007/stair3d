@@ -155,7 +155,7 @@ function buildStraightOrLandingPanel(tread, finalEdge) {
  * @returns {RiserModel}
  */
 export function buildRiserModel(tread, config) {
-  const { riserHeight, treadThickness, riserBoardThickness } = config;
+  const { riserHeight, treadThickness, riserBoardThickness, riserTopOverlapMm } = config;
   const isLanding = tread.type === 'landing';
   // The riser board's own physical thickness is ALWAYS config.riserBoardThickness — a real,
   // independently configured material dimension (a sheet of plywood, an MDF board), never
@@ -172,7 +172,12 @@ export function buildRiserModel(tread, config) {
   // Góra podstopnia i-tego = spód i-tego stopnia (patrz treadSolver.js: spód = (i+1)*h -
   // grubość_stopnia); cała bryła obniżona o treadThickness względem teoretycznej linii
   // podziału (index*riserHeight), bo góra podstopnia dochodzi do SPODU wyższego stopnia.
-  const top = tread.index * riserHeight + riserHeight - treadThickness;
+  //
+  // + riserTopOverlapMm: podstopień celowo wchodzi TROCHĘ WYŻEJ niż ten teoretyczny spód, w
+  // podfrezowany rowek w spodzie stopnia nad nim (treadSolver.js buildNotch/TreadModel.notch) —
+  // zakładka zamiast styku na styk, żeby przy pracy drewna nie powstał prześwit. Ten sam config
+  // (riserTopOverlapMm) steruje obiema stronami złącza, więc zawsze się zgadzają.
+  const top = tread.index * riserHeight + riserHeight - treadThickness + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0);
   const bottom = tread.index * riserHeight - treadThickness;
 
   const frontEdge = buildFrontEdgeInfo(tread, config);

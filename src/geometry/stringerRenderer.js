@@ -89,7 +89,7 @@ function buildHousingIndicatorMeshes(segment, geo, side, material) {
       elementType: 'stringer',
       stepId: `step-${housing.treadIndex}`,
       stringerId: side,
-      geometrySourceId: `stringer:${side}:${geo.segmentId}:housing-${housing.treadIndex}`,
+      geometrySourceId: `stringer:${side}:${geo.segmentId}:housing-${housing.kind === 'riser' ? 'riser-' : ''}${housing.treadIndex}`,
     });
     return mesh;
   });

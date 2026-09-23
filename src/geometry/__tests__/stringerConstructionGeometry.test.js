@@ -186,6 +186,46 @@ test('B3. housed: a housing spans UP from bearingElevation (the tread\'s own bot
   }
 });
 
+// Regression/feature: a housed wanga must also carry a real gniazdo (housing) for the RISER
+// board, not just for the tread — reported: the profile editor drew a proper housing rectangle
+// for the tread but only a thin line for the riser. Each tread-owning bearing must produce BOTH
+// a 'tread' and a 'riser' housing, kept apart by `kind` (so every other consumer — profile
+// editor, DXF export, the 3D indicator mesh — can tell them apart without a parallel array).
+test('housed + riser boards: every ownsStart bearing also gets a kind:"riser" housing, positioned and elevated per riserSolver.js\'s own RiserModel formula', () => {
+  const { config, planLayout } = build({
+    ...REALISTIC_STRAIGHT,
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
+    hasRiserBoards: true,
+    riserBoardThickness: 22,
+    riserTopOverlapMm: 12,
+  });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  const bearings = model.segments[0].treadBearings;
+
+  const treadHousings = geo.housings.filter((h) => h.kind === 'tread');
+  const riserHousings = geo.housings.filter((h) => h.kind === 'riser');
+  assert.equal(treadHousings.length, bearings.length);
+  assert.equal(riserHousings.length, bearings.filter((b) => b.ownsStart).length);
+
+  for (const h of riserHousings) {
+    const b = bearings.find((bb) => bb.treadIndex === h.treadIndex);
+    assert.equal(h.uStart, b.finalUStart - config.riserBoardThickness);
+    assert.equal(h.uEnd, b.finalUStart);
+    assert.equal(h.bottomV, b.bearingElevation - config.riserHeight);
+    assert.equal(h.topV, b.bearingElevation + config.riserTopOverlapMm);
+  }
+});
+
+test('housed, no riser boards: no riser housings are produced (kind:"riser" absent entirely)', () => {
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', hasRiserBoards: false });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const [geo] = buildStringerConstructionGeometry(model, config);
+  assert.equal(geo.housings.filter((h) => h.kind === 'riser').length, 0);
+  assert.ok(geo.housings.every((h) => h.kind === 'tread'));
+});
+
 // --- C/D. L-winder, both construction types ----------------------------------------------------
 
 for (const [label, constructionType] of [

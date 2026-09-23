@@ -177,7 +177,8 @@ export function renderProfileEditorSVG(views, options) {
     if (layers.housings !== false) {
       for (const h of view.housings || []) {
         const a = toSvg(seg, h.uStart, h.topV);
-        g.push(`<rect class="pe-housing" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, h.uEnd - h.uStart))}" height="${fmt(h.topV - h.bottomV)}"/>`);
+        const cls = h.kind === 'riser' ? 'pe-housing pe-housing-riser' : 'pe-housing';
+        g.push(`<rect class="${cls}" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, h.uEnd - h.uStart))}" height="${fmt(h.topV - h.bottomV)}"/>`);
       }
     }
 

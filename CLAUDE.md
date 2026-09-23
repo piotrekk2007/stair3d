@@ -793,6 +793,77 @@ correct title incl. the winder-only blank line, `null` for missing/degenerate in
 nothing to draw). Browser-verified: exporting a straight tread and the whole-stair sheet from a
 live session both produce well-formed DXF files with the expected titles.
 
+## Riser gets a real gniazdo in the wanga, plus a matching notch in the tread above it
+
+Reported against a screenshot of the profile editor: a housed ("wpuszczana") wanga already showed
+a proper red housing rectangle for a tread, but the riser directly below it was drawn only as a
+thin line — no real gniazdo. The user also flagged a structural point: a riser board should
+overlap ~1cm UP into the underside of the tread directly above it (a lap joint, not a flush butt
+joint) so wood movement can never open a light gap ("prześwit") at that seam — which in turn
+requires the tread itself to have a matching groove ("podfrezowanie") routed into its own
+underside to receive that overlap.
+
+- **New config field**: `config.riserTopOverlapMm` (10mm default) — how far the riser's own top
+  edge reaches up into the tread above it. `0` = flush butt joint (the old behaviour). Only has an
+  effect when `hasRiserBoards` is on. UI: "Zakładka podstopnia w stopień [mm]" slider next to the
+  existing "Grubość podstopnia" one (`ui.js`).
+- **`riserSolver.js`**: `RiserModel.elevation.top` gains `+ riserTopOverlapMm` on top of its
+  existing formula (`bearingElevation`, the tread's own bottom) — `elevation.bottom` (the previous
+  tread's own bottom, unchanged: a riser still spans one full `riserHeight`) is untouched. The SAME
+  config field drives both sides of this joint (here and the tread notch below), so they can never
+  drift apart.
+- **`treadSolver.js`**'s new `TreadModel.notch` (`{depthMm, outline} | null`, `buildNotch()`): a
+  groove cut into a tread's own UNDERSIDE, right behind its structural front edge — `depthMm` tall
+  (from the tread's own bottom) matching `riserTopOverlapMm`, `riserBoardThickness` wide (along the
+  going direction). Reuses `shiftFrontEdge()` with a NEGATIVE distance — its own doc comment already
+  anticipated exactly this case ("cofanie wangi pod podstopień") — the same recede-and-reproject-
+  the-corners math `applyNosing()` uses to extend the front edge, just backward instead of forward.
+  Starts at the tread's own STRUCTURAL front edge, never the nosed one: the nosing overhangs freely
+  past the riser with nothing under it, so that portion must stay solid. `null` whenever there is
+  nothing to notch for: no riser boards, a landing (empty `innerChain`, same reason nosing is
+  already zeroed there), or `riserTopOverlapMm`/`riserBoardThickness` is 0.
+- **`treadRenderer.js`**: a notched tread is built as TWO plain prisms glued together — a
+  full-footprint slab ABOVE the notch height, and a reduced-footprint (notch-receded outline) slab
+  BELOW it — merged via `mergeGeometries()` from `three/examples/jsm/utils/BufferGeometryUtils.js`
+  (already ships with the installed `three` package — no new dependency, per RULES.md rule 11, same
+  rationale already used for not adding true CSG elsewhere in this codebase). Exact, not
+  approximate, for this specific shape (a straight-sided rabbet along one edge, never a curved or
+  undercut groove). An un-notched tread renders exactly as before (single prism, untouched code
+  path).
+- **`stringerConstructionGeometry.js`**'s new `buildRiserHousings(effective, config)`: the wanga's
+  own gniazdo for the riser board, alongside the existing tread housing — both now live in ONE
+  combined `housings[]` array, each tagged `kind: 'tread'` or `kind: 'riser'` (`buildHousings()`
+  gained the `kind: 'tread'` tag) rather than a parallel array, so every existing consumer needs
+  only a `kind` check, never a second field to thread through. Positioned from the tread's own RAW
+  structural front corner (`b.finalUStart`, never the `riserRecess`-shifted `uStart` — an unrelated,
+  CUT-notch-only ledge concern), spanning backward by `riserBoardThickness`; elevation mirrors
+  `RiserModel.elevation` exactly (`topV = bearingElevation + riserTopOverlapMm`, `bottomV =
+  bearingElevation - riserHeight`). Guarded by `ownsStart` and `hasRiserBoards`/
+  `riserBoardThickness > 0`, same pattern as every other per-tread extension in this file. Only
+  produced for CLOSED (housed) construction — a CUT (overlay) board never has housings of any kind.
+- **`stringerRenderer.js`**: `buildHousingIndicatorMeshes()`'s `geometrySourceId` gained a
+  `kind`-aware suffix (`housing-riser-N` vs `housing-N`) — without it, a riser housing sharing the
+  same `treadIndex` as its tread's own housing would collide on the same id.
+- **Profile editor ("Profil wangi")**: `profileEditorRenderer.js` draws a riser housing with an
+  extra `.pe-housing-riser` class (greenish, echoing the colour the user's own screenshot used to
+  mark it up) alongside the existing red `.pe-housing` tread rectangles — same "wręgi (z noskiem)"
+  toggle controls both, no new checkbox needed. `stringerProfileView.js` needed no change (its
+  `housings: g.housings || []` passthrough is already generic).
+- **DXF export**: `housingEntities()` labels a riser housing "wpust podstopnia gł. Xmm" instead of
+  the plain tread "wpust gł. Xmm" — the only DXF change needed, since the geometry itself is just
+  another entry in the same `housings[]` array.
+
+Tests: `geometry/__tests__/riserModel.test.js` (`elevation.top` extended by exactly
+`riserTopOverlapMm`, `elevation.bottom` unaffected), `geometry/__tests__/treadModel.test.js`
+(`notch` is `null` with no risers/on a landing/with overlap or thickness at 0; a real notch's depth
+matches `riserTopOverlapMm` and its outline differs from the visible outline only at the front
+corners), `geometry/__tests__/stringerConstructionGeometry.test.js` (every `ownsStart` bearing gets
+a `kind:'riser'` housing at the exact position/elevation `riserSolver.js` itself uses; confirmed to
+fail — a missing riser housing entirely — without the fix; a stringer with risers off produces no
+`kind:'riser'` housings at all). Browser-verified: enabling "Podstopnie" shows a green riser
+gniazdo next to every red tread housing in the profile editor; the 3D view renders the notched
+tread mesh with no console errors and no visible artifacts at any of the standard camera views.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

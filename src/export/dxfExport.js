@@ -148,7 +148,8 @@ function housingEntities(geometry, offsetU) {
       { u: h.uStart + offsetU, v: h.topV },
     ];
     for (let i = 0; i < 4; i++) out.push(lineEntity(corners[i], corners[(i + 1) % 4], 'HOUSINGS'));
-    out.push(textEntity(`wpust gl. ${Math.round(h.depth)} mm`, { u: corners[0].u, v: corners[0].v - 15 }, 12, 'HOUSINGS'));
+    const label = h.kind === 'riser' ? 'wpust podstopnia' : 'wpust';
+    out.push(textEntity(`${label} gl. ${Math.round(h.depth)} mm`, { u: corners[0].u, v: corners[0].v - 15 }, 12, 'HOUSINGS'));
   }
   return out;
 }

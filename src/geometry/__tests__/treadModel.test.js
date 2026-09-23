@@ -86,3 +86,30 @@ test('landing tread has no nosing applied to its outline (outline == raw outline
   const model = buildTreadModel(landing, config);
   assert.deepEqual(model.outline, landing.outline);
 });
+
+// TreadModel.notch: a groove cut into a tread's own underside so the riser below it can overlap
+// riserTopOverlapMm UP into it (see riserSolver.js RiserModel.elevation.top) without a wood-
+// movement light gap. Only exists when there is something to notch for.
+test('notch is null with no riser boards, on a landing, and with overlap/riser-thickness at 0', () => {
+  const noRisers = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: false });
+  assert.equal(buildTreadModel(noRisers.planLayout.treads[1], noRisers.config).notch, null);
+
+  const landingCase = build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 2, treadsLegB: 2, hasRiserBoards: true });
+  const landing = landingCase.planLayout.treads.find((t) => t.type === 'landing');
+  assert.equal(buildTreadModel(landing, landingCase.config).notch, null);
+
+  const zeroOverlap = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: true, riserTopOverlapMm: 0 });
+  assert.equal(buildTreadModel(zeroOverlap.planLayout.treads[1], zeroOverlap.config).notch, null);
+
+  const zeroThickness = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: true, riserBoardThickness: 0 });
+  assert.equal(buildTreadModel(zeroThickness.planLayout.treads[1], zeroThickness.config).notch, null);
+});
+
+test('notch depth matches riserTopOverlapMm and its outline recedes the front edge by riserBoardThickness', () => {
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: true, riserTopOverlapMm: 12, riserBoardThickness: 22 });
+  const model = buildTreadModel(planLayout.treads[1], config);
+  assert.ok(model.notch, 'expected a notch on an ordinary tread with risers enabled');
+  assert.equal(model.notch.depthMm, 12);
+  assert.equal(model.notch.outline.length, model.outline.length, 'notch outline replaces only the front corners, never adds/removes points');
+  assert.notDeepEqual(model.notch.outline, model.outline, 'the notch outline must actually differ from the visible (nosed) outline');
+});

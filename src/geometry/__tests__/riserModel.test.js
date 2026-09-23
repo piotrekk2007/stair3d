@@ -120,6 +120,18 @@ test('changing nosing never changes riser board thickness, and changing riserBoa
   assert.equal(modelsThick[0].thickness, 20, 'riser board thickness must not depend on nosing');
 });
 
+// Regression: the riser deliberately overlaps UP into the tread above it by riserTopOverlapMm
+// (a real physical lap joint, not a butt joint, so wood movement can never open a light gap) —
+// see treadSolver.js buildNotch() for the matching groove cut into that tread's own underside.
+test('elevation.top is extended by riserTopOverlapMm; elevation.bottom is unaffected', () => {
+  const base = build({ stairType: 'straight', treadsLegA: 3, riserTopOverlapMm: 0 });
+  const overlapped = build({ stairType: 'straight', treadsLegA: 3, riserTopOverlapMm: 12 });
+  const modelBase = buildRiserModel(base.planLayout.treads[1], base.config);
+  const modelOverlapped = buildRiserModel(overlapped.planLayout.treads[1], overlapped.config);
+  assert.equal(modelOverlapped.elevation.top, modelBase.elevation.top + 12);
+  assert.equal(modelOverlapped.elevation.bottom, modelBase.elevation.bottom);
+});
+
 // --- Regression tests for the manual-edit trace finding: RiserModel used to silently ignore
 // edgeOverrides entirely (it read tread.innerChain/outerChain or tread.winderInfo.frontEdge —
 // both NOMINAL, never touched by an edit) — see riserSolver.js's module header and

@@ -323,6 +323,7 @@ function buildHousings(effective, config) {
   const depth = housingDepthFor(config.stringerThickness);
   const nosing = config.nosing > 0 ? config.nosing : 0;
   return effective.map((b) => ({
+    kind: 'tread',
     treadIndex: b.treadIndex,
     uStart: b.ownsStart ? b.uStart - (b.riserRecess || 0) - nosing : b.uStart,
     uEnd: b.uEnd,
@@ -330,6 +331,39 @@ function buildHousings(effective, config) {
     bottomV: b.bearingElevation,
     depth,
   }));
+}
+
+// A wpuszczana (closed) wanga must also have a real gniazdo (housing) for the RISER board, not
+// just for the tread — a riser is a physical board end sliding into the same face exactly like a
+// tread is (see the user's own report: the profile editor showed the tread's housing correctly
+// but only a thin line for the riser). Positioned from the tread's own RAW structural front corner
+// (`b.finalUStart`, never `b.uStart` — which already carries `effectiveBearings()`'s riserRecess
+// ledge-shift meant for a CUT board's notch shoulder, an unrelated concern for a housed board),
+// spanning backward by `riserBoardThickness` (the riser sits directly behind/below the tread it
+// supports, in the going direction). Elevation matches riserSolver.js's own `RiserModel.elevation`
+// formula exactly (`bearingElevation` = a tread's own bottom, by the same convention documented on
+// buildHousings() above): `topV = bearingElevation + riserTopOverlapMm` (the riser's deliberate
+// overlap up into the tread's own notch, see treadSolver.js buildNotch()), `bottomV =
+// bearingElevation - riserHeight` (the previous tread's own bottom — a riser spans one full
+// riserHeight). Guarded by `ownsStart` for the same reason every other per-tread extension here is:
+// a bearing split across a lap joint only extends on the copy owning the tread's true front corner.
+function buildRiserHousings(effective, config) {
+  if (!config.hasRiserBoards) return [];
+  const riserThickness = config.riserBoardThickness > 0 ? config.riserBoardThickness : 0;
+  if (!(riserThickness > 0)) return [];
+  const depth = housingDepthFor(config.stringerThickness);
+  const overlap = config.riserTopOverlapMm > 0 ? config.riserTopOverlapMm : 0;
+  return effective
+    .filter((b) => b.ownsStart)
+    .map((b) => ({
+      kind: 'riser',
+      treadIndex: b.treadIndex,
+      uStart: b.finalUStart - riserThickness,
+      uEnd: b.finalUStart,
+      topV: b.bearingElevation + overlap,
+      bottomV: b.bearingElevation - config.riserHeight,
+      depth,
+    }));
 }
 
 // --- Diagnostics -------------------------------------------------------------------------------
@@ -524,7 +558,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
     } else {
       outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
-      housings = buildHousings(effective, config);
+      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config)];
       diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
     }
 

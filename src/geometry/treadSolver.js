@@ -46,6 +46,13 @@ import { recessedEdge, housingRecessMm } from './edgeOverrides.js';
  * @property {object|null} winderInfo  Passthrough of tread.winderInfo (planLayout.js) — null
  *   for straight/landing treads.
  * @property {{x:number,y:number}[]} outline  FINAL, nosed footprint — the real as-built shape.
+ * @property {{depthMm:number, outline:{x:number,y:number}[]}|null} notch  A groove cut into THIS
+ *   tread's own UNDERSIDE, right behind its structural front edge, that the riser directly BELOW
+ *   it slots its own overlap (config.riserTopOverlapMm) into — see buildNotch(). `outline` is
+ *   this tread's own outline with its front edge receded by `config.riserBoardThickness` (the
+ *   groove's back boundary); `depthMm` is how far up from the tread's own bottom it's routed.
+ *   `null` whenever there is nothing to notch (no riser boards, a landing, or the overlap/riser
+ *   thickness is 0).
  */
 
 // Exported — THE canonical "are these two [inner,outer] edges the same" comparison. Used by
@@ -114,6 +121,41 @@ function applyNosing(tread, nosing) {
   });
 }
 
+// The riser below this tread is deliberately taller than its own structural gap by
+// `riserTopOverlapMm` (config.js, riserSolver.js RiserModel.elevation.top) — it overlaps UP into
+// this tread's own underside instead of butting flush, so wood movement can never open a light
+// gap at the joint. For that overlap to have somewhere to GO, this tread needs a matching groove
+// (a rabbet, "podfrezowanie") cut into its own underside, right where the riser's own edge sits:
+// `riserTopOverlapMm` deep, `riserBoardThickness` wide (along the going direction), starting at
+// the tread's own STRUCTURAL front edge (never the nosed one — the nosing overhangs freely past
+// the riser with nothing under it, so it must stay solid, full-thickness material; only the
+// portion actually above the riser needs to be hollow).
+//
+// Reuses shiftFrontEdge() with a NEGATIVE distance — its own doc comment already anticipates
+// exactly this ("ujemne = do wewnątrz/do przodu, jak przy cofaniu wangi pod podstopień") — the
+// same recede-the-front-edge-and-reproject-the-sides math applyNosing() above uses to extend it,
+// just in the opposite direction, to get the notch's own BACK boundary (the groove spans from
+// there forward to the tread's own structural front edge).
+//
+// Never for a landing: its innerChain is empty by design (nominalEdgesOf's own doc comment) so
+// shiftFrontEdge (which needs innerChain[1]) has nothing to recede along — the same reason nosing
+// itself is already zeroed for a landing.
+function buildNotch(tread, config) {
+  const { hasRiserBoards, riserBoardThickness, riserTopOverlapMm } = config;
+  if (!hasRiserBoards || tread.type === 'landing') return null;
+  if (!(riserTopOverlapMm > 0) || !(riserBoardThickness > 0)) return null;
+  if (!(tread.innerChain?.length > 1) || !(tread.outerChain?.length > 1)) return null;
+
+  const [inner0, outer0] = tread.frontEdge;
+  const { newInner0, newOuter0 } = shiftFrontEdge(tread, -riserBoardThickness);
+  const outline = tread.outline.map((p) => {
+    if (pointsEqual(p, inner0)) return newInner0;
+    if (pointsEqual(p, outer0)) return newOuter0;
+    return p;
+  });
+  return { depthMm: riserTopOverlapMm, outline };
+}
+
 /**
  * @param {import('./planLayout.js').Tread} tread
  * @param {Object} config  Full staircase config, plus `riserHeight` (see buildStaircase.js)
@@ -153,6 +195,7 @@ export function buildTreadModel(tread, config) {
     winderBlank: tread.type === 'winder' ? computeWinderBlank(tread, nosing) : null,
     overhang: tread.overhang ?? null,
     outline: applyNosing(tread, effectiveNosing),
+    notch: buildNotch(tread, config),
   };
 }
 

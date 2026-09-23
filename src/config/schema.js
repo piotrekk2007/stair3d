@@ -99,6 +99,12 @@ export function createDefaultConfig() {
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia
     riserBoardThickness: 20, // mm, grubość podstopnia
+    // O ile górna krawędź podstopnia wchodzi w spód stopnia NAD nim (zakładka, nie styk na styk) —
+    // bez tego mogłyby powstać prześwity między podstopniem a stopniem przy pracy drewna. Wymaga
+    // odpowiedniego podfrezowania (rowka) w spodzie tego stopnia — patrz treadSolver.js
+    // buildNotch()/TreadModel.notch i riserSolver.js (podnosi RiserModel.elevation.top o tyle samo,
+    // żeby obie strony złącza się zgadzały). Tylko przy hasRiserBoards=true; 0 = styk na styk.
+    riserTopOverlapMm: 10, // mm, zakładka podstopnia w stopień nad nim
 
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)
     hasCornerPost: true, // czy stawiać słup konstrukcyjny na zakrętach; gdy false, wangi łączą się bezpośrednio (zakładka na styk)
