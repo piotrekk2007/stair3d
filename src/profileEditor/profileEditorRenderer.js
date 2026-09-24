@@ -161,9 +161,8 @@ export function renderProfileEditorSVG(views, options) {
         g.push(`<rect class="pe-tread" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, t.uEnd - t.uStart))}" height="${fmt(t.zTop - t.zBottom)}"/>`);
       }
       for (const r of view.risers) {
-        const a = toSvg(seg, r.u, r.zTop);
-        const b = toSvg(seg, r.u, r.zBottom);
-        g.push(`<line class="pe-riser" x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}"/>`);
+        const a = toSvg(seg, r.uStart, r.zTop);
+        g.push(`<rect class="pe-riser-box" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, r.uEnd - r.uStart))}" height="${fmt(r.zTop - r.zBottom)}"/>`);
       }
     }
 

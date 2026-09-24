@@ -163,7 +163,7 @@ function buildBearingsForWalk(walk, runs, treads, sideIdx) {
 export function buildStringerModel(planLayout, config, side) {
   const chainKey = side === 'outer' ? 'outerChain' : 'innerChain';
   const sideIdx = side === 'outer' ? 1 : 0; // frontEdge/backEdge = [innerPoint, outerPoint]
-  const { riserHeight, treadThickness, stringerThickness, nosing, hasRiserBoards } = config;
+  const { riserHeight, treadThickness, stringerThickness, riserBoardThickness, hasRiserBoards } = config;
   // The nominal depth the lower contour is generated at (minimum depth + profile offset) — the
   // segment's "width" is that board depth, one definition shared with the profile solver.
   const boardDepth = profileParamsFromConfig(config).nominalDepthMm;
@@ -188,7 +188,9 @@ export function buildStringerModel(planLayout, config, side) {
 
       const treadBearings = bearingsByRun[runIdx].map((b) => {
         const tread = planLayout.treads[b.treadIndex];
-        const riserRecess = hasRiserBoards && tread.type !== 'landing' ? nosing : 0;
+        // The wanga steps back by the riser board's own thickness (the riser stands in that gap) — NOT by
+        // the nosing, which is only an overhang measured forward from the riser face.
+        const riserRecess = hasRiserBoards && tread.type !== 'landing' && riserBoardThickness > 0 ? riserBoardThickness : 0;
         return {
           ...b,
           bearingElevation: (tread.index + 1) * riserHeight - treadThickness,

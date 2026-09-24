@@ -163,9 +163,8 @@ export function buildRiserModel(tread, config) {
   // quantity). Conflating the two here used to mean setting nosing to 0 for a flush
   // "carpeted stair" look (riser board flush with the tread, no overhang) also made the riser
   // board itself disappear — a real, reported bug (thickness must never depend on nosing).
-  // `nosing` still legitimately drives stringerSolver.js's `riserRecess` (how far a tread's
-  // OWN bearing is set back to leave room for the NEXT tread's nosing overhang) — a genuinely
-  // different quantity from this one, not touched here.
+  // stringerSolver.js's `riserRecess` (how far the wanga steps back for the riser) equals this same
+  // riserBoardThickness; nosing is only an overhang measured forward from the riser face.
   const thickness = riserBoardThickness;
   const inward = !isLanding;
 

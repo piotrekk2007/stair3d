@@ -715,3 +715,17 @@ test('notch bug fix: with riser-board recess enabled, the riser face of every no
   }
   assert.ok(foundRise, 'expected at least one rising (riser) edge in the notch profile');
 });
+
+// Regression: the wanga steps back for the riser by the riser board's own THICKNESS, whatever the
+// nosing is (nosing is only an overhang measured forward from the riser face). It used to be
+// `nosing`, so with nosing 0 a cut wanga collided with the riser and no riser showed in the profile.
+test('cut wanga: riserRecess equals riserBoardThickness, independent of nosing', () => {
+  for (const nosing of [0, 25, 40]) {
+    const { config, planLayout } = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: true, riserBoardThickness: 30, nosing });
+    const model = buildStringerModel(planLayout, config, 'outer');
+    for (const b of model.segments[0].treadBearings) assert.equal(b.riserRecess, 30, `nosing ${nosing}`);
+  }
+  const off = build({ ...REALISTIC_STRAIGHT_CUT, hasRiserBoards: false, nosing: 25 });
+  const modelOff = buildStringerModel(off.planLayout, off.config, 'outer');
+  for (const b of modelOff.segments[0].treadBearings) assert.equal(b.riserRecess, 0);
+});

@@ -1363,6 +1363,7 @@ code {
 .pe-outline { fill: rgba(140, 100, 60, 0.18); stroke: none; }
 .pe-tread { fill: #d9c49a; stroke: #a8925f; stroke-width: 1; }
 .pe-riser { stroke: #b9a77c; stroke-width: 1.5; }
+.pe-riser-box { fill: rgba(60, 140, 80, 0.25); stroke: #2f8a4d; stroke-width: 1; pointer-events: none; }
 .pe-reference { fill: none; stroke: #7d8894; stroke-width: 1.5; stroke-dasharray: 8 5; }
 .pe-envelope { fill: none; stroke: #2b9a8a; stroke-width: 1.5; stroke-dasharray: 3 4; }
 .pe-contour { fill: none; stroke: #5a3d24; stroke-width: 2.5; pointer-events: none; }

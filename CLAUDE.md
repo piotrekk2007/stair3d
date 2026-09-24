@@ -864,6 +864,22 @@ fail — a missing riser housing entirely — without the fix; a stringer with r
 gniazdo next to every red tread housing in the profile editor; the 3D view renders the notched
 tread mesh with no console errors and no visible artifacts at any of the standard camera views.
 
+## Bug fix: wanga recessed by nosing instead of riser thickness; nosing/riser missing in the profile editor
+
+Reported with two screenshots: with a cut (nakładana) wanga and risers on, a 40 mm riser was not
+visible in the profile and the wanga overlapped it in 3D; only setting nosing = 40 made the wanga
+step back (and then the nosing itself was not drawn). Root cause: `stringerSolver.js` computed
+`riserRecess = hasRiserBoards ? nosing : 0` — the wanga stepped back by the NOSING, not by the riser
+board's thickness. **Fix**: `riserRecess = riserBoardThickness` (non-landing, risers on). Nosing is
+purely an overhang measured FORWARD from the riser face (= the tread's structural front edge), the
+riser occupies `[finalUStart, finalUStart + riserBoardThickness]` behind that face. Profile editor
+(`stringerProfileView.js`/`profileEditorRenderer.js`): `treads` boxes now include the nosing on the
+front corner that owns the tread (`finalUStart - nosing`) — this replaces the earlier deliberate
+"stopnie boxes are structural only" choice — and `risers` are drawn as real rectangles
+(`.pe-riser-box`, thickness wide, `bearingElevation - riserHeight .. + riserTopOverlapMm`) instead of a
+thin line, for cut and closed boards alike. Tests: `stringerConstructionGeometry.test.js`
+("riserRecess equals riserBoardThickness, independent of nosing").
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

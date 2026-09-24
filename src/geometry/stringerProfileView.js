@@ -31,13 +31,22 @@ export function buildProfileViewModel(geometries, model, config) {
 
     const treads = bearings.map((b) => ({
       treadIndex: b.treadIndex,
-      uStart: b.finalUStart,
+      // the drawn tread includes its nosing: an overhang measured forward from the riser face
+      // (= the structural front edge), on the corner that owns the tread's true front
+      uStart: b.ownsStart && config.nosing > 0 ? b.finalUStart - config.nosing : b.finalUStart,
       uEnd: b.finalUEnd,
       zBottom: b.bearingElevation,
       zTop: b.bearingElevation + config.treadThickness,
     }));
     const risers = config.hasRiserBoards
-      ? bearings.filter((b) => b.ownsStart).map((b) => ({ treadIndex: b.treadIndex, u: b.finalUStart, zBottom: b.bearingElevation - (config.riserHeight ?? 0), zTop: b.bearingElevation }))
+      ? bearings.filter((b) => b.ownsStart).map((b) => ({
+          treadIndex: b.treadIndex,
+          u: b.finalUStart,
+          uStart: b.finalUStart,
+          uEnd: b.finalUStart + (config.riserBoardThickness > 0 ? config.riserBoardThickness : 0),
+          zBottom: b.bearingElevation - (config.riserHeight ?? 0),
+          zTop: b.bearingElevation + (config.riserTopOverlapMm > 0 ? config.riserTopOverlapMm : 0),
+        }))
       : [];
 
     // The line the lower contour must stay on the far side of: the depth reference pushed down by
