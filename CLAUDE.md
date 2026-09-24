@@ -938,6 +938,15 @@ file the preset dropdown may still show the previous preset name (the colour pic
 **Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
 Tests: `scene/__tests__/appearance.test.js`.
 
+## Balustrade (handrail + balusters) — planned, not implemented
+
+See [docs/architecture/RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md): config parameters + a list of
+sections (`side`, `fromStep`, `toStep`) -> pure `railingSolver.js` -> renderer/validation/takeoff/plan 2D. Two
+placement modes (housed wanga: balusters uniformly along the pitch line; overlay wanga: a fixed rhythm per
+tread), handrail 900 mm above the nosing line by default, 4 stages (straight flights, winders/landings,
+takeoff/cut list/plan/DXF, refinements). Consult it before touching `postSolver.js`, `manualItems.js` or the
+`PL-LEGAL-H-01` rule.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
