@@ -91,12 +91,18 @@ function toXY(p) {
 // overlap by one board thickness (a simple lap-joint equivalent) so their extrusions don't
 // leave a visible gap at the joint. See the original comment history in git for the full
 // derivation; the logic itself is unchanged, only its home moved.
-function computeOpenCornerExtensions(segments, hasCornerPost) {
+function computeOpenCornerExtensions(model, hasCornerPost) {
+  const { segments, segmentJoints = [], side } = model;
   const extendEndOf = new Set();
   const extendStartOf = new Set();
-  if (hasCornerPost) return { extendEndOf, extendStartOf };
 
   for (let i = 0; i < segments.length - 1; i++) {
+    // With corner posts on, only an INNER-side turn whose post the user removed (a lap joint there,
+    // see stringerSolver.js) has no post to hide the seam and so needs the overlap.
+    if (hasCornerPost) {
+      const joint = segmentJoints.find((j) => j.beforeSegmentId === segments[i].id);
+      if (side !== 'inner' || joint?.type !== CONNECTION_TYPES.LAP_JOINT) continue;
+    }
     const a = segments[i].referenceLine;
     const b = segments[i + 1].referenceLine;
     if (pointsEqual(a.end, b.start)) {
@@ -896,7 +902,7 @@ function blendCappedStartsToPreviousEnd(ordered) {
 }
 
 export function buildStringerConstructionGeometry(model, config) {
-  const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model.segments, config.hasCornerPost);
+  const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model, config.hasCornerPost);
   const extendInfo = new Map(
     model.segments.map((segment, segIdx) => [segment.id, { extendStart: extendStartOf.has(segIdx), extendEnd: extendEndOf.has(segIdx) }])
   );

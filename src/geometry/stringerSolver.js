@@ -17,6 +17,7 @@
 
 import { cumulativeDistances, isCollinear, projectPointOntoLine, pointsEqual } from './pathUtils.js';
 import { COLLINEAR_EPS } from './tolerances.js';
+import { isCornerPostRemoved } from './postSolver.js';
 import { profileParamsFromConfig } from './stringerProfileModel.js';
 import {
   CONSTRUCTION_TYPES,
@@ -214,7 +215,9 @@ export function buildStringerModel(planLayout, config, side) {
     for (let k = 0; k < walkSegmentIds.length - 1; k++) {
       const prev = segments.find((s) => s.id === walkSegmentIds[k]);
       segmentJoints.push({
-        type: side === 'inner' && config.hasCornerPost ? CONNECTION_TYPES.CORNER_POST : CONNECTION_TYPES.LAP_JOINT,
+        // A corner post the user removed no longer interrupts the board: that turn's two boards
+        // meet on a lap joint (and are solved as one continuous profile), like with no posts at all.
+        type: side === 'inner' && config.hasCornerPost && !isCornerPostRemoved(planLayout, config, prev.referenceLine.end) ? CONNECTION_TYPES.CORNER_POST : CONNECTION_TYPES.LAP_JOINT,
         position: prev.referenceLine.end,
         beforeSegmentId: walkSegmentIds[k],
         afterSegmentId: walkSegmentIds[k + 1],
@@ -236,6 +239,7 @@ export function buildStringerModel(planLayout, config, side) {
   const intermediateSupports = [];
   if (side === 'inner' && config.hasCornerPost) {
     for (const turn of planLayout.turns) {
+      if (isCornerPostRemoved(planLayout, config, turn.innerCorner)) continue;
       intermediateSupports.push({ type: CONNECTION_TYPES.CORNER_POST, position: turn.innerCorner });
     }
   }

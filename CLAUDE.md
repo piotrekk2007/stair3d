@@ -311,9 +311,13 @@ posts that exist (what is rendered, priced, validated); `buildAllPostModels()` a
 "Przywróć słup" in the Inspektor. Editing lives in the Inspektor's post view (`data-post-edit`/`data-post-action`,
 delegated in `main.js` `applyPostEdit`) and only changes the config, then the normal `rebuild()` + undo entry. Saved
 as the optional top-level `postOverrides` in the project file (no schema bump — older files simply lack it).
-**Limitation:** removing a *corner* post does not change how the stringers meet there (the inner boards stay
-post-jointed); use the global "Słup konstrukcyjny na zakręcie" switch for that. Tests:
-`geometry/__tests__/postOverrides.test.js`.
+Removing a *corner* post also changes how the inner wanga meets there: that turn's two boards become a
+`LAP_JOINT` (solved as one continuous profile, with the postless overlap extension), exactly as with the global
+"Słup konstrukcyjny na zakręcie" switched off — but only for that turn (`postSolver.js` `cornerPostIdAt`/
+`isCornerPostRemoved` give one shared post-id numbering; `stringerSolver.js` picks the joint type from it and
+skips the removed post in `intermediateSupports`; `stringerConstructionGeometry.js` `computeOpenCornerExtensions`
+now reads the real joint types instead of the global flag — with posts on, only an inner lap joint extends).
+Tests: `geometry/__tests__/postOverrides.test.js`.
 
 ## Per-side stringer construction type + automatic housing recess (implemented)
 

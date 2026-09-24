@@ -111,3 +111,29 @@ test('project file: post overrides round-trip at the top level, outside config; 
   assert.equal(bare.postOverrides, undefined);
   assert.deepEqual(parseProjectJSON(JSON.stringify(bare)).manualPostOverrides, {});
 });
+
+// Removing a corner post means the inner wanga is no longer interrupted there: that turn's two
+// boards meet on a lap joint (one continuous profile), exactly like with no corner posts at all —
+// and only THAT turn changes.
+test('removing a corner post turns that turn\'s inner joint into a lap joint; other turns and the outer side keep theirs', () => {
+  const patch = { turn1Type: 'winder', turn2Type: 'winder', stairType: 'U', hasCornerPost: true, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
+  const base = layout(patch);
+  const jointsOf = (l, side) => buildStringerModelsForFlight(l.planLayout, l.config)[side].segmentJoints.map((j) => j.type);
+
+  const innerBase = jointsOf(base, 'inner');
+  assert.ok(innerBase.length >= 2, 'a U stair has at least two inner joints');
+  assert.ok(innerBase.every((t) => t === 'corner-post'), `expected only corner posts, got ${innerBase}`);
+
+  const removed = layout({ ...patch, manualPostOverrides: { 'post-corner-0': { removed: true } } });
+  const innerRemoved = jointsOf(removed, 'inner');
+  assert.equal(innerRemoved.filter((t) => t === 'lap-joint').length, 1, `only the removed post's turn changes: ${innerRemoved}`);
+  assert.equal(innerRemoved.length, innerBase.length);
+  assert.deepEqual(jointsOf(removed, 'outer'), jointsOf(base, 'outer'));
+
+  const model = buildStringerModelsForFlight(removed.planLayout, removed.config).inner;
+  assert.equal(model.intermediateSupports.length, innerBase.length - 1, 'the removed post is no longer an intermediate support');
+  // the lap-jointed pair now gets the overlap extension a post-less corner has
+  const [g0] = buildStringerConstructionGeometry(model, removed.config);
+  const [h0] = buildStringerConstructionGeometry(buildStringerModelsForFlight(base.planLayout, base.config).inner, base.config);
+  assert.ok(g0.ends.end.u > h0.ends.end.u, 'first board runs on into the joint once its post is gone');
+});

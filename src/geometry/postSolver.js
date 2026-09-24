@@ -57,6 +57,23 @@ export function sanitizePostOverrides(raw) {
   return out;
 }
 
+/**
+ * The id of the corner post standing at `point` (a turn's inner corner), or null — the SAME
+ * numbering buildAllPostModels() uses (`post-corner-<turn index>`, the first turn owning a corner
+ * when a merged landing gives two turns the same one). One shared answer, so the stringer solver
+ * and the post list can never disagree about which post is meant.
+ */
+export function cornerPostIdAt(planLayout, point) {
+  const i = planLayout.turns.findIndex((turn) => Math.hypot(turn.innerCorner.x - point.x, turn.innerCorner.y - point.y) < 1);
+  return i < 0 ? null : `post-corner-${i}`;
+}
+
+/** True when a corner post is switched on globally but the user removed this particular one. */
+export function isCornerPostRemoved(planLayout, config, point) {
+  const id = cornerPostIdAt(planLayout, point);
+  return id !== null && sanitizePostOverrides(config.manualPostOverrides)[id]?.removed === true;
+}
+
 function applyPostOverrides(models, rawOverrides) {
   const overrides = sanitizePostOverrides(rawOverrides);
   return models.map((m) => {
