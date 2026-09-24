@@ -165,6 +165,20 @@ function bearingEntities(segment, offsetU) {
   return out;
 }
 
+// A board's own ERROR/WARNING findings (StringerSegmentConstructionGeometry.diagnostics) are stated in
+// its title block — one line per rule with a count — so a flagged board is never sent to the
+// workshop looking clean. Nothing is hidden or waived here; INFO is left out as noise.
+function diagnosticLines(geometry) {
+  const byRule = new Map();
+  for (const d of geometry.diagnostics || []) {
+    if (d.severity !== 'ERROR' && d.severity !== 'WARNING') continue;
+    const key = `${d.severity} ${d.ruleId}`;
+    byRule.set(key, (byRule.get(key) || 0) + 1);
+  }
+  if (byRule.size === 0) return [];
+  return ['UWAGA: deska ma nierozwiazane uwagi walidacji - sprawdz zakladke Walidacja', ...[...byRule].map(([key, n]) => `  ${key.replace('ERROR', 'BLAD').replace('WARNING', 'OSTRZEZENIE')}${n > 1 ? ` (x${n})` : ''}`)];
+}
+
 function titleLines(geometry, config) {
   const typeLabel = CONSTRUCTION_TYPE_LABELS_PL[geometry.constructionType] || geometry.constructionType;
   return [
@@ -172,6 +186,7 @@ function titleLines(geometry, config) {
     `Typ: ${typeLabel}`,
     geometry.localDepthMm != null ? `Glebokosc lokalna min.: ${Math.round(geometry.localDepthMm)} mm` : null,
     config?.stringerThickness ? `Grubosc materialu: ${config.stringerThickness} mm` : null,
+    ...diagnosticLines(geometry),
     'Skala 1:1 - wszystkie wymiary w mm',
   ].filter(Boolean);
 }

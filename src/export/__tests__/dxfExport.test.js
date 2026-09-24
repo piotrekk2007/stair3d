@@ -262,3 +262,24 @@ test('buildTreadDXF: the underside groove for the riser overlap is drawn on its 
   assert.ok(!buildTreadDXF(noRisers.find((t) => t.type === 'straight')).includes('NOTCH\n1'));
   assert.ok(!buildTreadDXF(noRisers.find((t) => t.type === 'straight')).includes('rowek'));
 });
+
+// A board with ERROR/WARNING findings must say so in its own DXF title block, never look clean.
+test('buildStringerBoardDXF: findings on the board are stated in its title block; a clean board has none', () => {
+  const { geometries, model, config } = build({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
+  const clean = buildStringerBoardDXF({ ...geometries[0], diagnostics: [] }, { segment: model.segments[0], config });
+  assert.ok(!clean.includes('UWAGA'));
+
+  const flagged = {
+    ...geometries[0],
+    diagnostics: [
+      { ruleId: 'STRINGER-MIN-DEPTH', severity: 'ERROR' },
+      { ruleId: 'STRINGER-MIN-DEPTH', severity: 'ERROR' },
+      { ruleId: 'STRINGER-FILLET-CLAMPED', severity: 'INFO' },
+    ],
+  };
+  const dxf = buildStringerBoardDXF(flagged, { segment: model.segments[0], config });
+  assert.ok(dxf.includes('UWAGA: deska ma nierozwiazane uwagi'));
+  assert.ok(dxf.includes('BLAD STRINGER-MIN-DEPTH (x2)'));
+  assert.ok(!dxf.includes('FILLET-CLAMPED'), 'INFO findings are not stated');
+  assert.ok(buildStringerAllBoardsDXF([flagged], { model, config }).includes('BLAD STRINGER-MIN-DEPTH (x2)'));
+});

@@ -891,6 +891,15 @@ groove (no risers, landing, zero overlap) = nothing drawn. A tread's 3D mesh is 
 only; orientation-independent flat-face areas — the prism helper's winding is not consistent enough
 for a signed-volume check). Tests: `export/__tests__/dxfExport.test.js`.
 
+## Stringer DXF states the board's own validation findings
+
+Closes the old caveat that a `STRINGER-MIN-DEPTH`/`-CONTOUR-SELF-INTERSECTION` finding was not called
+out in the board's DXF. `dxfExport.js`'s title block (`titleLines`, single board and all-boards sheet)
+now adds, from `StringerSegmentConstructionGeometry.diagnostics`, an "UWAGA: deska ma nierozwiazane
+uwagi walidacji" line plus one "BLAD/OSTRZEZENIE <ruleId> (xN)" line per rule. INFO is omitted; nothing
+is hidden or waived (waivers live in the takeoff gate, not here). A clean board is unchanged. Test:
+`export/__tests__/dxfExport.test.js`.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
