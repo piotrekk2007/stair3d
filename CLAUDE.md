@@ -949,7 +949,11 @@ takeoff/cut list/plan/DXF, refinements). **Stage 1 is done** (straight flights, 
 `geometry/railingSolver.js` (`buildRailingModel`, `sanitizeRailingSections`, `HANDRAIL_PRESETS`), `railingRenderer.js`
 (merged handrail/balusters meshes + new end posts, group `Railing`, traceability `elementType: 'railing'`),
 `buildStaircase.js` returns `railingModel`, the "Balustrada" folder + sections table in `ui.js`, colour `railing` in
-`scene/appearance.js`, HUD layer, and `RAILING-SECTION-INVALID` (WARNING) through `takeoff/validationGate.js`. Not yet:
+`scene/appearance.js`, HUD layer, and `RAILING-SECTION-INVALID` (WARNING) through `takeoff/validationGate.js`. The balustrade's new end posts are ordinary `PostModel`s (`kind: 'railing'`, merged into `allPostModels`/`postModels`
+by `buildStaircase.js`, rendered by `postRenderer.js`, drawn as markers in the plan 2D) so they are selectable and editable
+in the Inspektor like any post — plus a per-post thickness `sizeMm` (railing posts only, `postSolver.js`
+`sanitizePostOverrides`/`applyPostOverrides`), defaults `config.railingPostSizeMm`/`railingPostTopAboveHandrailMm`.
+Not yet:
 plan-2D clicking of section ends, takeoff/cut list/DXF, turns/landings, PL-LEGAL-H-01 diagnostics, bent handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.

@@ -27,6 +27,7 @@
 //    handrail is a polyline of straight pieces (no bent handrail, no mitred joints — later stage).
 
 import { rotate90CW } from './planLayout.js';
+import { applyPostOverrides } from './postSolver.js';
 import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js';
 import { valueAtU } from './polylineProfile.js';
 import { curveToPolyline } from './profileCurve.js';
@@ -189,18 +190,28 @@ function buildSection(section, ctx) {
 
   // --- end posts: reuse an existing post standing at the section end, otherwise add one
   const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
-  const nearExisting = (p) => (postModels || []).some((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance);
+  const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;
   const stairDepth = config.minimumStringerDepthMm || 0;
+  // Half of the post width at each end of the handrail (what the baluster spacing must leave free): a reused
+  // structural post counts with its own size, a new one with its (possibly hand-edited) size, a removed one with 0.
+  const endHalf = { start: 0, end: 0 };
+  const nominalPosts = [];
   [['start', path[0]], ['end', path[path.length - 1]]].forEach(([which, p]) => {
-    if (nearExisting(p)) return;
-    base.posts.push({
+    const existing = existingNear(p);
+    if (existing) {
+      endHalf[which] = existing.size / 2;
+      return;
+    }
+    nominalPosts.push({
       postId: `railing-post-${section.id}-${which}`,
       kind: 'railing',
       position: { x: p.x, y: p.y },
-      elevation: { bottom: Math.max(0, p.z - stairDepth), top: railTop(p.z) },
-      size: config.postSize,
+      elevation: { bottom: Math.max(0, p.z - stairDepth), top: railTop(p.z) + (config.railingPostTopAboveHandrailMm || 0) },
+      size: config.railingPostSizeMm,
     });
   });
+  base.posts = applyPostOverrides(nominalPosts, config.manualPostOverrides);
+  for (const post of base.posts) endHalf[post.postId.endsWith('-start') ? 'start' : 'end'] = post.removed ? 0 : post.size / 2;
 
   // --- balusters
   const balusters = [];
@@ -224,11 +235,11 @@ function buildSection(section, ctx) {
     const cumulative = [0];
     for (let i = 1; i < path.length; i++) cumulative.push(cumulative[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
     const total = cumulative[cumulative.length - 1];
-    const usable = total - config.postSize;
+    const usable = total - endHalf.start - endHalf.end;
     const n = usable > maxClear ? Math.ceil((usable - maxClear) / pitch) : 0;
     const gap = (usable - n * balusterSize) / (n + 1);
     for (let j = 0; j < n; j++) {
-      const s = config.postSize / 2 + gap * (j + 1) + balusterSize * j + balusterSize / 2;
+      const s = endHalf.start + gap * (j + 1) + balusterSize * j + balusterSize / 2;
       const p = pointAt(path, cumulative, s);
       const top = wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
       const zBottom = top ?? p.z + (config.stringerTopMarginMm || 0);

@@ -10,6 +10,11 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji). Etapy 
   w tym samym rytmie na każdym stopniu (k z limitu prześwitu).
 - Słupki końcowe: istniejące słupy (start/koniec, od strony wewnętrznej) są używane ponownie, inaczej powstaje nowy słupek.
 - Poprzecznie: środek grubości wangi (`railingLateralOffsetMm`, null = auto; **bez suwaka w UI**).
+- **Słupki balustrady są zwykłymi słupami (`PostModel`, `kind: 'railing'`)**: `buildStaircase.js` dokłada je do `allPostModels`/`postModels`,
+  więc rysuje je `postRenderer.js`, wchodzą do kosztorysu/DXF słupów, są zaznaczalne (3D i znacznik w planie 2D) i edytowalne w Inspektorze
+  jak każdy słup: grubość (`sizeMm`, tylko słupki balustrady), wydłużenie/skrócenie od góry i od dołu, usunięcie/przywrócenie
+  (`config.manualPostOverrides`). Domyślnie: `railingPostSizeMm` (90) i `railingPostTopAboveHandrailMm` (0). Rozstaw tralek na wandze
+  wpuszczanej uwzględnia faktyczną szerokość słupka na każdym końcu (usunięty = 0).
 - Kolor balustrady dodany do kolorów prezentacji; warstwa "Balustrada" w HUD 3D; diagnostyki solvera przechodzą przez bramkę Walidacji.
 - **Jeszcze nie:** klikanie krańców odcinka w planie 2D (etap 3), kosztorys/lista cięcia/DXF (etap 3), zakręty i podesty (etap 2),
   reguła 1100 mm i prześwit 12/20 cm jako diagnostyka (etap 3).

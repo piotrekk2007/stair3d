@@ -22,7 +22,7 @@ export function renderPosts(postModels, material) {
   for (const model of postModels) {
     const mesh = boxMeshFor(model);
     mesh.material = material;
-    mesh.name = model.kind === 'corner' ? `Post_Corner_${cornerIndex++}` : MESH_NAME_BY_KIND[model.kind];
+    mesh.name = model.kind === 'corner' ? `Post_Corner_${cornerIndex++}` : model.kind === 'railing' ? `Post_Railing_${model.postId}` : MESH_NAME_BY_KIND[model.kind];
     // Posts aren't tied to one tread (stepId: null) — a corner post sits at a turn, a newel at
     // the flight's very start/end, neither "belongs to" a single step the way a bearing does.
     mesh.userData = traceability({ elementType: 'post', geometrySourceId: `post:${model.postId}` });

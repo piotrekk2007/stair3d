@@ -119,6 +119,8 @@ export function createDefaultConfig() {
     railingBalusterShape: 'square', // 'square' | 'round'
     railingBalusterSizeMm: 30, // mm, bok kwadratu albo średnica (BWF: min. 27 kwadratowa / 35 toczona)
     railingMaxClearMm: 120, // mm, maksymalny prześwit między tralkami (PL WT § 298: 12 cm wielorodzinne / 20 cm ogólnie)
+    railingPostSizeMm: 90, // mm, przekrój (kwadrat) nowych słupków balustrady na końcach odcinków; per słupek edytowalny w Inspektorze
+    railingPostTopAboveHandrailMm: 0, // mm, o ile słupek balustrady wystaje ponad górę poręczy
     railingLateralOffsetMm: null, // mm od osi odniesienia wangi w głąb schodów; null = środek grubości wangi
 
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)

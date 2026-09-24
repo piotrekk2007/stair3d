@@ -6,7 +6,7 @@ import { buildPlanLayout } from '../planLayout.js';
 import { buildTreadModels } from '../treadSolver.js';
 import { buildStringerModelsForFlight } from '../stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../stringerConstructionGeometry.js';
-import { buildPostModels } from '../postSolver.js';
+import { buildPostModels, sanitizePostOverrides } from '../postSolver.js';
 import { buildRailingModel, sanitizeRailingSections } from '../railingSolver.js';
 
 function stair(patch = {}) {
@@ -110,8 +110,10 @@ test('housed wanga: evenly spread along the handrail, every clear opening within
   const steps = along.slice(1).map((v, i) => v - along[i]);
   for (const d of steps) assert.ok(Math.abs(d - steps[0]) < 1e-6, 'even spacing');
   assert.ok(steps[0] - config.railingBalusterSizeMm <= config.railingMaxClearMm + 1e-6);
-  assert.ok(along[0] - config.railingBalusterSizeMm / 2 - config.postSize / 2 <= config.railingMaxClearMm + 1e-6, 'gap to the start post');
-  assert.ok(dist(start, end) - along[along.length - 1] - config.railingBalusterSizeMm / 2 - config.postSize / 2 <= config.railingMaxClearMm + 1e-6, 'gap to the end post');
+  const postHalf = section.posts[0].size / 2;
+  assert.ok(Math.abs(along[0] - config.railingBalusterSizeMm / 2 - postHalf - (steps[0] - config.railingBalusterSizeMm)) < 1e-6, 'the gap to the start post equals the gap between balusters');
+  assert.ok(along[0] - config.railingBalusterSizeMm / 2 - postHalf <= config.railingMaxClearMm + 1e-6, 'gap to the start post');
+  assert.ok(dist(start, end) - along[along.length - 1] - config.railingBalusterSizeMm / 2 - postHalf <= config.railingMaxClearMm + 1e-6, 'gap to the end post');
   for (const b of bs) assert.ok(b.heightMm > 0 && b.zBottom > 0);
   const heights = bs.map((b) => b.heightMm);
   assert.ok(Math.max(...heights) - Math.min(...heights) < 5, 'parallel to the pitch line');
@@ -130,4 +132,36 @@ test('handrail length and baluster count are exposed for the takeoff', () => {
   const s = model.sections[0];
   assert.ok(s.handrail.totalLengthMm > 2000);
   assert.ok(s.balusters.length > 10);
+});
+
+test('new end posts take the configured thickness and rise railingPostTopAboveHandrailMm above the handrail top', () => {
+  const { config, model } = stair({ ...cut, railingSections: whole('outer'), railingPostSizeMm: 100, railingPostTopAboveHandrailMm: 60 });
+  const [start, end] = model.sections[0].posts;
+  assert.equal(start.size, 100);
+  const startZ = config.riserHeight; // nosing line at the front of tread 0
+  assert.ok(Math.abs(start.elevation.top - (startZ + config.railingHeightMm + 60)) < 1e-6);
+  assert.ok(Math.abs(end.elevation.top - (11 * config.riserHeight + config.railingHeightMm + 60)) < 1e-6);
+});
+
+test('per-post edits: thickness and length of a railing post, and removing it; the balusters follow the real post width', () => {
+  const id = 'railing-post-s-start';
+  const base = stair({ ...closed, railingSections: whole('outer') }).model.sections[0];
+  const edited = stair({ ...closed, railingSections: whole('outer'), manualPostOverrides: { [id]: { sizeMm: 140, topDeltaMm: 50, bottomDeltaMm: -20 } } }).model.sections[0];
+  const b = base.posts.find((p) => p.postId === id);
+  const e = edited.posts.find((p) => p.postId === id);
+  assert.equal(e.size, 140);
+  assert.equal(e.nominalSize, b.size);
+  assert.ok(Math.abs(e.elevation.top - (b.elevation.top + 50)) < 1e-6);
+  assert.ok(Math.abs(e.elevation.bottom - (b.elevation.bottom + 20)) < 1e-6);
+  assert.equal(e.overridden, true);
+  const firstGap = (section) => Math.hypot(section.balusters[0].position.x - section.handrail.pieces[0].start.x, section.balusters[0].position.y - section.handrail.pieces[0].start.y);
+  assert.ok(firstGap(edited) > firstGap(base), 'a fatter post pushes the first baluster away from the end');
+
+  const removed = stair({ ...closed, railingSections: whole('outer'), manualPostOverrides: { [id]: { removed: true } } }).model.sections[0];
+  assert.equal(removed.posts.find((p) => p.postId === id).removed, true);
+  assert.ok(firstGap(removed) < firstGap(base), 'no post at that end: the first baluster comes closer');
+});
+
+test('the thickness override is sanitised to a sane range', () => {
+  assert.deepEqual(sanitizePostOverrides({ a: { sizeMm: 10 }, b: { sizeMm: 500 }, c: { sizeMm: 80 } }), { c: { sizeMm: 80 } });
 });

@@ -520,6 +520,7 @@ function regeneratePlan2D() {
     selection,
     layers: viewState.plan2dLayers,
     postStates: Object.fromEntries((lastModels?.allPostModels || []).map((p) => [p.postId, { removed: p.removed, overridden: p.overridden }])),
+    extraPosts: (lastModels?.allPostModels || []).filter((p) => p.kind === 'railing'),
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -570,11 +571,16 @@ function applyPostEdit(postId, change) {
   const overrides = { ...(config.manualPostOverrides || {}) };
   const entry = { ...(overrides[postId] || {}) };
   if (change.field === 'topDeltaMm' || change.field === 'bottomDeltaMm') entry[change.field] = Number.isFinite(change.value) ? change.value : 0;
+  else if (change.field === 'sizeMm') {
+    if (Number.isFinite(change.value) && change.value > 0) entry.sizeMm = change.value;
+    else delete entry.sizeMm;
+  }
   else if (change.action === 'remove') entry.removed = true;
   else if (change.action === 'restore') delete entry.removed;
   else if (change.action === 'reset') {
     delete entry.topDeltaMm;
     delete entry.bottomDeltaMm;
+    delete entry.sizeMm;
   }
   overrides[postId] = entry;
   config.manualPostOverrides = sanitizePostOverrides(overrides);

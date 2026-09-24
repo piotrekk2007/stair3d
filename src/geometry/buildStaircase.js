@@ -55,12 +55,14 @@ export function buildStaircase(config) {
     outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
     inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
   };
-  const postModels = buildPostModels(planLayout, fullConfig);
-  // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
-  const allPostModels = buildAllPostModels(planLayout, fullConfig);
+  const structuralPostModels = buildPostModels(planLayout, fullConfig);
 
-  // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6).
-  const railingModel = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels }, fullConfig);
+  // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
+  // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
+  const railingModel = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels }, fullConfig);
+  // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
+  const allPostModels = [...buildAllPostModels(planLayout, fullConfig), ...railingModel.posts];
+  const postModels = allPostModels.filter((p) => !p.removed);
 
   const root = new THREE.Group();
   root.name = 'Staircase';
@@ -77,7 +79,7 @@ export function buildStaircase(config) {
   }
 
   if (railingModel.enabled) {
-    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, postMaterial));
+    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial));
   }
 
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);

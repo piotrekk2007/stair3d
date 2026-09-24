@@ -18,6 +18,8 @@ import { normalizeVector } from './pathUtils.js';
 // A post shortened below this is treated as a mistake and the length edit is ignored (reported on the
 // model as `overrideRejected`) — a 100 mm stub is not a post.
 export const MIN_POST_HEIGHT_MM = 100;
+export const MIN_POST_SIZE_MM = 20;
+export const MAX_POST_SIZE_MM = 300;
 
 const NEWEL_HEIGHT = 1000; // mm, wysokość słupka początkowego/końcowego ponad poziom podłogi
 
@@ -28,10 +30,11 @@ function unitDir(pFrom, pTo) {
 /**
  * @typedef {Object} PostModel
  * @property {string} postId
- * @property {'start'|'end'|'corner'} kind
+ * @property {'start'|'end'|'corner'|'railing'} kind  'railing' = an end post of a balustrade section (railingSolver.js)
  * @property {{x:number,y:number}} position
  * @property {{bottom:number, top:number}} elevation
- * @property {number} size  mm, przekrój kwadratowy (config.postSize)
+ * @property {number} size  mm, przekrój kwadratowy (config.postSize; for a 'railing' post config.railingPostSizeMm or its own override)
+ * @property {number} [nominalSize]  the size before a manual thickness edit (only railing posts can have one)
  * @property {{bottom:number, top:number}} nominalElevation  before any manual length edit
  * @property {boolean} removed        the user deleted this post (only present in buildAllPostModels)
  * @property {boolean} overridden     a manual length edit is in effect
@@ -52,6 +55,8 @@ export function sanitizePostOverrides(raw) {
     if (entry.removed === true) clean.removed = true;
     if (Number.isFinite(entry.topDeltaMm) && entry.topDeltaMm !== 0) clean.topDeltaMm = entry.topDeltaMm;
     if (Number.isFinite(entry.bottomDeltaMm) && entry.bottomDeltaMm !== 0) clean.bottomDeltaMm = entry.bottomDeltaMm;
+    // Thickness (square section) of a balustrade post — the structural posts share config.postSize instead.
+    if (Number.isFinite(entry.sizeMm) && entry.sizeMm >= MIN_POST_SIZE_MM && entry.sizeMm <= MAX_POST_SIZE_MM) clean.sizeMm = entry.sizeMm;
     if (Object.keys(clean).length > 0) out[postId] = clean;
   }
   return out;
@@ -74,13 +79,18 @@ export function isCornerPostRemoved(planLayout, config, point) {
   return id !== null && sanitizePostOverrides(config.manualPostOverrides)[id]?.removed === true;
 }
 
-function applyPostOverrides(models, rawOverrides) {
+export function applyPostOverrides(models, rawOverrides) {
   const overrides = sanitizePostOverrides(rawOverrides);
   return models.map((m) => {
     const o = overrides[m.postId];
     const base = { ...m, nominalElevation: { ...m.elevation }, removed: false, overridden: false, overrideRejected: false };
     if (!o) return base;
     if (o.removed) base.removed = true;
+    if (o.sizeMm && m.kind === 'railing') {
+      base.nominalSize = m.size;
+      base.size = o.sizeMm;
+      base.overridden = true;
+    }
     const top = m.elevation.top + (o.topDeltaMm || 0);
     const bottom = m.elevation.bottom - (o.bottomDeltaMm || 0);
     if (o.topDeltaMm || o.bottomDeltaMm) {

@@ -160,6 +160,8 @@ export function createUI({
   live(rail.add(config, 'railingBalusterShape', { kwadratowa: 'square', okrągła: 'round' })).name('Tralka: kształt');
   live(rail.add(config, 'railingBalusterSizeMm', 12, 60, 1)).name('Tralka: bok / średnica [mm]');
   live(rail.add(config, 'railingMaxClearMm', 60, 200, 5)).name('Maks. prześwit między tralkami [mm]');
+  live(rail.add(config, 'railingPostSizeMm', 40, 160, 5)).name('Słupki balustrady: grubość [mm]');
+  live(rail.add(config, 'railingPostTopAboveHandrailMm', 0, 300, 10)).name('Słupki: wystają ponad poręcz [mm]');
 
   const sectionsBox = document.createElement('div');
   sectionsBox.className = 'railing-sections';

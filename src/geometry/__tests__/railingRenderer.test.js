@@ -29,17 +29,20 @@ test('no balustrade group when it is switched off or has no sections', () => {
   assert.equal(result.root.getObjectByName('Railing').children.length, 0);
 });
 
-test('one handrail mesh, one balusters mesh and the new end posts per section, each traceable', () => {
+test('one handrail mesh and one balusters mesh per section (traceable); the end posts are ordinary posts in the Posts group', () => {
   const { result } = stair();
   const group = result.root.getObjectByName('Railing');
   const names = group.children.map((c) => c.name);
-  assert.ok(names.includes('Railing_s_handrail'));
-  assert.ok(names.includes('Railing_s_balusters'));
-  assert.equal(names.filter((n) => n.startsWith('Railing_railing-post-')).length, result.railingModel.sections[0].posts.length);
+  assert.deepEqual(names.sort(), ['Railing_s_balusters', 'Railing_s_handrail']);
   for (const child of group.children) {
     assert.equal(child.userData.elementType, 'railing');
     assert.ok(child.userData.geometrySourceId.startsWith('railing:'));
   }
+  const railingPosts = result.railingModel.sections[0].posts;
+  assert.ok(railingPosts.length > 0);
+  const postNames = result.root.getObjectByName('Posts').children.map((c) => c.name);
+  for (const post of railingPosts) assert.ok(postNames.includes(`Post_Railing_${post.postId}`), post.postId);
+  assert.ok(result.postModels.some((p) => p.kind === 'railing') && result.allPostModels.some((p) => p.kind === 'railing'));
 });
 
 test('the balusters mesh spans exactly the solver\'s heights; the handrail top sits railingHeightMm above the nosing line at its start', () => {

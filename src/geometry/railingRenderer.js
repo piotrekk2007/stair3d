@@ -3,7 +3,7 @@
 // post goes were all decided by the solver. This file only turns those numbers into triangles.
 //
 // Per section: one mesh for the handrail pieces, one for all balusters (merged, so a stair with a few
-// hundred balusters is still one draw call and exports like any other mesh), and one per new end post.
+// hundred balusters is still one draw call and exports like any other mesh).
 // Plan (x, y, z-up) -> Three.js (x, y = z, z = -y), the same mapping as planToWorld().
 
 import * as THREE from 'three';
@@ -61,10 +61,10 @@ function mergedMesh(geometries, material, name, sourceId, sectionSide) {
 /**
  * @param {import('./railingSolver.js').RailingModel} railingModel
  * @param {{ balusterShape:string, balusterSizeMm:number }} style  from config (a rendering choice, not geometry)
- * @param {THREE.Material} material  handrail + balusters
- * @param {THREE.Material} [postMaterial]  the new end posts (defaults to `material`)
+ * @param {THREE.Material} material  handrail + balusters. The section's end posts are ordinary PostModels
+ *   (buildStaircase.js merges them into the post list), so postRenderer.js draws them, not this file.
  */
-export function renderRailing(railingModel, style, material, postMaterial = material) {
+export function renderRailing(railingModel, style, material) {
   const group = new THREE.Group();
   group.name = 'Railing';
   for (const section of railingModel.sections) {
@@ -85,15 +85,6 @@ export function renderRailing(railingModel, style, material, postMaterial = mate
       section.side
     );
     if (balusters) group.add(balusters);
-    for (const post of section.posts) {
-      const height = post.elevation.top - post.elevation.bottom;
-      const geometry = new THREE.BoxGeometry(post.size, height, post.size);
-      geometry.translate(post.position.x, post.elevation.bottom + height / 2, -post.position.y);
-      const mesh = new THREE.Mesh(geometry, postMaterial);
-      mesh.name = `Railing_${post.postId}`;
-      mesh.userData = traceability({ elementType: 'railing', stringerId: section.side, geometrySourceId: `railing:${post.postId}` });
-      group.add(mesh);
-    }
   }
   return group;
 }

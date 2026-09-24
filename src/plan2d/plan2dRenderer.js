@@ -274,7 +274,7 @@ function stringerSpacingXML(planLayout, config) {
  *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {} } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, extraPosts = [] } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -337,6 +337,9 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     .map(([postId, p]) => postRect(postId, p.x - config.postSize / 2, -p.y - config.postSize / 2, config.postSize))
     .join('');
 
+  // Balustrade end posts (kind 'railing', postSolver.js/railingSolver.js): same marker, own size and id.
+  const railingPostsXML = extraPosts.map((p) => postRect(p.postId, p.position.x - p.size / 2, -p.position.y - p.size / 2, p.size)).join('');
+
   const footprintX = b.maxX - b.minX;
   const footprintY = b.maxY - b.minY;
   const widthsXML = layers.widths === false ? '' : `
@@ -379,6 +382,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${runBoundariesXMLStr}
     ${postsXML}
     ${startEndPostsXML}
+    ${railingPostsXML}
     ${arrowXML}
     ${widthsXML}
     ${winderWidthXMLStr}

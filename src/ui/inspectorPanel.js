@@ -119,11 +119,17 @@ function postEditFormHTML(post, o) {
   }
   const field = (label, key, value) =>
     `<label class="insp-field"><span class="insp-label">${label}</span><input type="number" step="10" value="${value}" data-post-edit="${key}"> mm</label>`;
+  // Only a balustrade post has its own thickness (the structural posts share config.postSize).
+  const thickness =
+    post.kind === 'railing'
+      ? `<label class="insp-field"><span class="insp-label">Grubość słupka (kwadrat)</span><input type="number" step="5" min="20" max="300" value="${post.size}" data-post-edit="sizeMm"> mm</label>`
+      : '';
   return (
     section('Edycja słupa') +
+    thickness +
     field('Wydłuż (+) / skróć (−) od GÓRY', 'topDeltaMm', o.topDeltaMm || 0) +
     field('Wydłuż (+) / skróć (−) od DOŁU', 'bottomDeltaMm', o.bottomDeltaMm || 0) +
-    `<div class="insp-actions"><button type="button" class="insp-btn" data-post-action="reset">Resetuj długość</button><button type="button" class="insp-btn danger" data-post-action="remove">Usuń słup</button></div>`
+    `<div class="insp-actions"><button type="button" class="insp-btn" data-post-action="reset">Resetuj długość i grubość</button><button type="button" class="insp-btn danger" data-post-action="remove">Usuń słup</button></div>`
   );
 }
 
@@ -133,8 +139,8 @@ function postHTML(ctx) {
   const rows = [];
   rows.push(`<div class="insp-title">Słup <small>${selection.postId ?? ''}</small></div>`);
   if (post) {
-    rows.push(row('Rodzaj', post.kind, 'auto'));
-    rows.push(row('Przekrój', `${post.size} × ${post.size} mm`, config.lockedFields?.includes('postSize') ? 'user' : 'auto'));
+    rows.push(row('Rodzaj', post.kind === 'railing' ? 'słupek balustrady' : post.kind, 'auto'));
+    rows.push(row('Przekrój', `${post.size} × ${post.size} mm`, post.kind === 'railing' ? (post.overridden && post.nominalSize !== undefined ? 'manual' : 'auto') : config.lockedFields?.includes('postSize') ? 'user' : 'auto'));
     rows.push(row('Pozycja w rzucie', pt(post.position), 'auto'));
     if (post.removed) {
       rows.push(row('Stan', 'usunięty — nie ma go w modelu 3D, wycenie ani walidacji', 'manual'));
