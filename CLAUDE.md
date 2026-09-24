@@ -935,6 +935,8 @@ anything invalid falls back to the old material colour) and `applyAppearanceToMa
 file loads with the defaults), outside undo history, reset by "Nowy", never read by any solver or the
 takeoff. It applies in the normal 3D view too, not only in client mode. Known small limit: after loading a
 file the preset dropdown may still show the previous preset name (the colour picker is right).
+The balustrade has TWO colours: `railing` ("Poręcz") and `baluster` ("Tralki") — separate shared materials in `buildStaircase.js`,
+`renderRailing(model, style, material, balusterMaterial)`; an older project file without the `baluster` key gets the default.
 **Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
 Tests: `scene/__tests__/appearance.test.js`.
 
@@ -973,6 +975,15 @@ Not yet:
 DXF of handrail/balusters, a bent (curved) handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
+
+## Walkline in the plan 2D is drawn as a smooth curve
+
+The walkline used to be a polyline through one point per tread boundary, which zig-zags on a winder turn. `plan2d/smoothPath.js`
+(`smoothPath`, a centripetal Catmull-Rom curve resampled about every 40 mm) now redraws it THROUGH the very same points, so a
+winder turn reads as an arc while a straight flight stays exactly straight. **Display only:** `walklineModel.js`, the validator's
+winder-width check (`PL-LEGAL-C-01`) and every other consumer still use the exact points; `plan2dRenderer.js` `walklineXML` is
+the only caller. Across a landing (no inner boundary point) the line stays a straight segment. Tests:
+`plan2d/__tests__/smoothPath.test.js`.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

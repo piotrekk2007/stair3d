@@ -11,6 +11,7 @@
 import { computeWinderBlank } from '../geometry/winderBlank.js';
 import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
+import { smoothPath } from './smoothPath.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -87,6 +88,7 @@ function axisXML(planLayout) {
 // granic (getNominalBoundaryPoints — patrz edgeOverrides.js), nigdy z finalnej/edytowanej,
 // bo to konstrukcyjna linia odniesienia (patrz docs/model/STAIRCASE_DATA_MODEL.md §3.2:
 // "Walkline.path czyta zawsze Nominal").
+const WALKLINE_SMOOTH_STEP_MM = 40;
 function walklineXML(planLayout, config) {
   const n = planLayout.treads.length;
   const t = Math.min(1, Math.max(0, (config.stairWidth - config.walklineOffset) / config.stairWidth));
@@ -97,7 +99,9 @@ function walklineXML(planLayout, config) {
     pts.push(lerpPoint(boundary[1], boundary[0], t)); // boundary = [inner, outer]; lerp od outer(t=0) do inner(t=1)
   }
   if (pts.length < 2) return '';
-  return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#c0392b" stroke-width="8" stroke-dasharray="4,18" stroke-linecap="round"/>`;
+  // Only the DRAWING is smoothed (a Catmull-Rom curve through the very same points, so a winder turn reads as an
+  // arc and a straight flight stays straight) — the model's exact points are untouched.
+  return `<polyline points="${polygonPoints(smoothPath(pts, WALKLINE_SMOOTH_STEP_MM))}" fill="none" stroke="#c0392b" stroke-width="8" stroke-dasharray="4,18" stroke-linecap="round"/>`;
 }
 
 // Granice biegu (wymaganie 7) — miejsca, gdzie zmienia się TYP odcinka (prosty -> zabiegowy

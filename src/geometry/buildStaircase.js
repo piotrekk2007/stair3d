@@ -23,12 +23,14 @@ const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughnes
 const stringerMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.7, metalness: 0.02, side: THREE.DoubleSide });
 const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.65, metalness: 0.02 });
 const railingMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.7, metalness: 0.02 });
+// Own material for the balusters, so their colour can differ from the handrail's (scene/appearance.js 'baluster').
+const balusterMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.7, metalness: 0.02 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
 // odtwarza zależne od nich materiały pochodne (np. znacznik gniazda w wandze).
 export function setAppearance(appearance) {
-  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial }, appearance);
+  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial, baluster: balusterMaterial }, appearance);
 }
 
 // ORKIESTRATOR — żadna geometria nie jest tu ROZWIĄZYWANA, tylko SKŁADANA. Kolejność:
@@ -83,7 +85,7 @@ export function buildStaircase(config) {
   }
 
   if (railingModel.enabled) {
-    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial));
+    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, balusterMaterial));
   }
 
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);

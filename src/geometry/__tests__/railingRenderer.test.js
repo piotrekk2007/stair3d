@@ -59,6 +59,16 @@ test('the balusters mesh spans exactly the solver\'s heights; the handrail top s
   assert.ok(handrail.max.y <= topAtEnd + config.railingHandrailHeightMm, 'never above the end of the nosing line plus the profile');
 });
 
+test('the balusters mesh uses its own material, separate from the handrail\'s', () => {
+  const { result } = stair();
+  const group = result.root.getObjectByName('Railing');
+  const handrail = group.getObjectByName('Railing_s_handrail');
+  const balusters = group.getObjectByName('Railing_s_balusters');
+  assert.notEqual(handrail.material, balusters.material);
+  balusters.material.color.set('#1a1a1a');
+  assert.notEqual(handrail.material.color.getHexString(), balusters.material.color.getHexString());
+});
+
 test('round profiles build too (round handrail + round balusters)', () => {
   const { result } = stair({ railingHandrailShape: 'round', railingBalusterShape: 'round' });
   const group = result.root.getObjectByName('Railing');

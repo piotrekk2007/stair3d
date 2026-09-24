@@ -61,10 +61,11 @@ function mergedMesh(geometries, material, name, sourceId, sectionSide) {
 /**
  * @param {import('./railingSolver.js').RailingModel} railingModel
  * @param {{ balusterShape:string, balusterSizeMm:number }} style  from config (a rendering choice, not geometry)
- * @param {THREE.Material} material  handrail + balusters. The section's end posts are ordinary PostModels
+ * @param {THREE.Material} material  the handrail
+ * @param {THREE.Material} [balusterMaterial]  the balusters (defaults to `material`). The section's end posts are ordinary PostModels
  *   (buildStaircase.js merges them into the post list), so postRenderer.js draws them, not this file.
  */
-export function renderRailing(railingModel, style, material) {
+export function renderRailing(railingModel, style, material, balusterMaterial = material) {
   const group = new THREE.Group();
   group.name = 'Railing';
   for (const section of railingModel.sections) {
@@ -79,7 +80,7 @@ export function renderRailing(railingModel, style, material) {
     if (handrail) group.add(handrail);
     const balusters = mergedMesh(
       section.balusters.map((b) => balusterGeometry(b, style.balusterShape, style.balusterSizeMm)),
-      material,
+      balusterMaterial,
       `Railing_${section.id}_balusters`,
       `railing:${section.id}:balusters`,
       section.side

@@ -20,6 +20,16 @@ test('every preset is a valid colour', () => {
   for (const p of COLOR_PRESETS) assert.match(p.hex, /^#[0-9a-f]{6}$/i, p.id);
 });
 
+test('the balusters have their own colour, separate from the handrail', () => {
+  const mk = () => ({ color: { value: null, set(v) { this.value = v; } } });
+  const materials = { railing: mk(), baluster: mk() };
+  applyAppearanceToMaterials(materials, { railing: '#f4f4f2', baluster: '#1a1a1a' });
+  assert.equal(materials.railing.color.value, '#f4f4f2');
+  assert.equal(materials.baluster.color.value, '#1a1a1a');
+  // an older project file without the key gets the default
+  assert.equal(sanitizeAppearance({ railing: '#ffffff' }).baluster, DEFAULT_APPEARANCE.baluster);
+});
+
 test('applyAppearanceToMaterials sets each element\'s colour on its own material only', () => {
   const mk = () => ({ color: { value: null, set(v) { this.value = v; } } });
   const materials = { tread: mk(), riser: mk(), stringer: mk(), post: mk() };
