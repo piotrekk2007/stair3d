@@ -22,8 +22,8 @@
 //    `railingHeightMm` above that line.
 //  * RUNS: a handrail is a chain of straight pieces that ends in a post wherever the balustrade cannot
 //    continue as one piece — a corner in plan (> RAILING_CORNER_ANGLE_DEG), a step in height (the line
-//    jumps up where a flight starts after a landing) or a piece steeper than RAILING_STEEP_ANGLE_DEG (the
-//    dusza side of a winder, where the treads shrink to a point). Each such spot gets ONE post (an existing
+//    jumps up where a flight starts after a landing) or a piece that is practically vertical (RAILING_STEEP_ANGLE_DEG,
+//    e.g. the dusza of a very tight winder). A merely steep piece stays a handrail piece. Each such spot gets ONE post (an existing
 //    structural post is reused when it stands there) and the two handrail runs meet it at their own heights
 //    — the "łamana z prostych odcinków" of the plan, not a bent handrail. Runs shorter than a post are
 //    dropped (the neighbouring joins merge into one post).
@@ -54,7 +54,10 @@ export const HANDRAIL_PRESETS = Object.freeze([
 
 const POST_REUSE_TOLERANCE_FACTOR = 1; // an existing post closer than one post size to a join is reused
 export const RAILING_CORNER_ANGLE_DEG = 10; // a plan turn sharper than this ends the run in a post
-export const RAILING_STEEP_ANGLE_DEG = 50; // a piece steeper than this (or vertical) is a step, not a handrail
+// A piece steeper than this is a step, not a handrail. Deliberately almost vertical: the dusza side of a winder is steep
+// (~58 degrees with the default 110 mm dusza, ~85 with 3-4 winders per turn) but a continuous, if steep, handrail there is what
+// the user wants ("balustrada z prostych odcinków") — only a truly vertical jump (a landing, a flight starting higher) splits it.
+export const RAILING_STEEP_ANGLE_DEG = 89;
 const MIN_RUN_MM = 100; // a run shorter than this (and than one post) is dropped
 const SAME_POINT_MM = 1e-6;
 const MITER_LIMIT = 0.1; // 1 + cos(angle) below this: too sharp a turn to mitre, use the plain segment normal

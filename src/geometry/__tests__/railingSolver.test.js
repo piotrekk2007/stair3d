@@ -245,11 +245,23 @@ test('L stair with winders (outer): one corner post where the outer edge turns, 
   }
 });
 
-test('L stair with winders (inner / dusza): the handrail stops at a post and restarts higher — reported as an INFO, never a near-vertical handrail', () => {
-  const { model } = turn('winder', 'inner', cut);
+test('L stair with winders (inner / dusza): the handrail follows the winders as straight pieces — a steep rail, but continuous, never a gap', () => {
+  for (const windersPerTurn of [3, 4, 5]) {
+    const { model } = turn('winder', 'inner', { ...cut, windersPerTurn });
+    const section = model.sections[0];
+    assert.deepEqual(section.uncoveredSteps, [], `${windersPerTurn} winders`);
+    const planLength = (pts) => pts.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - pts[i].x, p.y - pts[i].y), 0);
+    const railed = section.handrail.pieces.reduce((sum, p) => sum + Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y), 0);
+    assert.ok(railed >= 0.95 * planLength(section.path), `${windersPerTurn} winders: the rail covers the whole path`);
+    for (const piece of section.handrail.pieces) assert.ok(slopeDeg(piece) <= RAILING_STEEP_ANGLE_DEG + 1e-6);
+  }
+});
+
+test('the default winder turn on the inner side reuses the structural corner post instead of adding a second one next to it', () => {
+  const { model, planLayout } = turn('winder', 'inner', cut);
   const section = model.sections[0];
-  assert.ok(section.diagnostics.some((d) => d.ruleId === 'RAILING-RAIL-STEP' && d.severity === 'INFO'));
-  for (const piece of section.handrail.pieces) assert.ok(slopeDeg(piece) <= RAILING_STEEP_ANGLE_DEG + 1e-6);
+  assert.equal(section.posts.filter((p) => p.postId.includes('-join-')).length, 0, 'a join at the inner corner falls into the existing post');
+  assert.ok(planLayout.turns.length > 0);
 });
 
 test('housed wanga on a turn: within each run the balusters are evenly spread and every clear opening stays within the limit', () => {
@@ -282,28 +294,19 @@ test('housed wanga on a turn: within each run the balusters are evenly spread an
 
 // --- the dusza side of a winder (reported: a section on the inner side from step 6/7 to 12 only got a rail on the straight steps)
 
-test('inner side across winders: the steps that cannot carry a handrail are named, and no balusters are left standing under nothing', () => {
+test('never a baluster under a missing handrail: whatever the winder, side and wanga, balusters only stand on treads that carry a rail', () => {
   for (const wanga of [cut, closed]) {
-    const { model, planLayout } = stair({
-      ...wanga,
-      stairType: 'L',
-      treadsLegA: 5,
-      treadsLegB: 5,
-      windersPerTurn: 5,
-      totalRise: 2800,
-      railingSections: [{ id: 's', side: 'inner', fromStep: 6, toStep: 11 }],
-    });
-    const section = model.sections[0];
-    assert.ok(section.valid);
-    const winders = planLayout.treads.filter((t) => t.type === 'winder').map((t) => t.index).filter((i) => i >= 6 && i <= 11);
-    assert.ok(winders.length > 0);
-    assert.ok(section.uncoveredSteps.length > 0, 'the winder steps on the dusza side have no rail');
-    for (const i of section.uncoveredSteps) assert.ok(winders.includes(i), `step ${i + 1} is uncovered but is not a winder`);
-    const finding = section.diagnostics.find((d) => d.ruleId === 'RAILING-UNCOVERED-STEPS');
-    assert.ok(finding && finding.severity === 'WARNING');
-    assert.ok(section.uncoveredSteps.every((i) => finding.message.includes(String(i + 1))));
-    for (const b of section.balusters) assert.ok(b.treadIndex === null || !section.uncoveredSteps.includes(b.treadIndex), 'a baluster stands on an uncovered step');
-    assert.ok(section.path.length >= 2, 'the full path is still exposed for the plan 2D');
+    for (const side of ['outer', 'inner']) {
+      for (const windersPerTurn of [2, 3, 4, 5, 6]) {
+        const { model } = stair({ ...wanga, stairType: 'L', treadsLegA: 5, treadsLegB: 5, windersPerTurn, totalRise: 2800, railingSections: [{ id: 's', side, fromStep: 3, toStep: 9 }] });
+        const section = model.sections[0];
+        assert.ok(section.valid);
+        for (const b of section.balusters) assert.ok(b.treadIndex === null || !section.uncoveredSteps.includes(b.treadIndex));
+        const finding = section.diagnostics.find((d) => d.ruleId === 'RAILING-UNCOVERED-STEPS');
+        assert.equal(!!finding, section.uncoveredSteps.length > 0, 'uncovered steps are always reported');
+        if (finding) assert.ok(section.uncoveredSteps.every((i) => finding.message.includes(String(i + 1))));
+      }
+    }
   }
 });
 

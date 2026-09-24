@@ -11,10 +11,11 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
 - Krańce odcinka z planu: po zaznaczeniu stopnia Inspektor ma sekcję „Balustrada" — dla każdego odcinka „Początek / Koniec: stopień N",
   „Do końca", „Usuń" oraz „Nowy odcinek zewn./wewn. od stopnia N" (`editRailingSections` w `railingSolver.js` — czysta funkcja, `main.js`
   `applyRailingEdit` zapisuje do `config.railingSections` + rebuild + historia). Tabela w panelu parametrów pozostaje.
-- **Strona dusz zakrętu:** odcinek po stronie wewnętrznej przez zabiegi NIE dostaje poręczy na stopniach zabiegowych — tam linia nosków
-  idzie prawie pionowo (5 podstopni na ~340 mm). Zgłaszane jako `RAILING-UNCOVERED-STEPS` (WARNING, z numerami stopni),
-  `RailingModel.sections[].uncoveredSteps`; tralki nie stoją już pod nieistniejącą poręczą (wcześniej zostawały pojedyncze na wandze
-  nakładanej). Otwarte pytanie: czy przerzucić tam skośny odcinek poręczy albo poczekać na poręcz giętą (etap 4).
+- **Strona dusz zakrętu (poprawione po zgłoszeniu):** najpierw poręcz po stronie wewnętrznej była tam ucinana (próg 50°), co dawało przerwę
+  i dwa słupy obok siebie. Teraz poręcz idzie przez zabiegi ciągle, choć stromo (~58° przy duszy 110 mm, ~85° przy 3–4 zabiegach na
+  zakręt) jako proste odcinki — jak w etapie 1. Dzieli ją tylko prawdziwy pion (`RAILING_STEEP_ANGLE_DEG = 89`, np. podest). Słupek
+  łączący wpadający w istniejący słup narożny jest używany ponownie (nie powstaje drugi). `RAILING-UNCOVERED-STEPS` /
+  `uncoveredSteps` zostają jako zabezpieczenie (stopień bez poręczy jest zgłaszany, a tralki nie stoją pod nieistniejącą poręczą).
 
 ## Co zrobiono w etapie 3a (kosztorys i walidacja)
 
