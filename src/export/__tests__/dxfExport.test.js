@@ -246,3 +246,19 @@ test('buildTreadDXF / buildAllTreadsDXF: null for missing/degenerate input', () 
   assert.equal(buildAllTreadsDXF([]), null);
   assert.equal(buildAllTreadsDXF(null), null);
 });
+
+// A tread with a riser below it has a groove milled into its underside (TreadModel.notch) — the
+// workshop drawing must show it (own layer, 4 edges, depth in the label); no risers = no groove.
+test('buildTreadDXF: the underside groove for the riser overlap is drawn on its own NOTCH layer, and only when there is one', () => {
+  const withRisers = buildTreads({ hasRiserBoards: true, riserTopOverlapMm: 12, riserBoardThickness: 20 });
+  const straight = withRisers.find((t) => t.type === 'straight' && t.notch);
+  assert.ok(straight);
+  const dxf = buildTreadDXF(straight);
+  assert.equal([...dxf.matchAll(/0\nLINE\n8\nNOTCH\n/g)].length, 4);
+  assert.ok(dxf.includes('rowek od spodu gl. 12 mm'));
+  assert.ok(buildAllTreadsDXF(withRisers).includes('8\nNOTCH\n'));
+
+  const noRisers = buildTreads({ hasRiserBoards: false });
+  assert.ok(!buildTreadDXF(noRisers.find((t) => t.type === 'straight')).includes('NOTCH\n1'));
+  assert.ok(!buildTreadDXF(noRisers.find((t) => t.type === 'straight')).includes('rowek'));
+});

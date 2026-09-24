@@ -880,6 +880,17 @@ front corner that owns the tread (`finalUStart - nosing`) — this replaces the 
 thin line, for cut and closed boards alike. Tests: `stringerConstructionGeometry.test.js`
 ("riserRecess equals riserBoardThickness, independent of nosing").
 
+## Tread DXF shows the underside groove for the riser overlap
+
+`dxfExport.js`'s tread export (`buildTreadDXF`/`buildAllTreadsDXF`) now also draws `TreadModel.notch`
+(the groove milled into the tread's underside for the riser's top overlap): the plan-view strip
+between the structural front edge and the same edge receded by `riserBoardThickness`, on its own
+`NOTCH` layer (colour 6) with the label "rowek od spodu gl. N mm". The outline itself is unchanged; no
+groove (no risers, landing, zero overlap) = nothing drawn. A tread's 3D mesh is covered by
+`geometry/__tests__/treadRenderer.test.js` (walking surface whole, underside = receded outline
+only; orientation-independent flat-face areas — the prism helper's winding is not consistent enough
+for a signed-volume check). Tests: `export/__tests__/dxfExport.test.js`.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

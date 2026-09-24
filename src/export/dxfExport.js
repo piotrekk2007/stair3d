@@ -185,7 +185,7 @@ function titleEntities(lines, bounds) {
 function wrapDxf(entityLines) {
   const header = ['0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC'];
   const layer = (name, color) => ['0', 'LAYER', '2', name, '70', '0', '62', String(color), '6', 'CONTINUOUS'];
-  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '4', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('BEARINGS', 5), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
+  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '5', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('NOTCH', 6), ...layer('BEARINGS', 5), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
   const entities = ['0', 'SECTION', '2', 'ENTITIES', ...entityLines, '0', 'ENDSEC'];
   return [...header, ...tables, ...entities, '0', 'EOF'].join('\n');
 }
@@ -313,12 +313,43 @@ const TREAD_GAP_MM = 200;
 // OWN local frame (u along its own walking direction, matching stockGeometry.js's
 // `boundingRectAlong`) and shifted so its own bounding box starts at (0,0), the same convention
 // every other DXF entry point in this file already uses for its own local frame.
-function localTreadOutline(tread) {
+function treadLocalFrame(tread) {
   const forward = tread.direction;
   const across = { u: -forward.y, v: forward.x };
-  const raw = tread.outline.map((p) => ({ u: p.x * forward.x + p.y * forward.y, v: p.x * across.u + p.y * across.v }));
-  const bounds = boundsOfPoints(raw);
-  return raw.map((p) => ({ u: p.u - bounds.minU, v: p.v - bounds.minV }));
+  const rotate = (p) => ({ u: p.x * forward.x + p.y * forward.y, v: p.x * across.u + p.y * across.v });
+  const bounds = boundsOfPoints(tread.outline.map(rotate));
+  return (p) => {
+    const r = rotate(p);
+    return { u: r.u - bounds.minU, v: r.v - bounds.minV };
+  };
+}
+
+function localTreadOutline(tread) {
+  const toLocal = treadLocalFrame(tread);
+  return tread.outline.map(toLocal);
+}
+
+// The groove routed into the tread's UNDERSIDE for the riser's top overlap (TreadModel.notch,
+// treadSolver.js buildNotch): in plan, the strip between the structural front edge and that edge
+// receded by the riser thickness. Drawn on its own layer with its depth, so the workshop sees
+// where and how deep to mill it (from below) — the outline itself never changes.
+function treadNotchEntities(tread, offsetU) {
+  const notch = tread.notch;
+  if (!notch || !Array.isArray(notch.outline) || notch.outline.length !== tread.outline.length) return [];
+  const toLocal = treadLocalFrame(tread);
+  const receded = [];
+  notch.outline.forEach((p, i) => {
+    const o = tread.outline[i];
+    if (Math.hypot(p.x - o.x, p.y - o.y) > 1e-6) receded.push(p);
+  });
+  const front = tread.frontEdge?.final;
+  if (receded.length !== 2 || !front) return [];
+  const nearest = (r) => (Math.hypot(front[0].x - r.x, front[0].y - r.y) <= Math.hypot(front[1].x - r.x, front[1].y - r.y) ? front[0] : front[1]);
+  const [ra, rb] = receded;
+  const strip = [nearest(ra), nearest(rb), rb, ra].map(toLocal).map((p) => ({ u: p.u + offsetU, v: p.v }));
+  const out = polygonEntities(strip, 'NOTCH');
+  out.push(textEntity(`rowek od spodu gl. ${Math.round(notch.depthMm)} mm`, { u: strip[3].u, v: strip[3].v - 15 }, 12, 'NOTCH'));
+  return out;
 }
 
 function isValidTread(tread) {
@@ -345,7 +376,7 @@ function treadTitleLines(tread) {
 export function buildTreadDXF(tread) {
   if (!isValidTread(tread)) return null;
   const local = localTreadOutline(tread);
-  const entities = [...polygonEntities(local, 'OUTLINE'), ...titleEntities(treadTitleLines(tread), boundsOfPoints(local))];
+  const entities = [...polygonEntities(local, 'OUTLINE'), ...treadNotchEntities(tread, 0), ...titleEntities(treadTitleLines(tread), boundsOfPoints(local))];
   return wrapDxf(entities);
 }
 
@@ -361,7 +392,7 @@ export function buildAllTreadsDXF(treads) {
     const offsetU = cursor - bounds.minU;
     cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
     const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
-    entities.push(...polygonEntities(shifted, 'OUTLINE'), ...titleEntities(treadTitleLines(tread), boundsOfPoints(shifted)));
+    entities.push(...polygonEntities(shifted, 'OUTLINE'), ...treadNotchEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }
