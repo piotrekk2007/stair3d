@@ -836,7 +836,7 @@ underside to receive that overlap.
   gained the `kind: 'tread'` tag) rather than a parallel array, so every existing consumer needs
   only a `kind` check, never a second field to thread through. Positioned from the tread's own RAW
   structural front corner (`b.finalUStart`, never the `riserRecess`-shifted `uStart` — an unrelated,
-  CUT-notch-only ledge concern), spanning backward by `riserBoardThickness`; elevation mirrors
+  CUT-notch-only ledge concern), spanning FORWARD by `riserBoardThickness` (the riser stands BEHIND the lower tread, under the front of the upper one); elevation mirrors
   `RiserModel.elevation` exactly (`topV = bearingElevation + riserTopOverlapMm`, `bottomV =
   bearingElevation - riserHeight`). Guarded by `ownsStart` and `hasRiserBoards`/
   `riserBoardThickness > 0`, same pattern as every other per-tread extension in this file. Only

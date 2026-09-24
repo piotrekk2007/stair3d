@@ -211,8 +211,8 @@ test('housed + riser boards: every ownsStart bearing also gets a kind:"riser" ho
 
   for (const h of riserHousings) {
     const b = bearings.find((bb) => bb.treadIndex === h.treadIndex);
-    assert.equal(h.uStart, b.finalUStart - config.riserBoardThickness);
-    assert.equal(h.uEnd, b.finalUStart);
+    assert.equal(h.uStart, b.finalUStart);
+    assert.equal(h.uEnd, b.finalUStart + config.riserBoardThickness);
     assert.equal(h.bottomV, b.bearingElevation - config.riserHeight);
     assert.equal(h.topV, b.bearingElevation + config.riserTopOverlapMm);
   }

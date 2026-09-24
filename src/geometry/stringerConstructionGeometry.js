@@ -339,7 +339,7 @@ function buildHousings(effective, config) {
 // but only a thin line for the riser). Positioned from the tread's own RAW structural front corner
 // (`b.finalUStart`, never `b.uStart` — which already carries `effectiveBearings()`'s riserRecess
 // ledge-shift meant for a CUT board's notch shoulder, an unrelated concern for a housed board),
-// spanning backward by `riserBoardThickness` (the riser sits directly behind/below the tread it
+// spanning FORWARD by `riserBoardThickness` (the riser stands directly BEHIND the lower tread, under the front of the tread it
 // supports, in the going direction). Elevation matches riserSolver.js's own `RiserModel.elevation`
 // formula exactly (`bearingElevation` = a tread's own bottom, by the same convention documented on
 // buildHousings() above): `topV = bearingElevation + riserTopOverlapMm` (the riser's deliberate
@@ -358,8 +358,8 @@ function buildRiserHousings(effective, config) {
     .map((b) => ({
       kind: 'riser',
       treadIndex: b.treadIndex,
-      uStart: b.finalUStart - riserThickness,
-      uEnd: b.finalUStart,
+      uStart: b.finalUStart,
+      uEnd: b.finalUStart + riserThickness,
       topV: b.bearingElevation + overlap,
       bottomV: b.bearingElevation - config.riserHeight,
       depth,
