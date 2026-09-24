@@ -79,6 +79,34 @@ export function sanitizeRailingSections(raw) {
   return out;
 }
 
+/**
+ * The pure edit behind the Inspektor's "Początek / Koniec / Nowy odcinek" buttons (a tread selected in the plan):
+ * returns a NEW section list. `from`/`to` move that end of the section to `stepIndex` (the other end follows when
+ * they would cross), `to-end` makes it run to the last tread, `remove` deletes it, `new` adds a section on `side`
+ * that starts at `stepIndex` and runs to the end. An unknown section id changes nothing.
+ */
+export function editRailingSections(sections, { action, sectionId, stepIndex, side }) {
+  const next = (sections || []).map((s) => ({ ...s }));
+  if (action === 'new') {
+    next.push({ id: `railing-${Date.now().toString(36)}-${next.length}`, side: side === 'inner' ? 'inner' : 'outer', fromStep: stepIndex, toStep: null });
+    return next;
+  }
+  const s = next.find((x) => x.id === sectionId);
+  if (!s) return next;
+  if (action === 'from') {
+    s.fromStep = stepIndex;
+    if (s.toStep !== null && s.toStep < stepIndex) s.toStep = stepIndex;
+  } else if (action === 'to') {
+    s.toStep = stepIndex;
+    if (s.fromStep > stepIndex) s.fromStep = stepIndex;
+  } else if (action === 'to-end') {
+    s.toStep = null;
+  } else if (action === 'remove') {
+    next.splice(next.indexOf(s), 1);
+  }
+  return next;
+}
+
 const planDist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
 function unit(v) {
@@ -260,7 +288,7 @@ function buildSection(section, ctx) {
   const treadCount = planLayout.treads.length;
   const fromStep = section.fromStep;
   const toStep = section.toStep === null ? treadCount - 1 : section.toStep;
-  const base = { id: section.id, side: section.side, fromStep, toStep, valid: false, handrail: null, runs: [], balusters: [], posts: [], diagnostics: [] };
+  const base = { id: section.id, side: section.side, fromStep, toStep, valid: false, handrail: null, runs: [], path: [], uncoveredSteps: [], balusters: [], posts: [], diagnostics: [] };
   if (fromStep > toStep || toStep >= treadCount) {
     base.diagnostics.push(diag(section.id, 'RAILING-SECTION-INVALID', `Odcinek balustrady ${section.id}: stopnie ${fromStep + 1}–${toStep + 1} są poza schodami albo w złej kolejności — odcinek pominięty.`));
     return base;
@@ -287,15 +315,24 @@ function buildSection(section, ctx) {
     for (const p of chain.shifted) {
       const last = nodes[nodes.length - 1];
       if (last && Math.hypot(p.x - last.x, p.y - last.y, p.z - last.z) < SAME_POINT_MM) continue;
-      nodes.push(p);
+      nodes.push({ ...p, treadIndex: chain.index });
     }
   }
   if (nodes.length < 2) {
     base.diagnostics.push(diag(section.id, 'RAILING-SECTION-INVALID', `Odcinek balustrady ${section.id}: brak długości do poprowadzenia poręczy — odcinek pominięty.`));
     return base;
   }
+  base.path = nodes.map((n) => ({ x: n.x, y: n.y })); // the whole wanga-side path (plan), also where no handrail can follow it
 
   const { runs, joins } = splitIntoRuns(nodes, config);
+
+  // Treads that carry no handrail at all: every node of theirs fell into a run that was too short to hold one (the
+  // dusza side of a winder, where the treads shrink to a point). Their balusters would stand under nothing.
+  const railedNodes = new Set(runs.flat());
+  const railedTreads = new Set(nodes.filter((n) => railedNodes.has(n)).map((n) => n.treadIndex));
+  const representedTreads = new Set(nodes.map((n) => n.treadIndex));
+  const uncoveredSteps = treadChains.map((c) => c.index).filter((i) => representedTreads.has(i) && !railedTreads.has(i));
+  base.uncoveredSteps = uncoveredSteps;
 
   // --- posts: one at the section start, one at the end, one at every join between two runs. An existing
   // structural post standing there is reused; a new one is a normal, editable railing post.
@@ -379,6 +416,7 @@ function buildSection(section, ctx) {
   // --- overlay wanga: the same rhythm on every tread, along that tread's own chain
   if (constructionType === CONSTRUCTION_TYPES.CUT) {
     for (const chain of treadChains) {
+      if (!railedTreads.has(chain.index)) continue;
       const path = chain.shifted;
       const cumulative = cumulativeLengths(path);
       const length = cumulative[cumulative.length - 1];
@@ -401,6 +439,15 @@ function buildSection(section, ctx) {
     heightMm: handrailHeight,
   };
   base.balusters = balusters.filter((b) => b.zTop - b.zBottom > 0).map((b, i) => ({ id: `${section.id}-baluster-${i}`, ...b, heightMm: b.zTop - b.zBottom }));
+  if (uncoveredSteps.length > 0) {
+    base.diagnostics.push(
+      diag(
+        section.id,
+        'RAILING-UNCOVERED-STEPS',
+        `Balustrada ${section.id}: stopnie ${uncoveredSteps.map((i) => i + 1).join(', ')} nie mają poręczy. Po stronie duszy zabiegi schodzą do jednego punktu (linia nosków idzie tam prawie pionowo), więc poręcz kończy się przy słupku i zaczyna dopiero za zakrętem. Ustaw ten odcinek po stronie zewnętrznej albo zaczekaj na poręcz giętą.`
+      )
+    );
+  }
   const steps = joins.filter((j) => j.kind === 'step').length;
   if (steps > 0) {
     base.diagnostics.push(diag(section.id, 'RAILING-RAIL-STEP', `Balustrada ${section.id}: poręcz kończy się przy słupku i zaczyna na innej wysokości w ${steps} miejscu(ach) (podest / dusza zakrętu) — połączenie ze słupkiem do dopracowania w warsztacie.`, 'INFO'));

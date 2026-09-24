@@ -7,7 +7,7 @@ import { buildTreadModels } from '../treadSolver.js';
 import { buildStringerModelsForFlight } from '../stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../stringerConstructionGeometry.js';
 import { buildPostModels, sanitizePostOverrides } from '../postSolver.js';
-import { buildRailingModel, sanitizeRailingSections, RAILING_STEEP_ANGLE_DEG, RAILING_CORNER_ANGLE_DEG } from '../railingSolver.js';
+import { buildRailingModel, sanitizeRailingSections, editRailingSections, RAILING_STEEP_ANGLE_DEG, RAILING_CORNER_ANGLE_DEG } from '../railingSolver.js';
 
 function stair(patch = {}) {
   const config = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 10, totalRise: 2000, treadGoing: 280, railingEnabled: true, ...patch };
@@ -278,4 +278,55 @@ test('housed wanga on a turn: within each run the balusters are evenly spread an
     for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i] - sorted[i - 1] - config.railingBalusterSizeMm <= config.railingMaxClearMm + 1e-3, 'clear opening within the limit');
   }
   assert.ok(checkedRuns >= 2, 'at least two runs actually carried enough balusters to check');
+});
+
+// --- the dusza side of a winder (reported: a section on the inner side from step 6/7 to 12 only got a rail on the straight steps)
+
+test('inner side across winders: the steps that cannot carry a handrail are named, and no balusters are left standing under nothing', () => {
+  for (const wanga of [cut, closed]) {
+    const { model, planLayout } = stair({
+      ...wanga,
+      stairType: 'L',
+      treadsLegA: 5,
+      treadsLegB: 5,
+      windersPerTurn: 5,
+      totalRise: 2800,
+      railingSections: [{ id: 's', side: 'inner', fromStep: 6, toStep: 11 }],
+    });
+    const section = model.sections[0];
+    assert.ok(section.valid);
+    const winders = planLayout.treads.filter((t) => t.type === 'winder').map((t) => t.index).filter((i) => i >= 6 && i <= 11);
+    assert.ok(winders.length > 0);
+    assert.ok(section.uncoveredSteps.length > 0, 'the winder steps on the dusza side have no rail');
+    for (const i of section.uncoveredSteps) assert.ok(winders.includes(i), `step ${i + 1} is uncovered but is not a winder`);
+    const finding = section.diagnostics.find((d) => d.ruleId === 'RAILING-UNCOVERED-STEPS');
+    assert.ok(finding && finding.severity === 'WARNING');
+    assert.ok(section.uncoveredSteps.every((i) => finding.message.includes(String(i + 1))));
+    for (const b of section.balusters) assert.ok(b.treadIndex === null || !section.uncoveredSteps.includes(b.treadIndex), 'a baluster stands on an uncovered step');
+    assert.ok(section.path.length >= 2, 'the full path is still exposed for the plan 2D');
+  }
+});
+
+test('outer side across winders has no uncovered steps', () => {
+  const { model } = stair({ ...cut, stairType: 'L', treadsLegA: 5, treadsLegB: 5, windersPerTurn: 5, totalRise: 2800, railingSections: [{ id: 's', side: 'outer', fromStep: 6, toStep: 11 }] });
+  assert.deepEqual(model.sections[0].uncoveredSteps, []);
+});
+
+// --- section edits from the plan 2D (Inspektor buttons)
+
+test('editRailingSections: from / to move an end (the other follows if they would cross), to-end, remove, new; unknown ids change nothing', () => {
+  const base = [{ id: 'a', side: 'outer', fromStep: 2, toStep: 6 }];
+  assert.deepEqual(editRailingSections(base, { action: 'from', sectionId: 'a', stepIndex: 4 })[0], { id: 'a', side: 'outer', fromStep: 4, toStep: 6 });
+  assert.deepEqual(editRailingSections(base, { action: 'from', sectionId: 'a', stepIndex: 8 })[0], { id: 'a', side: 'outer', fromStep: 8, toStep: 8 });
+  assert.deepEqual(editRailingSections(base, { action: 'to', sectionId: 'a', stepIndex: 9 })[0], { id: 'a', side: 'outer', fromStep: 2, toStep: 9 });
+  assert.deepEqual(editRailingSections(base, { action: 'to', sectionId: 'a', stepIndex: 1 })[0], { id: 'a', side: 'outer', fromStep: 1, toStep: 1 });
+  assert.equal(editRailingSections(base, { action: 'to-end', sectionId: 'a' })[0].toStep, null);
+  assert.deepEqual(editRailingSections(base, { action: 'remove', sectionId: 'a' }), []);
+  assert.deepEqual(editRailingSections(base, { action: 'from', sectionId: 'nope', stepIndex: 5 }), base);
+  const added = editRailingSections(base, { action: 'new', side: 'inner', stepIndex: 3 });
+  assert.equal(added.length, 2);
+  assert.deepEqual({ ...added[1], id: 'x' }, { id: 'x', side: 'inner', fromStep: 3, toStep: null });
+  assert.notEqual(added[1].id, 'a');
+  assert.deepEqual(base, [{ id: 'a', side: 'outer', fromStep: 2, toStep: 6 }], 'the input list is not mutated');
+  assert.equal(sanitizeRailingSections(added).length, 2, 'the result is a valid section list');
 });

@@ -293,6 +293,7 @@ export function createUI({
     ['stringers', 'Wangi'],
     ['winderWidth', 'Szer. zabiegu na linii pomiaru'],
     ['stringerSpacing', 'Rozstaw wang / min. głębokość'],
+    ['railing', 'Balustrada (poręcz, tralki, krańce)'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));

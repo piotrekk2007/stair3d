@@ -963,8 +963,13 @@ quantity = the balusters' cut list; railing posts are ordinary POST items), pric
 categories "Poręcze (z modelu)"/"Tralki (z modelu)", and `validator/railingChecks.js` (`PL-LEGAL-H-01` WARNING for height < 1100
 mm and for the configured/measured clear opening vs the building-type limit; `BWF-GUID-B-02` INFO). Tests:
 `takeoff/__tests__/railingItems.test.js`, `validator/__tests__/railingChecks.test.js`.
+**Stage 3b, part 1 (plan 2D) is done:** a "Balustrada" plan layer (dashed side path, thick handrail runs, baluster dots, a ring at
+each section end) and section-end editing from a tread selected in the plan (Inspektor "Balustrada" block, pure
+`editRailingSections` in `railingSolver.js`). A section across the dusza side of a winder gets no handrail there (the nosing
+line is nearly vertical) — reported as `RAILING-UNCOVERED-STEPS` (WARNING) and `sections[].uncoveredSteps`; balusters no longer
+stand under a missing handrail. Tests: `plan2d/__tests__/railingLayer.test.js`.
 Not yet:
-plan-2D marks/clicking of section ends, DXF of handrail/balusters, bent handrail. Tests:
+DXF of handrail/balusters, bent handrail / a rail across the dusza of winders. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 

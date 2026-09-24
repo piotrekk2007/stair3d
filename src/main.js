@@ -3,6 +3,7 @@ import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
 import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
+import { editRailingSections } from './geometry/railingSolver.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
 import { createProfileEditor } from './ui/profileEditorPanel.js';
@@ -68,6 +69,7 @@ const viewState = {
     runBoundaries: true,
     stepBoundaries: false,
     stringers: true,
+    railing: true,
     winderWidth: false,
     stringerSpacing: false,
   },
@@ -521,6 +523,7 @@ function regeneratePlan2D() {
     layers: viewState.plan2dLayers,
     postStates: Object.fromEntries((lastModels?.allPostModels || []).map((p) => [p.postId, { removed: p.removed, overridden: p.overridden }])),
     extraPosts: (lastModels?.allPostModels || []).filter((p) => p.kind === 'railing'),
+    railingModel: lastModels?.railingModel ?? null,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -584,6 +587,15 @@ function applyPostEdit(postId, change) {
   }
   overrides[postId] = entry;
   config.manualPostOverrides = sanitizePostOverrides(overrides);
+  rebuild();
+  commitHistory();
+}
+
+// Krańce odcinka balustrady ustawiane ze stopnia zaznaczonego w planie: zmienia WYŁĄCZNIE config.railingSections
+// (dane modelu), potem zwykły rebuild() + wpis do historii, jak każda inna edycja.
+function applyRailingEdit(action, sectionId, stepIndex, side) {
+  config.railingSections = editRailingSections(config.railingSections, { action, sectionId, stepIndex, side });
+  refreshUI(gui);
   rebuild();
   commitHistory();
 }
@@ -771,6 +783,8 @@ inspectorPanel.addEventListener('click', (e) => {
   if (dxfPostId) exportPostDXF(dxfPostId);
   const dxfStepId = e.target?.closest?.('[data-tread-dxf]')?.dataset.treadDxf;
   if (dxfStepId) exportTreadDXF(dxfStepId);
+  const railingBtn = e.target?.closest?.('[data-railing-action]');
+  if (railingBtn && selection?.elementType === 'tread') applyRailingEdit(railingBtn.dataset.railingAction, railingBtn.dataset.sectionId, selection.stepIndex, railingBtn.dataset.side);
 });
 const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onSelect: handleSelectDiagnostic,

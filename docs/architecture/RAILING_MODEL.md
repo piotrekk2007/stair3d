@@ -1,7 +1,20 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
-panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b (plan 2D + DXF) i 4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora), DXF jeszcze nie; etap 4 nie ruszony. Decyzje z użytkownikiem są na końcu.
+
+## Plan 2D i krańce odcinków (etap 3b, część 1)
+
+- Warstwa „Balustrada" w planie 2D (`plan2dRenderer.js`, opcja `railingModel`, przełącznik w „Linie konstrukcyjne"): cała ścieżka po
+  stronie wangi cienką przerywaną linią, biegi poręczy grubą linią na wierzchu, tralki jako kropki, pierścień na obu krańcach odcinka.
+  Miejsce, gdzie jest przerywana ścieżka bez grubej linii = tu poręcz nie ma jak iść (dusza zakrętu).
+- Krańce odcinka z planu: po zaznaczeniu stopnia Inspektor ma sekcję „Balustrada" — dla każdego odcinka „Początek / Koniec: stopień N",
+  „Do końca", „Usuń" oraz „Nowy odcinek zewn./wewn. od stopnia N" (`editRailingSections` w `railingSolver.js` — czysta funkcja, `main.js`
+  `applyRailingEdit` zapisuje do `config.railingSections` + rebuild + historia). Tabela w panelu parametrów pozostaje.
+- **Strona dusz zakrętu:** odcinek po stronie wewnętrznej przez zabiegi NIE dostaje poręczy na stopniach zabiegowych — tam linia nosków
+  idzie prawie pionowo (5 podstopni na ~340 mm). Zgłaszane jako `RAILING-UNCOVERED-STEPS` (WARNING, z numerami stopni),
+  `RailingModel.sections[].uncoveredSteps`; tralki nie stoją już pod nieistniejącą poręczą (wcześniej zostawały pojedyncze na wandze
+  nakładanej). Otwarte pytanie: czy przerzucić tam skośny odcinek poręczy albo poczekać na poręcz giętą (etap 4).
 
 ## Co zrobiono w etapie 3a (kosztorys i walidacja)
 

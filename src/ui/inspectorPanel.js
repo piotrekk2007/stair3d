@@ -40,6 +40,20 @@ function offsetOfPoints(nominal, final) {
   return nominal.map((p, i) => Math.hypot(final[i].x - p.x, final[i].y - p.y));
 }
 
+// Ustawianie krańców odcinków balustrady ze stopnia zaznaczonego w planie (obsługa w main.js applyRailingEdit).
+function railingBlockHTML(config, stepIndex) {
+  if (!config.railingEnabled) return '';
+  const sideLabel = { outer: 'zewn.', inner: 'wewn.' };
+  const sections = config.railingSections || [];
+  const rows = sections.map((s) => {
+    const range = `${s.fromStep + 1}–${s.toStep === null ? 'koniec' : s.toStep + 1}`;
+    const btn = (action, label) => `<button type="button" class="insp-btn" data-railing-action="${action}" data-section-id="${s.id}">${label}</button>`;
+    return `<div class="insp-railing"><div class="insp-railing-title">Odcinek ${sideLabel[s.side]} · stopnie ${range}</div><div class="insp-actions">${btn('from', `Początek: stopień ${stepIndex + 1}`)}${btn('to', `Koniec: stopień ${stepIndex + 1}`)}${s.toStep === null ? '' : btn('to-end', 'Do końca')}${btn('remove', 'Usuń')}</div></div>`;
+  });
+  const add = ['outer', 'inner'].map((side) => `<button type="button" class="insp-btn" data-railing-action="new" data-side="${side}">Nowy odcinek ${sideLabel[side]} od stopnia ${stepIndex + 1}</button>`).join('');
+  return section('Balustrada') + rows.join('') + `<div class="insp-actions">${add}</div>`;
+}
+
 function treadHTML(ctx) {
   const { treadModel: t, config, overrides, overhangs, diagnostics } = ctx;
   const idx = t.index;
@@ -77,6 +91,7 @@ function treadHTML(ctx) {
     rows.push(row('Krawędzie boczne', 'brak wysunięcia', 'auto'));
   }
 
+  rows.push(railingBlockHTML(config, idx));
   rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-tread-dxf="${t.stepId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego stopnia — gotowy kontur z noskiem, do wycięcia w warsztacie">Eksportuj stopień (DXF 1:1)</button></div>`);
 
   rows.push(section('Walidacja'));

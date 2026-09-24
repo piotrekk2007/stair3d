@@ -274,7 +274,7 @@ function stringerSpacingXML(planLayout, config) {
  *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, extraPosts = [] } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, extraPosts = [], railingModel = null } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -337,6 +337,28 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     .map(([postId, p]) => postRect(postId, p.x - config.postSize / 2, -p.y - config.postSize / 2, config.postSize))
     .join('');
 
+  // Balustrade (geometry/railingSolver.js): the whole side path thin and dashed, the handrail runs on top of
+  // it thick, balusters as dots; where the dashed line has no thick line on top, no handrail follows the path
+  // (the dusza side of a winder). Section ends are marked with a ring. Plan y is flipped for SVG.
+  const railingLayerXML = (() => {
+    if (layers.railing === false || !railingModel?.enabled) return '';
+    const size = config.railingBalusterSizeMm || 30;
+    const line = (pts, attrs) => `<polyline points="${pts.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ')}" fill="none" ${attrs}/>`;
+    return railingModel.sections
+      .filter((s) => s.valid)
+      .map((s) => {
+        const dashed = s.path?.length >= 2 ? line(s.path, 'stroke="#b07a3a" stroke-width="14" stroke-dasharray="60 50" opacity="0.7"') : '';
+        const runs = s.runs.map((run) => line([run.pieces[0].start, ...run.pieces.map((p) => p.end)], 'stroke="#b07a3a" stroke-width="42" stroke-linecap="round"')).join('');
+        const dots = s.balusters.map((b) => `<circle cx="${fmt(b.position.x)}" cy="${fmt(-b.position.y)}" r="${fmt(size / 2)}" fill="#5a3d24"/>`).join('');
+        const first = s.runs[0]?.pieces[0]?.start;
+        const lastRun = s.runs[s.runs.length - 1];
+        const last = lastRun?.pieces[lastRun.pieces.length - 1]?.end;
+        const ring = (p) => (p ? `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="70" fill="none" stroke="#1a5fb4" stroke-width="18"/>` : '');
+        return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${dots}${ring(first)}${ring(last)}</g>`;
+      })
+      .join('');
+  })();
+
   // Balustrade end posts (kind 'railing', postSolver.js/railingSolver.js): same marker, own size and id.
   const railingPostsXML = extraPosts.map((p) => postRect(p.postId, p.position.x - p.size / 2, -p.position.y - p.size / 2, p.size)).join('');
 
@@ -383,6 +405,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${postsXML}
     ${startEndPostsXML}
     ${railingPostsXML}
+    ${railingLayerXML}
     ${arrowXML}
     ${widthsXML}
     ${winderWidthXMLStr}
