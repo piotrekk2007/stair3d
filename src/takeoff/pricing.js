@@ -12,6 +12,7 @@ export const PRICE_UNITS = Object.freeze({
   VOLUME: 'volume', // unitPrice is per m³ — multiplies item.wasteAdjustedQuantity when its unit is 'm3'
   AREA: 'area', // unitPrice is per m² — multiplies item.wasteAdjustedQuantity when its unit is 'm2'
   PIECE: 'piece', // unitPrice is per szt — multiplies item.quantity
+  LENGTH: 'length', // unitPrice is per running metre — multiplies (item length in m) x quantity
 });
 
 /**
@@ -29,6 +30,9 @@ export const PRICE_UNITS = Object.freeze({
 export const DEFAULT_PRICE_LIST = Object.freeze([
   { materialId: 'timber-c24', price: 4200, currency: 'PLN', unit: PRICE_UNITS.VOLUME, source: 'Illustrative example — not a real supplier quote.' },
   { materialId: 'sheet-plywood-mdf', price: 90, currency: 'PLN', unit: PRICE_UNITS.AREA, source: 'Illustrative example — not a real supplier quote.' },
+  // Balustrade: no invented prices — 0 means "not priced yet" (the item stays unpriced and is flagged), the user types the real one.
+  { materialId: 'railing-baluster', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę tralki za sztukę.' },
+  { materialId: 'railing-handrail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę poręczy za metr bieżący.' },
 ]);
 
 function indexByMaterialId(priceList) {
@@ -41,6 +45,7 @@ function measureFor(item, unit) {
   if (unit === PRICE_UNITS.VOLUME) return item.wasteAdjustedUnit === 'm3' ? item.wasteAdjustedQuantity : null;
   if (unit === PRICE_UNITS.AREA) return item.wasteAdjustedUnit === 'm2' ? item.wasteAdjustedQuantity : null;
   if (unit === PRICE_UNITS.PIECE) return item.quantity;
+  if (unit === PRICE_UNITS.LENGTH) return item.calculatedDimensions?.lengthMm > 0 ? (item.calculatedDimensions.lengthMm / 1000) * item.quantity : null;
   throw new Error(`applyPricing: unknown price unit "${unit}"`);
 }
 
@@ -62,7 +67,7 @@ export function applyPricing(items, priceList = DEFAULT_PRICE_LIST) {
     // boardPricing.js — nie są wyceniane drugi raz ogólnym cennikiem po materialId.
     if (item.pricingSource) return { ...item };
     const price = byMaterial.get(item.materialId);
-    if (!price) return { ...item };
+    if (!price || !(price.price > 0)) return { ...item };
     const measure = measureFor(item, price.unit);
     if (measure === null) return { ...item };
     return {

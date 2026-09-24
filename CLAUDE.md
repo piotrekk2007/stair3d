@@ -957,8 +957,14 @@ in the Inspektor like any post — plus a per-post thickness `sizeMm` (railing p
 is cut into handrail RUNS ending in a post wherever it cannot continue as one piece (a plan corner > 10 degrees, a step in
 height, a piece steeper than 50 degrees such as the dusza of a winder); one post per join, an existing structural post is
 reused; `RAILING-RAIL-STEP` (INFO) reports a rail that restarts higher. See RAILING_MODEL.md for the limits (no bent handrail).
+**Stage 3a (takeoff + validation) is done:** `takeoff/railingItems.js` (HANDRAIL per piece, BALUSTER per section+length with a
+quantity = the balusters' cut list; railing posts are ordinary POST items), prices `railing-baluster` (per piece) and
+`railing-handrail` (per metre, new `PRICE_UNITS.LENGTH`) default to 0 = unpriced (`applyPricing` ignores prices <= 0), summary
+categories "Poręcze (z modelu)"/"Tralki (z modelu)", and `validator/railingChecks.js` (`PL-LEGAL-H-01` WARNING for height < 1100
+mm and for the configured/measured clear opening vs the building-type limit; `BWF-GUID-B-02` INFO). Tests:
+`takeoff/__tests__/railingItems.test.js`, `validator/__tests__/railingChecks.test.js`.
 Not yet:
-plan-2D clicking of section ends, takeoff/cut list/DXF, PL-LEGAL-H-01 diagnostics, bent handrail. Tests:
+plan-2D marks/clicking of section ends, DXF of handrail/balusters, bent handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 

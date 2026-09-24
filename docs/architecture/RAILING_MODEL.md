@@ -1,7 +1,23 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
-Status: **etapy 1 i 2 zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
-panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etapy 3–4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b (plan 2D + DXF) i 4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+
+## Co zrobiono w etapie 3a (kosztorys i walidacja)
+
+- **Kosztorys** (`takeoff/railingItems.js`, `computeMaterialTakeoff` przyjmuje `railingModel`): `HANDRAIL` = jedna pozycja na prosty
+  odcinek poręczy (prawdziwa długość 3D, przekrój); `BALUSTER` = jedna pozycja na (odcinek balustrady, długość zaokrąglona do 1 mm)
+  z `quantity` — to jest **lista cięcia tralek** (na wandze nakładanej wysokości różnią się co stopień). Słupki balustrady liczą się jako
+  zwykłe słupy (etykieta „Słupek balustrady", wycena z cennika słupów). Odpady: `HANDRAIL` 10%, `BALUSTER` 3%.
+- **Ceny:** `railing-baluster` (zł/szt.) i `railing-handrail` (zł/mb, nowa jednostka `PRICE_UNITS.LENGTH`) w ogólnym cenniku
+  (`DEFAULT_PRICE_LIST`), edytowane w „Cennik i materiały". **Domyślnie 0 = bez ceny** (pozycja zostaje niewyceniona i oznaczona) —
+  żadnych wymyślonych cen; `applyPricing` traktuje cenę <= 0 jako brak ceny. Kategorie podsumowania: „Poręcze (z modelu)" i „Tralki
+  (z modelu)" (celowo inne niż ręczne wiersze „Tralki"/„Poręcze", żeby się nie sklejały). Pozycje ręczne zostały — nie wpisuj drugi raz.
+- **Walidacja** (`validator/railingChecks.js`, wywoływana w `buildStaircase.js`, wynik dołącza do `railingModel.diagnostics`, więc
+  trafia do Walidacji i bramki kosztorysu): `PL-LEGAL-H-01` jako **WARNING** (nigdy blokujący, mimo że katalog ma ERROR — poręcz od linii
+  nosków to inna wielkość niż balustrada na wolnej krawędzi): wysokość < 1100 mm, skonfigurowany maks. prześwit > limit typu budynku
+  (200 mm ogólnie, 120 mm wielorodzinny/publiczny/ZOZ/oświata), oraz **zmierzony** największy prześwit na gotowej balustradzie;
+  `BWF-GUID-B-02` jako INFO (poręcz < 68×45, tralka < 27 kw./35 okr., słupek < 82).
 
 ## Co zrobiono w etapie 2 (zakręty i podesty)
 

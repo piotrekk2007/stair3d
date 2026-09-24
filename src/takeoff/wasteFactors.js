@@ -14,6 +14,8 @@ export const DEFAULT_WASTE_FACTORS = Object.freeze({
   STRINGER: 0.15, // long structural boards — cutting to length, avoiding defects, housing waste
   RISER: 0.08, // sheet material (plywood/MDF) — panel layout offcuts
   POST: 0.05, // short, simple square-section pieces — least waste-prone
+  HANDRAIL: 0.1, // cut to length with mitres at the ends
+  BALUSTER: 0.03, // short identical pieces, little offcut
 });
 
 /**

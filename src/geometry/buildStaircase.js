@@ -11,6 +11,7 @@ import { buildPostModels, buildAllPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildRailingModel } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
+import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
@@ -59,7 +60,10 @@ export function buildStaircase(config) {
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
-  const railingModel = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels }, fullConfig);
+  const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels }, fullConfig);
+  // Legal/reference checks on the solved balustrade (validator/railingChecks.js) join its own findings, which
+  // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
+  const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
   const allPostModels = [...buildAllPostModels(planLayout, fullConfig), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);

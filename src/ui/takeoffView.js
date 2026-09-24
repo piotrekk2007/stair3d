@@ -11,6 +11,8 @@ const ELEMENT_LABEL_PL = {
   STRINGER: 'Wangi',
   STRINGER_HOUSING: 'Wpusty wangi (informacyjnie)',
   POST: 'Słupy',
+  HANDRAIL: 'Poręcze',
+  BALUSTER: 'Tralki (lista cięcia)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -106,7 +108,7 @@ export function describeDimensions(d) {
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
 
-const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy'];
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)'];
 
 function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
@@ -121,6 +123,11 @@ function categoryOf(item, winderStepIds) {
       return 'Wangi';
     case 'POST':
       return 'Słupy';
+    // Distinct from the manual rows the user may still type ("Tralki", "Poręcze"), so the two never merge into one line.
+    case 'HANDRAIL':
+      return 'Poręcze (z modelu)';
+    case 'BALUSTER':
+      return 'Tralki (z modelu)';
     default:
       return null; // wpusty — poza kosztorysem
   }

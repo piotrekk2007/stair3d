@@ -22,6 +22,7 @@ import { wasteFactorFor } from './wasteFactors.js';
 import { boundingRectAlong, minAreaRectUV } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
 import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
+import { buildRailingItems } from './railingItems.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
@@ -279,7 +280,7 @@ function buildPostItem(post, config, wasteFactors) {
   const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
   const heightMm = post.elevation.top - post.elevation.bottom;
   const netVolumeMm3 = post.size * post.size * heightMm;
-  const label = { start: 'Słupek początkowy', end: 'Słupek końcowy', corner: 'Słup narożny (konstrukcyjny)' }[post.kind] || post.kind;
+  const label = { start: 'Słupek początkowy', end: 'Słupek końcowy', corner: 'Słup narożny (konstrukcyjny)', railing: 'Słupek balustrady' }[post.kind] || post.kind;
   // A post is square in section, so its cross-section maps onto BOTH the catalog's width and
   // thickness lists — the current illustrative timber-c24 catalog only lists sawn-board sizes
   // (thickness <= 60mm, width >= 150mm), which don't cover a typical ~110mm square post
@@ -302,7 +303,7 @@ function buildPostItem(post, config, wasteFactors) {
     stockVolume: netVolumeMm3 * MM3_TO_M3, // already a plain rectangular prism — net === stock
     stockArea: 0,
     wasteFactor: wasteFactorFor(ELEMENT_TYPES.POST, materialId, wasteFactors),
-    optional: post.kind === 'corner', // corner posts are conditional on config.hasCornerPost
+    optional: post.kind === 'corner' || post.kind === 'railing', // corner posts depend on config.hasCornerPost, balustrade posts on the balustrade
     status: TAKEOFF_ITEM_STATUS.OK,
     notes: [label, ...catalogNotes],
   });
@@ -325,7 +326,7 @@ function buildPostItems(postModels, config, wasteFactors) {
  * @param {{wasteFactors?: Object}} [options]
  * @returns {import('./takeoffTypes.js').MaterialTakeoffItem[]}  Cost fields are all null — see pricing.js.
  */
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels }, config, options = {}) {
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
     ...buildTreadItems(treadModels, config, wasteFactors),
@@ -333,5 +334,6 @@ export function computeMaterialTakeoff({ treadModels, riserModels, stringerModel
     ...buildStringerSideItems('outer', stringerModels.outer, stringerConstruction.outer, config, wasteFactors),
     ...buildStringerSideItems('inner', stringerModels.inner, stringerConstruction.inner, config, wasteFactors),
     ...buildPostItems(postModels, config, wasteFactors),
+    ...buildRailingItems(railingModel, config, wasteFactors),
   ];
 }
