@@ -938,7 +938,7 @@ file the preset dropdown may still show the previous preset name (the colour pic
 **Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
 Tests: `scene/__tests__/appearance.test.js`.
 
-## Balustrade (handrail + balusters) — stage 1 implemented
+## Balustrade (handrail + balusters) — stages 1 and 2 implemented
 
 See [docs/architecture/RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md): config parameters + a list of
 sections (`side`, `fromStep`, `toStep`) -> pure `railingSolver.js` -> renderer/validation/takeoff/plan 2D. Two
@@ -953,8 +953,12 @@ takeoff/cut list/plan/DXF, refinements). **Stage 1 is done** (straight flights, 
 by `buildStaircase.js`, rendered by `postRenderer.js`, drawn as markers in the plan 2D) so they are selectable and editable
 in the Inspektor like any post — plus a per-post thickness `sizeMm` (railing posts only, `postSolver.js`
 `sanitizePostOverrides`/`applyPostOverrides`), defaults `config.railingPostSizeMm`/`railingPostTopAboveHandrailMm`.
+**Stage 2 (turns and landings) is done too:** the path follows the whole tread chain (corners mitred, level across a landing) and
+is cut into handrail RUNS ending in a post wherever it cannot continue as one piece (a plan corner > 10 degrees, a step in
+height, a piece steeper than 50 degrees such as the dusza of a winder); one post per join, an existing structural post is
+reused; `RAILING-RAIL-STEP` (INFO) reports a rail that restarts higher. See RAILING_MODEL.md for the limits (no bent handrail).
 Not yet:
-plan-2D clicking of section ends, takeoff/cut list/DXF, turns/landings, PL-LEGAL-H-01 diagnostics, bent handrail. Tests:
+plan-2D clicking of section ends, takeoff/cut list/DXF, PL-LEGAL-H-01 diagnostics, bent handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 

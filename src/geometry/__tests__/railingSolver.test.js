@@ -7,7 +7,7 @@ import { buildTreadModels } from '../treadSolver.js';
 import { buildStringerModelsForFlight } from '../stringerSolver.js';
 import { buildStringerConstructionGeometry } from '../stringerConstructionGeometry.js';
 import { buildPostModels, sanitizePostOverrides } from '../postSolver.js';
-import { buildRailingModel, sanitizeRailingSections } from '../railingSolver.js';
+import { buildRailingModel, sanitizeRailingSections, RAILING_STEEP_ANGLE_DEG, RAILING_CORNER_ANGLE_DEG } from '../railingSolver.js';
 
 function stair(patch = {}) {
   const config = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 10, totalRise: 2000, treadGoing: 280, railingEnabled: true, ...patch };
@@ -164,4 +164,118 @@ test('per-post edits: thickness and length of a railing post, and removing it; t
 
 test('the thickness override is sanitised to a sane range', () => {
   assert.deepEqual(sanitizePostOverrides({ a: { sizeMm: 10 }, b: { sizeMm: 500 }, c: { sizeMm: 80 } }), { c: { sizeMm: 80 } });
+});
+
+// --- turns and landings (stage 2) ------------------------------------------------------------------------
+
+function turn(kind, side, extra = {}) {
+  return stair({
+    stairType: 'L',
+    turn1Type: kind,
+    treadsLegA: 4,
+    treadsLegB: 4,
+    windersPerTurn: 4,
+    totalRise: 2600,
+    railingSections: whole(side),
+    ...extra,
+  });
+}
+
+const slopeDeg = (piece) => (Math.atan2(Math.abs(piece.end.z - piece.start.z), Math.hypot(piece.end.x - piece.start.x, piece.end.y - piece.start.y)) * 180) / Math.PI;
+const planAngleDeg = (a, b) => {
+  const da = { x: a.end.x - a.start.x, y: a.end.y - a.start.y };
+  const db = { x: b.end.x - b.start.x, y: b.end.y - b.start.y };
+  const cos = (da.x * db.x + da.y * db.y) / (Math.hypot(da.x, da.y) * Math.hypot(db.x, db.y));
+  return (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
+};
+
+for (const kind of ['landing', 'winder']) {
+  for (const side of ['outer', 'inner']) {
+    for (const wanga of [cut, closed]) {
+      const label = `${kind} / ${side} / ${wanga === cut ? 'cut' : 'closed'}`;
+      test(`L stair (${label}): every handrail piece is a real handrail, every run turns only slightly, balusters have a positive height and clear the posts`, () => {
+        const { config, model } = turn(kind, side, wanga);
+        const section = model.sections[0];
+        assert.ok(section.valid);
+        assert.ok(section.runs.length >= 1);
+        for (const piece of section.handrail.pieces) assert.ok(slopeDeg(piece) <= RAILING_STEEP_ANGLE_DEG + 1e-6, `piece slope ${slopeDeg(piece)}`);
+        for (const run of section.runs) {
+          for (let i = 0; i < run.pieces.length - 1; i++) assert.ok(planAngleDeg(run.pieces[i], run.pieces[i + 1]) <= RAILING_CORNER_ANGLE_DEG + 1e-6, 'a corner must end the run in a post');
+        }
+        assert.ok(section.balusters.length > 0);
+        for (const b of section.balusters) assert.ok(b.heightMm > 0 && b.zTop > b.zBottom);
+        // no baluster stands inside one of this section's own posts
+        for (const post of section.posts.filter((p) => !p.removed)) {
+          for (const b of section.balusters) {
+            const d = Math.hypot(b.position.x - post.position.x, b.position.y - post.position.y);
+            assert.ok(d >= post.size / 2 + config.railingBalusterSizeMm / 2 - 1e-6, `baluster ${b.id} inside post ${post.postId}`);
+          }
+        }
+      });
+    }
+  }
+}
+
+test('L stair with a landing (outer): a corner post at the turn, the handrail LEVEL across the landing, then a step up to the next flight', () => {
+  const { config, model } = turn('landing', 'outer', cut);
+  const section = model.sections[0];
+  assert.ok(section.posts.some((p) => p.postId.includes('-join-')), 'a post at the corner');
+  const level = section.handrail.pieces.filter((p) => Math.abs(p.end.z - p.start.z) < 1e-6 && Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y) > 500);
+  assert.ok(level.length >= 1, 'a level piece across the landing');
+  assert.ok(section.runs.length >= 2);
+  const first = section.runs[0].pieces;
+  const second = section.runs[section.runs.length - 1].pieces;
+  const endOfFirst = first[first.length - 1].end.z;
+  const startOfLast = second[0].start.z;
+  assert.ok(startOfLast - endOfFirst >= config.riserHeight - 1e-6, 'the next flight starts at least one riser higher than the landing handrail');
+  const landingTop = 5 * config.riserHeight;
+  const onLanding = section.balusters.filter((b) => Math.abs(b.zBottom - landingTop) < 1e-6);
+  assert.ok(onLanding.length > 0, 'balusters stand on the landing');
+  for (const b of onLanding) assert.ok(Math.abs(b.zTop - (landingTop + config.railingHeightMm - config.railingHandrailHeightMm)) < 1e-6, 'the same height all over the level landing');
+});
+
+test('L stair with winders (outer): one corner post where the outer edge turns, the handrail meets it from both sides at the same height', () => {
+  const { model } = turn('winder', 'outer', cut);
+  const section = model.sections[0];
+  assert.ok(section.runs.length >= 2);
+  for (let j = 0; j < section.runs.length - 1; j++) {
+    const before = section.runs[j].pieces[section.runs[j].pieces.length - 1].end;
+    const after = section.runs[j + 1].pieces[0].start;
+    assert.ok(Math.hypot(before.x - after.x, before.y - after.y) < 200, 'the two runs meet at one post');
+  }
+});
+
+test('L stair with winders (inner / dusza): the handrail stops at a post and restarts higher — reported as an INFO, never a near-vertical handrail', () => {
+  const { model } = turn('winder', 'inner', cut);
+  const section = model.sections[0];
+  assert.ok(section.diagnostics.some((d) => d.ruleId === 'RAILING-RAIL-STEP' && d.severity === 'INFO'));
+  for (const piece of section.handrail.pieces) assert.ok(slopeDeg(piece) <= RAILING_STEEP_ANGLE_DEG + 1e-6);
+});
+
+test('housed wanga on a turn: within each run the balusters are evenly spread and every clear opening stays within the limit', () => {
+  const { config, model } = turn('landing', 'outer', closed);
+  const section = model.sections[0];
+  let checkedRuns = 0;
+  for (const run of section.runs) {
+    const pts = [run.pieces[0].start, ...run.pieces.map((p) => p.end)];
+    const onRun = section.balusters.filter((b) => {
+      let best = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i];
+        const c = pts[i + 1];
+        const dx = c.x - a.x;
+        const dy = c.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        const t = len2 ? Math.min(1, Math.max(0, ((b.position.x - a.x) * dx + (b.position.y - a.y) * dy) / len2)) : 0;
+        best = Math.min(best, Math.hypot(b.position.x - (a.x + dx * t), b.position.y - (a.y + dy * t)));
+      }
+      return best < 1;
+    });
+    if (onRun.length < 2) continue;
+    checkedRuns++;
+    const along = (b) => Math.hypot(b.position.x - pts[0].x, b.position.y - pts[0].y);
+    const sorted = onRun.map(along).sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i] - sorted[i - 1] - config.railingBalusterSizeMm <= config.railingMaxClearMm + 1e-3, 'clear opening within the limit');
+  }
+  assert.ok(checkedRuns >= 2, 'at least two runs actually carried enough balusters to check');
 });

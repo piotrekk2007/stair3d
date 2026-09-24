@@ -1,7 +1,23 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
-Status: **etap 1 zaimplementowany** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
-panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji). Etapy 2–4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+Status: **etapy 1 i 2 zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etapy 3–4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+
+## Co zrobiono w etapie 2 (zakręty i podesty)
+
+- Ścieżka poręczy idzie po CAŁYM łańcuchu stopnia (z narożnikami — na podeście po dwóch bokach, nie po przekątnej), przesuniętym
+  w bok jako jedna łamana z ostrymi narożnikami (miter). Linia nosków: +1 podstopień na stopniu prostym/zabiegowym, **poziomo na podeście**.
+- Poręcz to **biegi (runs) zakończone słupkiem** wszędzie tam, gdzie nie może być jednym odcinkiem: narożnik w rzucie > 10°
+  (`RAILING_CORNER_ANGLE_DEG`), skok wysokości (bieg po podeście zaczyna się o podstopień wyżej) albo odcinek stromszy niż 50°
+  (`RAILING_STEEP_ANGLE_DEG` — dusza zakrętu, gdzie stopnie zabiegowe schodzą do punktu). W każdym takim miejscu JEDEN słupek
+  (istniejący jest używany ponownie), a oba biegi dochodzą do niego na własnej wysokości. Biegi krótsze niż słupek są pomijane.
+  `RailingModel.sections[].runs` = `[{startPostId, endPostId, pieces}]`; `handrail.pieces` to wszystkie odcinki po kolei.
+- Wanga wpuszczana: tralki równo wzdłuż każdego biegu (szerokość słupka na obu końcach uwzględniona). Nakładana: ten sam rytm na
+  każdym stopniu, po łańcuchu stopnia (na podeście po obu bokach); tralka, która wypadłaby w słupku, jest pomijana.
+- Diagnostyka INFO `RAILING-RAIL-STEP`: poręcz kończy się przy słupku i zaczyna na innej wysokości (podest, dusza zakrętu).
+- **Ograniczenia:** poręcz nie jest gięta (łamana z prostych odcinków, bez łączenia na ucios pod skosem), a po stronie dusz zakrętu z
+  kilkoma stopniami zabiegowymi poręcz kończy się i zaczyna o kilka podstopni wyżej (potrzebny słup wysoki/łabędzia szyja — do
+  dopracowania w warsztacie, etap 4). Tralki przy słupku na wandze nakładanej są tylko pomijane, bez przeliczania rytmu.
 
 ## Co zrobiono w etapie 1 (odchylenia od planu)
 
@@ -16,7 +32,7 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji). Etapy 
   (`config.manualPostOverrides`). Domyślnie: `railingPostSizeMm` (90) i `railingPostTopAboveHandrailMm` (0). Rozstaw tralek na wandze
   wpuszczanej uwzględnia faktyczną szerokość słupka na każdym końcu (usunięty = 0).
 - Kolor balustrady dodany do kolorów prezentacji; warstwa "Balustrada" w HUD 3D; diagnostyki solvera przechodzą przez bramkę Walidacji.
-- **Jeszcze nie:** klikanie krańców odcinka w planie 2D (etap 3), kosztorys/lista cięcia/DXF (etap 3), zakręty i podesty (etap 2),
+- **Jeszcze nie:** klikanie krańców odcinka w planie 2D (etap 3), kosztorys/lista cięcia/DXF (etap 3),
   reguła 1100 mm i prześwit 12/20 cm jako diagnostyka (etap 3).
 
 ## Zasada
@@ -39,7 +55,7 @@ ten sam `RailingModel`; nic nie liczy geometrii samodzielnie. Balustrada NIE zmi
 - **Wanga wpuszczana:** poręcz równoległa do linii nachylenia; tralki równomiernie wzdłuż niej (prześwit <= limit), stoją na górnej krawędzi wangi (`upperCurve`).
 - **Wanga nakładana:** stały rytm na stopniu (k tralek, od noska; k z długości krawędzi stopnia, więc na zabiegowym różne), tralka stoi na stopniu, wysokość różna co stopień. Ostatnia tralka jednego stopnia i pierwsza następnego też muszą spełniać limit prześwitu.
 - Słupki na końcach odcinka: używa istniejących słupów (start/koniec/narożne) jeśli leżą w tym miejscu, inaczej nowy (`kind: 'railing'`).
-- Zakręt (etap 2): poręcz jako łamana z prostych odcinków, ze skosami po każdym stopniu zabiegowym; słupek w narożniku. Poręcz gięta poza zakresem.
+- Zakręt (etap 2, zrobione): poręcz jako biegi z prostych odcinków, słupek w każdym narożniku/skoku. Poręcz gięta poza zakresem.
 - Wynik: `RailingModel` = odcinki -> {ścieżka poręczy, tralki [{pozycja, dół, góra, profil}], słupki, diagnostyka}.
 
 ## Walidacja
