@@ -106,6 +106,21 @@ export function createDefaultConfig() {
     // żeby obie strony złącza się zgadzały). Tylko przy hasRiserBoards=true; 0 = styk na styk.
     riserTopOverlapMm: 10, // mm, zakładka podstopnia w stopień nad nim
 
+    // Balustrada (geometry/railingSolver.js, docs/architecture/RAILING_MODEL.md): poręcz + tralki na odcinkach
+    // wybranych przez użytkownika. railingSections = [{ id, side: 'outer'|'inner', fromStep, toStep|null }]
+    // (indeksy stopni od 0, toStep null = do ostatniego) — balustrada może zaczynać się od dowolnego stopnia,
+    // być tylko na jednym biegu albo tylko po jednej stronie.
+    railingEnabled: false,
+    railingSections: [],
+    railingHeightMm: 900, // mm, GÓRA poręczy nad linią nosków (linia przez czoła stopni)
+    railingHandrailShape: 'rect', // 'rect' | 'round'
+    railingHandrailWidthMm: 70, // mm, poprzecznie do biegu
+    railingHandrailHeightMm: 40, // mm, w pionie
+    railingBalusterShape: 'square', // 'square' | 'round'
+    railingBalusterSizeMm: 30, // mm, bok kwadratu albo średnica (BWF: min. 27 kwadratowa / 35 toczona)
+    railingMaxClearMm: 120, // mm, maksymalny prześwit między tralkami (PL WT § 298: 12 cm wielorodzinne / 20 cm ogólnie)
+    railingLateralOffsetMm: null, // mm od osi odniesienia wangi w głąb schodów; null = środek grubości wangi
+
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)
     hasCornerPost: true, // czy stawiać słup konstrukcyjny na zakrętach; gdy false, wangi łączą się bezpośrednio (zakładka na styk)
 

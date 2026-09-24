@@ -4,7 +4,7 @@
 // position or mesh naming (mesh.name is for exporters — see objExporter.js/daeExporter.js —
 // this is purely for in-app inspection, see elementInspector.js).
 //
-//   elementType       'tread' | 'riser' | 'stringer' | 'post'
+//   elementType       'tread' | 'riser' | 'stringer' | 'post' | 'railing'
 //   stepId            e.g. 'step-7' — which tread this element belongs to/supports; null when
 //                     the element isn't tied to one tread (e.g. a start/end/corner post).
 //   stringerId        'outer' | 'inner' — which stringer side; null for non-stringer elements.
@@ -14,7 +14,7 @@
 
 /**
  * @param {Object} fields
- * @param {'tread'|'riser'|'stringer'|'post'} fields.elementType
+ * @param {'tread'|'riser'|'stringer'|'post'|'railing'} fields.elementType
  * @param {string|null} [fields.stepId]
  * @param {'outer'|'inner'|null} [fields.stringerId]
  * @param {string} fields.geometrySourceId

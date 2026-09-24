@@ -60,7 +60,7 @@ export function runTakeoffValidationGate(models, options = {}) {
     { profileId: options.profileId }
   );
 
-  const diagnostics = [...validatorResult.diagnostics, ...collectStringerConstructionDiagnostics(models.stringerConstruction || {})];
+  const diagnostics = [...validatorResult.diagnostics, ...collectStringerConstructionDiagnostics(models.stringerConstruction || {}), ...(models.railingModel?.diagnostics || [])];
   const { active, waived, staleWaivers } = partitionByWaivers(diagnostics, options.waivers);
   const errors = active.filter((d) => d.severity === 'ERROR');
   const warnings = active.filter((d) => d.severity === 'WARNING');

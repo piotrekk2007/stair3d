@@ -1,6 +1,18 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
-Status: **zaplanowane, jeszcze niezaimplementowane.** Decyzje z użytkownikiem są na końcu.
+Status: **etap 1 zaimplementowany** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji). Etapy 2–4 nie ruszone. Decyzje z użytkownikiem są na końcu.
+
+## Co zrobiono w etapie 1 (odchylenia od planu)
+
+- `railingSolver.js`/`railingRenderer.js`/`buildStaircase.js` (`railingModel` w wyniku), `config.railing*` (schema.js).
+- Rozmieszczenie: wanga wpuszczana = równo wzdłuż poręczy, tralka stoi na `upperCurve` wangi; nakładana = k tralek na stopień
+  w tym samym rytmie na każdym stopniu (k z limitu prześwitu).
+- Słupki końcowe: istniejące słupy (start/koniec, od strony wewnętrznej) są używane ponownie, inaczej powstaje nowy słupek.
+- Poprzecznie: środek grubości wangi (`railingLateralOffsetMm`, null = auto; **bez suwaka w UI**).
+- Kolor balustrady dodany do kolorów prezentacji; warstwa "Balustrada" w HUD 3D; diagnostyki solvera przechodzą przez bramkę Walidacji.
+- **Jeszcze nie:** klikanie krańców odcinka w planie 2D (etap 3), kosztorys/lista cięcia/DXF (etap 3), zakręty i podesty (etap 2),
+  reguła 1100 mm i prześwit 12/20 cm jako diagnostyka (etap 3).
 
 ## Zasada
 
@@ -51,7 +63,11 @@ Panel parametrów (folder "Balustrada") + tabela odcinków (strona, od, do, doda
 - wysokość poręczy: 900 mm nad linią nosków (domyślnie, konfigurowalna)
 - zakręt v1: łamana z prostych odcinków; poręcz gięta później
 
-## Do zweryfikowania przy starcie etapu 1
+## Zweryfikowane w etapie 1
 
-- gdzie dokładnie leży wanga względem `outerChain`/`innerChain` (przesunięcie poprzeczne balustrady od osi wangi)
+- Wanga jest wyciskana od linii odniesienia (łańcuch stopnia) w głąb schodów (`stringerRenderer.js` `inwardDirection`), więc jej oś
+  leży o pół grubości od łańcucha w tę stronę.
+
+## Do zweryfikowania w kolejnych etapach
+
 - na którym stopniu leży pierwsza/ostatnia tralka, gdy odcinek kończy się w środku biegu (słupek końcowy)

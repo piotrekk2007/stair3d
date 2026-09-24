@@ -9,6 +9,8 @@ import { buildStringerConstructionGeometry } from './stringerConstructionGeometr
 import { renderStringers } from './stringerRenderer.js';
 import { buildPostModels, buildAllPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
+import { buildRailingModel } from './railingSolver.js';
+import { renderRailing } from './railingRenderer.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
@@ -19,12 +21,13 @@ const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughnes
 // całe wangi, a nie tylko jedną stronę.
 const stringerMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.7, metalness: 0.02, side: THREE.DoubleSide });
 const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.65, metalness: 0.02 });
+const railingMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.7, metalness: 0.02 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
 // odtwarza zależne od nich materiały pochodne (np. znacznik gniazda w wandze).
 export function setAppearance(appearance) {
-  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial }, appearance);
+  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial }, appearance);
 }
 
 // ORKIESTRATOR — żadna geometria nie jest tu ROZWIĄZYWANA, tylko SKŁADANA. Kolejność:
@@ -56,6 +59,9 @@ export function buildStaircase(config) {
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
   const allPostModels = buildAllPostModels(planLayout, fullConfig);
 
+  // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6).
+  const railingModel = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels }, fullConfig);
+
   const root = new THREE.Group();
   root.name = 'Staircase';
 
@@ -70,6 +76,10 @@ export function buildStaircase(config) {
     root.add(renderRisers(riserModels, riserBoardMaterial));
   }
 
+  if (railingModel.enabled) {
+    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, postMaterial));
+  }
+
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig);
 
@@ -79,5 +89,5 @@ export function buildStaircase(config) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel };
 }

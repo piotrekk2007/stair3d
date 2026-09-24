@@ -9,6 +9,7 @@ export const APPEARANCE_ELEMENTS = Object.freeze([
   { key: 'riser', label: 'Podstopnie' },
   { key: 'stringer', label: 'Wangi' },
   { key: 'post', label: 'Słupy' },
+  { key: 'railing', label: 'Balustrada' },
 ]);
 
 // Domyślne kolory = dotychczasowe kolory materiałów (nic się nie zmienia, dopóki ktoś nie wybierze).
@@ -17,6 +18,7 @@ export const DEFAULT_APPEARANCE = Object.freeze({
   riser: '#e8ddc4',
   stringer: '#8a5a34',
   post: '#5a3d24',
+  railing: '#d8c39a',
 });
 
 export const COLOR_PRESETS = Object.freeze([

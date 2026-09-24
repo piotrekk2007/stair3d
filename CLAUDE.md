@@ -938,13 +938,20 @@ file the preset dropdown may still show the previous preset name (the colour pic
 **Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
 Tests: `scene/__tests__/appearance.test.js`.
 
-## Balustrade (handrail + balusters) — planned, not implemented
+## Balustrade (handrail + balusters) — stage 1 implemented
 
 See [docs/architecture/RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md): config parameters + a list of
 sections (`side`, `fromStep`, `toStep`) -> pure `railingSolver.js` -> renderer/validation/takeoff/plan 2D. Two
 placement modes (housed wanga: balusters uniformly along the pitch line; overlay wanga: a fixed rhythm per
 tread), handrail 900 mm above the nosing line by default, 4 stages (straight flights, winders/landings,
-takeoff/cut list/plan/DXF, refinements). Consult it before touching `postSolver.js`, `manualItems.js` or the
+takeoff/cut list/plan/DXF, refinements). **Stage 1 is done** (straight flights, sections from-to, both wanga types):
+`config.railing*` (`schema.js`; `railingSections` = `[{id, side, fromStep, toStep|null}]`, 0-based steps), pure
+`geometry/railingSolver.js` (`buildRailingModel`, `sanitizeRailingSections`, `HANDRAIL_PRESETS`), `railingRenderer.js`
+(merged handrail/balusters meshes + new end posts, group `Railing`, traceability `elementType: 'railing'`),
+`buildStaircase.js` returns `railingModel`, the "Balustrada" folder + sections table in `ui.js`, colour `railing` in
+`scene/appearance.js`, HUD layer, and `RAILING-SECTION-INVALID` (WARNING) through `takeoff/validationGate.js`. Not yet:
+plan-2D clicking of section ends, takeoff/cut list/DXF, turns/landings, PL-LEGAL-H-01 diagnostics, bent handrail. Tests:
+`geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)

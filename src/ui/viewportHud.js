@@ -9,6 +9,7 @@ export const LAYERS_3D = [
   ['StringerOuter', 'Wanga zewn.'],
   ['StringerInner', 'Wanga wewn.'],
   ['Posts', 'Słupy'],
+  ['Railing', 'Balustrada'],
 ];
 
 const VIEWS = [

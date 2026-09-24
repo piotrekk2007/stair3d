@@ -3,6 +3,7 @@ import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
 import { stepIndexFromElementId } from './selection.js';
 import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
+import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -133,6 +134,104 @@ export function createUI({
   lockable(build.add(config, 'riserBoardThickness', 10, 50, 1).name('Grubość podstopnia [mm]'), 'riserBoardThickness');
   lockable(build.add(config, 'riserTopOverlapMm', 0, 30, 1).name('Zakładka podstopnia w stopień [mm]'), 'riserTopOverlapMm');
 
+  // Balustrada (geometry/railingSolver.js): parametry poręczy/tralek + lista odcinków. Wszystko to `config`
+  // (cofanie i plik projektu działają), więc zmiana idzie normalną drogą live -> rebuild -> commit.
+  const rail = gui.addFolder('Balustrada');
+  live(rail.add(config, 'railingEnabled')).name('Balustrada włączona');
+  const handrailOptions = { '— własny —': '', ...Object.fromEntries(HANDRAIL_PRESETS.map((p) => [p.label, p.id])) };
+  const handrailProxy = { preset: HANDRAIL_PRESETS.find((p) => p.shape === config.railingHandrailShape && p.width === config.railingHandrailWidthMm && p.height === config.railingHandrailHeightMm)?.id ?? '' };
+  rail
+    .add(handrailProxy, 'preset', handrailOptions)
+    .name('Poręcz: profil (gotowy)')
+    .onChange((id) => {
+      const p = HANDRAIL_PRESETS.find((x) => x.id === id);
+      if (!p) return;
+      config.railingHandrailShape = p.shape;
+      config.railingHandrailWidthMm = p.width;
+      config.railingHandrailHeightMm = p.height;
+      refreshUI(gui);
+      onChange();
+      (onCommit || onChange)();
+    });
+  live(rail.add(config, 'railingHandrailShape', { prostokątna: 'rect', okrągła: 'round' })).name('Poręcz: kształt');
+  live(rail.add(config, 'railingHandrailWidthMm', 30, 100, 1)).name('Poręcz: szerokość / średnica [mm]');
+  live(rail.add(config, 'railingHandrailHeightMm', 30, 100, 1)).name('Poręcz: wysokość [mm]');
+  live(rail.add(config, 'railingHeightMm', 700, 1200, 10)).name('Góra poręczy nad linią nosków [mm]');
+  live(rail.add(config, 'railingBalusterShape', { kwadratowa: 'square', okrągła: 'round' })).name('Tralka: kształt');
+  live(rail.add(config, 'railingBalusterSizeMm', 12, 60, 1)).name('Tralka: bok / średnica [mm]');
+  live(rail.add(config, 'railingMaxClearMm', 60, 200, 5)).name('Maks. prześwit między tralkami [mm]');
+
+  const sectionsBox = document.createElement('div');
+  sectionsBox.className = 'railing-sections';
+  const commitSections = () => {
+    onChange();
+    (onCommit || onChange)();
+  };
+  function renderSections() {
+    config.railingSections = sanitizeRailingSections(config.railingSections);
+    sectionsBox.innerHTML = '';
+    const title = document.createElement('div');
+    title.className = 'railing-sections-title';
+    title.textContent = 'Odcinki balustrady (stopnie liczone od 1; puste "do" = do końca)';
+    sectionsBox.appendChild(title);
+    config.railingSections.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'railing-section-row';
+      const side = document.createElement('select');
+      [['outer', 'zewn.'], ['inner', 'wewn.']].forEach(([value, label]) => side.add(new Option(label, value, false, s.side === value)));
+      side.addEventListener('change', () => {
+        s.side = side.value;
+        commitSections();
+      });
+      const from = document.createElement('input');
+      from.type = 'number';
+      from.min = '1';
+      from.title = 'od stopnia';
+      from.value = String(s.fromStep + 1);
+      from.addEventListener('change', () => {
+        const v = Math.round(Number(from.value));
+        if (Number.isFinite(v) && v >= 1) s.fromStep = v - 1;
+        commitSections();
+        renderSections();
+      });
+      const to = document.createElement('input');
+      to.type = 'number';
+      to.min = '1';
+      to.placeholder = 'koniec';
+      to.title = 'do stopnia (puste = do końca)';
+      to.value = s.toStep === null ? '' : String(s.toStep + 1);
+      to.addEventListener('change', () => {
+        const v = Math.round(Number(to.value));
+        s.toStep = to.value === '' || !Number.isFinite(v) || v < 1 ? null : v - 1;
+        commitSections();
+        renderSections();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '✕';
+      remove.title = 'Usuń odcinek';
+      remove.addEventListener('click', () => {
+        config.railingSections.splice(i, 1);
+        commitSections();
+        renderSections();
+      });
+      row.append(side, from, document.createTextNode('–'), to, remove);
+      sectionsBox.appendChild(row);
+    });
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.textContent = '+ Dodaj odcinek';
+    add.addEventListener('click', () => {
+      config.railingSections.push({ id: `railing-${Date.now().toString(36)}`, side: 'outer', fromStep: 0, toStep: null });
+      commitSections();
+      renderSections();
+    });
+    sectionsBox.appendChild(add);
+  }
+  renderSections();
+  rail.$children.appendChild(sectionsBox);
+  gui.refreshHooks = [renderSections];
+
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
   lockable(ceiling.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
@@ -221,6 +320,7 @@ export function createUI({
 
 export function refreshUI(gui) {
   gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  (gui.refreshHooks || []).forEach((hook) => hook());
 }
 
 export function createInfoPanel(container = document.body) {
