@@ -2,6 +2,7 @@ import GUI from 'lil-gui';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
 import { stepIndexFromElementId } from './selection.js';
+import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -54,6 +55,8 @@ export function createUI({
   onUndo,
   onRedo,
   onFitPlanView,
+  appearance,
+  onAppearanceChange,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -144,6 +147,26 @@ export function createUI({
   view.add(viewState, 'showStringerLengths').name('Długości wang').onChange((v) => onViewChange('showStringerLengths', v));
   view.add(viewState, 'showWinderBlanks').name('Formatki zabiegowe').onChange((v) => onViewChange('showWinderBlanks', v));
   view.add(viewState, 'showDebug').name('Debug mode (linie/punkty/łoża)').onChange((v) => onViewChange('showDebug', v));
+
+  // Kolory prezentacji: gotowa próbka albo własny kolor, osobno dla każdego elementu. Zapisywane w pliku
+  // projektu, poza historią modelu (zmiana koloru nie zmienia geometrii).
+  if (appearance) {
+    const look = gui.addFolder('Kolory (prezentacja)');
+    const presetOptions = { '— własny —': '', ...Object.fromEntries(COLOR_PRESETS.map((p) => [p.label, p.hex])) };
+    for (const { key, label } of APPEARANCE_ELEMENTS) {
+      const picker = look.addColor(appearance, key).name(label).onChange(() => onAppearanceChange && onAppearanceChange());
+      const proxy = { preset: COLOR_PRESETS.find((p) => p.hex === appearance[key])?.hex ?? '' };
+      look
+        .add(proxy, 'preset', presetOptions)
+        .name(`${label}: gotowe`)
+        .onChange((hex) => {
+          if (!hex) return;
+          appearance[key] = hex;
+          picker.updateDisplay();
+          onAppearanceChange && onAppearanceChange();
+        });
+    }
+  }
 
   const plan2d = gui.addFolder('Plan 2D');
   if (onTogglePlan2D) {

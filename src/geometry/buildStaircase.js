@@ -11,6 +11,7 @@ import { buildPostModels, buildAllPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
+import { applyAppearanceToMaterials } from '../scene/appearance.js';
 
 const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
 // Jeden wspólny materiał dla wang wewn.+zewn. — dzięki temu "Zaznacz wg materiału" w SketchUp
@@ -19,6 +20,12 @@ const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughnes
 const stringerMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.7, metalness: 0.02, side: THREE.DoubleSide });
 const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.65, metalness: 0.02 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
+
+// Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
+// odtwarza zależne od nich materiały pochodne (np. znacznik gniazda w wandze).
+export function setAppearance(appearance) {
+  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial }, appearance);
+}
 
 // ORKIESTRATOR — żadna geometria nie jest tu ROZWIĄZYWANA, tylko SKŁADANA. Kolejność:
 //

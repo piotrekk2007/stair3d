@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import './style.css';
 import { createDefaultConfig } from './config/schema.js';
-import { buildStaircase } from './geometry/buildStaircase.js';
+import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
+import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
 import { createProfileEditor } from './ui/profileEditorPanel.js';
@@ -98,6 +99,9 @@ let selectedTakeoffItemId = null;
 
 // Historia cofania działa WYŁĄCZNIE na modelu (config) — nigdy na widoku, zaznaczeniu ani meshach.
 const history = createHistory(config);
+
+// Kolory prezentacji (scene/appearance.js) — zapisywane w pliku projektu, poza `config` i historią modelu.
+const appearance = defaultAppearance();
 
 let currentRoot = null;
 let currentCeiling = null;
@@ -615,6 +619,8 @@ function handleNewProject() {
   if (!window.confirm('Rozpocząć nowy projekt? Bieżące parametry i ręczne edycje zostaną zastąpione domyślnymi (można to cofnąć przyciskiem Cofnij).')) return;
   Object.assign(config, createDefaultConfig());
   resetTakeoffSettings();
+  Object.assign(appearance, defaultAppearance());
+  setAppearance(appearance);
   waivers = [];
   pricingEditor.render();
   manualItemsEditor.render();
@@ -645,6 +651,7 @@ function handleSaveProject() {
     notes: projectMeta.notes,
     takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing, manualItems: takeoffSettings.manualItems },
     waivers,
+    appearance: { ...appearance },
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
   ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
@@ -662,6 +669,8 @@ function handleFileSelected(event) {
       projectMeta.name = meta.projectName;
       projectMeta.notes = meta.notes;
       waivers = meta.waivers;
+      Object.assign(appearance, sanitizeAppearance(meta.appearance));
+      setAppearance(appearance);
       resetTakeoffSettings();
       if (meta.takeoffSettings) {
         for (const incoming of meta.takeoffSettings.priceList || []) {
@@ -924,6 +933,11 @@ const gui = createUI({
   viewState,
   onViewChange: handleViewChange,
   onFitPlanView: fitPlanView,
+  appearance,
+  onAppearanceChange: () => {
+    setAppearance(appearance);
+    rebuild();
+  },
   onResetEdgeOverrides: handleResetEdgeOverrides,
   exportSelection,
   exportHandlers: {

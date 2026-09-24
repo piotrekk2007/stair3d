@@ -1,5 +1,6 @@
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { sanitizeWaivers } from '../diagnostics/waivers.js';
+import { sanitizeAppearance } from '../scene/appearance.js';
 import { sanitizeStringerProfileOverrides } from '../geometry/stringerProfileModel.js';
 import { sanitizePostOverrides } from '../geometry/postSolver.js';
 
@@ -52,6 +53,9 @@ export function buildProjectPayload(config, meta = {}) {
   if (meta.projectName) payload.projectName = meta.projectName;
   if (meta.notes) payload.notes = meta.notes;
   if (meta.takeoffSettings) payload.takeoffSettings = meta.takeoffSettings;
+  // Kolory prezentacji (scene/appearance.js) — ustawienie widoku, ale klient ma po ponownym otwarciu
+  // zobaczyć to samo, więc żyje w pliku (poza `config`; starszy plik go nie ma i dostaje domyślne).
+  if (meta.appearance) payload.appearance = meta.appearance;
   // Zaakceptowane wyjątki walidacji (diagnostics/waivers.js) — decyzja projektowa, więc żyje w
   // pliku, ale poza `config` (nie jest wejściem solvera i nie wchodzi do historii modelu).
   if (meta.waivers && meta.waivers.length > 0) payload.waivers = meta.waivers;
@@ -151,6 +155,7 @@ export function parseProjectFile(text) {
       notes: typeof data.notes === 'string' ? data.notes : '',
       takeoffSettings: data.takeoffSettings && typeof data.takeoffSettings === 'object' ? data.takeoffSettings : null,
       waivers: sanitizeWaivers(data.waivers),
+      appearance: sanitizeAppearance(data.appearance),
       schemaVersion: version,
       savedAt: typeof data.savedAt === 'string' ? data.savedAt : null,
     },

@@ -922,6 +922,22 @@ dusza edges (`STRINGER-CONTOUR-SELF-INTERSECTION`, depth 347 vs 350) — the upp
 equivalent of the lower blend. The "shaped transition piece at the post" remains unspecified/not done.
 Test: `stringerConstructionGeometry.test.js` ("tight winder (cut)", confirmed to fail without the fix).
 
+## Presentation colours per element (implemented)
+
+For showing a client e.g. white or black risers: `src/scene/appearance.js` (pure data — no geometry, no
+Three.js) holds a colour per element (`tread`/`riser`/`stringer`/`post`), a preset list (oak natural/light/
+dark, walnut, white, grey, anthracite, black), `sanitizeAppearance()` (only `#rrggbb`, unknown keys dropped,
+anything invalid falls back to the old material colour) and `applyAppearanceToMaterials()`.
+`buildStaircase.js`'s `setAppearance()` sets the colours on the four shared module materials; the next
+`rebuild()` recreates derived ones (the housing indicator in the wanga). UI: "Kolory (prezentacja)" folder in
+`ui.js` — a colour picker plus a "gotowe" preset dropdown per element. **It is presentation state, not
+`config`:** a top-level optional `appearance` in the project file (`projectIO.js`, no schema bump; an older
+file loads with the defaults), outside undo history, reset by "Nowy", never read by any solver or the
+takeoff. It applies in the normal 3D view too, not only in client mode. Known small limit: after loading a
+file the preset dropdown may still show the previous preset name (the colour picker is right).
+**Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
+Tests: `scene/__tests__/appearance.test.js`.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
