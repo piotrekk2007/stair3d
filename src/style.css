@@ -1446,3 +1446,5 @@ code {
 .pe-ribbon-seg { fill: #e4e8ed; stroke: #c9ced6; stroke-width: 1; cursor: pointer; }
 .pe-ribbon-seg:hover { fill: #d7dee6; }
 .pe-ribbon-seg.focused { fill: #a9c6ec; stroke: #1a5fb4; }
+
+.snap-guide { stroke: #d6336c; stroke-width: 1.5; stroke-dasharray: 8 5; vector-effect: non-scaling-stroke; pointer-events: none; }

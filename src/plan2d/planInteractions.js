@@ -52,7 +52,7 @@ function snapToAlignment(point, referencePoints) {
 // with grid snap (a coarse fallback on whichever axis alignment didn't already claim) — so a
 // drag that's near another point locks onto it precisely, and one that isn't still lands on a
 // predictable 5mm grid instead of an arbitrary pixel-derived coordinate.
-function snapPoint(raw, referencePoints) {
+export function snapPoint(raw, referencePoints) {
   const { point: aligned, guideX, guideY } = snapToAlignment(raw, referencePoints);
   return {
     point: {
@@ -62,6 +62,28 @@ function snapPoint(raw, referencePoints) {
     guideX,
     guideY,
   };
+}
+
+// The visible "smart guide": a dashed line through the point a drag just snapped to, along each
+// axis it aligned on, spanning the whole visible plan (`viewBox` in svg units: plan x, and plan y
+// flipped). Pure string builder so it can be tested without a DOM.
+export function snapGuidesXML(guideX, guideY, viewBox) {
+  if ((guideX === null || guideX === undefined) && (guideY === null || guideY === undefined)) return '';
+  const parts = [];
+  if (guideX !== null && guideX !== undefined) parts.push(`<line class="snap-guide" x1="${guideX}" y1="${viewBox.y}" x2="${guideX}" y2="${viewBox.y + viewBox.height}"/>`);
+  if (guideY !== null && guideY !== undefined) parts.push(`<line class="snap-guide" x1="${viewBox.x}" y1="${-guideY}" x2="${viewBox.x + viewBox.width}" y2="${-guideY}"/>`);
+  return `<g class="snap-guides" pointer-events="none">${parts.join('')}</g>`;
+}
+
+// Every live drag preview redraws the whole plan, so the guides are re-added to the CURRENT <svg>
+// after each redraw (and vanish with the next full redraw once the drag ends).
+function showSnapGuides(svg, guideX, guideY) {
+  if (!svg) return;
+  svg.querySelectorAll('.snap-guides').forEach((el) => el.remove());
+  const vb = svg.viewBox?.baseVal;
+  if (!vb) return;
+  const xml = snapGuidesXML(guideX, guideY, { x: vb.x, y: vb.y, width: vb.width, height: vb.height });
+  if (xml) svg.insertAdjacentHTML('beforeend', xml);
 }
 
 function screenToPlanPoint(svg, clientX, clientY) {
@@ -291,11 +313,12 @@ export function attachPlanInteractions(opts) {
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       const references = (getSnapPoints ? getSnapPoints() : []).filter((ref) => distance(ref, raw) > 1e-6);
-      const { point: p } = snapPoint(raw, references);
+      const { point: p, guideX, guideY } = snapPoint(raw, references);
       dragState.currentPoint = p;
       dragState.handle.setAttribute('cx', p.x);
       dragState.handle.setAttribute('cy', -p.y);
       onEdgeDragMove(dragState.boundaryIndex, { movedEndpoint: dragState.endpoint, point: p });
+      showSnapGuides(liveSvg(), guideX, guideY);
       return;
     }
 

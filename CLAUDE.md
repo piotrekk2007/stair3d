@@ -1008,9 +1008,10 @@ offsetMm }` (positive = away from the dusza/overhanging, negative = recessed).
   back to the existing grid snap (`snapMm`) on whichever axis didn't align — so two corners can
   be matched exactly without eyeballing it. `main.js` supplies `getSnapPoints()`, returning
   every tread's `frontEdge`/`backEdge` inner+outer points; the dragged point itself is filtered
-  out by `planInteractions.js`, not by the supplier. No visual "smart guide" line is drawn yet
-  showing why a point snapped — the snapping itself works, but that visual feedback is a
-  separate, not-yet-requested follow-up.
+  out by `planInteractions.js`, not by the supplier. While an edge handle is dragged, the axes it aligned on are shown as dashed
+  magenta "smart guide" lines across the visible plan (`planInteractions.js` `snapGuidesXML`/`showSnapGuides`,
+  `.snap-guide` in `style.css`); re-added to the current `<svg>` after each live redraw and gone when the
+  drag ends. Overhang drags (1D) have no alignment snap, so no guide. Tests: `plan2d/__tests__/snapGuides.test.js`.
 
 ## Workspace UI (stage 10, implemented)
 
