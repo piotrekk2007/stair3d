@@ -904,6 +904,24 @@ uwagi walidacji" line plus one "BLAD/OSTRZEZENIE <ruleId> (xN)" line per rule. I
 is hidden or waived (waivers live in the takeoff gate, not here). A clean board is unchanged. Test:
 `export/__tests__/dxfExport.test.js`.
 
+## Winder "local widening": already done by the start blend — the depth finding was measuring the wrong curve
+
+The open "local enlargement at a winder" item (STRINGER_CONSTRUCTION_SPEC.md, BWF-GUID-F-03) turned out
+to be mostly a measurement bug, found by probing 192 winder configs (L/U, cut/closed, 3-8 winders,
+2600/3000 rise, 900/1100 wide): tight winders (3-4 per turn, dusza treads 13-50 mm wide) reported
+`STRINGER-MIN-DEPTH` ERRORs (e.g. 21 mm vs 350 required) on boards whose FINAL lower edge was 350 mm deep.
+`blendCappedStartsToPreviousEnd()` already deepens a capped board start down to the neighbouring
+board's end — exactly the local widening a winder needs — but the depth finding (and, for cut boards,
+`STRINGER-MIN-SECTION`) was computed BEFORE that post-pass, on the flat-capped slice. New
+`refreshDepthAfterBlend()` (`stringerConstructionGeometry.js`, WeakMap `depthContexts` keeps the group
+reference/offset off the result object) re-measures `localDepthMm` on the final edge for exactly the
+blended boards and replaces those two findings (`minDepthDiagnostic`/`minSectionDiagnostic` factored out).
+Configs with an ERROR: 40 -> 16; every cut-board case is clean. **Still open (a real limit, not a
+measurement bug):** a housed (closed) board over 3 winders per turn — its upper line crosses the steep
+dusza edges (`STRINGER-CONTOUR-SELF-INTERSECTION`, depth 347 vs 350) — the upper contour has no
+equivalent of the lower blend. The "shaped transition piece at the post" remains unspecified/not done.
+Test: `stringerConstructionGeometry.test.js` ("tight winder (cut)", confirmed to fail without the fix).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

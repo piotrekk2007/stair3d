@@ -374,6 +374,38 @@ function buildRiserHousings(effective, config) {
 
 // --- Diagnostics -------------------------------------------------------------------------------
 
+function minSectionDiagnostic(segmentId, valueMm, requiredMm) {
+  return createDiagnostic({
+    ruleId: 'STRINGER-MIN-SECTION',
+    severity: 'WARNING',
+    elementType: 'stringer',
+    elementId: segmentId,
+    parameter: 'minRemainingSectionMm',
+    value: Math.round(valueMm * 10) / 10,
+    expected: `>= ${requiredMm}`,
+    unit: 'mm',
+    message: `Wanga (${segmentId}) ma za mało materiału w najcieńszym miejscu — ryzyko osłabienia konstrukcji.`,
+  });
+}
+
+function minDepthDiagnostic(segmentId, localDepthMm, requiredMm) {
+  return createDiagnostic({
+    ruleId: 'STRINGER-MIN-DEPTH',
+    severity: 'ERROR',
+    elementType: 'stringer',
+    elementId: segmentId,
+    parameter: 'minimumStringerDepthMm',
+    value: Math.round(localDepthMm * 10) / 10,
+    expected: `>= ${requiredMm}`,
+    unit: 'mm',
+    message: `Wanga (${segmentId}) ma lokalnie mniejszą głębokość (${Math.round(localDepthMm)} mm) niż wymagane minimum ${requiredMm} mm.`,
+  });
+}
+
+// What a board needs to re-measure its depth AFTER the post-passes below reshaped its lower edge
+// (a group-frame reference curve and this board's offset in it). Kept off the result object.
+const depthContexts = new WeakMap();
+
 // PERPENDICULAR distance (not a raw vertical Z gap — see file header) from every bearing
 // corner to the solved bottom contour — the true remaining material thickness at that point.
 function computeMinRemainingSectionCut(effective, bottomPolyline) {
@@ -573,39 +605,13 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
         ? config.stringerThickness - housingDepthFor(config.stringerThickness)
         : computeMinRemainingSectionCut(effective, bottomPolyline);
     const minRequired = config.stringerMinRemainingSectionMm ?? 0;
-    if (minRemainingSectionMm < minRequired) {
-      diagnostics.push(
-        createDiagnostic({
-          ruleId: 'STRINGER-MIN-SECTION',
-          severity: 'WARNING',
-          elementType: 'stringer',
-          elementId: segment.id,
-          parameter: 'minRemainingSectionMm',
-          value: Math.round(minRemainingSectionMm * 10) / 10,
-          expected: `>= ${minRequired}`,
-          unit: 'mm',
-          message: `Wanga (${segment.id}) ma za mało materiału w najcieńszym miejscu — ryzyko osłabienia konstrukcji.`,
-        })
-      );
-    }
+    if (minRemainingSectionMm < minRequired) diagnostics.push(minSectionDiagnostic(segment.id, minRemainingSectionMm, minRequired));
 
     // Local stringer depth: this segment's slice of the lower contour against the WHOLE group's
     // depth reference (see stringerProfileSolver.js measureLocalDepth for why not a sliced one).
     const localDepthMm = measureLocalDepth(lowerGroupSlice, solved.depthReferenceCurve);
     if (params.minimumDepthMm > 0 && localDepthMm < params.minimumDepthMm - DEPTH_TOLERANCE_MM) {
-      diagnostics.push(
-        createDiagnostic({
-          ruleId: 'STRINGER-MIN-DEPTH',
-          severity: 'ERROR',
-          elementType: 'stringer',
-          elementId: segment.id,
-          parameter: 'minimumStringerDepthMm',
-          value: Math.round(localDepthMm * 10) / 10,
-          expected: `>= ${params.minimumDepthMm}`,
-          unit: 'mm',
-          message: `Wanga (${segment.id}) ma lokalnie mniejszą głębokość (${Math.round(localDepthMm)} mm) niż wymagane minimum ${params.minimumDepthMm} mm.`,
-        })
-      );
+      diagnostics.push(minDepthDiagnostic(segment.id, localDepthMm, params.minimumDepthMm));
     }
 
     if (hasSelfIntersection(outerContour)) {
@@ -644,7 +650,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
           }))
         : null;
 
-    bySegmentId.set(segment.id, {
+    const result = {
       segmentId: segment.id,
       constructionType,
       pitchLine,
@@ -681,7 +687,9 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       profileOverridden: profileOverrides !== null,
       minRemainingSectionMm,
       diagnostics,
-    });
+    };
+    depthContexts.set(result, { referenceCurve: solved.depthReferenceCurve, segStart, effective, minDepthMm: params.minimumDepthMm, minSectionRequired: minRequired });
+    bySegmentId.set(segment.id, result);
   });
 
   return group.map((s) => bySegmentId.get(s.id) ?? emptySegmentGeometry(s));
@@ -901,6 +909,23 @@ function blendCappedStartsToPreviousEnd(ordered) {
   }
 }
 
+// The start-of-board blend (above) deepens a capped board start down to the neighbouring board's
+// end — that IS the local widening a tight winder's dusza needs. The depth findings were measured on
+// the un-blended (flat-capped) slice, so a board the blend already made deep enough was still reported
+// as too shallow. Re-measure the FINAL lower edge for exactly those boards and replace the two
+// depth findings; nothing else is touched.
+function refreshDepthAfterBlend(ordered) {
+  for (const geo of ordered) {
+    const ctx = depthContexts.get(geo);
+    if (!ctx || !geo.ends.start.blendedToPreviousEnd) continue;
+    geo.localDepthMm = measureLocalDepth(translateCurveU(geo.lowerCurve, ctx.segStart), ctx.referenceCurve);
+    geo.diagnostics = geo.diagnostics.filter((d) => d.ruleId !== 'STRINGER-MIN-DEPTH' && d.ruleId !== 'STRINGER-MIN-SECTION');
+    if (ctx.minDepthMm > 0 && geo.localDepthMm < ctx.minDepthMm - DEPTH_TOLERANCE_MM) geo.diagnostics.push(minDepthDiagnostic(geo.segmentId, geo.localDepthMm, ctx.minDepthMm));
+    if (geo.constructionType === CONSTRUCTION_TYPES.CUT) geo.minRemainingSectionMm = computeMinRemainingSectionCut(ctx.effective, geo.bottomProfile);
+    if (geo.minRemainingSectionMm < ctx.minSectionRequired) geo.diagnostics.push(minSectionDiagnostic(geo.segmentId, geo.minRemainingSectionMm, ctx.minSectionRequired));
+  }
+}
+
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model, config.hasCornerPost);
   const extendInfo = new Map(
@@ -914,6 +939,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampCrossSegmentOvershoot(ordered);
   blendCappedStartsToPreviousEnd(ordered);
+  refreshDepthAfterBlend(ordered);
   clampFirstSegmentToFloor(ordered);
   ordered.forEach(syncCurveStartsToPolylines);
   return ordered;

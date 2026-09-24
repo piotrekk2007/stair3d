@@ -729,3 +729,30 @@ test('cut wanga: riserRecess equals riserBoardThickness, independent of nosing',
   const modelOff = buildStringerModel(off.planLayout, off.config, 'outer');
   for (const b of modelOff.segments[0].treadBearings) assert.equal(b.riserRecess, 0);
 });
+
+// Regression: a tight winder (3 winders per turn — the dusza treads are ~13 mm wide, the board's
+// reference climbs almost vertically) got a STRINGER-MIN-DEPTH ERROR (21 mm) on a board whose FINAL
+// lower edge is 350 mm deep: the finding was measured on the flat-capped slice BEFORE
+// blendCappedStartsToPreviousEnd() deepened the board start down to the neighbour's end (the local
+// widening a winder needs). The depth is now re-measured on the final edge.
+test('tight winder (cut): the start blend\'s deepening is reflected in localDepthMm and no false MIN-DEPTH/MIN-SECTION is reported', () => {
+  const { config, planLayout } = build({
+    stairType: 'L',
+    turn1Type: 'winder',
+    treadsLegA: 4,
+    treadsLegB: 4,
+    windersPerTurn: 3,
+    totalRise: 2600,
+    treadGoing: 280,
+    stringerConstructionTypeOuter: 'cut',
+    stringerConstructionTypeInner: 'cut',
+  });
+  const model = buildStringerModelsForFlight(planLayout, config).inner;
+  const geos = buildStringerConstructionGeometry(model, config);
+  const blended = geos.filter((g) => g.ends.start.blendedToPreviousEnd);
+  assert.ok(blended.length > 0, 'this scenario must actually exercise the start blend');
+  for (const g of blended) {
+    assert.ok(g.localDepthMm >= config.minimumStringerDepthMm - 1, `${g.segmentId}: depth ${g.localDepthMm}`);
+    assert.ok(!g.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-DEPTH' || d.ruleId === 'STRINGER-MIN-SECTION'), `${g.segmentId}: ${g.diagnostics.map((d) => d.ruleId)}`);
+  }
+});
