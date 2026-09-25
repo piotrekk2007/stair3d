@@ -520,6 +520,18 @@ html, body {
   background: #fff;
 }
 
+#plan2d-zoom-controls button[data-action="edit"] {
+  width: auto;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+#plan2d-zoom-controls button[data-action="edit"].active {
+  background: #1a5fb4;
+  border-color: #1a5fb4;
+  color: #fff;
+}
+
 #plan2d-scale-readout {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 6px;

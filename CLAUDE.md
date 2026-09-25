@@ -976,7 +976,7 @@ reverted); a step that still ends up without a handrail is reported as `RAILING-
 planDeg = half the plan turn}, `cutLengthMm`; per baluster `topCutDeg`/`bottomCutDeg`/`longPointMm`), and
 `dxfExport.js` `buildRailingDXF` only draws them: every handrail piece in side view with both cuts, then the baluster
 cut list grouped by length and cuts; ASCII only; button "Balustrada (DXF 1:1)" in the Kosztorys toolbar. Tests:
-`export/__tests__/dxfExport.test.js`. Not yet: a bent (curved) handrail. Tests:
+`export/__tests__/dxfExport.test.js`. Not yet: a bent (curved) handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 
@@ -1165,6 +1165,12 @@ tail); the 3-winder cases that used to get STRINGER-TREAD-SUPPORT / -CONTOUR-SEL
 (blocking the takeoff) are clean. Tests: `stringerProfile.test.js` ("at a corner post … independent" — the board solved
 alone equals the one in the run), `stringerConstructionGeometry.test.js` ("tight winder: treads standing wholly on the
 corner post …"); both confirmed to fail on the old code.
+
+## Plan 2D "✎ Edytuj" button
+
+The plan HUD (`#plan2d-hud`, next to the zoom buttons) has a "✎ Edytuj" toggle — the same `viewState.plan2dEditMode`
+as "Edytuj krawędzie (przeciąganie)" in the parameter panel's Plan 2D folder; `main.js` `syncPlanEditButton` keeps the
+button state and the panel checkbox (via `refreshUI`) in sync both ways.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

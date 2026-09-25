@@ -589,6 +589,15 @@ function handleViewChange(key, value) {
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
   if (['showCeiling', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
+  if (key === 'plan2dEditMode') syncPlanEditButton();
+}
+
+// The plan HUD's "✎ Edytuj" button shows whether edge editing is on.
+function syncPlanEditButton() {
+  const button = document.querySelector('#plan2d-hud [data-action="edit"]');
+  if (!button) return;
+  button.classList.toggle('active', !!viewState.plan2dEditMode);
+  button.setAttribute('aria-pressed', viewState.plan2dEditMode ? 'true' : 'false');
 }
 
 // Edycja POJEDYNCZEGO słupa z Inspektora: zmienia wyłącznie config.manualPostOverrides (dane modelu),
@@ -904,6 +913,7 @@ const plan2dHud = document.createElement('div');
 plan2dHud.id = 'plan2d-hud';
 plan2dHud.innerHTML = `
   <div id="plan2d-zoom-controls">
+    <button type="button" data-action="edit" aria-pressed="false" title="Edycja krawędzi stopni: przeciągaj kółka na granicach stopni (narożniki), a po kliknięciu stopnia — romby przy jego bokach. To samo co „Edytuj krawędzie” w folderze Plan 2D.">✎ Edytuj</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
     <button type="button" data-action="fit" title="Dopasuj do widoku">⤢</button>
@@ -921,6 +931,13 @@ plan2dPanel.appendChild(plan2dHud);
 const scaleReadout = plan2dHud.querySelector('#plan2d-scale-readout');
 
 plan2dHud.querySelector('[data-action="fit"]').addEventListener('click', fitPlanView);
+// "✎ Edytuj" — the same view-state switch as "Edytuj krawędzie (przeciąganie)" in the parameter panel's Plan 2D
+// folder (both stay in sync: the panel via refreshUI, this button via syncPlanEditButton).
+plan2dHud.querySelector('[data-action="edit"]').addEventListener('click', () => {
+  handleViewChange('plan2dEditMode', !viewState.plan2dEditMode);
+  uiRefresh?.();
+});
+syncPlanEditButton();
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
