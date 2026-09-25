@@ -14,6 +14,7 @@ const TABS = [
   { id: 'inspector', label: 'Inspektor' },
   { id: 'validation', label: 'Walidacja' },
   { id: 'takeoff', label: 'Kosztorys' },
+  { id: 'structural', label: 'Konstrukcja' },
 ];
 
 /**

@@ -44,7 +44,7 @@ export const eurocodeStructural = defineRuleSet([
     source: 'EN 1912:2012, Structural timber — Strength classes — Assignment of visual grades and species',
     severity: 'WARNING',
     blocksGeneration: false,
-    notes: 'The project has no timber-species/grade field today; material takeoff (business goal 3) will need one before any structural check is meaningful.',
+    notes: 'Wired: config.structuralMaterialClass (C24/D30/D40, default D30 for oak — an assumption, grading per EN 1912 decides) selects the class for the orientative structural check (src/structural/timberClasses.js, values needsVerification). config.timberGrade stays the takeoff/pricing field.',
   },
   {
     ruleId: 'EC5-STRUCT-I-03',

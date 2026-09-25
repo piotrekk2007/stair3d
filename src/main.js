@@ -17,6 +17,8 @@ import { createUI, createInfoPanel, updateInfoPanel, createValidatorPanel, updat
 import { createWorkspace } from './ui/workspace.js';
 import { createInspectorPanel, updateInspectorPanel, selectionLabel } from './ui/inspectorPanel.js';
 import { createTakeoffPanel, updateTakeoffPanel, markTakeoffSelection } from './ui/takeoffPanel.js';
+import { createStructuralPanel, updateStructuralPanel } from './ui/structuralPanel.js';
+import { buildStructuralReport } from './structural/index.js';
 import { createViewportHud, LAYERS_3D } from './ui/viewportHud.js';
 import { GROUP_BY } from './ui/takeoffView.js';
 import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
@@ -238,6 +240,9 @@ function rebuild() {
   // wang), więc jej diagnostyki są kompletnym wynikiem walidacji — panel Walidacji i Kosztorys
   // zawsze pokazują ten sam stan (bez drugiego, osobnego przebiegu walidatora). Nic z tego nie
   // liczy geometrii: wszystko czyta te modele, które buildStaircase() już policzył.
+  // Orientative structural check (structural/index.js) — before the takeoff, so its findings join the same
+  // validation gate (Walidacja). Never blocks anything by itself (WARNING at most).
+  built.structural = buildStructuralReport(built, { riserMaterial: takeoffSettings.boardPricing?.riserMaterial });
   lastTakeoff = computeTakeoff();
   lastDiagnostics = lastTakeoff.activeDiagnostics;
   lastWaived = lastTakeoff.waivedDiagnostics;
@@ -257,6 +262,7 @@ function rebuild() {
   updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit, built.stairwellFit);
   const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
+  updateStructuralPanel(structuralPanel, built.structural);
 
   applyOverlayVisibility();
   applyLayerVisibility();
@@ -301,8 +307,11 @@ function winderStepIds() {
 // Zmiana cen/odpadów przelicza tylko kosztorys — geometria i historia modelu zostają nietknięte.
 function refreshTakeoff() {
   if (!lastModels) return;
+  // The riser material (oak/MDF) lives in the takeoff settings and changes the risers' weight.
+  lastModels.structural = buildStructuralReport(lastModels, { riserMaterial: takeoffSettings.boardPricing?.riserMaterial });
   lastTakeoff = computeTakeoff();
   renderTakeoffPanel();
+  updateStructuralPanel(structuralPanel, lastModels.structural);
 }
 
 function renderTakeoffPanel() {
@@ -804,6 +813,7 @@ const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onUnwaive: handleUnwaive,
   onClearStale: handleClearStaleWaivers,
 });
+const structuralPanel = createStructuralPanel(ws.tabBody('structural'));
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,
   onGroupChange: (groupBy) => {

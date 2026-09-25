@@ -106,7 +106,7 @@ test('runValidationPipeline: an absurdly small flight (too few risers for the to
   const result = runValidationPipeline(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 1, treadsLegB: 1, windersPerTurn: 1, treadGoing: 50, walklineOffset: 400, walklineSplitOffset: 400 }));
   assert.deepEqual(result.stages.GEOMETRIC_CONSTRAINTS, []);
   assert.equal(result.hasErrors, true);
-  assert.ok(result.stages.ERGONOMICS.some((d) => d.ruleId === 'PL-LEGAL-A-01' && d.severity === 'ERROR'), 'expected the Blondel formula violation to be reported');
+  assert.ok(result.stages.ERGONOMICS.some((d) => d.ruleId === 'PL-LEGAL-A-01' && d.severity === 'WARNING'), 'expected the Blondel formula violation to be reported (informational WARNING by user decision; the absurd riser height is still an ERROR elsewhere)');
 });
 
 test('checkTopologyValidity: catches a tread-count mismatch (negative, hand-built)', () => {

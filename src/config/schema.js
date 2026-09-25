@@ -109,6 +109,9 @@ export function createDefaultConfig() {
     // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
     // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).
     stringerMinRemainingSectionMm: 30, // mm, próg diagnostyczny — minimalna dopuszczalna grubość drewna w najcieńszym miejscu (nad wcięciem/pod wręgą)
+    // Klasa drewna TYLKO do orientacyjnej kontroli konstrukcji (src/structural/, docs/architecture/STRUCTURAL_CHECKS.md):
+    // 'C24' | 'D30' | 'D40' (EN 338). Osobna od timberGrade, którego używa kosztorys/cennik. D30 = dąb (założenie, EN 1912).
+    structuralMaterialClass: 'D30',
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia

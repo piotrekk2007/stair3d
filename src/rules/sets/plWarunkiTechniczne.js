@@ -21,10 +21,13 @@ export const plWarunkiTechniczne = defineRuleSet([
     ruleType: 'LEGAL_REQUIREMENT',
     jurisdiction: 'PL',
     source: 'Rozporządzenie MI ws. warunków technicznych budynków, § 69 ust. 4',
-    severity: 'ERROR',
-    blocksGeneration: true,
+    // Decyzja użytkownika (2026-09-25): wzór Blondela jest w programie TYLKO INFORMACYJNY — ostrzeżenie w Walidacji,
+    // nigdy blokada kosztorysu ani czynnik wpływający na geometrię (patrz geometry/stairwellFit.js). Przepis jako
+    // taki pozostaje wiążący (ruleType LEGAL_REQUIREMENT bez zmian) — to projektant decyduje, co z tym zrobić.
+    severity: 'WARNING',
+    blocksGeneration: false,
     notes:
-      'Odpowiednik projektu: config/schema.js już liczy "blondel"/"blondelOk", ale próg tam ustawiony na 600-650mm zgadza się z tym przepisem — warto formalnie powiązać z tym ruleId zamiast trzymać osobno.',
+      'Obniżone z ERROR do WARNING decyzją użytkownika: w programie tylko informacja, bez blokady kosztorysu. Próg 600-650 mm jest w config/schema.js jako BLONDEL_RANGE_MM (ta sama wartość).',
   },
   {
     ruleId: 'PL-LEGAL-A-02',

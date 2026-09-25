@@ -5,6 +5,7 @@ import { stepIndexFromElementId } from './selection.js';
 import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
+import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -159,6 +160,9 @@ export function createUI({
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');
+  // Only for the orientative structural check (zakładka "Konstrukcja") — the takeoff keeps using timberGrade.
+  const structuralClassOptions = Object.fromEntries(Object.entries(TIMBER_STRENGTH_CLASSES).map(([id, c]) => [c.label, id]));
+  live(build.add(config, 'structuralMaterialClass', structuralClassOptions)).name('Klasa drewna (kontrola konstr.)');
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');
   lockable(build.add(config, 'riserBoardThickness', 10, 50, 1).name('Grubość podstopnia [mm]'), 'riserBoardThickness');
   lockable(build.add(config, 'riserTopOverlapMm', 0, 30, 1).name('Zakładka podstopnia w stopień [mm]'), 'riserTopOverlapMm');

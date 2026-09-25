@@ -1028,6 +1028,28 @@ the UI). Also fixed: `planLayout.bounds` is now computed from the outer AND inne
 alone has zero width, so "Rzut klatki" showed a width of 0 mm (L/U bounds unchanged). Tests:
 `geometry/__tests__/stairwellFit.test.js`.
 
+## Structural check (orientative) — stage A1 implemented
+
+See [docs/architecture/STRUCTURAL_CHECKS.md](docs/architecture/STRUCTURAL_CHECKS.md) (scope, formulas, sources, statuses,
+stages A2-A5). **Orientative only — never a substitute for a structural engineer's design; never blocks the takeoff
+(WARNING at most).** Pure modules in `src/structural/` (no Three.js, no geometry): `timberClasses.js` (EN 338 C24/D30/D40
+from a SECONDARY source — RoyMech, edition not stated, values match EN 338:2003 — all `needsVerification`; D24 left out
+until verified; MDF 750 kg/m3 for MDF risers, manufacturer-typical, to verify; EC5 kmod/gammaM 1.3/kdef 0.6 and EN 1990
+1.35/1.5, recommended values, Polish NA to verify), `loads.js` (user decision: UK values UK-GUID-I-01/02 — 1.5 kN/m2,
+2.0 kN, handrail 0.36 kN/m, infill 0.5 kN/m2 / 0.35 kN, 25 mm — labelled UK, Polish value PL-LEGAL-I-01 unverified;
+parameters only once A2+ use them), `selfWeight.js` (mass = rhomean x NET volume from the UNGATED
+`computeMaterialTakeoff` — the same volume rule as the takeoff, RULES #8; housings subtracted from the wanga; structural
+posts vs balustrade posts by `PostModel.kind`; an element without a volume is reported missing, never estimated),
+`index.js` (`buildStructuralReport(models, {riserMaterial})` -> disclaimer, UK-load warning, self-weight, assumptions
+list, diagnostics). New config field `structuralMaterialClass` ('D30'; "Klasa drewna (kontrola konstr.)" in the
+Konstrukcja folder) — `timberGrade` (takeoff/pricing) unchanged. `main.js` builds the report in `rebuild()` (and again
+in `refreshTakeoff()`, since the riser material oak/MDF lives in the takeoff settings) as `built.structural`, whose
+diagnostics join the takeoff validation gate. UI: new right-sidebar tab "Konstrukcja" (`ui/structuralPanel.js`).
+`EC5-STRUCT-I-02`'s stale note updated. Tests: `structural/__tests__/structural.test.js`.
+
+**PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
+only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

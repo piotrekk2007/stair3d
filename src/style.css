@@ -1461,3 +1461,85 @@ code {
 .railing-section-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
 .railing-section-row input { width: 52px; }
 .railing-sections select, .railing-sections input, .railing-sections button { font: inherit; }
+
+/* ---- Zakładka "Konstrukcja" (ui/structuralPanel.js) ---- */
+#structural-panel {
+  line-height: 1.4;
+}
+
+#structural-panel h4 {
+  margin: 12px 0 4px;
+}
+
+.st-disclaimer {
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #fdf0ee;
+  border: 1px solid var(--c-err);
+  color: #7a1f14;
+  font-weight: 600;
+}
+
+.st-note {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #555;
+}
+
+.st-note.warn {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fdf7e8;
+  border: 1px solid var(--c-warn);
+  color: #6b5205;
+}
+
+.st-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.st-table th,
+.st-table td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+}
+
+.st-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-table tfoot th {
+  border-top: 2px solid var(--c-border);
+}
+
+.st-muted {
+  color: #888;
+}
+
+.st-assumptions {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.st-assumptions li {
+  margin-bottom: 4px;
+}
+
+.st-status {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #eee;
+  font-size: 11px;
+}
+
+.st-source {
+  color: #888;
+  font-size: 11px;
+}
