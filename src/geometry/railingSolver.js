@@ -37,7 +37,7 @@ import { rotate90CW } from './planLayout.js';
 import { applyPostOverrides } from './postSolver.js';
 import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js';
 import { valueAtU } from './polylineProfile.js';
-import { curveToPolyline } from './profileCurve.js';
+import { curveToPolyline, filletPolyline } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
@@ -213,6 +213,202 @@ function offsetLookup(points, distance, sign) {
   return lookup;
 }
 
+// --- bent handrail (etap 4) ------------------------------------------------------------------------------
+//
+// One run of the nosing line made smooth: in PLAN every interior corner (only corners without a post remain inside a
+// run when bent) is filleted with config.railingPlanBendRadiusMm; in ELEVATION — z against the distance along the
+// plan path — every change of pitch is filleted with config.railingBendRadiusMm (both clamped where the neighbouring
+// pieces are too short, profileCurve.js filletPolyline). The result is sampled densely, so every consumer keeps
+// working on straight chords (renderer, takeoff, checks); `run.bent` marks it for the takeoff and the DXF.
+const BENT_PLAN_CHORD_MM = 2; // chord tolerance of the plan arcs
+const BENT_ELEVATION_CHORD_MM = 1; // chord tolerance of the elevation arcs
+// Nodes of the nosing line closer than this (along the plan) are merged before the elevation is filleted — the tread
+// boundaries around a corner sit a few mm apart and would otherwise clamp every fillet to almost nothing.
+const BENT_MIN_NODE_SPACING_MM = 20;
+const PLAN_COLLINEAR_SIN = 1e-3; // a plan vertex turning less than this (sin) is not a corner
+
+// Plan corners only: collinear vertices dropped (a fillet sized by the legs of the REAL corner, not by a node a few
+// mm away on the same line).
+function planCorners(points) {
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = out[out.length - 1];
+    const p = points[i];
+    const b = points[i + 1];
+    const l1 = Math.hypot(p.u - a.u, p.v - a.v);
+    const l2 = Math.hypot(b.u - p.u, b.v - p.v);
+    if (l1 < SAME_POINT_MM || l2 < SAME_POINT_MM) continue;
+    const sin = Math.abs((p.u - a.u) * (b.v - p.v) - (p.v - a.v) * (b.u - p.u)) / (l1 * l2);
+    if (sin > PLAN_COLLINEAR_SIN) out.push(p);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function smoothRun(run, config) {
+  const plan = [];
+  for (const p of run) {
+    const last = plan[plan.length - 1];
+    if (last && Math.hypot(p.x - last.x, p.y - last.y) < SAME_POINT_MM) continue;
+    plan.push(p);
+  }
+  if (plan.length < 3) return simplifyPath(run);
+
+  const planPts = planCorners(plan.map((p) => ({ u: p.x, v: p.y })));
+  const planRadius = Math.max(0, config.railingPlanBendRadiusMm || 0);
+  const planCurve = filletPolyline(planPts, planPts.map((_, i) => (i > 0 && i < planPts.length - 1 ? planRadius : 0))).curve;
+  const planPoly = curveToPolyline(planCurve, BENT_PLAN_CHORD_MM);
+  const cumPlanNew = cumulativeLengths(planPoly.map((p) => ({ x: p.u, y: p.v })));
+  const cumPlanOld = cumulativeLengths(plan);
+  const scale = cumPlanOld[cumPlanOld.length - 1] > 0 ? cumPlanNew[cumPlanNew.length - 1] / cumPlanOld[cumPlanOld.length - 1] : 1;
+
+  const profile = [];
+  plan.forEach((p, i) => {
+    const q = { u: cumPlanOld[i] * scale, v: p.z };
+    const last = profile[profile.length - 1];
+    if (last && i < plan.length - 1 && q.u - last.u < BENT_MIN_NODE_SPACING_MM) return;
+    if (last && i === plan.length - 1 && profile.length > 1 && q.u - last.u < BENT_MIN_NODE_SPACING_MM) profile.pop();
+    profile.push(q);
+  });
+  const bendRadius = Math.max(0, config.railingBendRadiusMm || 0);
+  const zPoly = curveToPolyline(filletPolyline(profile, profile.map((_, i) => (i > 0 && i < profile.length - 1 ? bendRadius : 0))).curve, BENT_ELEVATION_CHORD_MM);
+
+  const stations = [...new Set([...cumPlanNew, ...zPoly.map((q) => q.u)].map((s) => Math.round(s * 1000) / 1000))].sort((a, b) => a - b);
+  const total = cumPlanNew[cumPlanNew.length - 1];
+  const planAt = (s) => {
+    const k = Math.max(1, cumPlanNew.findIndex((c) => c >= s));
+    const a = planPoly[k - 1];
+    const b = planPoly[k] ?? a;
+    const span = cumPlanNew[k] - cumPlanNew[k - 1];
+    const t = span > 0 ? (s - cumPlanNew[k - 1]) / span : 0;
+    return { x: a.u + (b.u - a.u) * t, y: a.v + (b.v - a.v) * t };
+  };
+  return stations.filter((s) => s >= -SAME_POINT_MM && s <= total + SAME_POINT_MM).map((s) => ({ ...planAt(Math.min(Math.max(s, 0), total)), z: valueAtU(zPoly, s) }));
+}
+
+// The base rail of one run: the run's plan path sampled every BASERAIL_SAMPLE_MM (plus its own vertices), each point
+// lifted onto the wanga's top edge (`topAt`) with the rail's centre half its height above it, collinear points merged.
+const CORNER_PROBE_MM = 1; // how far either side of a path vertex the boards' tops are read
+const BOARD_STEP_MM = 1; // a difference above this between the two sides is a step between boards, not the slope
+const BASERAIL_SAMPLE_MM = 20; // dense enough that a chord across a kink of the wanga top stays within ~1 mm of it
+function baseRailAlong(path, topAt, heightMm) {
+  const stations = [];
+  for (let i = 0; i < path.length; i++) {
+    stations.push(path[i]);
+    const next = path[i + 1];
+    if (!next) break;
+    const len = Math.hypot(next.x - path[i].x, next.y - path[i].y);
+    const n = Math.floor(len / BASERAIL_SAMPLE_MM);
+    for (let k = 1; k < n; k++) stations.push({ x: path[i].x + ((next.x - path[i].x) * k) / n, y: path[i].y + ((next.y - path[i].y) * k) / n });
+  }
+  // At a path vertex two boards may meet (a plan corner, the end of a run at a corner): the rail lies on the HIGHER
+  // of the top edges found just either side of it, never cutting into the board that rises past it.
+  const nudge = (p, q, mm) => {
+    const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    return { x: p.x + ((q.x - p.x) / l) * mm, y: p.y + ((q.y - p.y) / l) * mm };
+  };
+  const vertexIndex = new Map(path.map((p, k) => [p, k]));
+  const topAround = (p) => {
+    const k = vertexIndex.get(p);
+    if (k === undefined) return topAt(p);
+    const probes = [p, k > 0 ? nudge(p, path[k - 1], CORNER_PROBE_MM) : null, k < path.length - 1 ? nudge(p, path[k + 1], CORNER_PROBE_MM) : null].filter(Boolean);
+    const tops = probes.map(topAt).filter((t) => t !== null && t !== undefined);
+    if (tops.length === 0) return null;
+    const own = tops[0];
+    const highest = Math.max(...tops);
+    // only a real step between two boards counts; the slope of one board over CORNER_PROBE_MM is noise
+    return highest - own > BOARD_STEP_MM ? highest : own;
+  };
+  const points = stations
+    .map((p) => {
+      const top = topAround(p);
+      return top === null || top === undefined ? null : { x: p.x, y: p.y, z: top + heightMm / 2 };
+    })
+    .filter(Boolean);
+  if (points.length < 2) return [];
+  // A sampled kink of the wanga top leaves a chord of about one sample step between two long pieces — a pointless
+  // 20-30 mm piece for the workshop: it is replaced by the true kink (collapseShortPieces).
+  const simplified = collapseShortPieces(simplifyPath(points), 2 * BASERAIL_SAMPLE_MM);
+  const pieces = [];
+  for (let i = 0; i < simplified.length - 1; i++) {
+    const start = simplified[i];
+    const end = simplified[i + 1];
+    const lengthMm = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    if (lengthMm > SAME_POINT_MM) pieces.push({ start, end, lengthMm });
+  }
+  annotateCuts(pieces, heightMm);
+  return pieces;
+}
+
+// Removes pieces shorter than `minLen` from a 3D polyline where that is exact: an interior one whose neighbours lie in
+// one vertical plane is replaced by the intersection of their lines (the kink they really meet at); an end one merges
+// into its neighbour. A short piece at a plan corner (neighbours in different planes) is a real transition — kept.
+function collapseShortPieces(points, minLen) {
+  const pts = [...points];
+  const len = (a, b) => Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  let i = 0;
+  while (i < pts.length - 1 && pts.length > 2) {
+    if (len(pts[i], pts[i + 1]) >= minLen) {
+      i += 1;
+      continue;
+    }
+    if (i === 0) {
+      pts.splice(1, 1);
+      continue;
+    }
+    if (i + 1 === pts.length - 1) {
+      pts.splice(i, 1);
+      continue;
+    }
+    const kink = kinkBetween(pts[i - 1], pts[i], pts[i + 1], pts[i + 2]);
+    if (kink) {
+      pts.splice(i, 2, kink);
+      i = Math.max(0, i - 1);
+    } else {
+      i += 1;
+    }
+  }
+  return pts;
+}
+
+function kinkBetween(p0, a, b, p3) {
+  const l1 = Math.hypot(a.x - p0.x, a.y - p0.y);
+  const l2 = Math.hypot(p3.x - b.x, p3.y - b.y);
+  if (l1 < SAME_POINT_MM || l2 < SAME_POINT_MM) return null;
+  const d = { x: (a.x - p0.x) / l1, y: (a.y - p0.y) / l1 };
+  const d2 = { x: (p3.x - b.x) / l2, y: (p3.y - b.y) / l2 };
+  if (Math.abs(d.x * d2.y - d.y * d2.x) > PLAN_COLLINEAR_SIN) return null; // not in one vertical plane
+  const sOf = (q) => (q.x - a.x) * d.x + (q.y - a.y) * d.y;
+  const m1 = (a.z - p0.z) / (0 - sOf(p0));
+  const m2 = (p3.z - b.z) / (sOf(p3) - sOf(b));
+  if (Math.abs(m1 - m2) < 1e-9) return null;
+  const s = (b.z - m2 * sOf(b) - a.z) / (m1 - m2);
+  if (s < sOf(p0) || s > sOf(p3)) return null; // the lines meet outside the two neighbours
+  return { x: a.x + d.x * s, y: a.y + d.y * s, z: a.z + m1 * s };
+}
+
+// z of the (smoothed) nosing line under a plan point: the nearest chord in plan of the given paths, interpolated.
+function zOnPaths(paths, point) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const path of paths) {
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1];
+      const b = path[i];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const L2 = dx * dx + dy * dy;
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / L2)) : 0;
+      const d = Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+      if (d < bestDist) {
+        bestDist = d;
+        best = a.z + (b.z - a.z) * t;
+      }
+    }
+  }
+  return best;
+}
+
 // Removes vertices that lie on the straight line between their neighbours (3D), so a straight flight is
 // ONE handrail piece however many treads it spans.
 function simplifyPath(points) {
@@ -292,8 +488,10 @@ function buildTreadChains(planLayout, fromStep, toStep, side, riserHeight) {
   return chains;
 }
 
-// Splits the flat node list into runs (see the header) and reports the joins between them.
-function splitIntoRuns(nodes, config) {
+// Splits the flat node list into runs (see the header) and reports the joins between them. With a bent handrail
+// (config.railingBent) a plan corner only ends the run where a post already stands there (`isPostAt`); elsewhere the
+// handrail is bent round it (smoothRun).
+function splitIntoRuns(nodes, config, isPostAt = () => false) {
   const steep = Math.tan((RAILING_STEEP_ANGLE_DEG * Math.PI) / 180);
   const cornerCos = Math.cos((RAILING_CORNER_ANGLE_DEG * Math.PI) / 180);
   const runs = [];
@@ -316,7 +514,7 @@ function splitIntoRuns(nodes, config) {
       const lPrev = planDist(prev, a);
       if (lPrev > SAME_POINT_MM) {
         const cos = ((a.x - prev.x) * (b.x - a.x) + (a.y - prev.y) * (b.y - a.y)) / (lPrev * l);
-        if (cos < cornerCos) {
+        if (cos < cornerCos && (!config.railingBent || isPostAt(a))) {
           runs.push(current);
           joins.push({ kind: 'corner' });
           current = [a];
@@ -387,7 +585,9 @@ function buildSection(section, ctx) {
   }
   base.path = nodes.map((n) => ({ x: n.x, y: n.y })); // the whole wanga-side path (plan), also where no handrail can follow it
 
-  const { runs, joins } = splitIntoRuns(nodes, config);
+  const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
+  const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;
+  const { runs, joins } = splitIntoRuns(nodes, config, (p) => existingNear(p) !== null);
 
   // Treads that carry no handrail at all: every node of theirs fell into a run that was too short to hold one (the
   // dusza side of a winder, where the treads shrink to a point). Their balusters would stand under nothing.
@@ -399,8 +599,6 @@ function buildSection(section, ctx) {
 
   // --- posts: one at the section start, one at the end, one at every join between two runs. An existing
   // structural post standing there is reused; a new one is a normal, editable railing post.
-  const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
-  const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;
   const stairDepth = config.minimumStringerDepthMm || 0;
   const spots = [];
   spots.push({ id: `railing-post-${section.id}-start`, at: runs[0][0], zs: [runs[0][0].z] });
@@ -452,8 +650,20 @@ function buildSection(section, ctx) {
   const pitch = maxClear + balusterSize; // largest allowed centre-to-centre distance
   const pieces = [];
   const balusters = [];
+  const bent = !!config.railingBent;
+  const smoothedPaths = [];
+  // Base rail (podporęcz): only on a housed wanga — there the balusters stand on the wanga's top edge, and the base
+  // rail lies on that edge along each handrail run, the balusters standing in it (on an overlay wanga they stand on
+  // the treads: nothing to put a base rail on).
+  const baseRailOn = !!config.railingBaseRail && constructionType !== CONSTRUCTION_TYPES.CUT;
+  const baseRailHeight = baseRailOn ? config.railingBaseRailHeightMm : 0;
+  const baseRail = baseRailOn ? { shape: 'rect', widthMm: config.railingBaseRailWidthMm, heightMm: config.railingBaseRailHeightMm, runs: [], pieces: [] } : null;
+  if (config.railingBaseRail && !baseRailOn) {
+    base.diagnostics.push(diag(section.id, 'RAILING-BASERAIL-NOT-APPLICABLE', `Balustrada ${section.id}: podporęcz jest tylko przy wandze wpuszczanej — przy nakładanej tralki stoją na stopniach, podporęcz pominięta.`, 'INFO'));
+  }
   runs.forEach((run, j) => {
-    const path = simplifyPath(run);
+    const path = bent ? smoothRun(run, config) : simplifyPath(run);
+    if (bent) smoothedPaths.push(path);
     const runPieces = [];
     for (let i = 0; i < path.length - 1; i++) {
       const start = centre(path[i]);
@@ -462,10 +672,16 @@ function buildSection(section, ctx) {
     }
     annotateCuts(runPieces, handrailHeight);
     pieces.push(...runPieces);
-    base.runs.push({ startPostId: postIdAt.get(spots[j].id), endPostId: postIdAt.get(spots[j + 1].id), pieces: runPieces });
+    base.runs.push({ startPostId: postIdAt.get(spots[j].id), endPostId: postIdAt.get(spots[j + 1].id), pieces: runPieces, bent });
+
+    if (baseRail) {
+      const railPieces = baseRailAlong(path, (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]), baseRail.heightMm);
+      baseRail.runs.push({ pieces: railPieces });
+      baseRail.pieces.push(...railPieces);
+    }
 
     if (constructionType !== CONSTRUCTION_TYPES.CUT) {
-      // Housed wanga: evenly spread along this run, standing on the wanga's top edge.
+      // Housed wanga: evenly spread along this run, standing on the wanga's top edge (or in the base rail on it).
       const cumulative = cumulativeLengths(path);
       const total = cumulative[cumulative.length - 1];
       const startHalf = halfAt(spots[j]);
@@ -477,7 +693,7 @@ function buildSection(section, ctx) {
         const s = startHalf + gap * (b + 1) + balusterSize * b + balusterSize / 2;
         const p = pointAt(path, cumulative, s);
         const top = wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
-        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: top ?? p.z + (config.stringerTopMarginMm || 0), zTop: railTop(p.z) - handrailHeight });
+        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: (top ?? p.z + (config.stringerTopMarginMm || 0)) + baseRailHeight, zTop: railTop(p.z) - handrailHeight });
       }
     }
   });
@@ -495,7 +711,9 @@ function buildSection(section, ctx) {
         const p = pointAt(path, cumulative, (length * (b + 0.5)) / k);
         const onPost = postClearances.some((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < post.half + balusterSize / 2 + 5);
         if (onPost) continue;
-        balusters.push({ treadIndex: chain.index, position: { x: p.x, y: p.y }, zBottom: chain.zFront, zTop: railTop(p.z) - handrailHeight });
+        // a bent handrail runs above its own smoothed line, not the raw nosing line
+        const lineZ = bent ? (zOnPaths(smoothedPaths, p) ?? p.z) : p.z;
+        balusters.push({ treadIndex: chain.index, position: { x: p.x, y: p.y }, zBottom: chain.zFront, zTop: railTop(lineZ) - handrailHeight });
       }
     }
   }
@@ -507,6 +725,7 @@ function buildSection(section, ctx) {
     widthMm: config.railingHandrailWidthMm,
     heightMm: handrailHeight,
   };
+  base.baseRail = baseRail;
   base.balusters = balusters
     .filter((b) => b.zTop - b.zBottom > 0)
     .map((b, i) => {

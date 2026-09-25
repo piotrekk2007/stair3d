@@ -15,6 +15,7 @@ export const DEFAULT_WASTE_FACTORS = Object.freeze({
   RISER: 0.08, // sheet material (plywood/MDF) — panel layout offcuts
   POST: 0.05, // short, simple square-section pieces — least waste-prone
   HANDRAIL: 0.1, // cut to length with mitres at the ends
+  BASERAIL: 0.1, // same as the handrail
   BALUSTER: 0.03, // short identical pieces, little offcut
 });
 

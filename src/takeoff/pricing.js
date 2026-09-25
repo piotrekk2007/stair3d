@@ -33,6 +33,7 @@ export const DEFAULT_PRICE_LIST = Object.freeze([
   // Balustrade: no invented prices — 0 means "not priced yet" (the item stays unpriced and is flagged), the user types the real one.
   { materialId: 'railing-baluster', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę tralki za sztukę.' },
   { materialId: 'railing-handrail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę poręczy za metr bieżący.' },
+  { materialId: 'railing-baserail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę podporęczy za metr bieżący.' },
 ]);
 
 function indexByMaterialId(priceList) {

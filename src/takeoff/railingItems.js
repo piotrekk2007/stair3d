@@ -16,6 +16,7 @@ import { wasteFactorFor } from './wasteFactors.js';
 const MM3_TO_M3 = 1 / 1_000_000_000;
 export const RAILING_HANDRAIL_MATERIAL_ID = 'railing-handrail';
 export const RAILING_BALUSTER_MATERIAL_ID = 'railing-baluster';
+export const RAILING_BASERAIL_MATERIAL_ID = 'railing-baserail';
 
 const sideLabel = (side) => (side === 'outer' ? 'zewn.' : 'wewn.');
 
@@ -27,7 +28,10 @@ function handrailItems(section, config, wasteFactors) {
   const items = [];
   const { shape, widthMm, heightMm } = section.handrail;
   section.runs.forEach((run, r) => {
-    run.pieces.forEach((piece, p) => {
+    // A BENT run (railingSolver.js smoothRun) is ONE piece of handrail (bent/laminated to shape), however densely its
+    // curve is sampled into chords — one item with its true length along the axis.
+    const pieces = run.bent ? [{ lengthMm: run.pieces.reduce((sum, piece) => sum + piece.lengthMm, 0), bent: true }] : run.pieces;
+    pieces.forEach((piece, p) => {
       const lengthMm = piece.lengthMm;
       const volume = sectionArea(shape, widthMm, heightMm) * lengthMm * MM3_TO_M3;
       items.push(
@@ -49,12 +53,46 @@ function handrailItems(section, config, wasteFactors) {
           wasteFactor: wasteFactorFor(ELEMENT_TYPES.HANDRAIL, RAILING_HANDRAIL_MATERIAL_ID, wasteFactors),
           optional: true,
           status: TAKEOFF_ITEM_STATUS.OK,
-          notes: [`Poręcz ${sideLabel(section.side)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`],
+          notes: [
+            piece.bent
+              ? `Poręcz GIĘTA ${sideLabel(section.side)} (odcinek ${section.id}), bieg ${r + 1} — jeden element wygięty w pionie/rzucie, długość po osi 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm (rozwinięcie w DXF balustrady).`
+              : `Poręcz ${sideLabel(section.side)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`,
+          ],
         })
       );
     });
   });
   return items;
+}
+
+// Base rail (podporęcz): one item per straight piece, like the handrail.
+function baseRailItems(section, config, wasteFactors) {
+  if (!section.baseRail?.pieces?.length) return [];
+  const { widthMm, heightMm } = section.baseRail;
+  return section.baseRail.pieces.map((piece, p) => {
+    const lengthMm = piece.lengthMm;
+    const volume = widthMm * heightMm * lengthMm * MM3_TO_M3;
+    return createTakeoffItem({
+      itemId: `railing-${section.id}-baserail-${p}`,
+      elementType: ELEMENT_TYPES.BASERAIL,
+      sourceElementId: `railing:${section.id}:baserail:${p}`,
+      material: 'Podporęcz',
+      materialId: RAILING_BASERAIL_MATERIAL_ID,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { lengthMm, widthMm, heightMm, shape: 'rect' },
+      calculatedDimensions: { lengthMm, widthMm, heightMm, shape: 'rect' },
+      catalogStock: null,
+      netVolume: volume,
+      netArea: 0,
+      stockVolume: volume,
+      stockArea: 0,
+      wasteFactor: wasteFactorFor(ELEMENT_TYPES.BASERAIL, RAILING_BASERAIL_MATERIAL_ID, wasteFactors),
+      optional: true,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: [`Podporęcz ${sideLabel(section.side)} (odcinek ${section.id}), element ${p + 1} — na górnej krawędzi wangi wpuszczanej, tralki wchodzą w nią; przekrój ${widthMm} × ${heightMm} mm.`],
+    });
+  });
 }
 
 function balusterItems(section, config, wasteFactors) {
@@ -99,5 +137,5 @@ function balusterItems(section, config, wasteFactors) {
  */
 export function buildRailingItems(railingModel, config, wasteFactors = {}) {
   if (!railingModel || !railingModel.enabled) return [];
-  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors)]);
+  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors)]);
 }

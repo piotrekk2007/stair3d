@@ -78,6 +78,16 @@ export function renderRailing(railingModel, style, material, balusterMaterial = 
       section.side
     );
     if (handrail) group.add(handrail);
+    if (section.baseRail?.pieces?.length) {
+      const baseRail = mergedMesh(
+        section.baseRail.pieces.map((piece) => handrailPieceGeometry(piece, section.baseRail)),
+        material,
+        `Railing_${section.id}_baserail`,
+        `railing:${section.id}:baserail`,
+        section.side
+      );
+      if (baseRail) group.add(baseRail);
+    }
     const balusters = mergedMesh(
       section.balusters.map((b) => balusterGeometry(b, style.balusterShape, style.balusterSizeMm)),
       balusterMaterial,

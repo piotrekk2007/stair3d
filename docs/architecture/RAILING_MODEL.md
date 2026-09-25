@@ -1,7 +1,39 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
-panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 nie ruszony. Decyzje z użytkownikiem są na końcu.
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 (poręcz gięta, podporęcz) zrobiony. Decyzje z użytkownikiem są na końcu.
+
+## Etap 4: poręcz gięta i podporęcz
+
+**Poręcz gięta** (`config.railingBent`, domyślnie wyłączona; `railingBendRadiusMm` 300, `railingPlanBendRadiusMm` 150 —
+parametry, wybór programu, do ustalenia z warsztatem):
+- narożnik w rzucie przerywa bieg słupkiem TYLKO tam, gdzie stoi już słup (np. słup narożny po stronie duszy); w pozostałych
+  narożnikach poręcz jest wyginana w rzucie łukiem (`splitIntoRuns(…, isPostAt)`);
+- `smoothRun`: w rzucie łuki tylko w prawdziwych narożnikach (`planCorners` — punkty na prostej pominięte), w pionie (z
+  względem długości w rzucie) każde załamanie pochylenia zaokrąglone łukiem; węzły bliżej niż 20 mm scalane (granice stopni
+  przy narożniku inaczej ściskały łuki do zera); oba promienie przycinane, gdy sąsiednie odcinki są za krótkie
+  (`filletPolyline`). Wynik próbkowany gęsto (cięciwy) — renderer, walidacja, kontrola konstrukcji działają bez zmian;
+- `run.bent`; kosztorys: bieg gięty = JEDNA pozycja poręczy o prawdziwej długości osi; DXF: bieg gięty jako rozwinięcie
+  (oś rozwinięta wzdłuż rzutu × wysokość, krawędzie ±h/2) z długością osi 3D, długością w rzucie i wzniesieniem;
+- tralki biorą wysokość z wygładzonej linii (`zOnPaths`) — dochodzą dokładnie do spodu poręczy giętej;
+- **ograniczenie:** łuk w rzucie odsuwa poręcz (i tralki na wandze wpuszczanej) od osi wangi w narożniku o najwyżej
+  R·(√2−1) (62 mm przy R = 150) — przy wandze 40 mm tralki w samym narożniku stoją częściowo obok niej. Mały promień albo
+  słupek w narożniku to rozwiązują.
+
+**Podporęcz** (`config.railingBaseRail`, domyślnie wyłączona; `railingBaseRailWidthMm` 50, `railingBaseRailHeightMm` 30 —
+parametry, wybór programu): listwa na górnej krawędzi wangi WPUSZCZANEJ wzdłuż każdego biegu poręczy, tralki w nią wchodzą
+(ich dół o wysokość podporęczy wyżej). Przy wandze nakładanej tralki stoją na stopniach — podporęczy nie ma
+(`RAILING-BASERAIL-NOT-APPLICABLE`, INFO).
+- `baseRailAlong`: ścieżka biegu próbkowana co 20 mm, punkty na krawędzi wangi (`wangaTopAt`), w wierzchołku ścieżki — na
+  WYŻSZEJ z krawędzi desek tuż obok (uskok między deskami w narożniku; różnica ≤ 1 mm to tylko spadek jednej deski),
+  punkty współliniowe scalane, krótkie odcinki na załamaniu w jednej płaszczyźnie zastępowane prawdziwym załamaniem
+  (`collapseShortPieces`/`kinkBetween`); kąty cięcia jak w poręczy (`annotateCuts`);
+- `section.baseRail = {shape, widthMm, heightMm, runs, pieces}`; render (ten sam materiał co poręcz), kosztorys
+  (`ELEMENT_TYPES.BASERAIL`, materiał `railing-baserail`, cena za mb, domyślnie 0 = bez ceny, kategoria
+  „Podporęcze (z modelu)"), DXF (wiersze „Podporecz …"), ciężar do wangi w kontroli konstrukcji (element po elemencie
+  na deskę pod nim, `railingDetailKn.baseRail`) i do ciężaru własnego („Podporęcz").
+
+Testy: `geometry/__tests__/railingSolver.test.js` (etap 4).
 
 ## DXF balustrady (etap 3b, część 2) — jeden plik (decyzja użytkownika)
 

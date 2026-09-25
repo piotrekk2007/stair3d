@@ -65,7 +65,7 @@ function stringerTableHTML(stringers) {
   const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
   const rows = stringers.checks
     .map(
-      (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN: poręcz ${num(c.railingDetailKn.handrail, 2)}, tralki ${num(c.railingDetailKn.balusters, 2)}, słupki ${num(c.railingDetailKn.posts, 2)}), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
+      (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN: poręcz ${num(c.railingDetailKn.handrail, 2)}, tralki ${num(c.railingDetailKn.balusters, 2)}, słupki ${num(c.railingDetailKn.posts, 2)}, podporęcz ${num(c.railingDetailKn.baseRail ?? 0, 2)}), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
         <td>${sideLabel(c.side)} <span class="st-muted">${esc(c.segmentId.replace(/^(outer|inner)-seg-/, 'deska '))}</span></td>
         <td class="num">${Math.round(c.spanMm)}</td>
         <td class="num">${Math.round(c.angleDeg)}°</td>

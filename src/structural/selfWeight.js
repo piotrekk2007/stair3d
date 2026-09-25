@@ -14,6 +14,7 @@ export const WEIGHT_CATEGORIES = Object.freeze([
   { key: 'posts', label: 'Słupy konstrukcyjne' },
   { key: 'railingPosts', label: 'Słupki balustrady' },
   { key: 'handrail', label: 'Poręcz' },
+  { key: 'baserail', label: 'Podporęcz' },
   { key: 'balusters', label: 'Tralki' },
 ]);
 
@@ -43,6 +44,8 @@ function categoryOf(item, postKinds) {
       return postKinds[item.sourceElementId.replace(/^post:/, '')] === 'railing' ? 'railingPosts' : 'posts';
     case ELEMENT_TYPES.HANDRAIL:
       return 'handrail';
+    case ELEMENT_TYPES.BASERAIL:
+      return 'baserail';
     case ELEMENT_TYPES.BALUSTER:
       return 'balusters';
     default:

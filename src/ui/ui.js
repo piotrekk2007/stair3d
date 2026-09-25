@@ -194,6 +194,14 @@ export function createUI({
   live(rail.add(config, 'railingMaxClearMm', 60, 200, 5)).name('Maks. prześwit między tralkami [mm]');
   live(rail.add(config, 'railingPostSizeMm', 40, 160, 5)).name('Słupki balustrady: grubość [mm]');
   live(rail.add(config, 'railingPostTopAboveHandrailMm', 0, 300, 10)).name('Słupki: wystają ponad poręcz [mm]');
+  // Poręcz gięta (railingSolver.js smoothRun): łuki w pionie przy zmianie pochylenia i łuk w rzucie w narożniku bez słupa.
+  live(rail.add(config, 'railingBent')).name('Poręcz gięta (łuki zamiast załamań)');
+  live(rail.add(config, 'railingBendRadiusMm', 0, 2000, 10)).name('Gięcie w pionie: promień [mm]');
+  live(rail.add(config, 'railingPlanBendRadiusMm', 0, 1000, 10)).name('Gięcie w rzucie: promień [mm]');
+  // Podporęcz: tylko przy wandze wpuszczanej (tralki wchodzą w listwę na jej górnej krawędzi).
+  live(rail.add(config, 'railingBaseRail')).name('Podporęcz (wanga wpuszczana)');
+  live(rail.add(config, 'railingBaseRailWidthMm', 20, 120, 1)).name('Podporęcz: szerokość [mm]');
+  live(rail.add(config, 'railingBaseRailHeightMm', 10, 80, 1)).name('Podporęcz: wysokość [mm]');
 
   const sectionsBox = document.createElement('div');
   sectionsBox.className = 'railing-sections';

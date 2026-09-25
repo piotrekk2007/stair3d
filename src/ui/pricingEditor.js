@@ -96,9 +96,9 @@ export function createPricingEditor(container, { settings, onChange }) {
 
     // Ogólny cennik dotyczy już tylko podstopni z płyty MDF (wangi i słupy mają własne cenniki).
     const priceRows = settings.priceList
-      .filter((price) => ['sheet-plywood-mdf', 'railing-baluster', 'railing-handrail'].includes(price.materialId))
+      .filter((price) => ['sheet-plywood-mdf', 'railing-baluster', 'railing-handrail', 'railing-baserail'].includes(price.materialId))
       .map((price) => {
-        const railingLabels = { 'railing-baluster': 'Tralka (cena za sztukę)', 'railing-handrail': 'Poręcz (cena za metr bieżący)' };
+        const railingLabels = { 'railing-baluster': 'Tralka (cena za sztukę)', 'railing-handrail': 'Poręcz (cena za metr bieżący)', 'railing-baserail': 'Podporęcz (cena za metr bieżący)' };
         const label = railingLabels[price.materialId] ?? DEFAULT_MATERIAL_CATALOG[price.materialId]?.label ?? price.materialId;
         const unit = price.unit === 'volume' ? 'zł/m³' : price.unit === 'area' ? 'zł/m²' : price.unit === 'length' ? 'zł/mb' : 'zł/szt.';
         return `<tr><td>${esc(label)}</td><td>${numInput(`data-kind="price" data-material="${esc(price.materialId)}"`, price.price)}</td><td>${unit}</td></tr>`;

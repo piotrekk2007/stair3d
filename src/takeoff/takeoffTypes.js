@@ -22,6 +22,7 @@ export const ELEMENT_TYPES = Object.freeze({
   LANDING: 'LANDING',
   POST: 'POST',
   HANDRAIL: 'HANDRAIL', // one straight handrail piece (railingItems.js)
+  BASERAIL: 'BASERAIL', // one straight base-rail (podporęcz) piece on a housed wanga (railingItems.js)
   BALUSTER: 'BALUSTER', // balusters of one length (quantity > 1) — the balusters' cut list
   SUPPORT: 'SUPPORT', // reserved — no solved model produces this yet; never fabricated
   OTHER: 'OTHER', // reserved — catch-all for a future element type, never fabricated today

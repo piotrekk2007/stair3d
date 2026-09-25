@@ -333,3 +333,135 @@ test('editRailingSections: from / to move an end (the other follows if they woul
   assert.deepEqual(base, [{ id: 'a', side: 'outer', fromStep: 2, toStep: 6 }], 'the input list is not mutated');
   assert.equal(sanitizeRailingSections(added).length, 2, 'the result is a valid section list');
 });
+
+// ---- stage 4: bent handrail (railingSolver.js smoothRun) ----
+import { buildStaircase as buildStaircaseForBent } from '../buildStaircase.js';
+import { computeMaterialTakeoff as takeoffForBent } from '../../takeoff/materialTakeoff.js';
+import { buildRailingDXF as railingDxfForBent } from '../../export/dxfExport.js';
+
+const bentStair = (patch = {}, sections = [{ id: 'o', side: 'outer', fromStep: 0, toStep: null }]) =>
+  buildStaircaseForBent({ ...createDefaultConfig(), railingEnabled: true, railingBent: true, railingSections: sections, ...patch });
+const pitchOf = (p) => (Math.atan2(p.end.z - p.start.z, Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y)) * 180) / Math.PI;
+const maxPitchJump = (pieces) => pieces.slice(1).reduce((m, p, i) => Math.max(m, Math.abs(pitchOf(p) - pitchOf(pieces[i]))), 0);
+
+test('bent handrail: a plan corner with no post is bent round instead of ending in a post — one run, no join post', () => {
+  const straight = bentStair({ railingBent: false });
+  const bent = bentStair();
+  assert.equal(straight.railingModel.sections[0].runs.length, 2, 'the straight (łamana) handrail ends in a post at the outer corner');
+  assert.equal(bent.railingModel.sections[0].runs.length, 1);
+  assert.equal(bent.railingModel.sections[0].runs[0].bent, true);
+  assert.ok(!bent.railingModel.sections[0].posts.some((p) => p.postId.includes('join')), 'no join post at the bent corner');
+});
+
+test('bent handrail: pitch changes are rounded — no kink between consecutive pieces larger than a few degrees', () => {
+  const straight = bentStair({ railingBent: false });
+  const bent = bentStair();
+  const straightJump = Math.max(...straight.railingModel.sections[0].runs.map((run) => maxPitchJump(run.pieces)));
+  const bentJump = maxPitchJump(bent.railingModel.sections[0].runs[0].pieces);
+  assert.ok(straightJump > 10, `the łamana handrail has kinks (${straightJump.toFixed(1)} deg)`);
+  assert.ok(bentJump < 8, `bent handrail still kinks by ${bentJump.toFixed(1)} deg`);
+});
+
+test('bent handrail: where a structural post stands at the corner (the dusza side) the handrail still ends at the post', () => {
+  const r = bentStair({}, [{ id: 'i', side: 'inner', fromStep: 0, toStep: null }]);
+  const ids = r.railingModel.sections[0].runs.flatMap((run) => [run.startPostId, run.endPostId]);
+  assert.ok(ids.includes('post-corner-0'));
+});
+
+test('bent handrail: every baluster reaches exactly the underside of the bent handrail above it', () => {
+  for (const type of ['closed', 'cut']) {
+    const r = bentStair({ stringerConstructionTypeOuter: type });
+    const section = r.railingModel.sections[0];
+    const h = section.handrail.heightMm;
+    const pieces = section.runs.flatMap((run) => run.pieces);
+    for (const b of section.balusters) {
+      let best = null;
+      let bestDist = Infinity;
+      for (const p of pieces) {
+        const dx = p.end.x - p.start.x;
+        const dy = p.end.y - p.start.y;
+        const L2 = dx * dx + dy * dy;
+        const t = L2 > 0 ? Math.max(0, Math.min(1, ((b.position.x - p.start.x) * dx + (b.position.y - p.start.y) * dy) / L2)) : 0;
+        const d = Math.hypot(b.position.x - (p.start.x + t * dx), b.position.y - (p.start.y + t * dy));
+        if (d < bestDist) {
+          bestDist = d;
+          best = p.start.z + (p.end.z - p.start.z) * t - h / 2;
+        }
+      }
+      assert.ok(Math.abs(b.zTop - best) < 1, `${type}: baluster ${b.id} top ${b.zTop.toFixed(1)} vs handrail underside ${best.toFixed(1)}`);
+    }
+  }
+});
+
+test('bent handrail: the takeoff counts a bent run as ONE handrail piece of its true length, and the DXF draws its development', () => {
+  const r = bentStair();
+  const items = takeoffForBent(r, r.fullConfig).filter((i) => i.elementType === 'HANDRAIL');
+  const run = r.railingModel.sections[0].runs[0];
+  assert.equal(items.length, 1);
+  assert.ok(Math.abs(items[0].nominalDimensions.lengthMm - run.pieces.reduce((s, p) => s + p.lengthMm, 0)) < 1e-9);
+  const dxf = railingDxfForBent(r.railingModel, { balusterSizeMm: r.fullConfig.railingBalusterSizeMm });
+  assert.ok(dxf.includes('Porecz GIETA'));
+  assert.ok(/^[\x00-\x7F]*$/.test(dxf));
+});
+
+// ---- stage 4: base rail (podporęcz) on a housed wanga ----
+import { buildStructuralReport as structuralForBaseRail } from '../../structural/index.js';
+
+const withBaseRail = (patch = {}) => bentStair({ railingBent: false, railingBaseRail: true, ...patch });
+
+test('base rail: lies on the housed wanga\'s top edge along the handrail runs, and the balusters stand in it', () => {
+  const plain = bentStair({ railingBent: false });
+  const r = withBaseRail();
+  const section = r.railingModel.sections[0];
+  const h = r.fullConfig.railingBaseRailHeightMm;
+  assert.ok(section.baseRail.pieces.length > 0);
+  // every baluster is lifted by exactly the base rail's height (it stands IN the base rail on the wanga)
+  const before = plain.railingModel.sections[0].balusters;
+  assert.equal(section.balusters.length, before.length);
+  section.balusters.forEach((b, i) => assert.ok(Math.abs(b.zBottom - before[i].zBottom - h) < 1e-6));
+  // the base rail's underside is the wanga's top at the balusters' feet (the same wanga top the balusters used)
+  for (const b of before) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const p of section.baseRail.pieces) {
+      const dx = p.end.x - p.start.x;
+      const dy = p.end.y - p.start.y;
+      const L2 = dx * dx + dy * dy;
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((b.position.x - p.start.x) * dx + (b.position.y - p.start.y) * dy) / L2)) : 0;
+      const d = Math.hypot(b.position.x - (p.start.x + t * dx), b.position.y - (p.start.y + t * dy));
+      if (d < bestDist) {
+        bestDist = d;
+        best = p.start.z + (p.end.z - p.start.z) * t - h / 2;
+      }
+    }
+    assert.ok(Math.abs(best - b.zBottom) < 2, `base rail underside ${best.toFixed(1)} vs wanga top ${b.zBottom.toFixed(1)} at ${b.id}`);
+  }
+});
+
+test('base rail: not on an overlay wanga (the balusters stand on the treads) — skipped with an INFO', () => {
+  const r = withBaseRail({ stringerConstructionTypeOuter: 'cut' });
+  const section = r.railingModel.sections[0];
+  assert.equal(section.baseRail, null);
+  assert.ok(section.diagnostics.some((d) => d.ruleId === 'RAILING-BASERAIL-NOT-APPLICABLE' && d.severity === 'INFO'));
+});
+
+test('base rail: priced per piece (own material), drawn in the balustrade DXF, and its weight loads the wanga', () => {
+  const r = withBaseRail();
+  const pieces = r.railingModel.sections[0].baseRail.pieces;
+  const items = takeoffForBent(r, r.fullConfig).filter((i) => i.elementType === 'BASERAIL');
+  assert.equal(items.length, pieces.length);
+  assert.ok(items.every((i) => i.materialId === 'railing-baserail'));
+  const dxf = railingDxfForBent(r.railingModel, { balusterSizeMm: r.fullConfig.railingBalusterSizeMm });
+  assert.equal((dxf.match(/\nPodporecz /g) || []).length, pieces.length);
+  const report = structuralForBaseRail(r);
+  const onBoards = report.stringers.checks.reduce((s, c) => s + c.railingDetailKn.baseRail, 0);
+  const selfWeight = report.selfWeight.categories.find((c) => c.key === 'baserail').weightKn;
+  assert.ok(onBoards > 0);
+  assert.ok(Math.abs(onBoards - selfWeight) < 1e-9, 'the whole base rail reaches the wangi');
+});
+
+test('base rail off (default): nothing changes', () => {
+  const r = bentStair({ railingBent: false });
+  assert.equal(r.railingModel.sections[0].baseRail, null);
+  assert.equal(takeoffForBent(r, r.fullConfig).filter((i) => i.elementType === 'BASERAIL').length, 0);
+});

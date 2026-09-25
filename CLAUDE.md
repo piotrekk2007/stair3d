@@ -976,7 +976,11 @@ reverted); a step that still ends up without a handrail is reported as `RAILING-
 planDeg = half the plan turn}, `cutLengthMm`; per baluster `topCutDeg`/`bottomCutDeg`/`longPointMm`), and
 `dxfExport.js` `buildRailingDXF` only draws them: every handrail piece in side view with both cuts, then the baluster
 cut list grouped by length and cuts; ASCII only; button "Balustrada (DXF 1:1)" in the Kosztorys toolbar. Tests:
-`export/__tests__/dxfExport.test.js`. Not yet: a bent (curved) handrail. Tests:
+`export/__tests__/dxfExport.test.js`.
+**Stage 4 (bent handrail + base rail) is done** — see RAILING_MODEL.md "Etap 4": `config.railingBent` (plan corners
+without a post bent round, pitch changes rounded — `smoothRun`; a bent run is one takeoff item and a development in the
+DXF) and `config.railingBaseRail` (podporęcz on a housed wanga's top edge, balusters standing in it — `baseRailAlong`;
+own takeoff element BASERAIL / material `railing-baserail`, DXF rows, weight onto the wanga). Both off by default. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 

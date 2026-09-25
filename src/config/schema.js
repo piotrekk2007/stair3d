@@ -152,6 +152,17 @@ export function createDefaultConfig() {
     railingPostSizeMm: 90, // mm, przekrój (kwadrat) nowych słupków balustrady na końcach odcinków; per słupek edytowalny w Inspektorze
     railingPostTopAboveHandrailMm: 0, // mm, o ile słupek balustrady wystaje ponad górę poręczy
     railingLateralOffsetMm: null, // mm od osi odniesienia wangi w głąb schodów; null = środek grubości wangi
+    // Poręcz gięta (etap 4, railingSolver.js smoothRun): załamania pochylenia w biegu zastąpione łukami w pionie,
+    // a narożnik w rzucie, przy którym NIE stoi słup, łukiem w rzucie zamiast słupka. Promienie to parametry
+    // (wybór programu, do ustalenia z warsztatem — nie wartości z normy).
+    railingBent: false,
+    railingBendRadiusMm: 300, // mm, promień łuku w pionie (zmiana pochylenia poręczy)
+    railingPlanBendRadiusMm: 150, // mm, promień łuku w rzucie (narożnik bez słupa)
+    // Podporęcz (etap 4): listwa na górnej krawędzi wangi WPUSZCZANEJ, w którą wchodzą tralki (przy wandze nakładanej
+    // tralki stoją na stopniach — tam podporęczy nie ma). Wymiary to parametry (wybór programu, nie norma).
+    railingBaseRail: false,
+    railingBaseRailWidthMm: 50, // mm, poprzecznie do biegu
+    railingBaseRailHeightMm: 30, // mm, w pionie
 
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)
     hasCornerPost: true, // czy stawiać słup konstrukcyjny na zakrętach; gdy false, wangi łączą się bezpośrednio (zakładka na styk)

@@ -12,6 +12,7 @@ const ELEMENT_LABEL_PL = {
   STRINGER_HOUSING: 'Wpusty wangi (informacyjnie)',
   POST: 'Słupy',
   HANDRAIL: 'Poręcze',
+  BASERAIL: 'Podporęcze',
   BALUSTER: 'Tralki (lista cięcia)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
@@ -126,6 +127,8 @@ function categoryOf(item, winderStepIds) {
     // Distinct from the manual rows the user may still type ("Tralki", "Poręcze"), so the two never merge into one line.
     case 'HANDRAIL':
       return 'Poręcze (z modelu)';
+    case 'BASERAIL':
+      return 'Podporęcze (z modelu)';
     case 'BALUSTER':
       return 'Tralki (z modelu)';
     default:
