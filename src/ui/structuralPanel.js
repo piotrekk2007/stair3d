@@ -7,11 +7,50 @@ function esc(text) {
 
 const num = (v, digits) => v.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-export function createStructuralPanel(container) {
+// `onSelectStep(stepId)` — a click on a tread row selects that tread everywhere (2D, 3D, Inspektor).
+export function createStructuralPanel(container, { onSelectStep } = {}) {
   const panel = document.createElement('div');
   panel.id = 'structural-panel';
   container.appendChild(panel);
+  panel.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-step-id]');
+    if (row && onSelectStep) onSelectStep(row.dataset.stepId);
+  });
   return panel;
+}
+
+const pct = (u) => `${Math.round(u * 100)}%`;
+const utilCell = (u) => `<td class="num${u > 1 ? ' st-over' : ''}">${pct(u)}</td>`;
+const TYPE_LABEL = { straight: 'prosty', winder: 'zabieg.' };
+
+function treadTableHTML(treads) {
+  if (!treads || (treads.checks.length === 0 && treads.skipped.length === 0)) return '<div class="st-note">Brak stopni do sprawdzenia.</div>';
+  const worst = treads.checks.reduce((m, c) => Math.max(m, c.maxUtil), 0);
+  const rows = treads.checks
+    .map(
+      (c) => `<tr class="st-row" data-step-id="${esc(c.stepId)}" title="Kliknij, aby zaznaczyć stopień">
+        <td>${c.stepNumber} <span class="st-muted">${TYPE_LABEL[c.type] || ''}</span></td>
+        <td class="num">${Math.round(c.spanMm)}</td>
+        <td class="num">${Math.round(c.bMm)}×${c.hMm}</td>
+        ${utilCell(c.bendingUtil)}
+        ${utilCell(c.shearUtil)}
+        <td class="num${c.deflectionInstMm > c.deflectionInstLimitMm ? ' st-over' : ''}" title="limit ${num(c.deflectionInstLimitMm, 1)} mm">${num(c.deflectionInstMm, 1)}</td>
+        <td class="num${c.deflectionFinMm > c.deflectionFinLimitMm ? ' st-over' : ''}" title="limit ${num(c.deflectionFinLimitMm, 1)} mm">${num(c.deflectionFinMm, 1)}</td>
+        ${utilCell(c.maxUtil)}
+      </tr>`
+    )
+    .join('');
+  const skipped = treads.skipped.length
+    ? `<div class="st-note">Nie sprawdzane: ${treads.skipped.map((s) => `nr ${Number(String(s.stepId).replace('step-', '')) + 1} (${esc(s.reason)})`).join('; ')}.</div>`
+    : '';
+  return `
+    <div class="st-note ${worst > 1 ? 'warn' : ''}">Najbardziej wytężony stopień: ${pct(worst)}${worst > 1 ? ' — przekroczenie (ostrzeżenie w Walidacji)' : ''}.</div>
+    <table class="st-table">
+      <thead><tr><th>Stopień</th><th>L [mm]</th><th>b×h</th><th>M</th><th>V</th><th title="ugięcie chwilowe od obc. użytkowego">w_inst</th><th title="ugięcie końcowe z pełzaniem">w_fin</th><th>max</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="st-note">M — zginanie, V — ścinanie (% nośności obliczeniowej); ugięcia w mm (najedź, by zobaczyć limit); max — najgorszy z czterech warunków.</div>
+    ${skipped}`;
 }
 
 export function updateStructuralPanel(panel, report) {
@@ -49,8 +88,9 @@ export function updateStructuralPanel(panel, report) {
     </table>
     ${missing}
     <div class="st-note">Objętości netto z modelu (te same co w kosztorysie; wanga bez materiału wybranego na wręgi). Gęstość: ρmean klasy ${esc(report.materialClass)}.</div>
-    <h4>Kontrole nośności</h4>
-    <div class="st-note">Jeszcze nie liczone — kolejne etapy: stopień, wanga, poręcz ze słupkiem, tralka (docs/architecture/STRUCTURAL_CHECKS.md).</div>
+    <h4>Stopnie — belka między wangami</h4>
+    ${treadTableHTML(report.treads)}
+    <div class="st-note">Jeszcze nie liczone: wanga, poręcz ze słupkiem, tralka (kolejne etapy, docs/architecture/STRUCTURAL_CHECKS.md).</div>
     <h4>Założenia i źródła</h4>
     <ul class="st-assumptions">${assumptions}</ul>`;
 }

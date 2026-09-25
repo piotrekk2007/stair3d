@@ -40,6 +40,9 @@ export const EC5_FACTORS = Object.freeze({
   gammaMSource: 'EN 1995-1-1 Table 2.3, solid timber (recommended value; Polish National Annex to be verified)',
   kdef: 0.6,
   kdefSource: 'EN 1995-1-1 Table 3.2, solid timber, service class 1',
+  // Crack factor for shear: effective width b_ef = k_cr · b.
+  kcr: 0.67,
+  kcrSource: 'EN 1995-1-1:2004+A1:2008 §6.1.7(2), solid timber (recommended value)',
   needsVerification: true,
 });
 
@@ -47,7 +50,9 @@ export const EC5_FACTORS = Object.freeze({
 export const LOAD_COMBINATION = Object.freeze({
   gammaG: 1.35,
   gammaQ: 1.5,
-  source: 'EN 1990, recommended partial factors for permanent (G) and variable (Q) actions; Polish National Annex to be verified',
+  // Quasi-permanent factor of the imposed load, category A (domestic) — used for creep of the final deflection.
+  psi2CategoryA: 0.3,
+  source: 'EN 1990, recommended partial factors for permanent (G) and variable (Q) actions, and Table A1.1 psi2 = 0.3 for category A; Polish National Annex to be verified',
   needsVerification: true,
 });
 

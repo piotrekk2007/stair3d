@@ -160,9 +160,7 @@ export function createUI({
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');
-  // Only for the orientative structural check (zakładka "Konstrukcja") — the takeoff keeps using timberGrade.
-  const structuralClassOptions = Object.fromEntries(Object.entries(TIMBER_STRENGTH_CLASSES).map(([id, c]) => [c.label, id]));
-  live(build.add(config, 'structuralMaterialClass', structuralClassOptions)).name('Klasa drewna (kontrola konstr.)');
+
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');
   lockable(build.add(config, 'riserBoardThickness', 10, 50, 1).name('Grubość podstopnia [mm]'), 'riserBoardThickness');
   lockable(build.add(config, 'riserTopOverlapMm', 0, 30, 1).name('Zakładka podstopnia w stopień [mm]'), 'riserTopOverlapMm');
@@ -266,6 +264,17 @@ export function createUI({
   renderSections();
   rail.$children.appendChild(sectionsBox);
   gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync())];
+
+  // Orientative structural check (tab "Konstrukcja", src/structural/) — the takeoff keeps using timberGrade.
+  // Load defaults are the UK values (UK-GUID-I-01, user decision), labelled as such in the tab.
+  const structural = gui.addFolder('Kontrola konstrukcji (orientacyjna)');
+  const structuralClassOptions = Object.fromEntries(Object.entries(TIMBER_STRENGTH_CLASSES).map(([id, c]) => [c.label, id]));
+  live(structural.add(config, 'structuralMaterialClass', structuralClassOptions)).name('Klasa drewna (EN 338)');
+  live(structural.add(config, 'structuralStairUdlKnM2', 0.5, 5, 0.1)).name('Obc. użytkowe [kN/m²] (UK 1,5)');
+  live(structural.add(config, 'structuralStairPointKn', 0.5, 5, 0.1)).name('Siła skupiona [kN] (UK 2,0)');
+  live(structural.add(config, 'structuralTreadDeflectionRatio', 150, 600, 10)).name('Ugięcie chwilowe ≤ L /');
+  live(structural.add(config, 'structuralTreadFinalDeflectionRatio', 150, 600, 10)).name('Ugięcie końcowe ≤ L /');
+  structural.close();
 
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');

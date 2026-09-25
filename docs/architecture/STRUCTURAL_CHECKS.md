@@ -1,7 +1,7 @@
 # Kontrola konstrukcji (orientacyjna) — ciężary, obciążenia, wytrzymałość
 
-Status: **etap A1 zaimplementowany** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów, zakładka
-„Konstrukcja"). Etapy A2–A5 (kontrole nośności) — plan poniżej, jeszcze nie ma kodu.
+Status: **etapy A1 i A2 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
+zakładka „Konstrukcja"; stopień jako belka). Etapy A3–A5 — plan poniżej, jeszcze nie ma kodu.
 
 > **To jest kontrola orientacyjna. Nie zastępuje projektu konstrukcyjnego ani obliczeń konstruktora.** Program
 > upraszcza schemat statyczny (belki swobodnie podparte, wsporniki), nie liczy połączeń, drgań ani stateczności, a
@@ -66,11 +66,31 @@ Stała ostrzeżenie w zakładce: „obciążenia wg brytyjskiego załącznika kr
    podstopni, wang (objętość deski minus wręgi — wręg to materiał usunięty), słupów konstrukcyjnych, słupków
    balustrady, poręczy, tralek. Suma i podział na kategorie. Element bez objętości (np. wanga z błędem geometrii)
    jest zgłaszany jako brakujący, nie szacowany.
-2. **Stopień (A2).** Belka swobodnie podparta między wangami (EC5-STRUCT-I-01), rozpiętość = światło między licami
-   wang, przekrój `b = głębokość stopnia`, `h = grubość`. Zginanie: `M = Q·L/4` (siła skupiona w środku) oraz
-   `M = q·b·L²/8` (równomierne), plus ciężar własny; `σ = M/W`, `W = b·h²/6`, porównanie z `f_m,d`. Ugięcie:
-   `P·L³/(48·E·I)`, `5·q·L⁴/(384·E·I)`; limit do ustalenia (EC5 Tab. 7.2 podaje zakres l/300–l/500 —
-   EC5-STRUCT-I-04, wartość projektowa do weryfikacji).
+2. **Stopień (A2, zrobione — `src/structural/treadCheck.js`).** Belka swobodnie podparta między wangami
+   (EC5-STRUCT-I-01).
+   - **Długość stopnia** = średnia z długości krawędzi czołowej i tylnej (finalnych). Dla prostego to jego szerokość;
+     zabiegowy to długi klin od duszy do ściany (krawędzie np. 1375 i 1121 mm) — średnia to długość zastępcza.
+   - **Rozpiętość L** = długość − dwa oparcia. Wanga zajmuje pas [0, t] w głąb od łańcucha; koniec stopnia leży
+     `recess` od łańcucha (`edgeOverrides.js` `housingRecessMm`: głębokość wpustu przy wpuszczanej, 0 przy
+     nakładanej), więc stopień opiera się na długości `t − recess`, a środek oparcia jest `(t − recess)/2` od końca.
+     Domyślnie 868 − 2·12 = 844 mm.
+   - **Przekrój** `b × h`: `b` = pole stopnia / jego długość (prosty: głębokość + nosek; zabiegowy: średnia
+     głębokość — prostokąt zastępczy), `h` = grubość stopnia. Rowek pod zakładkę podstopnia pominięty.
+   - **Przypadki SGN** (nigdy razem, EN 1991-1-1): ciężar + równomierne `q·b` (średniotrwałe, k_mod 0,8):
+     `M = (1,35·g + 1,5·q·b)·L²/8`; ciężar + siła skupiona w środku (krótkotrwałe, k_mod 0,9):
+     `M = 1,35·g·L²/8 + 1,5·Q·L/4`. `σ = M/W`, `W = b·h²/6`, porównanie z `f_m,d = k_mod·f_m,k/γ_M`. Ścinanie
+     `τ = 1,5·V/(k_cr·b·h)`, k_cr = 0,67, porównanie z `f_v,d`.
+   - **SGU** (EC5-STRUCT-I-04): chwilowe od obciążenia użytkowego (gorsze z `5·q·b·L⁴/(384·E·I)` i
+     `Q·L³/(48·E·I)`, E0,mean) ≤ L/300; końcowe `w_G·(1+k_def) + w_q·(1+ψ2·k_def)`, ψ2 = 0,3 (kat. A) ≤ L/250.
+     Limity to łagodny koniec zakresów EC5 Tab. 7.2 (l/300–l/500, l/250–l/350) — parametry, do weryfikacji.
+   - **Podesty** nie są sprawdzane (wymagają własnej konstrukcji — legarów — której model nie opisuje).
+   - **Wynik:** tabela w zakładce (klik = zaznaczenie stopnia), WARNING `EC5-STRUCT-I-01` (nośność) lub
+     `EC5-STRUCT-I-04` (ugięcie) na stopniu > 100 %.
+   - **Przykład (domyślne schody L, dąb D30 40 mm, szer. 900):** proste 57 % (decyduje ugięcie chwilowe 1,6 / 2,8 mm),
+     dwa środkowe zabiegowe 136 % i 152 % (ugięcie chwilowe 5,5–6,2 mm przy L ≈ 1,2 m; zginanie 66–73 %). Przy
+     50 mm wszystkie ≤ 100 %.
+   - **Ograniczenie:** zabiegowy to w rzeczywistości płyta klinowa (narożny oparty na dwóch wangach w narożniku);
+     belka zastępcza jest uproszczeniem, nie wykazano, że po bezpiecznej stronie.
 3. **Wanga (A3).** Belka nachylona, swobodnie podparta między podporami (podłoga / słup / podest), obciążenie z
    połowy szerokości biegu (+ ciężar stopni, podstopni, balustrady po tej stronie). Przekrój: **nakładana** —
    osłabiony gardzielą (najmniejsza pozostała wysokość deski, `minRemainingSectionMm` / diagnostyka
@@ -98,5 +118,6 @@ EC5-STRUCT-I-01…05, EC5-STRUCT-F-01 (`src/rules/sets/eurocodeStructural.js`), 
 
 - **A1** (zrobione): dokument, `src/structural/timberClasses.js`, `selfWeight.js`, `index.js`, pole
   `structuralMaterialClass`, zakładka „Konstrukcja".
-- **A2** stopień · **A3** wanga · **A4** poręcz + słupek · **A5** tralka — każdy z testami, diagnostyką i wierszem w
+- **A2** (zrobione): `treadCheck.js`, parametry obciążeń i limitów ugięć w folderze „Kontrola konstrukcji" (domyślnie UK).
+- **A3** wanga · **A4** poręcz + słupek · **A5** tralka — każdy z testami, diagnostyką i wierszem w
   tabeli.

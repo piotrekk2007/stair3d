@@ -112,6 +112,12 @@ export function createDefaultConfig() {
     // Klasa drewna TYLKO do orientacyjnej kontroli konstrukcji (src/structural/, docs/architecture/STRUCTURAL_CHECKS.md):
     // 'C24' | 'D30' | 'D40' (EN 338). Osobna od timberGrade, którego używa kosztorys/cennik. D30 = dąb (założenie, EN 1912).
     structuralMaterialClass: 'D30',
+    // Obciążenia i limity ugięć kontroli konstrukcji — domyślnie wartości BRYTYJSKIE (UK-GUID-I-01, decyzja
+    // użytkownika; polska wartość PL-LEGAL-I-01 niezweryfikowana) i łagodny koniec zakresów EC5 Tab. 7.2.
+    structuralStairUdlKnM2: 1.5, // kN/m², użytkowe schodów, równomierne
+    structuralStairPointKn: 2.0, // kN, użytkowe schodów, skupione (w najniekorzystniejszym miejscu)
+    structuralTreadDeflectionRatio: 300, // ugięcie chwilowe stopnia <= L / tyle
+    structuralTreadFinalDeflectionRatio: 250, // ugięcie końcowe (z pełzaniem) <= L / tyle
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia

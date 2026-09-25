@@ -1047,6 +1047,19 @@ in `refreshTakeoff()`, since the riser material oak/MDF lives in the takeoff set
 diagnostics join the takeoff validation gate. UI: new right-sidebar tab "Konstrukcja" (`ui/structuralPanel.js`).
 `EC5-STRUCT-I-02`'s stale note updated. Tests: `structural/__tests__/structural.test.js`.
 
+**Stage A2 (treads) implemented:** `src/structural/treadCheck.js` `checkTreads(treadModels, config)` — every straight
+and winder tread as a simply supported beam between its wangi: length = mean of its final front/back edge lengths (a
+winder is a long wedge), span = length minus two bearings of `(t − recess)/2` (recess from `edgeOverrides.js`
+`housingRecessMm`, the SAME value the geometry uses), `b = area / length`, `h = treadThickness`; ULS G+UDL
+(medium-term) and G+point at mid-span (short-term), bending and shear (`k_cr` 0.67), SLS instantaneous ≤ L/300 and
+final with creep (`k_def`, psi2 = 0.3) ≤ L/250. Landings skipped (need own framing). WARNING `EC5-STRUCT-I-01` /
+`EC5-STRUCT-I-04` per tread > 100 %. New config (folder "Kontrola konstrukcji (orientacyjna)", also holds the class):
+`structuralStairUdlKnM2` 1.5, `structuralStairPointKn` 2.0 (UK defaults), `structuralTreadDeflectionRatio` 300,
+`structuralTreadFinalDeflectionRatio` 250. Tab: tread table (1-based numbers, click = select). Default L stair: straight
+57 %, the two middle winders 136/152 % (instantaneous deflection). **Found, not fixed:** a housed wanga occupies [0, t]
+in from its chain but the tread end sits `housingDepthFor(t)` (16) in from the chain — i.e. 24 mm into a 40 mm board,
+deeper than the 16 mm pocket (`applyHousingRecess` treats the chain as the wanga's inner face).
+
 **PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
 only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
 

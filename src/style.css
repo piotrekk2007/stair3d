@@ -1543,3 +1543,16 @@ code {
   color: #888;
   font-size: 11px;
 }
+
+#structural-panel .st-row {
+  cursor: pointer;
+}
+
+#structural-panel .st-row:hover {
+  background: rgba(26, 95, 180, 0.08);
+}
+
+.st-table .st-over {
+  color: #b3261e;
+  font-weight: 600;
+}

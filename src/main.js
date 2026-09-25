@@ -813,7 +813,12 @@ const validatorPanel = createValidatorPanel(ws.tabBody('validation'), {
   onUnwaive: handleUnwaive,
   onClearStale: handleClearStaleWaivers,
 });
-const structuralPanel = createStructuralPanel(ws.tabBody('structural'));
+const structuralPanel = createStructuralPanel(ws.tabBody('structural'), {
+  onSelectStep: (stepId) => {
+    const stepIndex = stepIndexFromElementId(stepId);
+    if (stepIndex !== null) setSelection({ elementType: 'tread', stepIndex });
+  },
+});
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,
   onGroupChange: (groupBy) => {
