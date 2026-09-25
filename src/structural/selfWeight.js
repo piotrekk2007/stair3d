@@ -17,6 +17,17 @@ export const WEIGHT_CATEGORIES = Object.freeze([
   { key: 'balusters', label: 'Tralki' },
 ]);
 
+/**
+ * Density used for one weight category (the one rule, shared by the self-weight table and the member checks):
+ * risers of MDF (takeoff settings) use MDF_DENSITY, everything else the structural class's ρmean.
+ * @returns {{rho:number, label:string}}
+ */
+export function densityFor(key, config, options = {}) {
+  if (key === 'risers' && options.riserMaterial === 'mdf') return { rho: MDF_DENSITY.rhomean, label: 'MDF' };
+  const wood = timberClass(config.structuralMaterialClass);
+  return { rho: wood.rhomean, label: wood.label };
+}
+
 function categoryOf(item, postKinds) {
   switch (item.elementType) {
     case ELEMENT_TYPES.TREAD:
@@ -58,10 +69,8 @@ function categoryOf(item, postKinds) {
  * @returns {{categories: WeightCategory[], totalMassKg:number, totalWeightKn:number, missing:{itemId:string, label:string}[]}}
  */
 export function computeSelfWeight(items, config, options = {}) {
-  const wood = timberClass(config.structuralMaterialClass);
   const postKinds = Object.fromEntries((options.postModels || []).map((p) => [p.postId, p.kind]));
-  const riserIsMdf = options.riserMaterial === 'mdf';
-  const densityOf = (key) => (key === 'risers' && riserIsMdf ? { rho: MDF_DENSITY.rhomean, label: 'MDF' } : { rho: wood.rhomean, label: wood.label });
+  const densityOf = (key) => densityFor(key, config, options);
 
   const acc = new Map(WEIGHT_CATEGORIES.map((c) => [c.key, { volumeM3: 0, count: 0 }]));
   const missing = [];

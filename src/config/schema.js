@@ -118,6 +118,8 @@ export function createDefaultConfig() {
     structuralStairPointKn: 2.0, // kN, użytkowe schodów, skupione (w najniekorzystniejszym miejscu)
     structuralTreadDeflectionRatio: 300, // ugięcie chwilowe stopnia <= L / tyle
     structuralTreadFinalDeflectionRatio: 250, // ugięcie końcowe (z pełzaniem) <= L / tyle
+    structuralStringerDeflectionRatio: 300, // wanga: ugięcie chwilowe <= L (pochyła) / tyle
+    structuralStringerFinalDeflectionRatio: 250, // wanga: ugięcie końcowe <= L / tyle
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia

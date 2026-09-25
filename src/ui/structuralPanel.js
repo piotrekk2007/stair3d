@@ -8,13 +8,15 @@ function esc(text) {
 const num = (v, digits) => v.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 // `onSelectStep(stepId)` — a click on a tread row selects that tread everywhere (2D, 3D, Inspektor).
-export function createStructuralPanel(container, { onSelectStep } = {}) {
+export function createStructuralPanel(container, { onSelectStep, onSelectStringer } = {}) {
   const panel = document.createElement('div');
   panel.id = 'structural-panel';
   container.appendChild(panel);
   panel.addEventListener('click', (e) => {
     const row = e.target.closest('[data-step-id]');
     if (row && onSelectStep) onSelectStep(row.dataset.stepId);
+    const stringerRow = e.target.closest('[data-stringer-side]');
+    if (stringerRow && onSelectStringer) onSelectStringer(stringerRow.dataset.stringerSide);
   });
   return panel;
 }
@@ -50,6 +52,38 @@ function treadTableHTML(treads) {
       <tbody>${rows}</tbody>
     </table>
     <div class="st-note">M — zginanie, V — ścinanie (% nośności obliczeniowej); ugięcia w mm (najedź, by zobaczyć limit); max — najgorszy z czterech warunków.</div>
+    ${skipped}`;
+}
+
+function stringerTableHTML(stringers) {
+  if (!stringers || (stringers.checks.length === 0 && stringers.skipped.length === 0)) return '<div class="st-note">Brak desek wang do sprawdzenia.</div>';
+  const worst = stringers.checks.reduce((m, c) => Math.max(m, c.maxUtil), 0);
+  const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
+  const rows = stringers.checks
+    .map(
+      (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
+        <td>${sideLabel(c.side)} <span class="st-muted">${esc(c.segmentId.replace(/^(outer|inner)-seg-/, 'deska '))}</span></td>
+        <td class="num">${Math.round(c.spanMm)}</td>
+        <td class="num">${Math.round(c.angleDeg)}°</td>
+        <td class="num">${Math.round(c.bMm)}×${Math.round(c.hMm)}</td>
+        ${utilCell(c.bendingUtil)}
+        ${utilCell(c.shearUtil)}
+        <td class="num${c.deflectionInstMm > c.deflectionInstLimitMm ? ' st-over' : ''}" title="limit ${num(c.deflectionInstLimitMm, 1)} mm">${num(c.deflectionInstMm, 1)}</td>
+        <td class="num${c.deflectionFinMm > c.deflectionFinLimitMm ? ' st-over' : ''}" title="limit ${num(c.deflectionFinLimitMm, 1)} mm">${num(c.deflectionFinMm, 1)}</td>
+        ${utilCell(c.maxUtil)}
+      </tr>`
+    )
+    .join('');
+  const skipped = stringers.skipped.length
+    ? `<div class="st-note">Nie sprawdzane: ${stringers.skipped.map((s) => `${sideLabel(s.side)} ${esc(s.segmentId)} (${esc(s.reason)})`).join('; ')}.</div>`
+    : '';
+  return `
+    <div class="st-note ${worst > 1 ? 'warn' : ''}">Najbardziej wytężona deska wangi: ${pct(worst)}${worst > 1 ? ' — przekroczenie (ostrzeżenie w Walidacji)' : ''}.</div>
+    <table class="st-table">
+      <thead><tr><th>Wanga</th><th>L [mm]</th><th>kąt</th><th>b×h</th><th>M</th><th>V</th><th>w_inst</th><th>w_fin</th><th>max</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="st-note">L — długość pochyła między końcami deski; b×h — przekrój obliczeniowy (wpuszczana: grubość − wpust; nakładana: gardziel pod wcięciem). Najedź na wiersz, by zobaczyć obciążenia (z balustradą).</div>
     ${skipped}`;
 }
 
@@ -90,7 +124,9 @@ export function updateStructuralPanel(panel, report) {
     <div class="st-note">Objętości netto z modelu (te same co w kosztorysie; wanga bez materiału wybranego na wręgi). Gęstość: ρmean klasy ${esc(report.materialClass)}.</div>
     <h4>Stopnie — belka między wangami</h4>
     ${treadTableHTML(report.treads)}
-    <div class="st-note">Jeszcze nie liczone: wanga, poręcz ze słupkiem, tralka (kolejne etapy, docs/architecture/STRUCTURAL_CHECKS.md).</div>
+    <h4>Wangi — belka pochyła</h4>
+    ${stringerTableHTML(report.stringers)}
+    <div class="st-note">Jeszcze nie liczone: poręcz ze słupkiem, tralka (kolejne etapy, docs/architecture/STRUCTURAL_CHECKS.md).</div>
     <h4>Założenia i źródła</h4>
     <ul class="st-assumptions">${assumptions}</ul>`;
 }

@@ -818,6 +818,7 @@ const structuralPanel = createStructuralPanel(ws.tabBody('structural'), {
     const stepIndex = stepIndexFromElementId(stepId);
     if (stepIndex !== null) setSelection({ elementType: 'tread', stepIndex });
   },
+  onSelectStringer: (side) => setSelection({ elementType: 'stringer', stringerId: side }),
 });
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,

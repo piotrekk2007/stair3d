@@ -151,3 +151,66 @@ test('the report carries the tread checks and their findings', () => {
   assert.ok(report.treads.checks.length > 0);
   assert.ok(report.diagnostics.some((d) => d.ruleId === 'EC5-STRUCT-I-01' || d.ruleId === 'EC5-STRUCT-I-04'));
 });
+
+// ---- A3: wangi as inclined beams ----
+import { checkStringers, STEEP_BOARD_MAX_DEG } from '../stringerCheck.js';
+import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
+import { housingDepthFor } from '../../geometry/stringerModel.js';
+
+const stringerChecksOf = (patch = {}) => {
+  const b = builtWith(patch);
+  return { built: b, result: checkStringers(b, computeMaterialTakeoff(b, b.fullConfig)) };
+};
+
+test('wanga section: housed = (t − housing depth) × local depth; overlay = t × throat under the notches', () => {
+  const housed = stringerChecksOf({ stairType: 'straight', treadsLegA: 14 });
+  const t = housed.built.fullConfig.stringerThickness;
+  const c = housed.result.checks[0];
+  assert.equal(c.bMm, t - housingDepthFor(t));
+  assert.equal(c.hMm, housed.built.stringerConstruction[c.side][0].localDepthMm);
+  const cut = stringerChecksOf({ stairType: 'straight', treadsLegA: 14, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
+  const k = cut.result.checks[0];
+  assert.equal(k.bMm, t);
+  assert.equal(k.hMm, cut.built.stringerConstruction[k.side][0].minRemainingSectionMm);
+});
+
+test('wanga load: the imposed UDL of a straight flight splits 50/50 between the two wangi (hand check)', () => {
+  const { built, result } = stringerChecksOf({ stairType: 'straight', treadsLegA: 14 });
+  const area = built.treadModels.reduce((s, t) => s + Math.abs(t.outline.reduce((a, p, i, arr) => a + p.x * arr[(i + 1) % arr.length].y - arr[(i + 1) % arr.length].x * p.y, 0)) / 2, 0);
+  const expectedKn = (built.fullConfig.structuralStairUdlKnM2 * area) / 1e6 / 2;
+  for (const c of result.checks) assert.ok(Math.abs(c.imposedKn - expectedKn) < 1e-9, `${c.side}: ${c.imposedKn} vs ${expectedKn}`);
+});
+
+test('the balustrade\'s weight loads only the wanga on its own side', () => {
+  const base = stringerChecksOf();
+  const withRail = stringerChecksOf({ railingEnabled: true, railingSections: [{ id: 'r1', side: 'outer', fromStep: 0, toStep: null }] });
+  const sum = (r, side, key) => r.result.checks.filter((c) => c.side === side).reduce((s, c) => s + c[key], 0);
+  assert.ok(sum(withRail, 'outer', 'railingKn') > 0);
+  assert.equal(sum(withRail, 'inner', 'railingKn'), 0);
+  assert.ok(Math.abs(sum(withRail, 'outer', 'permanentKn') - sum(base, 'outer', 'permanentKn') - sum(withRail, 'outer', 'railingKn')) < 1e-9);
+  assert.ok(Math.abs(sum(withRail, 'inner', 'permanentKn') - sum(base, 'inner', 'permanentKn')) < 1e-9);
+});
+
+test('a longer flight is more utilised; a thin board over 100 % is a WARNING on that board, never an ERROR', () => {
+  const short = stringerChecksOf({ stairType: 'straight', treadsLegA: 8 });
+  const long = stringerChecksOf({ stairType: 'straight', treadsLegA: 15 });
+  assert.ok(long.result.checks[0].bendingUtil > short.result.checks[0].bendingUtil);
+  const weak = stringerChecksOf({ stairType: 'straight', treadsLegA: 15, stringerThickness: 20, minimumStringerDepthMm: 150 });
+  assert.ok(weak.result.diagnostics.length > 0);
+  for (const d of weak.result.diagnostics) {
+    assert.equal(d.severity, 'WARNING');
+    assert.equal(d.elementType, 'stringer');
+  }
+});
+
+test('a board steeper than the limit is skipped with its reason, never checked as a beam', () => {
+  const r = stringerChecksOf({ windersPerTurn: 3, walklineOffset: 250, walklineSplitOffset: 250 }).result;
+  for (const c of r.checks) assert.ok(c.angleDeg <= STEEP_BOARD_MAX_DEG);
+  for (const s of r.skipped) assert.ok(typeof s.reason === 'string' && s.reason.length > 0);
+});
+
+test('the report carries the wanga checks', () => {
+  const b = builtWith();
+  const report = buildStructuralReport(b);
+  assert.ok(report.stringers.checks.length >= 2);
+});

@@ -1,7 +1,7 @@
 # Kontrola konstrukcji (orientacyjna) — ciężary, obciążenia, wytrzymałość
 
-Status: **etapy A1 i A2 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
-zakładka „Konstrukcja"; stopień jako belka). Etapy A3–A5 — plan poniżej, jeszcze nie ma kodu.
+Status: **etapy A1, A2 i A3 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
+zakładka „Konstrukcja"; stopień jako belka; wanga jako belka pochyła). Etapy A4–A5 — plan poniżej, jeszcze nie ma kodu.
 
 > **To jest kontrola orientacyjna. Nie zastępuje projektu konstrukcyjnego ani obliczeń konstruktora.** Program
 > upraszcza schemat statyczny (belki swobodnie podparte, wsporniki), nie liczy połączeń, drgań ani stateczności, a
@@ -91,11 +91,22 @@ Stała ostrzeżenie w zakładce: „obciążenia wg brytyjskiego załącznika kr
      50 mm wszystkie ≤ 100 %.
    - **Ograniczenie:** zabiegowy to w rzeczywistości płyta klinowa (narożny oparty na dwóch wangach w narożniku);
      belka zastępcza jest uproszczeniem, nie wykazano, że po bezpiecznej stronie.
-3. **Wanga (A3).** Belka nachylona, swobodnie podparta między podporami (podłoga / słup / podest), obciążenie z
-   połowy szerokości biegu (+ ciężar stopni, podstopni, balustrady po tej stronie). Przekrój: **nakładana** —
-   osłabiony gardzielą (najmniejsza pozostała wysokość deski, `minRemainingSectionMm` / diagnostyka
-   `STRINGER-MIN-SECTION`); **wpuszczana** — efektywna grubość = grubość − głębokość wpustu. Wykorzystanie w % i
-   ugięcie. Sposób modelowania wangi zgodnie z EC5-STRUCT-F-01 (typ wangi zmienia model statyczny).
+3. **Wanga (A3, zrobione — `src/structural/stringerCheck.js`).** Każda deska wangi to belka pochyła swobodnie
+   podparta między swoimi końcami (podłoga, lico słupa, podest, zakładka na narożniku bez słupa); ciągłość na zakładce
+   pominięta. EC5-STRUCT-I-01, model zależny od typu wangi (EC5-STRUCT-F-01).
+   - **Rozpiętość:** pozioma `Lh` = końce deski (`ends`), kąt α z pierwszego i ostatniego oparcia stopnia, długość
+     pochyła `L = Lh / cos α`. Deska stromsza niż 60° (dusza ciasnego zabiegu) — pominięta z podaniem powodu.
+   - **Przekrój:** wpuszczana — `b = t − głębokość wpustu`, `h` = lokalna głębokość deski; nakładana — `b = t`,
+     `h` = gardziel pod wcięciem (`minRemainingSectionMm`).
+   - **Obciążenia** (rozłożone równomiernie na `Lh`): ciężar deski (objętość netto minus wręgi), połowa ciężaru każdego
+     stopnia i podstopnia na niej (podział między deski po długości oparcia), **balustrada po tej stronie** (poręcz +
+     tralki, podział między deski po długości); obciążenie użytkowe = połowa `q · pole stopnia`; ALBO cała siła skupiona
+     w środku rozpiętości (siła przy wandze idzie niemal w całości w nią).
+   - **SGN** jak dla stopnia (moment belki pochyłej = moment rzutu poziomego; ścinanie prostopadłe × cos α), k_cr.
+     **SGU** prostopadle do deski na `L`: `q·cos²α` na długości pochyłej; limity `structuralStringerDeflectionRatio`
+     (L/300) i `…FinalDeflectionRatio` (L/250), do weryfikacji. Siła osiowa pominięta.
+   - **Przykład (domyślne L, D30, wpuszczana 40 mm, głębokość 350):** deski 18–23 %; nakładana (gardziel 186–203 mm)
+     do 52 %; bieg prosty 14 stopni (L ≈ 4,6 m) 33 %.
 4. **Poręcz i słupek (A4).** Poręcz: belka między słupkami przy 0,36 kN/m poziomo, zginanie względem osi pionowej i
    ugięcie ≤ 25 mm. Słupek: wspornik utwierdzony w podstawie, `F = q · (połowa rozpiętości z każdej strony)`,
    `M = F · H` (H = wysokość poręczy nad podstawą słupka). Połączenie słupka z konstrukcją — poza zakresem.
@@ -119,5 +130,6 @@ EC5-STRUCT-I-01…05, EC5-STRUCT-F-01 (`src/rules/sets/eurocodeStructural.js`), 
 - **A1** (zrobione): dokument, `src/structural/timberClasses.js`, `selfWeight.js`, `index.js`, pole
   `structuralMaterialClass`, zakładka „Konstrukcja".
 - **A2** (zrobione): `treadCheck.js`, parametry obciążeń i limitów ugięć w folderze „Kontrola konstrukcji" (domyślnie UK).
-- **A3** wanga · **A4** poręcz + słupek · **A5** tralka — każdy z testami, diagnostyką i wierszem w
+- **A3** (zrobione): `stringerCheck.js`, tabela desek w zakładce (klik = zaznaczenie wangi, dymek = obciążenia z balustradą).
+- **A4** · **A4** poręcz + słupek · **A5** tralka — każdy z testami, diagnostyką i wierszem w
   tabeli.

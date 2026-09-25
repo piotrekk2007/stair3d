@@ -1059,6 +1059,17 @@ final with creep (`k_def`, psi2 = 0.3) ≤ L/250. Landings skipped (need own fra
 56 %, the two middle winders 134/150 % (instantaneous deflection), after the housing-bottom fix below (span 836 mm,
 bearing = the 16 mm housing depth).
 
+**Stage A3 (wangi) implemented:** `src/structural/stringerCheck.js` `checkStringers(models, items, {riserMaterial})` —
+every wanga board as an inclined beam simply supported between its own end faces (floor, post face, landing, lap
+joint — continuity ignored). Lh from `ends`, alpha from the first/last seat, L = Lh/cos(alpha); boards steeper than
+`STEEP_BOARD_MAX_DEG` (60) skipped with a reason. Section: housed b = t − housing depth, h = `localDepthMm`; cut b = t,
+h = throat `minRemainingSectionMm`. Loads over Lh: board net volume minus housings, half of each carried tread/riser
+(shared among this side's boards by seat length), the balustrade on this side (handrail + balusters, by length),
+imposed = half q x tread area, OR the whole point load at mid-span. Same ULS/SLS as the treads, SLS perpendicular over
+L; new config `structuralStringerDeflectionRatio` 300 / `structuralStringerFinalDeflectionRatio` 250. `selfWeight.js`
+exports `densityFor` (one density rule). Tab: wanga table (click selects the wanga; tooltip = loads incl. balustrade).
+Default L stair: 18-23 % (housed), up to 52 % (cut).
+
 **PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
 only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
 

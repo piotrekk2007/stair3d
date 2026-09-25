@@ -272,8 +272,10 @@ export function createUI({
   live(structural.add(config, 'structuralMaterialClass', structuralClassOptions)).name('Klasa drewna (EN 338)');
   live(structural.add(config, 'structuralStairUdlKnM2', 0.5, 5, 0.1)).name('Obc. użytkowe [kN/m²] (UK 1,5)');
   live(structural.add(config, 'structuralStairPointKn', 0.5, 5, 0.1)).name('Siła skupiona [kN] (UK 2,0)');
-  live(structural.add(config, 'structuralTreadDeflectionRatio', 150, 600, 10)).name('Ugięcie chwilowe ≤ L /');
-  live(structural.add(config, 'structuralTreadFinalDeflectionRatio', 150, 600, 10)).name('Ugięcie końcowe ≤ L /');
+  live(structural.add(config, 'structuralTreadDeflectionRatio', 150, 600, 10)).name('Stopień: ugięcie chwilowe ≤ L /');
+  live(structural.add(config, 'structuralTreadFinalDeflectionRatio', 150, 600, 10)).name('Stopień: ugięcie końcowe ≤ L /');
+  live(structural.add(config, 'structuralStringerDeflectionRatio', 150, 600, 10)).name('Wanga: ugięcie chwilowe ≤ L /');
+  live(structural.add(config, 'structuralStringerFinalDeflectionRatio', 150, 600, 10)).name('Wanga: ugięcie końcowe ≤ L /');
   structural.close();
 
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');

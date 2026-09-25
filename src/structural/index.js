@@ -6,6 +6,7 @@ import { computeMaterialTakeoff } from '../takeoff/materialTakeoff.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { computeSelfWeight } from './selfWeight.js';
 import { checkTreads } from './treadCheck.js';
+import { checkStringers, STEEP_BOARD_MAX_DEG } from './stringerCheck.js';
 import { EC5_FACTORS, LOAD_COMBINATION, MDF_DENSITY, TIMBER_STRENGTH_CLASSES, DEFAULT_STRUCTURAL_CLASS, timberClass } from './timberClasses.js';
 import { LOAD_SOURCE_WARNING, UK_DOMESTIC_LOADS, TREAD_DEFLECTION_DEFAULTS } from './loads.js';
 
@@ -28,6 +29,11 @@ function assumptionsFor(classId, wood, riserMaterial, config) {
     { text: `Ścinanie: szerokość efektywna k_cr·b, k_cr = ${fmt(EC5_FACTORS.kcr)}`, source: EC5_FACTORS.kcrSource, status: 'do weryfikacji' },
     { text: `Ugięcie stopnia: chwilowe ≤ L/${config.structuralTreadDeflectionRatio}, końcowe (pełzanie k_def, ψ2 = ${fmt(LOAD_COMBINATION.psi2CategoryA)}) ≤ L/${config.structuralTreadFinalDeflectionRatio}`, source: TREAD_DEFLECTION_DEFAULTS.source, status: 'do weryfikacji' },
     { text: 'Pominięte: rowek pod zakładkę podstopnia, współpraca podstopnia ze stopniem, drgania', source: 'założenie programu (po bezpiecznej stronie, poza drganiami)', status: 'założenie' },
+    { text: 'Wanga: każda deska swobodnie podparta między swoimi końcami (podłoga, lico słupa, podest, zakładka); ciągłość na zakładce pominięta', source: 'EC5-STRUCT-I-01, EC5-STRUCT-F-01 (model uproszczony)', status: 'założenie' },
+    { text: 'Przekrój wangi: wpuszczana — grubość minus głębokość wpustu × lokalna głębokość deski; nakładana — grubość × najcieńsze miejsce pod wcięciem (gardziel)', source: 'EC5-STRUCT-F-01', status: 'założenie' },
+    { text: 'Obciążenie wangi: jej ciężar, połowa ciężaru i obciążenia każdego stopnia i podstopnia na niej, balustrada po jej stronie; albo cała siła skupiona w środku rozpiętości', source: 'założenie programu', status: 'założenie' },
+    { text: `Deska stromsza niż ${STEEP_BOARD_MAX_DEG}° (dusza ciasnego zabiegu) nie jest liczona jako belka; siła osiowa wzdłuż wangi pominięta`, source: 'założenie programu', status: 'założenie' },
+    { text: `Ugięcie wangi (prostopadle, na długości pochyłej): chwilowe ≤ L/${config.structuralStringerDeflectionRatio}, końcowe ≤ L/${config.structuralStringerFinalDeflectionRatio}`, source: TREAD_DEFLECTION_DEFAULTS.source, status: 'do weryfikacji' },
   ];
   if (riserMaterial === 'mdf') list.push({ text: `Podstopnie z MDF: ${MDF_DENSITY.rhomean} kg/m³ (tylko ciężar, nie element nośny)`, source: MDF_DENSITY.source, status: 'do weryfikacji' });
   if (!TIMBER_STRENGTH_CLASSES[classId]) list.unshift({ text: `Nieznana klasa "${classId}" — użyto ${DEFAULT_STRUCTURAL_CLASS}`, source: '', status: 'uwaga' });
@@ -48,6 +54,7 @@ export function buildStructuralReport(models, options = {}) {
   const selfWeight = computeSelfWeight(items, config, { postModels: models.postModels, riserMaterial: options.riserMaterial });
 
   const treads = checkTreads(models.treadModels || [], config);
+  const stringers = checkStringers(models, items, { riserMaterial: options.riserMaterial });
 
   const diagnostics = [];
   if (selfWeight.missing.length > 0) {
@@ -70,7 +77,8 @@ export function buildStructuralReport(models, options = {}) {
     material: wood,
     selfWeight,
     treads,
+    stringers,
     assumptions: assumptionsFor(classId, wood, options.riserMaterial, config),
-    diagnostics: [...diagnostics, ...treads.diagnostics],
+    diagnostics: [...diagnostics, ...treads.diagnostics, ...stringers.diagnostics],
   };
 }
