@@ -120,6 +120,8 @@ export function createDefaultConfig() {
     structuralTreadFinalDeflectionRatio: 250, // ugięcie końcowe (z pełzaniem) <= L / tyle
     structuralStringerDeflectionRatio: 300, // wanga: ugięcie chwilowe <= L (pochyła) / tyle
     structuralStringerFinalDeflectionRatio: 250, // wanga: ugięcie końcowe <= L / tyle
+    structuralHandrailLineKnM: 0.36, // kN/m, poziome obciążenie poręczy (UK-GUID-I-02, wartość UK)
+    structuralHandrailMaxDeflectionMm: 25, // mm, maks. ugięcie poręczy/wychylenie słupka (UK-GUID-I-02)
     timberGrade: 'C24', // klasa wytrzymałości drewna konstrukcyjnego (PN-EN 1912) — patrz docs/rules/TECHNICAL_RULES_CATALOGUE.md, BWF-GUID-E-02/EC5-STRUCT-I-02
 
     hasRiserBoards: false, // czy dodawać podstopnie (zamknięty stopień) zamiast otwartego stopnia

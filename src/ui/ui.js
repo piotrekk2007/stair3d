@@ -276,6 +276,8 @@ export function createUI({
   live(structural.add(config, 'structuralTreadFinalDeflectionRatio', 150, 600, 10)).name('Stopień: ugięcie końcowe ≤ L /');
   live(structural.add(config, 'structuralStringerDeflectionRatio', 150, 600, 10)).name('Wanga: ugięcie chwilowe ≤ L /');
   live(structural.add(config, 'structuralStringerFinalDeflectionRatio', 150, 600, 10)).name('Wanga: ugięcie końcowe ≤ L /');
+  live(structural.add(config, 'structuralHandrailLineKnM', 0.1, 3, 0.01)).name('Poręcz: obc. poziome [kN/m] (UK 0,36)');
+  live(structural.add(config, 'structuralHandrailMaxDeflectionMm', 5, 60, 1)).name('Poręcz/słupek: ugięcie ≤ [mm]');
   structural.close();
 
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');

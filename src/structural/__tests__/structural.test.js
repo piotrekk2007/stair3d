@@ -214,3 +214,60 @@ test('the report carries the wanga checks', () => {
   const report = buildStructuralReport(b);
   assert.ok(report.stringers.checks.length >= 2);
 });
+
+// ---- A4: handrail and balustrade posts under the horizontal line load ----
+import { checkRailing } from '../railingCheck.js';
+
+const railingBuilt = (patch = {}, sections = [{ id: 'r1', side: 'outer', fromStep: 0, toStep: null }]) =>
+  builtWith({ railingEnabled: true, railingSections: sections, ...patch });
+
+test('handrail hand check: M = 1.5 qL²/8 over the run between its posts, about the vertical axis', () => {
+  const b = railingBuilt({ stairType: 'straight' });
+  const r = checkRailing(b);
+  const c = r.rails[0];
+  const { widthMm: w, heightMm: h } = b.railingModel.sections[0].handrail;
+  const q = b.fullConfig.structuralHandrailLineKnM; // kN/m == N/mm
+  const sigma = (1.5 * q * c.spanMm ** 2) / 8 / ((h * w * w) / 6);
+  assert.ok(Math.abs(c.bendingUtil - sigma / designValue(TIMBER_STRENGTH_CLASSES.D30.fmk, EC5_FACTORS.kmod.shortTerm)) < 1e-9);
+  const wHand = (5 * q * c.spanMm ** 4) / (384 * TIMBER_STRENGTH_CLASSES.D30.e0mean * ((h * w ** 3) / 12));
+  assert.ok(Math.abs(c.deflectionMm - wHand) < 1e-9);
+});
+
+test('a post carries half of each handrail run it ends, as a cantilever from its base (M = F·H)', () => {
+  const b = railingBuilt();
+  const r = checkRailing(b);
+  const join = r.posts.find((p) => p.postId.includes('join'));
+  const runs = b.railingModel.sections[0].runs;
+  const halfSum = runs.filter((run) => run.startPostId === join.postId || run.endPostId === join.postId).reduce((s, run) => s + run.pieces.reduce((a, p) => a + p.lengthMm, 0) / 2, 0);
+  assert.ok(Math.abs(join.forceKn - (b.fullConfig.structuralHandrailLineKnM * halfSum) / 1000) < 1e-9);
+  assert.ok(join.leverMm > 0);
+});
+
+test('a railing run names the post that really stands at its end — a reused structural post by its own id', () => {
+  const b = railingBuilt({}, [{ id: 'r2', side: 'inner', fromStep: 0, toStep: null }]);
+  const ids = new Set(b.allPostModels.map((p) => p.postId));
+  for (const run of b.railingModel.sections[0].runs) {
+    assert.ok(ids.has(run.startPostId), `${run.startPostId} is not a post`);
+    assert.ok(ids.has(run.endPostId), `${run.endPostId} is not a post`);
+  }
+  const r = checkRailing(b);
+  assert.ok(r.skipped.some((s) => s.id === 'post-corner-0'), 'a corner post is part of the structure, not a free cantilever');
+});
+
+test('a long handrail without an intermediate post over-deflects: WARNING (UK-GUID-I-02), never an ERROR', () => {
+  const r = checkRailing(railingBuilt());
+  const over = r.rails.filter((c) => c.deflectionMm > c.deflectionLimitMm);
+  assert.ok(over.length > 0);
+  assert.ok(r.diagnostics.length > 0);
+  for (const d of r.diagnostics) {
+    assert.equal(d.severity, 'WARNING');
+    assert.equal(d.ruleId, 'UK-GUID-I-02');
+  }
+});
+
+test('no balustrade: nothing to check; a larger line load raises the utilisation', () => {
+  assert.equal(checkRailing(builtWith()).rails.length, 0);
+  const a = checkRailing(railingBuilt({ stairType: 'straight' })).rails[0];
+  const b = checkRailing(railingBuilt({ stairType: 'straight', structuralHandrailLineKnM: 0.74 })).rails[0];
+  assert.ok(b.bendingUtil > a.bendingUtil);
+});

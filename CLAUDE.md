@@ -1070,6 +1070,16 @@ L; new config `structuralStringerDeflectionRatio` 300 / `structuralStringerFinal
 exports `densityFor` (one density rule). Tab: wanga table (click selects the wanga; tooltip = loads incl. balustrade).
 Default L stair: 18-23 % (housed), up to 52 % (cut).
 
+**Stage A4 (balustrade under horizontal load) implemented:** `src/structural/railingCheck.js` `checkRailing(models)` —
+every handrail run as a beam simply supported between its two posts (3D length, balusters NOT counted as supports,
+bending about the vertical axis with the profile's `widthMm` horizontal), line load `structuralHandrailLineKnM` (0.36,
+UK-GUID-I-02) short-term x 1.5, deflection <= `structuralHandrailMaxDeflectionMm` (25). Posts: half of each run they
+end, at the rail's height, cantilever from their own bottom (balustrade posts) or the floor (start newel), M = F·H;
+corner/end posts skipped (tied into the structure). WARNING `UK-GUID-I-02` (elementType railing / post). **Model fix:**
+`railingSolver.js` runs now name the post that really stands at their end (a reused structural post by its own id,
+`postIdAt`), not the spot id; `validator/railingChecks.js` looks posts up by id first. Tab: balustrade table (click on
+a post selects it). Default L with an outer balustrade: the 3.14 m run over-deflects (40 mm).
+
 **PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
 only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
 

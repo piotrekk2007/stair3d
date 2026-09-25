@@ -1,7 +1,7 @@
 # Kontrola konstrukcji (orientacyjna) — ciężary, obciążenia, wytrzymałość
 
-Status: **etapy A1, A2 i A3 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
-zakładka „Konstrukcja"; stopień jako belka; wanga jako belka pochyła). Etapy A4–A5 — plan poniżej, jeszcze nie ma kodu.
+Status: **etapy A1–A4 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
+zakładka „Konstrukcja"; stopień jako belka; wanga jako belka pochyła; poręcz i słupki pod obciążeniem poziomym). Etap A5 (tralka) — plan poniżej, jeszcze nie ma kodu.
 
 > **To jest kontrola orientacyjna. Nie zastępuje projektu konstrukcyjnego ani obliczeń konstruktora.** Program
 > upraszcza schemat statyczny (belki swobodnie podparte, wsporniki), nie liczy połączeń, drgań ani stateczności, a
@@ -107,9 +107,22 @@ Stała ostrzeżenie w zakładce: „obciążenia wg brytyjskiego załącznika kr
      (L/300) i `…FinalDeflectionRatio` (L/250), do weryfikacji. Siła osiowa pominięta.
    - **Przykład (domyślne L, D30, wpuszczana 40 mm, głębokość 350):** deski 18–23 %; nakładana (gardziel 186–203 mm)
      do 52 %; bieg prosty 14 stopni (L ≈ 4,6 m) 33 %.
-4. **Poręcz i słupek (A4).** Poręcz: belka między słupkami przy 0,36 kN/m poziomo, zginanie względem osi pionowej i
-   ugięcie ≤ 25 mm. Słupek: wspornik utwierdzony w podstawie, `F = q · (połowa rozpiętości z każdej strony)`,
-   `M = F · H` (H = wysokość poręczy nad podstawą słupka). Połączenie słupka z konstrukcją — poza zakresem.
+4. **Poręcz i słupek (A4, zrobione — `src/structural/railingCheck.js`).**
+   - **Obciążenie:** poziome `q` na poręczy (`structuralHandrailLineKnM`, domyślnie 0,36 kN/m — UK-GUID-I-02, wartość
+     UK), krótkotrwałe (k_mod 0,9), SGN × 1,5. Ciężar balustrady jest pionowy — tylko ściska słupki, nie wchodzi do
+     tych kontroli (niosą go wangi, kontrola 3).
+   - **Poręcz:** każdy bieg (`railingModel.sections[].runs`) to belka swobodnie podparta między swoimi słupkami, na
+     długości 3D; ciągłość nad słupkiem pominięta; **tralki nie są podporami** (same są wspornikami). Zginanie względem
+     osi pionowej — szerokość profilu (`widthMm`) jest wymiarem poziomym (założenie o ułożeniu presetu). `M = 1,5·q·L²/8`,
+     ugięcie `5·q·L⁴/(384·E·I)` ≤ `structuralHandrailMaxDeflectionMm` (25 mm, UK-GUID-I-02).
+   - **Słupek:** siła `F = q · (połowa każdego biegu, który się na nim kończy)` na wysokości poręczy; wspornik
+     utwierdzony w swojej podstawie (słupek balustrady — `elevation.bottom`, słupek początkowy — w podłodze):
+     `M = 1,5·F·H`, `W = a³/6`, wychylenie `F·H³/(3·E·I)` ≤ 25 mm. Słupy narożne i końcowe (związane z wangami i
+     stropem) nie są liczone jako wolne wsporniki — wypisane z powodem. Mocowanie słupka poza kontrolą.
+   - **Poprawka modelu przy okazji:** bieg poręczy wskazywał identyfikator MIEJSCA słupka (`railing-post-…`) także
+     wtedy, gdy stał tam ponownie użyty słup konstrukcyjny — teraz wskazuje słup, który faktycznie tam stoi.
+   - **Przykład (domyślne L, balustrada po stronie zewnętrznej, poręcz 70×40, słupek 90):** bieg 2,55 m — 65 %, ugięcie
+     17 mm; bieg 3,14 m — zginanie 98 %, ugięcie 40 mm > 25 mm (potrzebny słupek pośredni); słupek łączący 75 %.
 5. **Tralka (A5).** Wspornik od podstawy: obciążenie wypełnienia 0,5 kN/m² × rozstaw × wysokość,
    `M = w·s·H²/2`.
 

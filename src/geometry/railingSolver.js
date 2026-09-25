@@ -359,13 +359,18 @@ function buildSection(section, ctx) {
   spots.push({ id: `railing-post-${section.id}-end`, at: lastRun[lastRun.length - 1], zs: [lastRun[lastRun.length - 1].z] });
 
   const halves = new Map(); // post id -> half width the spacing must leave free
+  // The post that really stands at each spot: a reused structural post keeps ITS id, so a run's start/end post id
+  // always names an existing PostModel (the structural check and the Inspektor look posts up by it).
+  const postIdAt = new Map();
   const nominalPosts = [];
   for (const spot of spots) {
     const existing = existingNear(spot.at);
     if (existing) {
       halves.set(spot.id, existing.size / 2);
+      postIdAt.set(spot.id, existing.postId);
       continue;
     }
+    postIdAt.set(spot.id, spot.id);
     nominalPosts.push({
       postId: spot.id,
       kind: 'railing',
@@ -397,7 +402,7 @@ function buildSection(section, ctx) {
       runPieces.push({ start, end, lengthMm: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z) });
     }
     pieces.push(...runPieces);
-    base.runs.push({ startPostId: spots[j].id, endPostId: spots[j + 1].id, pieces: runPieces });
+    base.runs.push({ startPostId: postIdAt.get(spots[j].id), endPostId: postIdAt.get(spots[j + 1].id), pieces: runPieces });
 
     if (constructionType !== CONSTRUCTION_TYPES.CUT) {
       // Housed wanga: evenly spread along this run, standing on the wanga's top edge.

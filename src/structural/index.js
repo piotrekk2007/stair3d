@@ -7,6 +7,7 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { computeSelfWeight } from './selfWeight.js';
 import { checkTreads } from './treadCheck.js';
 import { checkStringers, STEEP_BOARD_MAX_DEG } from './stringerCheck.js';
+import { checkRailing } from './railingCheck.js';
 import { EC5_FACTORS, LOAD_COMBINATION, MDF_DENSITY, TIMBER_STRENGTH_CLASSES, DEFAULT_STRUCTURAL_CLASS, timberClass } from './timberClasses.js';
 import { LOAD_SOURCE_WARNING, UK_DOMESTIC_LOADS, TREAD_DEFLECTION_DEFAULTS } from './loads.js';
 
@@ -22,7 +23,10 @@ function assumptionsFor(classId, wood, riserMaterial, config) {
     { text: `k_mod (kl. użytkowania 1): stałe ${fmt(EC5_FACTORS.kmod.permanent)}, średniotrwałe ${fmt(EC5_FACTORS.kmod.mediumTerm)}, krótkotrwałe ${fmt(EC5_FACTORS.kmod.shortTerm)}; γ_M ${fmt(EC5_FACTORS.gammaM)}; k_def ${fmt(EC5_FACTORS.kdef)}`, source: `${EC5_FACTORS.kmodSource}; ${EC5_FACTORS.gammaMSource}`, status: 'do weryfikacji' },
     { text: `Kombinacja SGN: ${fmt(LOAD_COMBINATION.gammaG)}·G + ${fmt(LOAD_COMBINATION.gammaQ)}·Q`, source: LOAD_COMBINATION.source, status: 'do weryfikacji' },
     { text: `Obciążenie użytkowe schodów: ${fmt(config.structuralStairUdlKnM2)} kN/m² równomierne albo ${fmt(config.structuralStairPointKn)} kN skupione (nie jednocześnie)`, source: `${UK_DOMESTIC_LOADS.stairUdlKnM2.ruleId} (domyślnie wartości UK)`, status: 'UK — do weryfikacji dla PL' },
-    ...[UK_DOMESTIC_LOADS.handrailLineKnM, UK_DOMESTIC_LOADS.infillUdlKnM2, UK_DOMESTIC_LOADS.infillPointKn, UK_DOMESTIC_LOADS.handrailMaxDeflectionMm].map((l) => ({ text: `${l.label}: ${fmt(l.value)} (UK) — do kontroli balustrady (etapy A4/A5)`, source: l.ruleId, status: 'UK — do weryfikacji dla PL' })),
+    { text: `Poręcz: poziomo ${fmt(config.structuralHandrailLineKnM)} kN/m (krótkotrwałe), ugięcie poręczy i wychylenie słupka ≤ ${config.structuralHandrailMaxDeflectionMm} mm`, source: `${UK_DOMESTIC_LOADS.handrailLineKnM.ruleId} (domyślnie wartości UK)`, status: 'UK — do weryfikacji dla PL' },
+    ...[UK_DOMESTIC_LOADS.infillUdlKnM2, UK_DOMESTIC_LOADS.infillPointKn].map((l) => ({ text: `${l.label}: ${fmt(l.value)} (UK) — do kontroli tralek (etap A5)`, source: l.ruleId, status: 'UK — do weryfikacji dla PL' })),
+    { text: 'Poręcz: belka swobodnie podparta między słupkami na swojej długości 3D; tralki nie są liczone jako podpory; zginanie względem osi pionowej (szerokość profilu w poziomie)', source: 'założenie programu (po bezpiecznej stronie)', status: 'założenie' },
+    { text: 'Słupek balustrady: wspornik utwierdzony w swojej podstawie (słupek początkowy — w podłodze), siła z połowy każdego odcinka poręczy na wysokości poręczy; słupy narożne i końcowe związane z wangami/stropem nie są liczone; mocowanie słupka poza kontrolą', source: 'założenie programu', status: 'założenie' },
     { text: 'Stopień: belka swobodnie podparta między wangami; rozpiętość między środkami oparć na wangach (oparcie = grubość wangi − cofnięcie stopnia przy wpuście, wg geometrii modelu)', source: 'EC5-STRUCT-I-01 (model uproszczony, po bezpiecznej stronie wg BWF)', status: 'założenie' },
     { text: 'Stopień zabiegowy: prostokąt zastępczy — szerokość = pole stopnia / jego długość', source: 'założenie programu', status: 'założenie' },
     { text: 'Klasy trwania: równomierne = średniotrwałe (k_mod 0,8), skupione = krótkotrwałe (k_mod 0,9)', source: 'EN 1995-1-1 Tab. 2.2 / 3.1', status: 'do weryfikacji' },
@@ -55,6 +59,7 @@ export function buildStructuralReport(models, options = {}) {
 
   const treads = checkTreads(models.treadModels || [], config);
   const stringers = checkStringers(models, items, { riserMaterial: options.riserMaterial });
+  const railing = checkRailing(models);
 
   const diagnostics = [];
   if (selfWeight.missing.length > 0) {
@@ -78,7 +83,8 @@ export function buildStructuralReport(models, options = {}) {
     selfWeight,
     treads,
     stringers,
+    railing,
     assumptions: assumptionsFor(classId, wood, options.riserMaterial, config),
-    diagnostics: [...diagnostics, ...treads.diagnostics, ...stringers.diagnostics],
+    diagnostics: [...diagnostics, ...treads.diagnostics, ...stringers.diagnostics, ...railing.diagnostics],
   };
 }

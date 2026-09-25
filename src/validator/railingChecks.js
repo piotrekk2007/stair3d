@@ -122,7 +122,7 @@ export function evaluateRailingChecks(railingModel, config, postModels = []) {
   const sizeOf = (id, position) => {
     const railingPost = railingModel.posts.find((p) => p.postId === id);
     if (railingPost) return railingPost.removed ? 0 : railingPost.size;
-    const existing = postModels.find((p) => Math.hypot(p.position.x - position.x, p.position.y - position.y) < config.postSize);
+    const existing = postModels.find((p) => p.postId === id) ?? postModels.find((p) => Math.hypot(p.position.x - position.x, p.position.y - position.y) < config.postSize);
     return existing ? existing.size : config.postSize;
   };
   for (const section of validSections) {

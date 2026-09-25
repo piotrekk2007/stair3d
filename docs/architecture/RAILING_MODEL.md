@@ -121,6 +121,12 @@ Przesunięcie poprzeczne balustrady (i grubość wang) szło przy skręcie w lew
 (z `planLayout.handedness`) dla wang, balustrady i słupów. Słupy konstrukcyjne stoją w osi wangi, tak jak słupki
 balustrady — ponowne użycie istniejącego słupa na końcu odcinka działa dzięki temu dokładniej.
 
+## Identyfikatory słupków w biegach
+
+`runs[].startPostId/endPostId` wskazują słup, który faktycznie stoi na końcu biegu — ponownie użyty słup konstrukcyjny
+pod swoim własnym id (wcześniej: id miejsca `railing-post-…`, które nie istniało jako model). Korzysta z tego kontrola
+konstrukcji (A4) i walidacja prześwitu.
+
 ## Zweryfikowane w etapie 1
 
 - Wanga jest wyciskana od linii odniesienia (łańcuch stopnia) w głąb schodów (`stringerRenderer.js` `inwardDirection`), więc jej oś

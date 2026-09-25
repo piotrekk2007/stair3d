@@ -1,7 +1,8 @@
 // Imposed loads for the orientative structural check (docs/architecture/STRUCTURAL_CHECKS.md). User decision
 // (2026-09-25): the UK National Annex values, clearly labelled as such — the Polish value (PL-LEGAL-I-01) is not
 // confirmed by a source and must not be assumed equal. The stair loads are config parameters since A2
-// (structuralStairUdlKnM2/-PointKn, these values as defaults); the balustrade loads become parameters in A4/A5.
+// (structuralStairUdlKnM2/-PointKn, these values as defaults), the handrail load and deflection limit since A4
+// (structuralHandrailLineKnM/-MaxDeflectionMm); the infill loads become parameters in A5.
 
 export const LOAD_SOURCE_WARNING = 'Obciążenia wg brytyjskiego załącznika krajowego (UK) — polskie wartości do weryfikacji (PL-LEGAL-I-01).';
 

@@ -8,7 +8,7 @@ function esc(text) {
 const num = (v, digits) => v.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 // `onSelectStep(stepId)` — a click on a tread row selects that tread everywhere (2D, 3D, Inspektor).
-export function createStructuralPanel(container, { onSelectStep, onSelectStringer } = {}) {
+export function createStructuralPanel(container, { onSelectStep, onSelectStringer, onSelectPost } = {}) {
   const panel = document.createElement('div');
   panel.id = 'structural-panel';
   container.appendChild(panel);
@@ -17,6 +17,8 @@ export function createStructuralPanel(container, { onSelectStep, onSelectStringe
     if (row && onSelectStep) onSelectStep(row.dataset.stepId);
     const stringerRow = e.target.closest('[data-stringer-side]');
     if (stringerRow && onSelectStringer) onSelectStringer(stringerRow.dataset.stringerSide);
+    const postRow = e.target.closest('[data-post-id]');
+    if (postRow && onSelectPost) onSelectPost(postRow.dataset.postId);
   });
   return panel;
 }
@@ -87,6 +89,45 @@ function stringerTableHTML(stringers) {
     ${skipped}`;
 }
 
+function railingTableHTML(railing) {
+  if (!railing || (railing.rails.length === 0 && railing.posts.length === 0)) return '<div class="st-note">Brak balustrady (albo odcinków) do sprawdzenia.</div>';
+  const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
+  const worst = [...railing.rails, ...railing.posts].reduce((m, c) => Math.max(m, c.maxUtil), 0);
+  const railRows = railing.rails
+    .map(
+      (c) => `<tr>
+        <td>poręcz ${sideLabel(c.side)} <span class="st-muted">${esc(c.sectionId)}, bieg ${c.runIndex + 1}</span></td>
+        <td class="num">${Math.round(c.spanMm)}</td>
+        <td class="num">${esc(c.section)}</td>
+        ${utilCell(c.bendingUtil)}
+        <td class="num${c.deflectionMm > c.deflectionLimitMm ? ' st-over' : ''}" title="limit ${c.deflectionLimitMm} mm">${num(c.deflectionMm, 1)}</td>
+        ${utilCell(c.maxUtil)}
+      </tr>`
+    )
+    .join('');
+  const postRows = railing.posts
+    .map(
+      (c) => `<tr class="st-row" data-post-id="${esc(c.postId)}" title="siła ${num(c.forceKn, 2)} kN na ramieniu ${Math.round(c.leverMm)} mm — kliknij, aby zaznaczyć słupek">
+        <td>słupek <span class="st-muted">${esc(c.postId)}</span></td>
+        <td class="num">${Math.round(c.leverMm)}</td>
+        <td class="num">${c.sizeMm}×${c.sizeMm}</td>
+        ${utilCell(c.bendingUtil)}
+        <td class="num${c.deflectionMm > c.deflectionLimitMm ? ' st-over' : ''}" title="limit ${c.deflectionLimitMm} mm">${num(c.deflectionMm, 1)}</td>
+        ${utilCell(c.maxUtil)}
+      </tr>`
+    )
+    .join('');
+  const skipped = railing.skipped.length ? `<div class="st-note">Nie sprawdzane: ${railing.skipped.map((s) => `${esc(s.id)} (${esc(s.reason)})`).join('; ')}.</div>` : '';
+  return `
+    <div class="st-note ${worst > 1 ? 'warn' : ''}">Najbardziej wytężony element balustrady: ${pct(worst)}${worst > 1 ? ' — przekroczenie (ostrzeżenie w Walidacji)' : ''}.</div>
+    <table class="st-table">
+      <thead><tr><th>Element</th><th title="poręcz: rozpiętość między słupkami; słupek: wysokość poręczy nad podstawą">L / H</th><th>przekrój</th><th>M</th><th>w [mm]</th><th>max</th></tr></thead>
+      <tbody>${railRows}${postRows}</tbody>
+    </table>
+    <div class="st-note">Poziome obciążenie poręczy; w — ugięcie poręczy w poziomie / wychylenie słupka na wysokości poręczy. Tralki nie są liczone jako podpory poręczy.</div>
+    ${skipped}`;
+}
+
 export function updateStructuralPanel(panel, report) {
   if (!report) {
     panel.innerHTML = '';
@@ -126,7 +167,9 @@ export function updateStructuralPanel(panel, report) {
     ${treadTableHTML(report.treads)}
     <h4>Wangi — belka pochyła</h4>
     ${stringerTableHTML(report.stringers)}
-    <div class="st-note">Jeszcze nie liczone: poręcz ze słupkiem, tralka (kolejne etapy, docs/architecture/STRUCTURAL_CHECKS.md).</div>
+    <h4>Balustrada — poręcz i słupki (obciążenie poziome)</h4>
+    ${railingTableHTML(report.railing)}
+    <div class="st-note">Jeszcze nie liczone: tralka (etap A5, docs/architecture/STRUCTURAL_CHECKS.md).</div>
     <h4>Założenia i źródła</h4>
     <ul class="st-assumptions">${assumptions}</ul>`;
 }
