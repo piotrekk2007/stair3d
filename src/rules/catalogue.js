@@ -10,6 +10,7 @@ import { generalErgonomics } from './sets/generalErgonomics.js';
 import { manufacturingAssumptions } from './sets/manufacturingAssumptions.js';
 import { validationMeta } from './sets/validationMeta.js';
 import { stringerConstructionAssumptions } from './sets/stringerConstructionAssumptions.js';
+import { stairwellFitAssumptions } from './sets/stairwellFitAssumptions.js';
 
 // Each entry is independently addable/removable here without touching any other set —
 // this array IS the "independent change" seam requested for the architecture.
@@ -21,6 +22,7 @@ export const RULE_SETS = Object.freeze({
   manufacturingAssumptions,
   validationMeta,
   stringerConstructionAssumptions,
+  stairwellFitAssumptions,
 });
 
 export function getFullCatalogue() {

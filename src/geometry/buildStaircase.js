@@ -14,6 +14,7 @@ import { renderRailing } from './railingRenderer.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
+import { solveStairwellFit, applyStairwellFit } from './stairwellFit.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 
 const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
@@ -43,7 +44,12 @@ export function setAppearance(appearance) {
 // Każdy `build*Models()` jest czystą funkcją (planLayout, config) -> dane; każdy `render*()`
 // przyjmuje TYLKO już gotowy model i zwraca THREE.Group — żaden renderer nie woła solvera
 // sam, i żaden solver nie zagląda do Three.js. Patrz docs/architecture/CONSOLIDATION.md.
-export function buildStaircase(config) {
+export function buildStaircase(inputConfig) {
+  // "Dopasuj do klatki" (stairwellFit.js): the going and straight-tread counts derived from the stairwell's side
+  // lengths replace the user's values BEFORE anything is solved, so every model, the validation and the takeoff
+  // see one and the same stair. With the fit off (or without a solution) this is the user's config unchanged.
+  const stairwellFit = solveStairwellFit(inputConfig);
+  const config = applyStairwellFit(inputConfig, stairwellFit);
   const derived = deriveStairData(config);
   const fullConfig = { ...config, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(fullConfig);
@@ -97,5 +103,5 @@ export function buildStaircase(config) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit };
 }

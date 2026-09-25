@@ -210,7 +210,8 @@ function buildStraightLayout(config) {
     innerFullPath,
     treads,
     turns: [],
-    bounds: computeBounds(outerFullPath),
+    // Outer AND inner line: a straight stair's outer line alone is one segment with zero width.
+    bounds: computeBounds([...outerFullPath, ...innerFullPath]),
   };
 }
 
@@ -541,7 +542,8 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
     innerFullPath,
     treads,
     turns,
-    bounds: computeBounds(outerFullPath),
+    // Outer AND inner line: a straight stair's outer line alone is one segment with zero width.
+    bounds: computeBounds([...outerFullPath, ...innerFullPath]),
   };
 }
 

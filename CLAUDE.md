@@ -999,6 +999,35 @@ the only caller. Across a landing (no inner boundary point) the line stays a str
   be unlocked. `style.css` re-enables pointer events on `.lock-toggle` inside a disabled controller.
   Browser-verified (hit test on the button, lock -> unlock).
 
+## Stairwell fit ("Dopasuj do klatki", implemented)
+
+`src/geometry/stairwellFit.js` derives the tread going and the straight-tread counts (`treadsLegA/B/C`) from the
+stairwell's side lengths, like `totalRise` derives the riser height. Config: `stairwellFitEnabled`,
+`stairwellSideAMm`/`BMm`/`CMm` (0 = no dimension), `stairwellKeySide` ('A'|'B'|'C'); new keys have defaults, so no
+project-file version bump. A **side** is one straight stretch of `planLayout.outerFullPath` (outer face of the outer
+wanga = the wall line), from the first tread's front edge WITHOUT nosing to the corner / the last tread's back edge
+(`outerSideLengths`, collinear points merged). The KEY side is met exactly (the going is solved per key-flight count;
+a side is affine in the going), the other given sides as closely as the counts allow — the going must be one per
+stair. Every combination of the other flights' counts is scored cheaply (linear side-vs-count model +
+`deriveStairData`), then the winner is measured on a real `buildPlanLayout` (no geometric rule is duplicated).
+Filters: riser in `minRiser..maxRiser`, turn feasible, going in `FIT_GOING_RANGE_MM` (180-320, the slider range).
+The variant with the smallest total non-key deviation wins. **2h+s (PL-LEGAL-A-01) is informational only (user
+decision): it never overrides a dimension** — it only breaks a tie between equally good variants (closest to 625 mm,
+the middle of `BLONDEL_RANGE_MM`, now a named export of `config/schema.js`); compliance is reported by the validator,
+the fit adds no 2h+s finding of its own — catalogued as `STAIR3D-FIT-01`
+(`src/rules/sets/stairwellFitAssumptions.js`, SOFTWARE_DESIGN_CHOICE/ASSUMPTION). The winder count, width and all
+other parameters stay the user's. `buildStaircase()` applies the fit FIRST (`applyStairwellFit`) and returns
+`stairwellFit`; its diagnostics (`STAIR3D-FIT-01`: WARNING per missed non-key side, ERROR
+when there is no key dimension or no solution — the stair is then built from the user's own values) go through the
+takeoff validation gate to Walidacja. `main.js` `rebuild()` copies the fitted values back into `config` (a fixed
+point — the fit never reads them) so sliders, the project file and undo show the real stair; driven fields
+(`stairwellDrivenFields`) are shown AUTO and disabled (their lock button stays usable). UI: "Klatka schodowa" folder;
+the info panel lists each side's achieved length vs target. **Not covered:** the standalone
+`validation/pipeline.js`/`validateStaircase(config)` entry points build from the raw config (they are not wired into
+the UI). Also fixed: `planLayout.bounds` is now computed from the outer AND inner line — a straight stair's outer line
+alone has zero width, so "Rzut klatki" showed a width of 0 mm (L/U bounds unchanged). Tests:
+`geometry/__tests__/stairwellFit.test.js`.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

@@ -1,3 +1,6 @@
+// PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
+export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
+
 export function createDefaultConfig() {
   return {
     // Id into src/rules/profiles/definitions.js DESIGN_PROFILES — which bundle of legal /
@@ -41,6 +44,17 @@ export function createDefaultConfig() {
     // duszy) — pozwala na niesymetryczny zabieg (więcej stopni przed narożnikiem niż po nim).
     walklineSplitOffset: 400,
     minInnerWidth: 110, // mm, minimalna dopuszczalna szerokość stopnia przy duszy
+
+    // Dopasowanie do klatki (src/geometry/stairwellFit.js): gdy włączone, głębokość stopnia i liczby stopni
+    // prostych (treadsLegA/B/C) są WYLICZANE z długości boków klatki, tak jak wysokość podstopnia z totalRise.
+    // Bok = odcinek zewnętrznej linii schodów (lico wangi zewnętrznej, czyli ściana) od czoła pierwszego
+    // stopnia (bez noska) do narożnika / do tyłu ostatniego stopnia. 0 = bok bez wymiaru. Bok kluczowy
+    // wychodzi dokładnie, pozostałe najbliżej jak się da (głębokość stopnia jest jedna na całe schody).
+    stairwellFitEnabled: false,
+    stairwellSideAMm: 0, // mm, bok wzdłuż biegu A
+    stairwellSideBMm: 0, // mm, bok wzdłuż biegu B (L, U)
+    stairwellSideCMm: 0, // mm, bok wzdłuż biegu C (tylko U)
+    stairwellKeySide: 'A', // 'A' | 'B' | 'C' — bok, który musi wyjść dokładnie
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza
@@ -192,7 +206,7 @@ export function deriveStairData(config) {
   const riserHeight = totalRise / numRisers;
 
   const blondel = 2 * riserHeight + treadGoing;
-  const blondelOk = blondel >= 600 && blondel <= 650;
+  const blondelOk = blondel >= BLONDEL_RANGE_MM.min && blondel <= BLONDEL_RANGE_MM.max;
 
   const riserRangeOk = riserHeight >= minRiser && riserHeight <= maxRiser;
 

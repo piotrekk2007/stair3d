@@ -196,6 +196,10 @@ window.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------------------------
 // rebuild(): model -> solvery -> render 3D / plan 2D / walidacja / kosztorys / panele
 // ---------------------------------------------------------------------------------------------
+// Set once the parameter panel exists (it is created after rebuild() is defined); see the stairwell fit in rebuild().
+let uiRefresh = null;
+let fitWasEnabled = false;
+
 function rebuild() {
   for (const group of [currentRoot, currentCeiling, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay]) {
     if (!group) continue;
@@ -208,6 +212,14 @@ function rebuild() {
   const built = buildStaircase(config);
   const { root, ceilingMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = built;
   lastModels = built;
+  // "Dopasuj do klatki": the stair was built from the fitted going/counts (buildStaircase applies the fit itself);
+  // they are copied into config so the sliders, the project file and undo show what the stair really is — like an
+  // AUTO value. The fit depends only on the targets and the other parameters, never on these fields, so copying
+  // them back changes nothing on the next rebuild.
+  const fitValues = built.stairwellFit?.values;
+  if (fitValues) Object.assign(config, fitValues);
+  if (config.stairwellFitEnabled || fitWasEnabled) uiRefresh?.();
+  fitWasEnabled = !!config.stairwellFitEnabled;
 
   scene.add(root);
   scene.add(ceilingMesh);
@@ -242,7 +254,7 @@ function rebuild() {
   currentDerived = derived;
   if (!planViewport) fitPlanView();
 
-  updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit);
+  updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit, built.stairwellFit);
   const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
 
@@ -967,6 +979,7 @@ const gui = createUI({
   onExportPlan2D: () => exportPlan2DSVG(currentPlan2DSVG),
 });
 
+uiRefresh = () => refreshUI(gui);
 setView(viewState.view);
 rebuild();
 updateHistoryButtons();

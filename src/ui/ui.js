@@ -4,13 +4,16 @@ import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.j
 import { stepIndexFromElementId } from './selection.js';
 import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
+import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
 // Dopina przycisk kłódki do wiersza kontrolki lil-gui — realizuje wymaganie 13 (blokowanie
 // wybranych parametrów). Blokada to WYŁĄCZNIE wyłączenie kontrolki w UI (config.lockedFields,
 // patrz config/schema.js) — nie jest to ograniczenie solvera ani reguła walidacji.
-function makeLockable(controller, config, fieldName) {
+// A field the stairwell fit derives (stairwellDrivenFields) is shown as AUTO and disabled, like a locked one, but
+// its lock button stays usable. `syncs` collects every row's sync so a refresh can re-apply both states.
+function makeLockable(controller, config, fieldName, syncs) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'lock-toggle';
@@ -20,11 +23,14 @@ function makeLockable(controller, config, fieldName) {
   const badge = stateBadgeElement('auto');
   const sync = () => {
     const locked = config.lockedFields.includes(fieldName);
+    const driven = stairwellDrivenFields(config).includes(fieldName);
     btn.textContent = locked ? '🔒' : '🔓';
     btn.classList.toggle('locked', locked);
-    setStateBadge(badge, locked ? 'user' : 'auto');
-    controller.disable(locked);
+    setStateBadge(badge, locked && !driven ? 'user' : 'auto');
+    controller.disable(locked || driven);
+    controller.domElement.title = driven ? 'Wyliczane z wymiarów klatki (Klatka schodowa → Dopasuj do klatki)' : '';
   };
+  if (syncs) syncs.push(sync);
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -72,8 +78,9 @@ export function createUI({
   function live(controller) {
     return controller.onChange(onChange).onFinishChange(onCommit || onChange);
   }
+  const lockSyncs = [];
   function lockable(controller, fieldName) {
-    return makeLockable(live(controller), config, fieldName);
+    return makeLockable(live(controller), config, fieldName, lockSyncs);
   }
 
   if (onUndo || onRedo) {
@@ -98,6 +105,15 @@ export function createUI({
   lockable(dims.add(config, 'totalRise', 2000, 3600, 10).name('Wys. kondygnacji [mm]'), 'totalRise');
   lockable(dims.add(config, 'stairWidth', 700, 1400, 10).name('Szerokość biegu [mm]'), 'stairWidth');
   lockable(dims.add(config, 'treadGoing', 180, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
+
+  // Dopasowanie do klatki (geometry/stairwellFit.js): the going and the straight-tread counts are derived from the
+  // stairwell's sides, like the riser height from the floor height. 0 = no dimension for that side.
+  const well = gui.addFolder('Klatka schodowa');
+  live(well.add(config, 'stairwellFitEnabled')).name('Dopasuj do klatki');
+  live(well.add(config, 'stairwellSideAMm', 0, 12000, 10)).name('Bok A (wzdłuż biegu A) [mm]');
+  live(well.add(config, 'stairwellSideBMm', 0, 12000, 10)).name('Bok B (L, U) [mm]');
+  live(well.add(config, 'stairwellSideCMm', 0, 12000, 10)).name('Bok C (tylko U) [mm]');
+  live(well.add(config, 'stairwellKeySide', ['A', 'B', 'C'])).name('Bok kluczowy (dokładny)');
 
   const steps = gui.addFolder('Liczba stopni');
   // L/U can start straight away with winders (0 straight treads before the first turn); a straight stair
@@ -245,7 +261,7 @@ export function createUI({
   }
   renderSections();
   rail.$children.appendChild(sectionsBox);
-  gui.refreshHooks = [renderSections];
+  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync())];
 
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
@@ -346,10 +362,28 @@ export function createInfoPanel(container = document.body) {
   return panel;
 }
 
-export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit) {
+// Info-panel rows for "Dopasuj do klatki": each side's achieved length against its target (* = key side).
+function stairwellFitRows(fit) {
+  if (!fit.values) return `<div class="note error">${fit.message}</div>`;
+  const sideRows = fit.sides
+    .map((s) => {
+      const achieved = `${s.achieved.toFixed(0)} mm`;
+      if (s.target === null) return `<div class="row resultant"><span>Klatka: bok ${s.side} (bez wymiaru)</span><b>${achieved}</b></div>`;
+      const dev = Math.round(s.deviation);
+      const cls = dev === 0 ? 'ok' : 'warn';
+      const devText = dev === 0 ? '' : ` (${dev > 0 ? '+' : ''}${dev})`;
+      return `<div class="row resultant ${cls}"><span>Klatka: bok ${s.side}${s.key ? ' (kluczowy)' : ''} / ${s.target}</span><b>${achieved}${devText}</b></div>`;
+    })
+    .join('');
+  return sideRows + '<div class="note">Boki mierzone po licu wangi zewnętrznej, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>';
+}
+
+export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, stairwellFit = null) {
   const rows = [];
+  const fitted = !!stairwellFit?.values;
+  const goingText = Number.isInteger(config.treadGoing) ? config.treadGoing.toFixed(0) : config.treadGoing.toFixed(1);
   rows.push(`<div class="row"><span>Liczba stopni</span><b>${derived.numTreads}</b></div>`);
-  rows.push(`<div class="row"><span>Głębokość stopnia (prosty)</span><b>${config.treadGoing.toFixed(0)} mm</b></div>`);
+  rows.push(`<div class="row${fitted ? ' resultant' : ''}"><span>Głębokość stopnia (prosty)${fitted ? ` ${AUTO_BADGE}` : ''}</span><b>${goingText} mm</b></div>`);
   rows.push(`<div class="row resultant"><span>Wysokość podstopnia ${AUTO_BADGE}</span><b>${derived.riserHeight.toFixed(1)} mm</b></div>`);
   rows.push(`<div class="row"><span>Wysokość kondygnacji</span><b>${config.totalRise.toFixed(0)} mm</b></div>`);
 
@@ -358,6 +392,8 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit) 
     const footprintY = planLayout.bounds.maxY - planLayout.bounds.minY;
     rows.push(`<div class="row resultant"><span>Rzut klatki (dł. × szer.) ${AUTO_BADGE}</span><b>${footprintY.toFixed(0)} × ${footprintX.toFixed(0)} mm</b></div>`);
   }
+
+  if (stairwellFit?.enabled) rows.push(stairwellFitRows(stairwellFit));
 
   const blondelClass = derived.blondelOk ? 'ok' : 'warn';
   rows.push(`<div class="row resultant ${blondelClass}"><span>Wzór Blondela (2h+e) ${AUTO_BADGE}</span><b>${derived.blondel.toFixed(0)} mm</b></div>`);
