@@ -985,6 +985,20 @@ winder-width check (`PL-LEGAL-C-01`) and every other consumer still use the exac
 the only caller. Across a landing (no inner boundary point) the line stays a straight segment. Tests:
 `plan2d/__tests__/smoothPath.test.js`.
 
+## Bug fixes: a flight can start with winders; locked fields can be unlocked
+
+- **`treadsLegA` = 0** is now allowed for L/U (a flight that starts straight away with winders; the geometry
+  already handled it). `ui.js` sets the slider minimum from the stair type (`syncLegAMin`: 1 for `straight`,
+  0 otherwise, clamped on a type change). With 0 straight treads the inner path begins (or, with the last leg
+  at 0, ends) at the turn's inner corner, which put `post-start`/`post-end` exactly on top of `post-corner-N`.
+  `postSolver.js` now drops the start/end post when a (not removed) corner post already stands there
+  (`POST_COINCIDENCE_MM`); removing that corner post brings the start/end post back. The plan 2D draws the
+  start/end marker only when that post exists in `postStates`. Tests: `geometry/__tests__/postOverrides.test.js`.
+- **Lock (kłódka)**: lil-gui disables pointer events on every child of a disabled controller
+  (`.lil-controller.lil-disabled *`, `!important`), including the lock button, so a locked field could never
+  be unlocked. `style.css` re-enables pointer events on `.lock-toggle` inside a disabled controller.
+  Browser-verified (hit test on the button, lock -> unlock).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

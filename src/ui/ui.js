@@ -91,7 +91,7 @@ export function createUI({
 
   if (onReset) gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
 
-  live(gui.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
+  const stairTypeCtrl = live(gui.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
   live(gui.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
 
   const dims = gui.addFolder('Wymiary ogólne');
@@ -100,7 +100,20 @@ export function createUI({
   lockable(dims.add(config, 'treadGoing', 180, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
 
   const steps = gui.addFolder('Liczba stopni');
-  lockable(steps.add(config, 'treadsLegA', 1, 15, 1).name('Proste (odc. A)'), 'treadsLegA');
+  // L/U can start straight away with winders (0 straight treads before the first turn); a straight stair
+  // needs at least one tread, so the minimum follows the stair type.
+  const legACtrl = lockable(steps.add(config, 'treadsLegA', 0, 15, 1).name('Proste (odc. A)'), 'treadsLegA');
+  const syncLegAMin = () => {
+    const min = config.stairType === 'straight' ? 1 : 0;
+    legACtrl.min(min);
+    if (config.treadsLegA < min) config.treadsLegA = min;
+    legACtrl.updateDisplay();
+  };
+  stairTypeCtrl.onChange((value) => {
+    syncLegAMin();
+    onChange(value);
+  });
+  syncLegAMin();
   live(steps.add(config, 'turn1Type', ['winder', 'landing'])).name('Zakręt 1: typ');
   lockable(steps.add(config, 'windersPerTurn', 2, 6, 1).name('Zabiegowe (każdy skręt)'), 'windersPerTurn');
   lockable(steps.add(config, 'treadsLegB', 0, 15, 1).name('Proste (odc. B)'), 'treadsLegB');

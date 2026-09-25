@@ -22,6 +22,8 @@ export const MIN_POST_SIZE_MM = 20;
 export const MAX_POST_SIZE_MM = 300;
 
 const NEWEL_HEIGHT = 1000; // mm, wysokość słupka początkowego/końcowego ponad poziom podłogi
+// Two post positions closer than this are the same place (same 1 mm tolerance as the corner-post de-duplication).
+const POST_COINCIDENCE_MM = 1;
 
 function unitDir(pFrom, pTo) {
   return normalizeVector({ x: pTo.x - pFrom.x, y: pTo.y - pFrom.y });
@@ -151,12 +153,23 @@ export function buildAllPostModels(planLayout, config) {
     // identyczne, nakładające się słupy.
     const placedCorners = [];
     planLayout.turns.forEach((turn, i) => {
-      const isDuplicate = placedCorners.some((c) => Math.hypot(c.x - turn.innerCorner.x, c.y - turn.innerCorner.y) < 1);
+      const isDuplicate = placedCorners.some((c) => Math.hypot(c.x - turn.innerCorner.x, c.y - turn.innerCorner.y) < POST_COINCIDENCE_MM);
       if (isDuplicate) return;
       placedCorners.push(turn.innerCorner);
       models.push({ postId: `post-corner-${i}`, kind: 'corner', position: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
     });
   }
 
-  return applyPostOverrides(models, config.manualPostOverrides);
+  // A flight can start (treadsLegA = 0) or end (last straight leg = 0) directly with winders: the inner
+  // path then begins/ends AT the turn's inner corner, so the start/end newel would stand exactly where the
+  // corner post already stands (two posts in one place). The full-height corner post takes that role; the
+  // start/end post is only kept when the user removed that corner post, so the spot is never left empty.
+  const overrides = sanitizePostOverrides(config.manualPostOverrides);
+  const coveredByCornerPost = (point) =>
+    models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && Math.hypot(m.position.x - point.x, m.position.y - point.y) < POST_COINCIDENCE_MM);
+  const kept = models.filter(
+    (m) => !(m.postId === 'post-start' && coveredByCornerPost(startPoint)) && !(m.postId === 'post-end' && coveredByCornerPost(endPoint)),
+  );
+
+  return applyPostOverrides(kept, config.manualPostOverrides);
 }

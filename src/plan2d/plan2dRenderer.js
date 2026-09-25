@@ -338,6 +338,9 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ['post-start', startPost],
     ['post-end', endPost],
   ]
+    // postSolver.js drops the start/end post when a corner post already stands there (a flight starting or
+    // ending with winders) — it is then absent from postStates (built from allPostModels) and not drawn.
+    .filter(([postId]) => Object.keys(postStates).length === 0 || postId in postStates)
     .map(([postId, p]) => postRect(postId, p.x - config.postSize / 2, -p.y - config.postSize / 2, config.postSize))
     .join('');
 

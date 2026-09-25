@@ -612,6 +612,13 @@ html, body {
   opacity: 1;
 }
 
+/* lil-gui turns off pointer events on EVERY child of a disabled controller (`.lil-controller.lil-disabled *`,
+   !important) — which also swallowed the lock button itself, so a locked field could never be unlocked.
+   The button must stay clickable; only the field's own input is meant to be disabled. */
+.lil-controller.lil-disabled .lock-toggle {
+  pointer-events: auto !important;
+}
+
 .value-badge {
   display: inline-block;
   margin-left: 6px;

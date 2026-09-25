@@ -137,3 +137,27 @@ test('removing a corner post turns that turn\'s inner joint into a lap joint; ot
   const [h0] = buildStringerConstructionGeometry(buildStringerModelsForFlight(base.planLayout, base.config).inner, base.config);
   assert.ok(g0.ends.end.u > h0.ends.end.u, 'first board runs on into the joint once its post is gone');
 });
+
+test('a flight starting or ending straight away with winders (0 straight treads) has ONE post at that corner, not two', () => {
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1;
+  for (const patch of [{ treadsLegA: 0 }, { treadsLegB: 0 }, { stairType: 'U', treadsLegA: 0, treadsLegC: 0 }]) {
+    const { config, planLayout } = layout(patch);
+    const posts = buildPostModels(planLayout, config);
+    for (let i = 0; i < posts.length; i++) {
+      for (let j = i + 1; j < posts.length; j++) {
+        assert.ok(!near(posts[i].position, posts[j].position), `${JSON.stringify(patch)}: ${posts[i].postId} and ${posts[j].postId} stand in the same place`);
+      }
+    }
+    assert.ok(posts.some((p) => p.kind === 'corner'), 'the full-height corner post stays');
+  }
+  // an ordinary stair keeps its start and end post
+  const ordinary = buildPostModels(layout().planLayout, layout().config).map((p) => p.postId);
+  assert.ok(ordinary.includes('post-start') && ordinary.includes('post-end'));
+});
+
+test('a flight starting with winders: removing the corner post brings the start post back, so the spot is never empty', () => {
+  const { config, planLayout } = layout({ treadsLegA: 0, manualPostOverrides: { 'post-corner-0': { removed: true } } });
+  const ids = buildPostModels(planLayout, config).map((p) => p.postId);
+  assert.ok(!ids.includes('post-corner-0'));
+  assert.ok(ids.includes('post-start'));
+});
