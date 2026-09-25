@@ -199,18 +199,37 @@ export function createProfileEditor(container, handlers) {
       const { cp } = found;
       const cur = cp.tangent ? offsetFromDrag(cp, { u: cp.u, v: cp.v }) : { ds: 0, dn: 0 };
       const contourLabel = cp.contour === 'lower' ? 'dolny' : 'górny';
-      parts.push(`<div class="pe-point"><b>Punkt: ${escapeHtml(cp.id)}</b> <small>kontur ${contourLabel} · ${cp.kind === 'inserted' ? 'dodany ręcznie' : cp.kind === 'overridden' ? 'zmieniony ręcznie' : 'kotwiczony do stopnia'}</small>`);
-      parts.push(`<label>Głębiej (+) / płycej (−) o <input type="number" step="5" data-pe-field="dn" value="${Math.round(cur.dn * 10) / 10}"> mm</label>`);
-      if (cp.kind === 'inserted') parts.push(`<label>Położenie na odcinku (0–1) <input type="number" step="0.05" min="0.02" max="0.98" data-pe-field="t" value="${Math.round(cp.t * 100) / 100}"></label>`);
-      else parts.push(`<label>Wzdłuż wangi <input type="number" step="5" data-pe-field="ds" value="${Math.round(cur.ds * 10) / 10}"> mm</label>`);
+      const isAnchor = cp.kind === 'post' || cp.kind === 'post-overridden';
+      const kindLabel = isAnchor ? `kotwa na słupie ${escapeHtml(cp.postId ?? '')}` : cp.kind === 'inserted' ? 'dodany ręcznie' : cp.kind === 'overridden' ? 'zmieniony ręcznie' : 'kotwiczony do stopnia';
+      parts.push(`<div class="pe-point"><b>Punkt: ${escapeHtml(cp.id)}</b> <small>kontur ${contourLabel} · ${kindLabel}</small>`);
+      if (isAnchor) {
+        // a post anchor only moves along the post face: one height field (its "ds" is the vertical offset)
+        parts.push(`<label>Wysokość na licu słupa, w górę (+) / w dół (−) o <input type="number" step="5" data-pe-field="ds" value="${Math.round(cur.ds * 10) / 10}"> mm</label>`);
+      } else {
+        parts.push(`<label>Głębiej (+) / płycej (−) o <input type="number" step="5" data-pe-field="dn" value="${Math.round(cur.dn * 10) / 10}"> mm</label>`);
+        if (cp.kind === 'inserted') parts.push(`<label>Położenie na odcinku (0–1) <input type="number" step="0.05" min="0.02" max="0.98" data-pe-field="t" value="${Math.round(cp.t * 100) / 100}"></label>`);
+        else parts.push(`<label>Wzdłuż wangi <input type="number" step="5" data-pe-field="ds" value="${Math.round(cur.ds * 10) / 10}"> mm</label>`);
+      }
       parts.push(`<label>Promień zaokrąglenia <input type="number" step="10" min="0" data-pe-field="radius" value="${Math.round(cp.radiusMm)}" placeholder="auto"> mm</label>`);
       parts.push(`<span class="pe-point-actions"><button type="button" data-pe-action="reset-point">${cp.kind === 'inserted' ? 'Usuń punkt' : 'Resetuj punkt'}</button></span></div>`);
     } else {
-      parts.push('<div class="pe-point muted">Zaznacz punkt (kółko na konturze), żeby ustawić dokładne wartości.</div>');
+      parts.push('<div class="pe-point muted">Zaznacz punkt (kółko na konturze, kwadrat = kotwa na słupie), żeby ustawić dokładne wartości.</div>');
     }
+    // Findings: ONE compact line (collapsed by default) — the list used to take half of the editing area. Opened on
+    // request, capped in height; out-of-date edits get a one-click clean-up.
     const findings = state.views.flatMap((v) => v.diagnostics.filter((d) => /^STRINGER-/.test(d.ruleId) && d.ruleId !== 'STRINGER-MIN-SECTION').map((d) => ({ d, seg: v.segmentId })));
-    for (const { d, seg } of findings) parts.push(`<div class="pe-diag ${d.severity.toLowerCase()}"><b>${escapeHtml(d.ruleId)}</b> <small>${escapeHtml(seg)}</small> ${escapeHtml(d.message)}</div>`);
+    const stale = [...new Set(state.views.flatMap((v) => v.outOfDateOverrideIds || []))];
+    if (findings.length > 0 || stale.length > 0) {
+      const counts = ['error', 'warning', 'info'].map((sev) => [sev, findings.filter(({ d }) => d.severity.toLowerCase() === sev).length]).filter(([, n]) => n > 0);
+      const summary = counts.map(([sev, n]) => `<span class="pe-count ${sev}">${n} ${sev === 'error' ? 'błąd' : sev === 'warning' ? 'uwaga' : 'info'}</span>`).join(' ');
+      const clean = stale.length > 0 ? ` <button type="button" data-pe-action="prune" title="${escapeHtml(stale.join(', '))}">Usuń nieaktualne edycje (${stale.length})</button>` : '';
+      const list = findings.map(({ d, seg }) => `<div class="pe-diag ${d.severity.toLowerCase()}"><b>${escapeHtml(d.ruleId)}</b> <small>${escapeHtml(seg)}</small> ${escapeHtml(d.message)}</div>`).join('');
+      parts.push(`<details class="pe-findings"${state.findingsOpen ? ' open' : ''}><summary>Uwagi do profilu: ${summary || '—'}</summary><div class="pe-findings-list">${list}</div></details>${clean}`);
+    }
     info.innerHTML = parts.join('');
+    info.querySelector('.pe-findings')?.addEventListener('toggle', (e) => {
+      state.findingsOpen = e.target.open;
+    });
   }
 
   function refresh() {
@@ -493,6 +512,15 @@ export function createProfileEditor(container, handlers) {
       return;
     }
     const step = e.shiftKey ? NUDGE_STEP_FAST_MM : NUDGE_STEP_MM;
+    const selectedCp = state.selected ? findControlPoint(state.selected.id, state.selected.contour)?.cp : null;
+    if (selectedCp && (selectedCp.kind === 'post' || selectedCp.kind === 'post-overridden')) {
+      // a post anchor moves only along the post: up/down arrows change its height ("ds" along the vertical face)
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        nudgeSelectedPoint(e.key === 'ArrowUp' ? step : -step, 0);
+      }
+      return;
+    }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       nudgeSelectedPoint(0, step);
@@ -641,6 +669,13 @@ export function createProfileEditor(container, handlers) {
   });
   info.addEventListener('click', (e) => {
     if (e.target?.dataset?.peAction === 'reset-point') resetSelectedPoint();
+    if (e.target?.dataset?.peAction === 'prune') {
+      const ids = [...new Set(state.views.flatMap((v) => v.outOfDateOverrideIds || []))];
+      if (ids.length === 0) return;
+      handlers.applyEdit({ type: PROFILE_EDITS.PRUNE, side: state.side, ids });
+      handlers.commit();
+      refresh();
+    }
   });
 
   window.addEventListener('resize', () => {

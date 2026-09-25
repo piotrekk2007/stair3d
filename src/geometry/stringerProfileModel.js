@@ -51,6 +51,18 @@ export function anchorIdForTread(treadIndex) {
   return `support:step-${treadIndex}`;
 }
 
+// A POST ANCHOR: where a board's edge meets the face of the structural post it butts into (start newel, corner post,
+// end newel). One per board end at a post and contour. It lies ON the post face (fixed u) and only moves up/down it —
+// "anchor the wanga here on the post" — and the contour (a spline too) is built through it. Keyed by post AND board,
+// because the two boards meeting at a corner post each have their own anchor on it.
+export const POST_ANCHOR_PREFIX = 'post:';
+export function postAnchorId(postId, segmentId) {
+  return `${POST_ANCHOR_PREFIX}${postId}@${segmentId}`;
+}
+export function isPostAnchorId(id) {
+  return typeof id === 'string' && id.startsWith(POST_ANCHOR_PREFIX);
+}
+
 // A manual override may not be more than this far from the required depth to count as met —
 // float noise only, not a design tolerance.
 export const DEPTH_TOLERANCE_MM = 1e-3;
@@ -116,7 +128,8 @@ export function scopeIncludes(scope, contour) {
 //     mode: 'AUTO' | 'MANUAL',        // AUTO: the profile is fully derived, entries are ignored
 //     lower: { [anchorId]: { ds?, dn?, radiusMm? } },
 //     upper: { [anchorId]: { ds?, dn?, radiusMm? } },     // 'closed' only
-//     inserted: [{ id, contour, after, t, dn?, radiusMm? }]
+//     inserted: [{ id, contour, after, t, dn?, radiusMm? }],
+//     anchors: { [postAnchorId]: { lower?: { dv }, upper?: { dv } } }   // post anchors: height on the post face
 //   }
 //
 // `ds` moves a control point ALONG the reference curve, `dn` along the contour's own outward
@@ -161,7 +174,14 @@ export function sanitizeStringerProfileOverrides(raw) {
     }
     const lower = sanitizeContourOverrides(entry.lower);
     const upper = sanitizeContourOverrides(entry.upper);
-    if (Object.keys(lower).length === 0 && Object.keys(upper).length === 0 && inserted.length === 0) continue;
+    const anchors = {};
+    for (const [id, a] of Object.entries(entry.anchors && typeof entry.anchors === 'object' ? entry.anchors : {})) {
+      if (!isPostAnchorId(id) || !a || typeof a !== 'object') continue;
+      const clean = {};
+      for (const contour of [PROFILE_CONTOURS.LOWER, PROFILE_CONTOURS.UPPER]) if (Number.isFinite(a[contour]?.dv)) clean[contour] = { dv: a[contour].dv };
+      if (Object.keys(clean).length > 0) anchors[id] = clean;
+    }
+    if (Object.keys(lower).length === 0 && Object.keys(upper).length === 0 && inserted.length === 0 && Object.keys(anchors).length === 0) continue;
     result[side] = {
       // A layer with entries but no explicit mode is a manual profile — the entries exist because
       // someone edited it.
@@ -169,6 +189,8 @@ export function sanitizeStringerProfileOverrides(raw) {
       lower,
       upper,
       inserted,
+      // only when there are any, so a file without post anchors keeps its exact previous shape
+      ...(Object.keys(anchors).length > 0 ? { anchors } : {}),
     };
   }
   return result;
@@ -180,6 +202,7 @@ export function countProfileOverrides(all) {
   for (const entry of Object.values(sanitizeStringerProfileOverrides(all))) {
     if (entry.mode === PROFILE_MODES.AUTO) continue;
     count += Object.keys(entry.lower).length + Object.keys(entry.upper).length + entry.inserted.length;
+    count += Object.values(entry.anchors || {}).reduce((n, a) => n + Object.keys(a).length, 0);
   }
   return count;
 }
@@ -191,7 +214,7 @@ export function countProfileOverrides(all) {
  */
 export function setVertexOverride(all, side, contour, anchorId, patch) {
   const current = sanitizeStringerProfileOverrides(all);
-  const entry = current[side] || { mode: PROFILE_MODES.MANUAL, lower: {}, upper: {}, inserted: [] };
+  const entry = current[side] || { mode: PROFILE_MODES.MANUAL, lower: {}, upper: {}, inserted: [], anchors: {} };
   const merged = { ...(entry[contour][anchorId] || {}) };
   for (const [key, value] of Object.entries(patch)) {
     if (value === null) delete merged[key];
@@ -222,6 +245,7 @@ export const PROFILE_EDITS = Object.freeze({
   RESET_VERTEX: 'resetVertex',
   SET_MODE: 'setMode',
   RESET_SIDE: 'resetSide',
+  PRUNE: 'prune', // remove the listed out-of-date override ids (edit.ids)
 });
 
 function withEntry(current, side, entry) {
@@ -235,10 +259,21 @@ function withEntry(current, side, entry) {
  */
 export function applyProfileEdit(all, edit) {
   const current = sanitizeStringerProfileOverrides(all);
-  const entry = current[edit.side] || { mode: PROFILE_MODES.MANUAL, lower: {}, upper: {}, inserted: [] };
+  const entry = current[edit.side] || { mode: PROFILE_MODES.MANUAL, lower: {}, upper: {}, inserted: [], anchors: {} };
   const isInserted = (id) => entry.inserted.some((i) => i.id === id);
+  const withAnchor = (id, contour, value) => {
+    const anchors = { ...(entry.anchors || {}) };
+    const a = { ...(anchors[id] || {}) };
+    if (value === null) delete a[contour];
+    else a[contour] = value;
+    if (Object.keys(a).length === 0) delete anchors[id];
+    else anchors[id] = a;
+    return withEntry(current, edit.side, { ...entry, anchors });
+  };
   switch (edit.type) {
     case PROFILE_EDITS.MOVE_VERTEX: {
+      // a post anchor only moves along the post face: its `ds` is measured along that (vertical) face
+      if (isPostAnchorId(edit.anchorId)) return withAnchor(edit.anchorId, edit.contour, { dv: edit.ds ?? 0 });
       if (!isInserted(edit.anchorId)) return setVertexOverride(all, edit.side, edit.contour, edit.anchorId, { ds: edit.ds ?? 0, dn: edit.dn ?? 0 });
       const inserted = entry.inserted.map((i) => (i.id === edit.anchorId ? { ...i, dn: edit.dn ?? i.dn, t: edit.t ?? i.t } : i));
       return withEntry(current, edit.side, { ...entry, inserted });
@@ -257,6 +292,7 @@ export function applyProfileEdit(all, edit) {
       return withEntry(current, edit.side, { ...entry, inserted });
     }
     case PROFILE_EDITS.RESET_VERTEX: {
+      if (isPostAnchorId(edit.anchorId)) return withAnchor(edit.anchorId, edit.contour, null);
       const next = { ...entry, inserted: entry.inserted.filter((i) => i.id !== edit.anchorId) };
       if (edit.contour && next[edit.contour]) {
         next[edit.contour] = { ...next[edit.contour] };
@@ -268,9 +304,24 @@ export function applyProfileEdit(all, edit) {
       const { [edit.side]: _dropped, ...rest } = current;
       return sanitizeStringerProfileOverrides(rest);
     }
+    case PROFILE_EDITS.PRUNE:
+      return pruneProfileOverrides(all, edit.side, edit.ids || []);
     case PROFILE_EDITS.SET_MODE:
       return withEntry(current, edit.side, { ...entry, mode: edit.mode === PROFILE_MODES.AUTO ? PROFILE_MODES.AUTO : PROFILE_MODES.MANUAL });
     default:
       return current;
   }
+}
+
+/**
+ * Removes the given override ids (control points, inserted points, post anchors) from one stringer's layer — the
+ * "remove out-of-date edits" action for overrides whose point no longer exists anywhere on that wanga.
+ */
+export function pruneProfileOverrides(all, side, ids) {
+  const current = sanitizeStringerProfileOverrides(all);
+  const entry = current[side];
+  if (!entry || !ids || ids.length === 0) return current;
+  const drop = new Set(ids);
+  const keep = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([id]) => !drop.has(id)));
+  return withEntry(current, side, { ...entry, lower: keep(entry.lower), upper: keep(entry.upper), anchors: keep(entry.anchors), inserted: entry.inserted.filter((i) => !drop.has(i.id)) });
 }

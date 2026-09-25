@@ -244,3 +244,14 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 * The side-view editor (tab "Profil wangi") exposes the override layer; its limits are listed in CLAUDE.md
   ("Side-view editor"): no handles for control points beyond a board's end faces, and the first edit turns every
   tread into a control point.
+
+
+## Kotwy na słupach i edycje przypisane do desek (etap po „deski przy słupie są niezależne")
+
+- **Kotwa na słupie** (`post:<słup>@<deska>`): punkt krawędzi deski dokładnie na licu słupa, w który deska wchodzi —
+  po jednym na koniec deski i kontur; porusza się tylko w pionie po licu słupa (`anchors[id][kontur] = {dv}`).
+  Nieruszona nie zmienia deski (uchwyt na krawędzi policzonej bez niej); ruszona staje się wierzchołkiem, przez który
+  liczony jest kontur (także spline). To jest „kotwienie wangi na słupie" z prośby użytkownika.
+- **Edycje przypisane do desek**: każda grupa desek dostaje tylko swoje punkty; edycja pasująca do żadnej deski jest
+  zgłaszana raz (INFO) i można ją usunąć jednym przyciskiem (`PROFILE_EDITS.PRUNE`).
+- **Uwagi w edytorze**: jedna zwinięta linia z licznikami zamiast listy na pół ekranu.

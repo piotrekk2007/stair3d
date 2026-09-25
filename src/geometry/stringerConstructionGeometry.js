@@ -72,7 +72,7 @@ import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm } from './stringerModel.js';
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
-import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM } from './stringerProfileModel.js';
+import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
 import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
@@ -580,7 +580,23 @@ function emptySegmentGeometry(segment) {
 // segment's own outerContour/pitchProfile/diagnostics look exactly like a single-segment
 // result would, but a board that spans a postless corner now has edges that actually meet
 // there, instead of two independently-fit profiles that happen to disagree at the join.
-function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides) {
+// The part of one stringer side's manual overrides that belongs to THIS group of boards: control points whose anchor
+// is one of the group's knots, inserted points that follow one of them, post anchors of the group's own boards. The
+// ids actually used are recorded in `used`, so the side can report an override that fits NO board as out of date
+// (instead of every other board reporting it as "orphaned" — which is what happened once posts split a wanga into
+// independent boards). Null in, null out.
+function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
+  if (!profileOverrides) return null;
+  const pick = (obj, ids) => Object.fromEntries(Object.entries(obj || {}).filter(([id]) => ids.has(id)));
+  const lower = pick(profileOverrides.lower, knotIds);
+  const upper = pick(profileOverrides.upper, knotIds);
+  const anchors = pick(profileOverrides.anchors, anchorIds);
+  const inserted = (profileOverrides.inserted || []).filter((i) => knotIds.has(i.after));
+  for (const id of [...Object.keys(lower), ...Object.keys(upper), ...Object.keys(anchors), ...inserted.map((i) => i.id)]) used.add(id);
+  return { ...profileOverrides, lower, upper, anchors, inserted };
+}
+
+function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set()) {
   const withBearings = group.filter((s) => s.treadBearings.length > 0);
   if (withBearings.length === 0) return group.map(emptySegmentGeometry);
 
@@ -588,13 +604,20 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
   const effectiveByGroup = withBearings.map((s) => effectiveBearings(s, extendInfo.get(s.id).extendStart, extendInfo.get(s.id).extendEnd));
   const segmentLengths = withBearings.map((s) => s.referenceLine.length);
   const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, profileOverrides !== null);
+  // Post anchors: every end of a board of this group that butts into a structural post (group u of the post face).
+  const postAnchors = [];
+  withBearings.forEach((segment, i) => {
+    if (segment.startPost) postAnchors.push({ id: postAnchorId(segment.startPost.postId, segment.id), u: offsets[i] + segment.startPost.faceU, postId: segment.startPost.postId });
+    if (segment.endPost) postAnchors.push({ id: postAnchorId(segment.endPost.postId, segment.id), u: offsets[i] + segment.endPost.faceU, postId: segment.endPost.postId });
+  });
+  const groupOverrides = overridesForGroup(profileOverrides, new Set(groupKnots.map((k) => k.id)), new Set(postAnchors.map((a) => a.id)), usedOverrideIds);
   const constructionType = withBearings[0].constructionType;
   const boardWidth = withBearings[0].width;
 
   // The profile itself — reference curve, lower and (housed) upper contour as lines and true
   // arcs — is solved in ONE place, stringerProfileSolver.js. This file only decides WHAT the
   // reference is (the bearings) and how the solved profile is cut into physical boards.
-  const solved = solveStringerProfile({ reference: groupKnots, constructionType, params, overrides: profileOverrides });
+  const solved = solveStringerProfile({ reference: groupKnots, constructionType, params, overrides: groupOverrides, postAnchors });
   const profileDiagnostics = solved.findings.map((f) =>
     createDiagnostic({
       ruleId: f.ruleId,
@@ -894,6 +917,35 @@ function syncCurveStartsToPolylines(geo) {
 // a long horizontal run — which stretched the board. Both are gone; continuity is only solved where boards meet
 // WITHOUT a post (a lap joint — one profile over the whole group, groupSegmentsByLapJoint).
 
+// An override that fits NO board of this wanga any more (the treads or the posts changed): one INFO on the side's first
+// board, never a warning per board, and the ids listed on it (`outOfDateOverrideIds`) so the editor can offer to remove
+// them. The override is simply not applied — nothing else depends on it.
+function reportOutOfDateOverrides(ordered, profileOverrides, used) {
+  if (!profileOverrides || ordered.length === 0) return;
+  const all = [
+    ...Object.keys(profileOverrides.lower || {}),
+    ...Object.keys(profileOverrides.upper || {}),
+    ...Object.keys(profileOverrides.anchors || {}),
+    ...(profileOverrides.inserted || []).map((i) => i.id),
+  ];
+  const stale = [...new Set(all.filter((id) => !used.has(id)))];
+  const first = ordered[0];
+  first.outOfDateOverrideIds = stale;
+  if (stale.length === 0) return;
+  first.diagnostics = [
+    ...first.diagnostics,
+    createDiagnostic({
+      ruleId: 'STRINGER-OVERRIDE-ORPHANED',
+      severity: 'INFO',
+      elementType: 'stringer',
+      elementId: first.segmentId,
+      parameter: 'manualStringerProfileOverrides',
+      value: stale.length,
+      message: `${stale.length} ręczn${stale.length === 1 ? 'a edycja' : 'e edycje'} profilu tej wangi nie pasuj${stale.length === 1 ? 'e' : 'ą'} już do żadnego punktu (zmienił się układ stopni lub słupów) — pominięt${stale.length === 1 ? 'a' : 'e'}. Można je usunąć w edytorze profilu („Usuń nieaktualne edycje").`,
+    }),
+  ];
+}
+
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model, config.hasCornerPost);
   const extendInfo = new Map(
@@ -901,11 +953,13 @@ export function buildStringerConstructionGeometry(model, config) {
   );
   const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
   const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
-  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides));
+  const usedOverrideIds = new Set();
+  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampFirstSegmentToFloor(ordered);
   ordered.forEach(syncCurveStartsToPolylines);
+  reportOutOfDateOverrides(ordered, profileOverrides, usedOverrideIds);
   return ordered;
 }

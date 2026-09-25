@@ -1396,9 +1396,20 @@ code {
 .pe-cp-overridden { fill: #ffd8a8; stroke: #e07b00; }
 .pe-cp-inserted { fill: #c9f0d0; stroke: #2a9d4b; }
 .pe-cp.selected { stroke-width: 3.5; fill: #1a5fb4; }
+/* post anchor: a square on the face of the post the board butts into (moves up/down only) */
+.pe-cp-post { fill: #e8f0fb; stroke: #1a5fb4; cursor: ns-resize; }
+.pe-cp-post-overridden { fill: #ffd8a8; stroke: #e07b00; cursor: ns-resize; }
 .pe-radius-label, .pe-label { fill: #444; font-family: inherit; }
 .pe-label.violation { fill: #d33; font-weight: 600; }
-#profile-panel .pe-info { padding: 8px 12px; border-top: 1px solid #d4d9df; font-size: 12px; max-height: 32%; overflow: auto; background: #fafbfc; }
+#profile-panel .pe-info { padding: 6px 12px; border-top: 1px solid #d4d9df; font-size: 12px; max-height: 22%; overflow: auto; background: #fafbfc; }
+/* findings: one compact, collapsible line instead of a list over half the editor */
+#profile-panel .pe-findings { display: inline-block; margin-top: 4px; }
+#profile-panel .pe-findings summary { cursor: pointer; color: #4a5563; }
+#profile-panel .pe-findings-list { max-height: 110px; overflow: auto; }
+#profile-panel .pe-count { display: inline-block; padding: 0 6px; border-radius: 9px; font-size: 11px; background: #eef4fc; }
+#profile-panel .pe-count.error { background: #fdeaea; color: #9b1c1c; }
+#profile-panel .pe-count.warning { background: #fff5e0; color: #8a5a00; }
+#profile-panel [data-pe-action="prune"] { margin-left: 8px; padding: 2px 8px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
 #profile-panel .pe-point { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 #profile-panel .pe-point.muted { color: #6b7684; }
 #profile-panel .pe-point input { width: 72px; padding: 2px 5px; }

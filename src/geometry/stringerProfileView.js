@@ -72,7 +72,9 @@ export function buildProfileViewModel(geometries, model, config) {
         t: c.t,
         edgeLength: c.edgeLength,
         // anchored to a tread / the end, manually moved or given a radius, or inserted by hand
-        kind: c.inserted ? 'inserted' : c.overridden ? 'overridden' : 'anchored',
+        // a post anchor (on the face of the post the board butts into) is drawn and edited differently
+        kind: c.anchor ? (c.overridden ? 'post-overridden' : 'post') : c.inserted ? 'inserted' : c.overridden ? 'overridden' : 'anchored',
+        postId: c.postId ?? null,
         withinSegment: c.withinSegment,
       }));
 
@@ -108,6 +110,8 @@ export function buildProfileViewModel(geometries, model, config) {
         .filter(Boolean)
         .map((p) => ({ postId: p.postId, end: p.end, uStart: p.centreU - p.sizeMm / 2, uEnd: p.centreU + p.sizeMm / 2, zBottom: p.elevation.bottom, zTop: p.elevation.top })),
       diagnostics: g.diagnostics,
+      // override ids that fit no board of this wanga any more (set on the side's first board) — "remove out-of-date edits"
+      outOfDateOverrideIds: g.outOfDateOverrideIds || [],
     };
   });
 }

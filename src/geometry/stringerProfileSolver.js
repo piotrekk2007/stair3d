@@ -27,7 +27,7 @@
 // ends up at distance (d - r)/cos(phi) + r from the reference vertex — >= d only while r <= d.
 // Corners turning the other way only ever add material, so they are always safe.
 
-import { offsetPolylineByNormal } from './polylineProfile.js';
+import { offsetPolylineByNormal, valueAtU } from './polylineProfile.js';
 import {
   filletPolyline,
   feasibleRadii,
@@ -37,6 +37,7 @@ import {
   curveDistance,
   pointToCurveDistance,
   splinePointsThrough,
+  curveToPolyline,
 } from './profileCurve.js';
 import { CONSTRUCTION_TYPES } from './stringerModel.js';
 import { PROFILE_CONTOURS, TRANSITION_STYLES, DEPTH_TOLERANCE_MM, MIN_VERTEX_SPACING_MM, scopeIncludes } from './stringerProfileModel.js';
@@ -86,6 +87,43 @@ function finding(fields) {
 }
 
 // --- control polygon (nominal + overrides) -------------------------------------------------------
+
+// Post anchors (see stringerProfileModel.js postAnchorId): a point on the contour exactly at a post face. An anchor
+// with no override is VIRTUAL — reported as a control point (a handle for the editor) at the contour's current height
+// there, but not part of the polygon, so an unedited board keeps its shape exactly (spline included). A moved anchor
+// becomes a real vertex at (face u, nominal height + dv) and the contour is built through it.
+function withPostAnchors(vertices, postAnchors, overrides, contour, solvedCurve) {
+  const virtual = [];
+  let list = vertices;
+  // the anchor's own height is read off the contour AS SOLVED without it (for a spline or a filleted corner that is
+  // not the control polygon), so an unmoved anchor sits exactly on the drawn edge
+  const drawn = solvedCurve && solvedCurve.length > 0 ? curveToPolyline(solvedCurve) : vertices.map((v) => ({ u: v.u, v: v.v }));
+  for (const anchor of postAnchors || []) {
+    const nominalV = drawn.length >= 2 ? valueAtU(drawn, anchor.u) : drawn.length === 1 ? drawn[0].v : 0;
+    const dv = overrides?.anchors?.[anchor.id]?.[contour]?.dv;
+    const point = {
+      id: anchor.id,
+      u: anchor.u,
+      v: nominalV + (Number.isFinite(dv) ? dv : 0),
+      nominal: { u: anchor.u, v: nominalV },
+      override: Number.isFinite(dv) ? { ds: dv, dn: 0 } : null,
+      explicitRadius: undefined,
+      inserted: false,
+      anchor: true,
+      postId: anchor.postId,
+      // moves only along the post face (vertical): an editor's drag along this "tangent" is the height change
+      tangent: { u: 0, v: 1 },
+      normal: { u: 1, v: 0 },
+    };
+    if (!Number.isFinite(dv)) {
+      virtual.push(point);
+      continue;
+    }
+    const at = list.findIndex((v) => v.u > anchor.u);
+    list = at < 0 ? [...list, point] : [...list.slice(0, at), point, ...list.slice(at)];
+  }
+  return { vertices: list, virtual };
+}
 
 function buildControlPolygon({ reference, contour, nominalPoints, overrides, findings }) {
   const tangents = vertexTangents(reference);
@@ -251,6 +289,8 @@ function controlPointsFrom(vertices, applied) {
     radius: applied ? applied[i] || 0 : 0,
     overridden: !!v.override || v.explicitRadius !== undefined,
     inserted: v.inserted,
+    anchor: !!v.anchor,
+    postId: v.postId,
     t: v.t,
     edgeLength: v.edgeLength,
     nominal: v.nominal ? { u: v.nominal.u, v: v.nominal.v } : null,
@@ -364,13 +404,14 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
  * @param {string} input.constructionType  CONSTRUCTION_TYPES.CUT | CLOSED
  * @param {Object} input.params            profileParamsFromConfig(config)
  * @param {Object|null} input.overrides    activeOverridesFor(config.manualStringerProfileOverrides, side)
+ * @param {{id:string, u:number, postId:string}[]} [input.postAnchors]  post faces the group's boards butt into (group u)
  * @returns {{
  *   referenceCurve: Object[], lowerCurve: Object[], upperCurve: Object[]|null,
  *   depthReferenceCurve: Object[], lowerControl: Object[], upperControl: Object[]|null,
  *   findings: Object[]
  * }}
  */
-export function solveStringerProfile({ reference, constructionType, params, overrides = null }) {
+export function solveStringerProfile({ reference, constructionType, params, overrides = null, postAnchors = [] }) {
   const findings = [];
   const closed = constructionType === CONSTRUCTION_TYPES.CLOSED;
   const referenceCurve = polylineToCurve(reference);
@@ -393,24 +434,34 @@ export function solveStringerProfile({ reference, constructionType, params, over
   const lowerNominal = offsetPolylineByNormal(reference, lowerDistance, 'down');
   const upperNominal = closed ? offsetPolylineByNormal(reference, topMarginFromReferenceMm, 'up') : null;
 
-  const lowerVertices = buildControlPolygon({ reference, contour: PROFILE_CONTOURS.LOWER, nominalPoints: lowerNominal, overrides, findings });
-  const upperVertices = closed ? buildControlPolygon({ reference, contour: PROFILE_CONTOURS.UPPER, nominalPoints: upperNominal, overrides, findings }) : null;
-
+  const lowerBase = buildControlPolygon({ reference, contour: PROFILE_CONTOURS.LOWER, nominalPoints: lowerNominal, overrides, findings });
+  const upperBase = closed ? buildControlPolygon({ reference, contour: PROFILE_CONTOURS.UPPER, nominalPoints: upperNominal, overrides, findings }) : null;
   // The curve each contour's rounding must stay away from. Sharp control polygons on purpose:
   // rounding one contour never gets to "use up" the other's margin.
-  const lowerOpposite = closed ? polylineToCurve(upperVertices) : referenceCurve;
-  const lower = solveContour({ vertices: lowerVertices, contour: PROFILE_CONTOURS.LOWER, params, opposite: lowerOpposite, findings });
-  const upper = closed
-    ? solveContour({ vertices: upperVertices, contour: PROFILE_CONTOURS.UPPER, params, opposite: polylineToCurve(lowerVertices), findings })
-    : null;
+  const solveBoth = (lowerVertices, upperVertices, into) => {
+    const lowerOpposite = closed ? polylineToCurve(upperVertices) : referenceCurve;
+    const lowerSolved = solveContour({ vertices: lowerVertices, contour: PROFILE_CONTOURS.LOWER, params, opposite: lowerOpposite, findings: into });
+    const upperSolved = closed ? solveContour({ vertices: upperVertices, contour: PROFILE_CONTOURS.UPPER, params, opposite: polylineToCurve(lowerVertices), findings: into }) : null;
+    return { lowerSolved, upperSolved };
+  };
+  // Pass 1 without post anchors; the anchors then read their height off these solved edges. Only if an anchor was
+  // MOVED is the profile solved again through it (findings of the discarded pass are dropped).
+  const firstFindings = [];
+  const first = solveBoth(lowerBase, upperBase, firstFindings);
+  const lowerAnchored = withPostAnchors(lowerBase, postAnchors, overrides, PROFILE_CONTOURS.LOWER, first.lowerSolved.curve);
+  const upperAnchored = closed ? withPostAnchors(upperBase, postAnchors, overrides, PROFILE_CONTOURS.UPPER, first.upperSolved.curve) : null;
+  const anchorsMoved = lowerAnchored.vertices.length !== lowerBase.length || (closed && upperAnchored.vertices.length !== upperBase.length);
+  const { lowerSolved: lower, upperSolved: upper } = anchorsMoved ? solveBoth(lowerAnchored.vertices, closed ? upperAnchored.vertices : null, findings) : (findings.push(...firstFindings), first);
 
+  const withVirtual = (control, virtual, contour) =>
+    [...control, ...virtual.map((v) => ({ id: v.id, contour, u: v.u, v: v.v, radius: 0, overridden: false, inserted: false, anchor: true, postId: v.postId, nominal: v.nominal, tangent: v.tangent, normal: v.normal }))].sort((a, b) => a.u - b.u);
   return {
     referenceCurve,
     lowerCurve: lower.curve,
     upperCurve: upper ? upper.curve : null,
     depthReferenceCurve: closed ? upper.curve : referenceCurve,
-    lowerControl: lower.control,
-    upperControl: upper ? upper.control : null,
+    lowerControl: withVirtual(lower.control, lowerAnchored.virtual, PROFILE_CONTOURS.LOWER),
+    upperControl: upper ? withVirtual(upper.control, upperAnchored.virtual, PROFILE_CONTOURS.UPPER) : null,
     findings,
   };
 }

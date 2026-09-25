@@ -220,9 +220,17 @@ export function renderProfileEditorSVG(views, options) {
       const p = toSvg(seg, c.u, c.v);
       const isSel = selected && selected.id === c.id && selected.contour === c.contour;
       const r = (isSel ? 8 : 6) * pxToMm;
-      g.push(
-        `<circle class="pe-cp pe-cp-${c.kind}${isSel ? ' selected' : ''}" data-cp-id="${escapeHtml(c.id)}" data-contour="${c.contour}" data-seg-index="${i}" cx="${fmt(p.x)}" cy="${fmt(p.y)}" r="${fmt(r)}"/>`
-      );
+      if (c.kind === 'post' || c.kind === 'post-overridden') {
+        // a post anchor: a square on the post face (it only moves up/down the post)
+        const half = r * 1.1;
+        g.push(
+          `<rect class="pe-cp pe-cp-${c.kind}${isSel ? ' selected' : ''}" data-cp-id="${escapeHtml(c.id)}" data-contour="${c.contour}" data-seg-index="${i}" x="${fmt(p.x - half)}" y="${fmt(p.y - half)}" width="${fmt(2 * half)}" height="${fmt(2 * half)}"><title>Kotwa na słupie ${escapeHtml(c.postId ?? '')} — przeciągnij w górę/w dół</title></rect>`
+        );
+      } else {
+        g.push(
+          `<circle class="pe-cp pe-cp-${c.kind}${isSel ? ' selected' : ''}" data-cp-id="${escapeHtml(c.id)}" data-contour="${c.contour}" data-seg-index="${i}" cx="${fmt(p.x)}" cy="${fmt(p.y)}" r="${fmt(r)}"/>`
+        );
+      }
       if (c.radiusMm > 0) g.push(`<text class="pe-radius-label" x="${fmt(p.x + 10 * pxToMm)}" y="${fmt(p.y - 8 * pxToMm)}" font-size="${px(11)}">R${Math.round(c.radiusMm)}</text>`);
     }
 

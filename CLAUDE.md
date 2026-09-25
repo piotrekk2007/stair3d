@@ -1176,6 +1176,34 @@ The plan HUD (`#plan2d-hud`, next to the zoom buttons) has a "✎ Edytuj" toggle
 as "Edytuj krawędzie (przeciąganie)" in the parameter panel's Plan 2D folder; `main.js` `syncPlanEditButton` keeps the
 button state and the panel checkbox (via `refreshUI`) in sync both ways.
 
+## Profile editor: post anchors, per-board overrides, compact findings
+
+Reported: not enough freedom editing a wanga, constant STRINGER-OVERRIDE-ORPHANED warnings, and the findings list
+covering half of the editor.
+- **Per-board overrides (bug).** The override layer is per stringer SIDE, but the solver runs per GROUP of boards; since
+  posts split a wanga into independent boards, every board received all of the side's overrides and reported each
+  point of another board as ORPHANED (a WARNING per board). `stringerConstructionGeometry.js` `overridesForGroup` now
+  hands each group only its own points (knots, inserted points after them, its post anchors) and records the ids used;
+  `reportOutOfDateOverrides` reports an override that fits NO board as ONE INFO on the side's first board and lists
+  them in `outOfDateOverrideIds`. New edit `PROFILE_EDITS.PRUNE` / `pruneProfileOverrides` removes them ("Usuń
+  nieaktualne edycje" button in the editor; undoable like every edit).
+- **Post anchors** (`stringerProfileModel.js` `postAnchorId(postId, segmentId)` = `post:<postId>@<segmentId>`,
+  override `anchors: { [id]: { lower?: {dv}, upper?: {dv} } }`, emitted only when present so older files keep their
+  shape): at every board end that butts into a structural post, a control point ON the post face, per contour, moving
+  only up/down the post. `stringerProfileSolver.js` `withPostAnchors`: an unmoved anchor is VIRTUAL (a handle at the
+  height of the edge as solved without it — spline included — never changing the board); a moved one becomes a real
+  vertex at (face u, that height + dv) and the profile is solved again through it (two passes). `MOVE_VERTEX` on an
+  anchor stores its `ds` (the drag along the vertical "tangent") as `dv`; `RESET_VERTEX` removes it. Construction
+  geometry passes `postAnchors` per group from `StringerSegment.startPost/endPost`.
+- **Editor**: anchors drawn as squares (`.pe-cp-post`, orange when moved), one "Wysokość na licu słupa" field, up/down
+  arrows move them; the findings are ONE collapsed line (`<details class="pe-findings">` with per-severity counts,
+  list capped at 110 px), the info strip capped at 22 % of the panel.
+- **Known (unchanged):** the first manual edit switches the side to MANUAL, which keeps every tread knot (no collinear
+  simplification) — with SPLINE the whole curve then shifts slightly. The closing knot id `end:top` is shared by every
+  group of a side. A manual edit that breaks the minimum depth stays a STRINGER-MIN-DEPTH ERROR (blocks the takeoff).
+Tests: `geometry/__tests__/stringerProfile.test.js` (post anchors, per-board overrides — the regression confirmed to
+fail on the old code — and PRUNE).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

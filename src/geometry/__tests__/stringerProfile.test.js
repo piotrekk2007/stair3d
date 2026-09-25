@@ -460,7 +460,9 @@ test('override: an anchor that no longer exists is reported (ORPHANED) and chang
   const nominal = flight(STRAIGHT_CUT).geo.outer[0];
   const overrides = setVertexOverride({}, 'outer', 'lower', 'support:step-99', { dn: 50 });
   const edited = flight({ ...STRAIGHT_CUT, manualStringerProfileOverrides: overrides }).geo.outer[0];
-  assert.ok(edited.diagnostics.some((d) => d.ruleId === 'STRINGER-OVERRIDE-ORPHANED' && d.severity === 'WARNING'));
+  // one INFO for the whole wanga (not a warning per board), listing the ids the editor can offer to remove
+  assert.ok(edited.diagnostics.some((d) => d.ruleId === 'STRINGER-OVERRIDE-ORPHANED' && d.severity === 'INFO'));
+  assert.deepEqual(edited.outOfDateOverrideIds, ['support:step-99']);
   assert.deepEqual(edited.bottomProfile, nominal.bottomProfile);
 });
 
@@ -703,4 +705,79 @@ test('steep start blend: a start that is NOT steep is untouched (no blend, no ca
     assert.ok(!g.ends.start.blendedToPreviousEnd);
     assert.ok(!g.ends.start.capped);
   }
+});
+
+// ---- post anchors + per-board overrides (profile editor freedom) ----
+import { applyProfileEdit as anchorEdit, PROFILE_EDITS as ANCHOR_EDITS, postAnchorId, sanitizeStringerProfileOverrides as sanitizeForAnchors } from '../stringerProfileModel.js';
+
+const LWITH_POSTS = { stairType: 'L', turn1Type: 'winder', hasCornerPost: true };
+const vAtU = (poly, u) => {
+  for (let i = 1; i < poly.length; i++) {
+    if (u <= poly[i].u + 1e-9) {
+      const a = poly[i - 1];
+      const c = poly[i];
+      return c.u - a.u < 1e-12 ? c.v : a.v + ((c.v - a.v) * (u - a.u)) / (c.u - a.u);
+    }
+  }
+  return poly[poly.length - 1].v;
+};
+
+test('post anchors: every inner board end at a post has one, on the post face and exactly on the drawn edge', () => {
+  for (const style of ['TANGENT_ARC', 'SPLINE']) {
+    const { geo, models } = flight({ ...LWITH_POSTS, stringerTransitionStyle: style });
+    models.inner.segments.forEach((seg, i) => {
+      const g = geo.inner[i];
+      for (const [end, post] of [['start', seg.startPost], ['end', seg.endPost]]) {
+        if (!post) continue;
+        const a = g.lowerControl.find((c) => c.id === postAnchorId(post.postId, seg.id));
+        assert.ok(a, `${style} ${seg.id} ${end}: no anchor`);
+        assert.ok(Math.abs(a.u - post.faceU) < 1e-6, 'on the post face');
+        assert.ok(Math.abs(vAtU(g.bottomProfile, a.u) - a.v) < 0.5, `${style} ${seg.id} ${end}: anchor ${a.v.toFixed(1)} vs edge ${vAtU(g.bottomProfile, a.u).toFixed(1)}`);
+        assert.equal(a.withinSegment, true, 'has a handle');
+      }
+    });
+    assert.equal(geo.outer[0].lowerControl.filter((c) => c.anchor).length, 0, 'the outer wanga has no posts');
+  }
+});
+
+test('post anchors: moving one up/down the post moves the board edge at the post face by exactly that much (spline too)', () => {
+  for (const style of ['TANGENT_ARC', 'SPLINE']) {
+    const cfg = { ...LWITH_POSTS, stringerTransitionStyle: style, stringerConstructionTypeInner: 'closed' };
+    const { models } = flight(cfg);
+    const seg = models.inner.segments[1];
+    const id = postAnchorId(seg.startPost.postId, seg.id);
+    for (const contour of ['lower', 'upper']) {
+      const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour, anchorId: id, ds: 120, dn: 0 });
+      const g = flight({ ...cfg, manualStringerProfileOverrides: overrides }).geo.inner[1];
+      const a = g[`${contour}Control`].find((c) => c.id === id);
+      const edge = contour === 'lower' ? g.bottomProfile : g.topProfile;
+      assert.ok(Math.abs(a.v - a.nominal.v - 120) < 1e-6);
+      assert.ok(Math.abs(vAtU(edge, g.ends.start.u) - (a.nominal.v + 120)) < 0.5, `${style} ${contour}: edge ${vAtU(edge, g.ends.start.u).toFixed(1)} vs ${(a.nominal.v + 120).toFixed(1)}`);
+    }
+    // reset removes it again
+    const moved = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour: 'lower', anchorId: id, ds: 120, dn: 0 });
+    const reset = anchorEdit(moved, { type: ANCHOR_EDITS.RESET_VERTEX, side: 'inner', contour: 'lower', anchorId: id });
+    assert.equal(sanitizeForAnchors(reset).inner?.anchors, undefined);
+  }
+});
+
+// Regression: posts split a wanga into independent boards, and every board used to receive ALL the side's overrides —
+// so an edit of a point on board 2 was reported as ORPHANED (a WARNING) on board 1.
+test('an edit on one board of a wanga is never reported as orphaned on another board', () => {
+  const { models } = flight(LWITH_POSTS);
+  const seg1 = models.inner.segments[1];
+  const someTread = seg1.treadBearings.find((b) => b.ownsStart && b.finalUStart > seg1.startPost.faceU);
+  const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour: 'lower', anchorId: `support:step-${someTread.treadIndex}`, ds: 0, dn: 30 });
+  const { geo } = flight({ ...LWITH_POSTS, manualStringerProfileOverrides: overrides });
+  for (const g of geo.inner) assert.ok(!g.diagnostics.some((d) => d.ruleId === 'STRINGER-OVERRIDE-ORPHANED'), `${g.segmentId}: ${g.diagnostics.map((d) => d.ruleId)}`);
+  assert.deepEqual(geo.inner[0].outOfDateOverrideIds, []);
+});
+
+test('out-of-date edits: listed once for the wanga, removable with one PRUNE edit', () => {
+  const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour: 'lower', anchorId: 'support:step-999', ds: 0, dn: 30 });
+  const { geo } = flight({ ...LWITH_POSTS, manualStringerProfileOverrides: overrides });
+  assert.deepEqual(geo.inner[0].outOfDateOverrideIds, ['support:step-999']);
+  assert.equal(geo.inner.flatMap((g) => g.diagnostics).filter((d) => d.ruleId === 'STRINGER-OVERRIDE-ORPHANED').length, 1);
+  const pruned = anchorEdit(overrides, { type: ANCHOR_EDITS.PRUNE, side: 'inner', ids: ['support:step-999'] });
+  assert.equal(sanitizeForAnchors(pruned).inner, undefined, 'nothing left');
 });
