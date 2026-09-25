@@ -283,3 +283,64 @@ test('buildStringerBoardDXF: findings on the board are stated in its title block
   assert.ok(!dxf.includes('FILLET-CLAMPED'), 'INFO findings are not stated');
   assert.ok(buildStringerAllBoardsDXF([flagged], { model, config }).includes('BLAD STRINGER-MIN-DEPTH (x2)'));
 });
+
+// ---- balustrade: cut angles (railingSolver.js annotateCuts) and the one-sheet DXF ----
+import { buildStaircase } from '../../geometry/buildStaircase.js';
+import { buildRailingDXF } from '../dxfExport.js';
+import { piecePitchDeg } from '../../geometry/railingSolver.js';
+
+const railed = (patch = {}, side = 'outer') =>
+  buildStaircase({ ...createDefaultConfig(), railingEnabled: true, railingSections: [{ id: 'r1', side, fromStep: 0, toStep: null }], ...patch });
+const dxfTexts = (dxf) => dxf.split('\n').filter((line, i, all) => all[i - 1] === '1' && all[i - 2] !== undefined);
+
+test('handrail cuts: plumb at a post (−/+ pitch), the bisector at a join, cut length from the longer edge', () => {
+  const r = railed();
+  for (const run of r.railingModel.sections[0].runs) {
+    const first = run.pieces[0];
+    const last = run.pieces[run.pieces.length - 1];
+    assert.equal(first.startCut.kind, 'post');
+    assert.ok(Math.abs(first.startCut.verticalDeg + piecePitchDeg(first)) < 1e-9, 'plumb cut at the start post');
+    assert.equal(last.endCut.kind, 'post');
+    assert.ok(Math.abs(last.endCut.verticalDeg - piecePitchDeg(last)) < 1e-9, 'plumb cut at the end post');
+    for (let i = 0; i < run.pieces.length - 1; i++) {
+      const a = run.pieces[i];
+      const b = run.pieces[i + 1];
+      assert.equal(a.endCut.kind, 'join');
+      assert.ok(Math.abs(a.endCut.verticalDeg - (piecePitchDeg(b) - piecePitchDeg(a)) / 2) < 1e-9, 'half the pitch change');
+      assert.ok(Math.abs(a.endCut.verticalDeg - b.startCut.verticalDeg) < 1e-9, 'both sides of a join cut at the same angle');
+      assert.ok(a.endCut.planDeg >= 0 && a.endCut.planDeg <= 90);
+    }
+    for (const p of run.pieces) assert.ok(p.cutLengthMm >= p.lengthMm - 1e-9);
+  }
+});
+
+test('baluster cuts: top at the handrail pitch; bottom flat on a tread (overlay), parallel to the rail on a housed wanga', () => {
+  const housed = railed({ stairType: 'straight' });
+  const pitch = piecePitchDeg(housed.railingModel.sections[0].runs[0].pieces[0]);
+  for (const b of housed.railingModel.sections[0].balusters) {
+    assert.ok(Math.abs(b.topCutDeg - pitch) < 1e-9);
+    assert.ok(Math.abs(b.bottomCutDeg - pitch) < 1e-9);
+    assert.ok(b.longPointMm > b.heightMm);
+  }
+  const overlay = railed({ stairType: 'straight', stringerConstructionTypeOuter: 'cut' });
+  for (const b of overlay.railingModel.sections[0].balusters) assert.equal(b.bottomCutDeg, 0);
+});
+
+test('railing DXF: one sheet with every handrail piece and the whole baluster cut list; ASCII only', () => {
+  const r = railed();
+  const dxf = buildRailingDXF(r.railingModel, { balusterSizeMm: r.fullConfig.railingBalusterSizeMm });
+  assert.ok(dxf.startsWith('0\nSECTION'));
+  assert.ok(dxf.trimEnd().endsWith('EOF'));
+  assert.ok(/^[\x00-\x7F]*$/.test(dxf), 'a DXF meant for any CAD/CNC stays plain ASCII');
+  const texts = dxfTexts(dxf);
+  const pieceCount = r.railingModel.sections[0].runs.reduce((s, run) => s + run.pieces.length, 0);
+  assert.equal(texts.filter((t) => t.startsWith('Porecz ')).length, pieceCount);
+  const balusterTotal = texts.filter((t) => t.startsWith('Tralka ')).reduce((s, t) => s + Number(t.match(/: (\d+) szt/)[1]), 0);
+  assert.equal(balusterTotal, r.railingModel.sections[0].balusters.length);
+  assert.ok(texts.some((t) => t.includes('st.')), 'angles written as "st."');
+});
+
+test('railing DXF: nothing to draw -> null (no empty file)', () => {
+  const r = buildStaircase(createDefaultConfig());
+  assert.equal(buildRailingDXF(r.railingModel), null);
+});

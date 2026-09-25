@@ -971,8 +971,12 @@ each section end) and section-end editing from a tread selected in the plan (Ins
 truly vertical jump splits it; an earlier 50 degree limit cut the rail there and left two posts side by side, reported and
 reverted); a step that still ends up without a handrail is reported as `RAILING-UNCOVERED-STEPS` (WARNING) and
 `sections[].uncoveredSteps`, and balusters never stand under a missing handrail. Tests: `plan2d/__tests__/railingLayer.test.js`.
-Not yet:
-DXF of handrail/balusters, a bent (curved) handrail. Tests:
+**Stage 3b, part 2 (DXF) is done — one sheet (user decision):** cut angles live in the model (`railingSolver.js`
+`annotateCuts`: per handrail piece `pitchDeg`, `startCut`/`endCut` {kind post|join, verticalDeg from the square cut,
+planDeg = half the plan turn}, `cutLengthMm`; per baluster `topCutDeg`/`bottomCutDeg`/`longPointMm`), and
+`dxfExport.js` `buildRailingDXF` only draws them: every handrail piece in side view with both cuts, then the baluster
+cut list grouped by length and cuts; ASCII only; button "Balustrada (DXF 1:1)" in the Kosztorys toolbar. Tests:
+`export/__tests__/dxfExport.test.js`. Not yet: a bent (curved) handrail. Tests:
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 

@@ -1,7 +1,27 @@
 # Balustrada (poręcz + tralki) — plan wdrożenia
 
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
-panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora), DXF jeszcze nie; etap 4 nie ruszony. Decyzje z użytkownikiem są na końcu.
+panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 nie ruszony. Decyzje z użytkownikiem są na końcu.
+
+## DXF balustrady (etap 3b, część 2) — jeden plik (decyzja użytkownika)
+
+- **Kąty cięcia są w modelu**, nie w eksporterze (`railingSolver.js` `annotateCuts`/`pitchUnder`): każdy element poręczy
+  ma `pitchDeg`, `startCut`/`endCut` = `{kind: 'post'|'join', verticalDeg, planDeg}` i `cutLengthMm`; każda tralka ma
+  `topCutDeg`, `bottomCutDeg`, `longPointMm`.
+  - pion (widok z boku), od cięcia prostopadłego do osi: przy słupku cięcie pionowe (−/+ nachylenie elementu), na
+    łączeniu dwóch elementów biegu — dwusieczna (połowa zmiany nachylenia), po obu stronach ten sam kąt;
+  - rzut: połowa kąta skrętu na łączeniu (0 przy słupku). Przy jednoczesnej zmianie nachylenia i skrętu to dwie
+    składowe podane osobno (cięcie złożone do dopracowania w warsztacie);
+  - `cutLengthMm` = dłuższa z krawędzi (górna / dolna) — długość do cięcia;
+  - tralka: góra pod nachyleniem poręczy nad nią; dół — na stopniu (wanga nakładana) poziomo, na wandze wpuszczanej
+    równolegle do poręczy (przybliżenie: górna krawędź wangi biegnie równolegle do linii poręczy).
+- **`dxfExport.js` `buildRailingDXF(railingModel, {balusterSizeMm})`** — jeden arkusz 1:1: nagłówek z objaśnieniem
+  kątów, każdy element poręczy w widoku z boku (oś, oba cięcia narysowane) z opisem (bieg, element, przekrój, oś,
+  długość do cięcia, nachylenie, oba cięcia), potem lista cięcia tralek zgrupowana po (odcinek, długość osi co 1 mm,
+  kąt góry, kąt dołu) — ilość, oś, długość max, kąty — każda grupa narysowana raz, leżąco. Tylko ASCII (kąty jako
+  „32,9 st."). Brak balustrady → `null` (komunikat w UI zamiast pustego pliku).
+- UI: przycisk „Balustrada (DXF 1:1)" w pasku zakładki Kosztorys (`takeoffPanel.js` `onExportRailingDXF`,
+  `main.js` `exportRailingDXF`).
 
 ## Plan 2D i krańce odcinków (etap 3b, część 1)
 

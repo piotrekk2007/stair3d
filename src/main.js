@@ -32,7 +32,7 @@ import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { exportStaircaseToOBJ } from './export/objExporter.js';
 import { exportStaircaseToDAE } from './export/daeExporter.js';
 import { downloadTextFile } from './export/downloadTextFile.js';
-import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF } from './export/dxfExport.js';
+import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF } from './export/dxfExport.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
@@ -777,6 +777,14 @@ function exportAllTreadsDXF() {
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_stopnie.dxf`, 'application/dxf');
 }
 
+// The whole balustrade (handrail pieces with their cuts + the baluster cut list) on one 1:1 sheet. Nothing to draw
+// (no balustrade / no valid section) -> a message instead of an empty file.
+function exportRailingDXF() {
+  const dxf = lastModels?.railingModel ? buildRailingDXF(lastModels.railingModel, { balusterSizeMm: lastModels.fullConfig.railingBalusterSizeMm }) : null;
+  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_balustrada.dxf`, 'application/dxf');
+  else window.alert('Brak balustrady do narysowania — włącz balustradę i dodaj odcinek.');
+}
+
 function exportTakeoff(kind) {
   if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
   const base = fileBaseName();
@@ -830,6 +838,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportCSV: () => exportTakeoff('csv'),
   onExportTXT: () => exportTakeoff('txt'),
   onExportPostsDXF: () => exportAllPostsDXF(),
+  onExportRailingDXF: () => exportRailingDXF(),
   onExportTreadsDXF: () => exportAllTreadsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia

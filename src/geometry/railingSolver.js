@@ -112,6 +112,65 @@ export function editRailingSections(sections, { action, sectionId, stepIndex, si
 
 const planDist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
+const rad = (d) => (d * Math.PI) / 180;
+const deg = (r) => (r * 180) / Math.PI;
+const planLen = (p) => Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y);
+// Pitch of a handrail piece, degrees above horizontal (negative going down).
+export function piecePitchDeg(piece) {
+  return deg(Math.atan2(piece.end.z - piece.start.z, planLen(piece)));
+}
+
+/**
+ * Cut angles of the handrail pieces of ONE run (mutates the pieces it is given — freshly built by buildSection).
+ * `startCut`/`endCut` = { kind: 'post'|'join', verticalDeg, planDeg }:
+ *  - verticalDeg: the cut seen from the side, measured from the square (perpendicular-to-the-axis) cut. In the
+ *    piece's own side view (u along its axis, v up, the axis at v = 0) the cut line through the axis end reaches the
+ *    top edge (v = +h/2) at u = +(h/2)·tan(verticalDeg) at the start and at u = L − (h/2)·tan(verticalDeg) at the
+ *    end. A run's end at a post is a plumb cut (start −pitch, end +pitch); a join between two pieces of the run is
+ *    the bisector of their pitches (half the pitch change).
+ *  - planDeg: seen from above, half the turn between the two pieces at a join (0 at a post, square in plan).
+ * `cutLengthMm` = the longer of the piece's top and bottom edges — the length to cut it from.
+ */
+function annotateCuts(runPieces, handrailHeight) {
+  const h2 = handrailHeight / 2;
+  const pitches = runPieces.map(piecePitchDeg);
+  const planDir = (p) => Math.atan2(p.end.y - p.start.y, p.end.x - p.start.x);
+  const planTurnDeg = (a, b) => {
+    let d = deg(planDir(b) - planDir(a));
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return Math.abs(d) / 2;
+  };
+  runPieces.forEach((piece, i) => {
+    const prev = runPieces[i - 1];
+    const next = runPieces[i + 1];
+    const alpha = pitches[i];
+    piece.pitchDeg = alpha;
+    piece.startCut = prev ? { kind: 'join', verticalDeg: (alpha - pitches[i - 1]) / 2, planDeg: planTurnDeg(prev, piece) } : { kind: 'post', verticalDeg: -alpha, planDeg: 0 };
+    piece.endCut = next ? { kind: 'join', verticalDeg: (pitches[i + 1] - alpha) / 2, planDeg: planTurnDeg(piece, next) } : { kind: 'post', verticalDeg: alpha, planDeg: 0 };
+    const top = piece.lengthMm - h2 * Math.tan(rad(piece.startCut.verticalDeg)) - h2 * Math.tan(rad(piece.endCut.verticalDeg));
+    const bottom = piece.lengthMm + h2 * Math.tan(rad(piece.startCut.verticalDeg)) + h2 * Math.tan(rad(piece.endCut.verticalDeg));
+    piece.cutLengthMm = Math.max(top, bottom);
+  });
+}
+
+// Pitch of the handrail piece above a plan point (the nearest piece in plan).
+function pitchUnder(pieces, point) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const p of pieces) {
+    const len = planLen(p);
+    if (len < 1e-6) continue;
+    const t = Math.max(0, Math.min(1, ((point.x - p.start.x) * (p.end.x - p.start.x) + (point.y - p.start.y) * (p.end.y - p.start.y)) / (len * len)));
+    const d = Math.hypot(point.x - (p.start.x + t * (p.end.x - p.start.x)), point.y - (p.start.y + t * (p.end.y - p.start.y)));
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  return best ? piecePitchDeg(best) : 0;
+}
+
 function unit(v) {
   const len = Math.hypot(v.x, v.y);
   return len > 1e-9 ? { x: v.x / len, y: v.y / len } : { x: 1, y: 0 };
@@ -401,6 +460,7 @@ function buildSection(section, ctx) {
       const end = centre(path[i + 1]);
       runPieces.push({ start, end, lengthMm: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z) });
     }
+    annotateCuts(runPieces, handrailHeight);
     pieces.push(...runPieces);
     base.runs.push({ startPostId: postIdAt.get(spots[j].id), endPostId: postIdAt.get(spots[j + 1].id), pieces: runPieces });
 
@@ -447,7 +507,18 @@ function buildSection(section, ctx) {
     widthMm: config.railingHandrailWidthMm,
     heightMm: handrailHeight,
   };
-  base.balusters = balusters.filter((b) => b.zTop - b.zBottom > 0).map((b, i) => ({ id: `${section.id}-baluster-${i}`, ...b, heightMm: b.zTop - b.zBottom }));
+  base.balusters = balusters
+    .filter((b) => b.zTop - b.zBottom > 0)
+    .map((b, i) => {
+      // Top: cut to the pitch of the handrail piece above it. Bottom: flat on a tread (overlay wanga), or along the
+      // wanga's top edge, which runs parallel to the handrail (housed wanga) — an approximation stated in the DXF.
+      const topCutDeg = pitchUnder(pieces, b.position);
+      const bottomCutDeg = constructionType === CONSTRUCTION_TYPES.CUT ? 0 : topCutDeg;
+      const heightMm = b.zTop - b.zBottom;
+      const half = balusterSize / 2;
+      const longPointMm = heightMm + half * (Math.tan(rad(topCutDeg)) + Math.tan(rad(bottomCutDeg)));
+      return { id: `${section.id}-baluster-${i}`, ...b, heightMm, topCutDeg, bottomCutDeg, longPointMm };
+    });
   if (uncoveredSteps.length > 0) {
     base.diagnostics.push(
       diag(

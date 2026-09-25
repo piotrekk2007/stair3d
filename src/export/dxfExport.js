@@ -411,3 +411,105 @@ export function buildAllTreadsDXF(treads) {
   }
   return wrapDxf(entities);
 }
+
+// --- balustrade (poręcz + tralki) — ONE sheet ------------------------------------------------------
+//
+// Everything a workshop needs to cut the balustrade, full size: every handrail piece in its own side view (true
+// axis length, its two cuts drawn and labelled — the cut angles come from the RailingModel, railingSolver.js
+// annotateCuts; nothing is computed here), then the baluster cut list grouped by length and end cuts, each group
+// drawn once. Plan (mitre) angles cannot be shown in a side view, so they are stated in the labels.
+
+const RAIL_TEXT_LINES = 3;
+const RAIL_ROW_GAP_MM = 120;
+const RAIL_SIDE_LABELS = Object.freeze({ outer: 'zewn.', inner: 'wewn.' });
+const ANGLE_DIGITS = 1;
+
+const tanDeg = (d) => Math.tan((d * Math.PI) / 180);
+// ASCII only in a DXF (see stripDiacritics): 'st.' instead of the degree sign, Polish decimal comma.
+const angleText = (d) => `${Math.abs(d).toFixed(ANGLE_DIGITS).replace('.', ',')} st.`;
+
+// A bar of length L and depth h in its own side view (u along the axis, v across, axis at v = 0), its start cut
+// through u = 0 and end cut through u = L at the given angles from the square cut (railingSolver.js convention: the
+// cut reaches the top edge at u = +(h/2)·tan(start) and at u = L − (h/2)·tan(end)).
+function cutBarOutline(L, h, startDeg, endDeg, offsetU, offsetV) {
+  const h2 = h / 2;
+  const s = h2 * tanDeg(startDeg);
+  const e = h2 * tanDeg(endDeg);
+  return [
+    { u: offsetU - s, v: offsetV - h2 },
+    { u: offsetU + L + e, v: offsetV - h2 },
+    { u: offsetU + L - e, v: offsetV + h2 },
+    { u: offsetU + s, v: offsetV + h2 },
+  ];
+}
+
+function railCutText(cut) {
+  if (!cut) return 'prosto';
+  return cut.kind === 'post' ? `pion ${angleText(cut.verticalDeg)} (przy slupku)` : `pion ${angleText(cut.verticalDeg)}, rzut ${angleText(cut.planDeg)} (laczenie)`;
+}
+
+/**
+ * The whole balustrade on one 1:1 sheet: handrail pieces (side view, cuts drawn and labelled) and the baluster cut
+ * list. `null` when there is nothing to draw (no balustrade, no valid section).
+ * @param {import('../geometry/railingSolver.js').RailingModel} railingModel
+ * @param {{balusterSizeMm?:number}} [options]
+ */
+export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
+  const sections = (railingModel?.sections || []).filter((s) => s.valid && s.handrail?.pieces?.length > 0);
+  if (!railingModel?.enabled || sections.length === 0) return null;
+  const entities = [];
+  let cursor = 0; // v of the next row's top; rows go downward
+  const row = (height, lines, drawAt) => {
+    const textTop = cursor;
+    lines.forEach((line, i) => entities.push(textEntity(line, { u: 0, v: textTop - (i + 1) * TITLE_LINE_HEIGHT_MM }, TITLE_TEXT_HEIGHT_MM, 'TEXT')));
+    const centreV = textTop - RAIL_TEXT_LINES * TITLE_LINE_HEIGHT_MM - TITLE_MARGIN_MM - height / 2;
+    drawAt(centreV);
+    cursor = centreV - height / 2 - RAIL_ROW_GAP_MM;
+  };
+
+  const header = [
+    'Balustrada - skala 1:1, wszystkie wymiary w mm',
+    'Katy ciecia: pion - od ciecia prostopadlego do osi (widok z boku), rzut - polowa kata skretu na laczeniu',
+    'Tralki: dol przy wandze wpuszczanej przyjety rownolegle do poreczy (przyblizenie)',
+  ];
+  row(0, header, () => {});
+
+  for (const section of sections) {
+    const { heightMm: h, widthMm: w, shape } = section.handrail;
+    const profile = shape === 'round' ? `okragla d${w}` : `${w}x${h}`;
+    section.runs.forEach((run, r) => {
+      run.pieces.forEach((piece, p) => {
+        const lines = [
+          `Porecz ${section.id} (${RAIL_SIDE_LABELS[section.side] || section.side}) - bieg ${r + 1}, element ${p + 1}, przekroj ${profile}`,
+          `Os: ${Math.round(piece.lengthMm)} mm, do ciecia: ${Math.round(piece.cutLengthMm ?? piece.lengthMm)} mm, nachylenie ${angleText(piece.pitchDeg ?? 0)}`,
+          `Poczatek: ${railCutText(piece.startCut)}; koniec: ${railCutText(piece.endCut)}`,
+        ];
+        row(h, lines, (v) => entities.push(...polygonEntities(cutBarOutline(piece.lengthMm, h, piece.startCut?.verticalDeg ?? 0, piece.endCut?.verticalDeg ?? 0, 0, v), 'OUTLINE')));
+      });
+    });
+  }
+
+  // baluster cut list: one row per (section, length, top cut, bottom cut), drawn lying down (bottom end at u = 0)
+  const size = balusterSizeMm || 30;
+  for (const section of sections) {
+    const groups = new Map();
+    for (const b of section.balusters) {
+      const key = [Math.round(b.heightMm), (b.topCutDeg ?? 0).toFixed(ANGLE_DIGITS), (b.bottomCutDeg ?? 0).toFixed(ANGLE_DIGITS)].join('|');
+      const g = groups.get(key) || { heightMm: Math.round(b.heightMm), topCutDeg: b.topCutDeg ?? 0, bottomCutDeg: b.bottomCutDeg ?? 0, longPointMm: b.longPointMm ?? b.heightMm, count: 0 };
+      g.count += 1;
+      groups.set(key, g);
+    }
+    [...groups.values()]
+      .sort((a, b) => a.heightMm - b.heightMm)
+      .forEach((g) => {
+        const lines = [
+          `Tralka ${section.id} (${RAIL_SIDE_LABELS[section.side] || section.side}): ${g.count} szt, przekroj ${size}`,
+          `Os: ${g.heightMm} mm, dl. max: ${Math.round(g.longPointMm)} mm`,
+          `Gora: ${angleText(g.topCutDeg)} od poziomu; dol: ${angleText(g.bottomCutDeg)} od poziomu`,
+        ];
+        // lying down: u = along the baluster (bottom at 0), v = across; the cuts are the pitch from the square cut
+        row(size, lines, (v) => entities.push(...polygonEntities(cutBarOutline(g.heightMm, size, g.bottomCutDeg, g.topCutDeg, 0, v), 'OUTLINE')));
+      });
+  }
+  return wrapDxf(entities);
+}
