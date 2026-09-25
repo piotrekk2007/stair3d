@@ -1010,6 +1010,7 @@ const gui = createUI({
   viewState,
   onViewChange: handleViewChange,
   onFitPlanView: fitPlanView,
+  getPlanBounds: () => lastModels?.planLayout?.bounds ?? null,
   appearance,
   onAppearanceChange: () => {
     setAppearance(appearance);

@@ -6,6 +6,7 @@ import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
+import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -65,6 +66,7 @@ export function createUI({
   onFitPlanView,
   appearance,
   onAppearanceChange,
+  getPlanBounds,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -292,10 +294,27 @@ export function createUI({
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
   lockable(ceiling.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
-  lockable(ceiling.add(config, 'openingLength', 800, 5000, 50).name('Otwór: długość (Y) [mm]'), 'openingLength');
-  lockable(ceiling.add(config, 'openingWidth', 700, 2500, 50).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
-  lockable(ceiling.add(config, 'openingOffsetX', -2000, 2000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
-  lockable(ceiling.add(config, 'openingOffsetY', -2000, 2000, 10).name('Otwór: offset Y [mm]'), 'openingOffsetY');
+  lockable(ceiling.add(config, 'openingLength', 800, 6000, 50).name('Otwór: długość (Y) [mm]'), 'openingLength');
+  lockable(ceiling.add(config, 'openingWidth', 700, 6000, 50).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
+  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
+  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 10).name('Otwór: offset Y [mm]'), 'openingOffsetY');
+  // Dosunięcie otworu do narożnika/boku rzutu schodów (alignedOpeningOffsets) — zmienia tylko offsety w config,
+  // więc cofanie i plik projektu działają jak przy suwakach. Pole zablokowane (kłódka) nie jest ruszane.
+  const alignProxy = {
+    target: OPENING_ALIGN_TARGETS[0].id,
+    apply() {
+      const bounds = getPlanBounds && getPlanBounds();
+      if (!bounds) return;
+      const next = alignedOpeningOffsets(config, bounds, alignProxy.target);
+      const locked = config.lockedFields || [];
+      for (const key of ['openingOffsetX', 'openingOffsetY']) if (!locked.includes(key)) config[key] = next[key];
+      refreshUI(gui);
+      onChange();
+      (onCommit || onChange)();
+    },
+  };
+  ceiling.add(alignProxy, 'target', Object.fromEntries(OPENING_ALIGN_TARGETS.map((t) => [t.label, t.id]))).name('Dosuń otwór do');
+  ceiling.add(alignProxy, 'apply').name('⇲ Dosuń otwór');
 
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));

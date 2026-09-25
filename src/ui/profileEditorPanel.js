@@ -521,12 +521,15 @@ export function createProfileEditor(container, handlers) {
       }
       return;
     }
+    // up/down move the point up/down on screen: along its outward normal, which points DOWN for the lower contour
+    // (before, the arrows were reversed there — ArrowDown made the board shallower)
+    const up = selectedCp && selectedCp.normal && selectedCp.normal.v < 0 ? -1 : 1;
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      nudgeSelectedPoint(0, step);
+      nudgeSelectedPoint(0, up * step);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      nudgeSelectedPoint(0, -step);
+      nudgeSelectedPoint(0, -up * step);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       nudgeSelectedPoint(step, 0);

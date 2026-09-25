@@ -27,7 +27,7 @@
 // ends up at distance (d - r)/cos(phi) + r from the reference vertex — >= d only while r <= d.
 // Corners turning the other way only ever add material, so they are always safe.
 
-import { offsetPolylineByNormal, valueAtU } from './polylineProfile.js';
+import { offsetPolylineByNormal, valueAtU, simplifyCollinear } from './polylineProfile.js';
 import {
   filletPolyline,
   feasibleRadii,
@@ -123,6 +123,58 @@ function withPostAnchors(vertices, postAnchors, overrides, contour, solvedCurve)
     list = at < 0 ? [...list, point] : [...list.slice(0, at), point, ...list.slice(at)];
   }
   return { vertices: list, virtual };
+}
+
+// Reference knots that lie on a straight line between their neighbours (the same test the construction layer used to
+// simplify with — polylineProfile.js simplifyCollinear): unedited, they shape nothing, so they are left out of the
+// solve (fillet legs and splines see exactly the polygon they always did) and only reported as handles.
+function passiveVertexIds(reference) {
+  const kept = new Set(simplifyCollinear(reference).map((p) => p.id));
+  return new Set(reference.filter((p) => !kept.has(p.id)).map((p) => p.id));
+}
+
+const isEdited = (v) => !!v.override || v.explicitRadius !== undefined || v.inserted || v.anchor;
+
+function isPassive(v, passive) {
+  return passive.has(v.id) && !isEdited(v);
+}
+
+// The passive set of one contour's vertex list: collinear knots, except the neighbours of an edited point — they stay in
+// the solve so an edit stays LOCAL (they hold the rest of the edge where it was). Two on each side: a spline segment
+// depends on two points either side of it, so with one the edit still bent the next, long segment.
+const EDIT_NEIGHBOURS_KEPT = 2;
+function passiveFor(vertices, passive) {
+  const out = new Set(passive);
+  vertices.forEach((v, i) => {
+    if (!isEdited(v)) return;
+    for (let k = 1; k <= EDIT_NEIGHBOURS_KEPT; k++) {
+      if (vertices[i - k]) out.delete(vertices[i - k].id);
+      if (vertices[i + k]) out.delete(vertices[i + k].id);
+    }
+  });
+  return out;
+}
+
+// The control points of the vertices left out of the solve, each placed on the edge AS SOLVED (a spline or a fillet
+// does not pass through the polygon) so its handle sits on the drawn line; `nominal` stays the polygon point, the
+// origin a drag is measured from.
+function passiveControls(vertices, passive, solvedCurve, contour) {
+  const drawn = solvedCurve && solvedCurve.length > 0 ? curveToPolyline(solvedCurve) : null;
+  return vertices
+    .filter((v) => isPassive(v, passive))
+    .map((v) => ({
+      id: v.id,
+      contour,
+      u: v.u,
+      v: drawn && drawn.length >= 2 ? valueAtU(drawn, v.u) : v.v,
+      radius: 0,
+      overridden: false,
+      inserted: false,
+      anchor: false,
+      nominal: v.nominal ? { u: v.nominal.u, v: v.nominal.v } : null,
+      tangent: v.tangent,
+      normal: v.normal,
+    }));
 }
 
 function buildControlPolygon({ reference, contour, nominalPoints, overrides, findings }) {
@@ -299,7 +351,62 @@ function controlPointsFrom(vertices, applied) {
   }));
 }
 
-function solveContour({ vertices, contour, params, opposite, findings }) {
+// Where the line through `p` along `dir` crosses a polyline (the nearest crossing), or null. The first and last
+// segments count as extended past the polyline's ends: an offset curve's end moves a little off the end knot's normal.
+function crossingAlong(p, dir, polyline) {
+  let best = null;
+  for (let i = 1; i < polyline.length; i++) {
+    const a = polyline[i - 1];
+    const b = polyline[i];
+    const eu = b.u - a.u;
+    const ev = b.v - a.v;
+    const den = dir.u * ev - dir.v * eu;
+    if (Math.abs(den) < 1e-12) continue;
+    const wu = a.u - p.u;
+    const wv = a.v - p.v;
+    const t = (wu * ev - wv * eu) / den;
+    const s = (wu * dir.v - wv * dir.u) / den;
+    if ((i > 1 && s < -1e-9) || (i < polyline.length - 1 && s > 1 + 1e-9)) continue;
+    if (!best || Math.abs(t) < Math.abs(best.t)) best = { t, u: p.u + dir.u * t, v: p.v + dir.v * t };
+  }
+  return best;
+}
+
+// A hand-edited spline, kept equal to the AUTO spline wherever the edit cannot reach: a Catmull-Rom piece between
+// knots i and i+1 depends only on knots i-1..i+2, so a piece with none of those edited is taken from `autoDense` (the
+// AUTO curve, which its two ends already lie on) instead of the new spline — which, through a different set of knots,
+// would bend it slightly. The pieces around an edit come from `manualDense` — except that where every edit within reach
+// only moved its point OUTWARDS (a deeper board), the piece is never let in past the AUTO curve: an interpolating spline
+// swings a little the other way next to a bump, which made "deepen this point" report the board as too shallow.
+// `edited[i]` is null (unedited), 'out' (moved outwards only) or 'any'.
+function followAutoAwayFromEdits(points, edited, manualDense, autoDense, contour) {
+  const between = (poly, u0, u1) => poly.filter((q) => q.u > u0 + 1e-9 && q.u < u1 - 1e-9);
+  const outward = contour === PROFILE_CONTOURS.LOWER ? Math.min : Math.max;
+  const out = [points[0]];
+  for (let i = 0; i < points.length - 1; i++) {
+    const inReach = edited.slice(Math.max(0, i - 1), i + 3).filter(Boolean);
+    if (inReach.length === 0) {
+      out.push(...between(autoDense, points[i].u, points[i + 1].u), points[i + 1]);
+      continue;
+    }
+    const piece = between(manualDense, points[i].u, points[i + 1].u);
+    const keepOutside = inReach.every((e) => e === 'out');
+    const u0 = autoDense[0].u;
+    const u1 = autoDense[autoDense.length - 1].u;
+    const clamp = (q) => (q.u >= u0 && q.u <= u1 ? { u: q.u, v: outward(q.v, valueAtU(autoDense, q.u)) } : q);
+    out.push(...(keepOutside ? piece.map(clamp) : piece), points[i + 1]);
+  }
+  return out;
+}
+
+// How a vertex was edited, for followAutoAwayFromEdits.
+function editKind(v) {
+  if (!isEdited(v)) return null;
+  if (v.anchor || !v.override) return 'any';
+  return (v.override.dn || 0) >= 0 ? 'out' : 'any';
+}
+
+function solveContour({ vertices, contour, params, opposite, findings, autoDense = null }) {
   const points = vertices.map((v) => ({ u: v.u, v: v.v }));
 
   // SPLINE replaces per-corner rounding with ONE smooth curve through the whole contour — reuses
@@ -327,8 +434,29 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
   // never silently corrected" — a manual edit is a design decision, not something AUTO gets to
   // override just because it also happens to run through this function.
   if (params.transitionStyle === TRANSITION_STYLES.SPLINE && scopeIncludes(params.radiusScope, contour)) {
-    const hasManualPoint = vertices.some((v) => v.override || v.explicitRadius !== undefined);
-    let dense = splinePointsThrough(points);
+    const hasManualPoint = vertices.some((v) => isEdited(v));
+    // A hand-edited contour keeps the depth push the AUTO profile got (before, the push was simply dropped and the
+    // whole rest of the curve jumped): every UNEDITED point is moved along its own normal onto the AUTO curve as it was
+    // drawn (`autoDense`, push included), and an edited point is moved by the same local push measured at its nominal
+    // place — so its offset counts from where AUTO drew it (a zero drag reproduces AUTO) and is then kept exactly,
+    // never "corrected" towards the minimum depth. Post anchors already sit on the solved edge and are left alone.
+    const pushAt = (v) => {
+      if (!autoDense || !v.normal || v.anchor) return 0;
+      const hit = crossingAlong(v.nominal || v, v.normal, autoDense);
+      return hit ? hit.t : 0;
+    };
+    const pushedPoints =
+      hasManualPoint && autoDense
+        ? vertices.map((v) => {
+            const t = pushAt(v);
+            if (t === 0) return { u: v.u, v: v.v };
+            return { u: v.u + v.normal.u * t, v: v.v + v.normal.v * t };
+          })
+        : points;
+    let dense = splinePointsThrough(pushedPoints);
+    if (dense && hasManualPoint && autoDense) {
+      dense = followAutoAwayFromEdits(pushedPoints, vertices.map(editKind), dense, autoDense, contour);
+    }
     if (dense) {
       if (!hasManualPoint) {
         const pushDirection = contour === PROFILE_CONTOURS.LOWER ? 'down' : 'up';
@@ -339,9 +467,9 @@ function solveContour({ vertices, contour, params, opposite, findings }) {
           dense = offsetPolylineByNormal(dense, deficit, pushDirection);
           curve = polylineToCurve(dense);
         }
-        return { curve, control: controlPointsFrom(vertices, null) };
+        return { curve, control: controlPointsFrom(vertices, null), dense };
       }
-      return { curve: polylineToCurve(dense), control: controlPointsFrom(vertices, null) };
+      return { curve: polylineToCurve(dense), control: controlPointsFrom(vertices, null), dense };
     }
     findings.push(
       finding({
@@ -436,22 +564,41 @@ export function solveStringerProfile({ reference, constructionType, params, over
 
   const lowerBase = buildControlPolygon({ reference, contour: PROFILE_CONTOURS.LOWER, nominalPoints: lowerNominal, overrides, findings });
   const upperBase = closed ? buildControlPolygon({ reference, contour: PROFILE_CONTOURS.UPPER, nominalPoints: upperNominal, overrides, findings }) : null;
+  const passiveKnots = passiveVertexIds(reference);
+  const active = (list) => {
+    if (!list) return list;
+    const passive = passiveFor(list, passiveKnots);
+    return list.filter((v) => !isPassive(v, passive));
+  };
+  // The AUTO version of a contour: every point back at its nominal place, no inserted/anchor points.
+  const autoOf = (list) => (list ? list.filter((v) => !v.inserted && !v.anchor).map((v) => ({ ...v, u: v.nominal.u, v: v.nominal.v, override: null, explicitRadius: undefined })) : list);
   // The curve each contour's rounding must stay away from. Sharp control polygons on purpose:
   // rounding one contour never gets to "use up" the other's margin.
-  const solveBoth = (lowerVertices, upperVertices, into) => {
+  const solveBoth = (lowerAll, upperAll, into, auto = { lower: null, upper: null }) => {
+    const lowerVertices = active(lowerAll);
+    const upperVertices = active(upperAll);
     const lowerOpposite = closed ? polylineToCurve(upperVertices) : referenceCurve;
-    const lowerSolved = solveContour({ vertices: lowerVertices, contour: PROFILE_CONTOURS.LOWER, params, opposite: lowerOpposite, findings: into });
-    const upperSolved = closed ? solveContour({ vertices: upperVertices, contour: PROFILE_CONTOURS.UPPER, params, opposite: polylineToCurve(lowerVertices), findings: into }) : null;
+    const lowerSolved = solveContour({ vertices: lowerVertices, contour: PROFILE_CONTOURS.LOWER, params, opposite: lowerOpposite, findings: into, autoDense: auto.lower });
+    const upperSolved = closed ? solveContour({ vertices: upperVertices, contour: PROFILE_CONTOURS.UPPER, params, opposite: polylineToCurve(lowerVertices), findings: into, autoDense: auto.upper }) : null;
     return { lowerSolved, upperSolved };
   };
+  // The AUTO spline (its depth push included), solved once and followed by a hand-edited contour away from the edit.
+  const anyEdit = (list) => (list || []).some((v) => isEdited(v)) || (postAnchors || []).some((a) => overrides?.anchors?.[a.id]);
+  const autoSplines =
+    params.transitionStyle === TRANSITION_STYLES.SPLINE && (anyEdit(lowerBase) || anyEdit(upperBase))
+      ? (() => {
+          const auto = solveBoth(autoOf(lowerBase), autoOf(upperBase), []);
+          return { lower: auto.lowerSolved.dense || null, upper: auto.upperSolved?.dense || null };
+        })()
+      : { lower: null, upper: null };
   // Pass 1 without post anchors; the anchors then read their height off these solved edges. Only if an anchor was
   // MOVED is the profile solved again through it (findings of the discarded pass are dropped).
   const firstFindings = [];
-  const first = solveBoth(lowerBase, upperBase, firstFindings);
+  const first = solveBoth(lowerBase, upperBase, firstFindings, autoSplines);
   const lowerAnchored = withPostAnchors(lowerBase, postAnchors, overrides, PROFILE_CONTOURS.LOWER, first.lowerSolved.curve);
   const upperAnchored = closed ? withPostAnchors(upperBase, postAnchors, overrides, PROFILE_CONTOURS.UPPER, first.upperSolved.curve) : null;
   const anchorsMoved = lowerAnchored.vertices.length !== lowerBase.length || (closed && upperAnchored.vertices.length !== upperBase.length);
-  const { lowerSolved: lower, upperSolved: upper } = anchorsMoved ? solveBoth(lowerAnchored.vertices, closed ? upperAnchored.vertices : null, findings) : (findings.push(...firstFindings), first);
+  const { lowerSolved: lower, upperSolved: upper } = anchorsMoved ? solveBoth(lowerAnchored.vertices, closed ? upperAnchored.vertices : null, findings, autoSplines) : (findings.push(...firstFindings), first);
 
   const withVirtual = (control, virtual, contour) =>
     [...control, ...virtual.map((v) => ({ id: v.id, contour, u: v.u, v: v.v, radius: 0, overridden: false, inserted: false, anchor: true, postId: v.postId, nominal: v.nominal, tangent: v.tangent, normal: v.normal }))].sort((a, b) => a.u - b.u);
@@ -460,8 +607,8 @@ export function solveStringerProfile({ reference, constructionType, params, over
     lowerCurve: lower.curve,
     upperCurve: upper ? upper.curve : null,
     depthReferenceCurve: closed ? upper.curve : referenceCurve,
-    lowerControl: withVirtual(lower.control, lowerAnchored.virtual, PROFILE_CONTOURS.LOWER),
-    upperControl: upper ? withVirtual(upper.control, upperAnchored.virtual, PROFILE_CONTOURS.UPPER) : null,
+    lowerControl: withVirtual([...lower.control, ...passiveControls(lowerAnchored.vertices, passiveFor(lowerAnchored.vertices, passiveKnots), lower.curve, PROFILE_CONTOURS.LOWER)], lowerAnchored.virtual, PROFILE_CONTOURS.LOWER),
+    upperControl: upper ? withVirtual([...upper.control, ...passiveControls(upperAnchored.vertices, passiveFor(upperAnchored.vertices, passiveKnots), upper.curve, PROFILE_CONTOURS.UPPER)], upperAnchored.virtual, PROFILE_CONTOURS.UPPER) : null,
     findings,
   };
 }

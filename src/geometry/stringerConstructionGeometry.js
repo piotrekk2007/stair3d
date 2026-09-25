@@ -72,7 +72,7 @@ import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm } from './stringerModel.js';
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
-import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
+import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, closingAnchorId, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
 import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
@@ -191,7 +191,7 @@ function groupSegmentsByLapJoint(segments, segmentJoints) {
 // collinear simplification below would drop the ids of interior treads of a straight flight, so
 // it is skipped when the stringer has manual overrides (`keepAllAnchors`) — a control point the
 // user can see must stay addressable. Without overrides the output is exactly what it always was.
-function buildPitchKnots(effectiveByGroup, segmentLengths, keepAllAnchors = false) {
+function buildPitchKnots(effectiveByGroup, segmentLengths, closingId) {
   const knots = [];
   const offsets = [];
   let offset = 0;
@@ -226,9 +226,12 @@ function buildPitchKnots(effectiveByGroup, segmentLengths, keepAllAnchors = fals
   } else {
     closingV = lastKnot.v; // a single-bearing group has no local slope to extrapolate — flat is the only option
   }
-  const closing = { u: lastOffset + last.uEnd, v: closingV, id: END_ANCHOR_ID };
-  const allKnots = keepAllAnchors ? [...knots, closing] : simplifyCollinear([...knots, closing]);
-  return { knots: allKnots, offsets };
+  const closing = { u: lastOffset + last.uEnd, v: closingV, id: closingId };
+  // EVERY tread keeps its knot (an addressable control point, in AUTO too). Knots lying on a straight line do not
+  // shape anything: the profile solver leaves out the unedited ones (stringerProfileSolver.js passiveVertexIds), with
+  // the same collinearity test this used to apply here — so the AUTO profile is exactly what it was, and a first edit
+  // no longer switches the whole board to a denser knot set (which reshaped a spline and shortened fillet legs).
+  return { knots: [...knots, closing], offsets };
 }
 
 function computePitchLineFromKnots(knots) {
@@ -599,14 +602,14 @@ function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
   return { ...profileOverrides, lower, upper, anchors, inserted };
 }
 
-function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set()) {
+function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set(), isLastGroupOfSide = true) {
   const withBearings = group.filter((s) => s.treadBearings.length > 0);
   if (withBearings.length === 0) return group.map(emptySegmentGeometry);
 
   const params = profileParamsFromConfig(config);
   const effectiveByGroup = withBearings.map((s) => effectiveBearings(s, extendInfo.get(s.id).extendStart, extendInfo.get(s.id).extendEnd));
   const segmentLengths = withBearings.map((s) => s.referenceLine.length);
-  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, profileOverrides !== null);
+  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, closingAnchorId(withBearings[withBearings.length - 1].id, isLastGroupOfSide));
   // Post anchors: every end of a board of this group that butts into a structural post (group u of the post face).
   const postAnchors = [];
   withBearings.forEach((segment, i) => {
@@ -957,7 +960,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
   const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
   const usedOverrideIds = new Set();
-  const results = groups.flatMap((group) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds));
+  const results = groups.flatMap((group, g) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds, g === groups.length - 1));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));

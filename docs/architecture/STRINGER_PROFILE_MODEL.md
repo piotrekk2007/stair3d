@@ -255,3 +255,19 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 - **Edycje przypisane do desek**: każda grupa desek dostaje tylko swoje punkty; edycja pasująca do żadnej deski jest
   zgłaszana raz (INFO) i można ją usunąć jednym przyciskiem (`PROFILE_EDITS.PRUNE`).
 - **Uwagi w edytorze**: jedna zwinięta linia z licznikami zamiast listy na pół ekranu.
+
+## Punkt zamykający na grupę desek; pierwsza edycja zostaje lokalna
+
+- **`end:top` tylko dla ostatniej grupy wangi** — pozostałe grupy desek (przy słupach każda deska to osobna grupa)
+  zamykają się na `end:<id deski>`. Wcześniej jedna edycja `end:top` przesuwała koniec każdej deski naraz.
+- **Wszystkie węzły stopni zawsze istnieją**; współliniowe, nieedytowane są w solverze „pasywne" (pomijane w
+  rozwiązaniu tym samym testem, którym wcześniej upraszczano węzły tylko w AUTO) i pokazywane jako uchwyty na krzywej.
+  AUTO bez zmian (bit w bit); pierwsza edycja nie przełącza już deski na gęstszy zestaw węzłów. Dwóch sąsiadów z każdej
+  strony edycji zostaje aktywnych.
+- **SPLINE po edycji** podąża za krzywą AUTO (z jej odsunięciem głębokości): nieedytowane węzły leżą na niej, kawałki
+  spline'u poza zasięgiem edycji (węzły i-1..i+2 nieedytowane) są z niej kopiowane, a przy edycji tylko na zewnątrz
+  (pogłębienie) kontur nie wchodzi płycej niż AUTO. Edycja do wewnątrz zostaje dokładnie i jest zgłaszana (WARNING).
+  Zmiana deski daleko od pierwszej edycji: było 50,5 mm (SPLINE, L), jest 0,000 mm.
+- **Strzałki w edytorze** dla dolnego konturu działały odwrotnie (↓ spłycała deskę) — poprawione.
+- Ograniczenie: styk kopii AUTO z kawałkiem spline'u ma ciągłą pozycję i niewielką zmianę kierunku (do ok. 3° między
+  próbkami co 15 mm).

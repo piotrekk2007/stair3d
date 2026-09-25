@@ -140,7 +140,6 @@ export function createPricingEditor(container, { settings, onChange }) {
 
         <div class="tkp-block">
           <div class="tkp-title">Wangi nośne <span class="tk-hint">(deska z cennika desek: grubość × szerokość wangi z parametrów × rzeczywista długość)</span></div>
-          <label>Dopłata do ceny wangi [%] ${numInput('data-kind="surcharge"', p.stringerSurchargePct ?? 0)}</label>
         </div>
 
         <div class="tkp-block">
@@ -203,8 +202,6 @@ export function createPricingEditor(container, { settings, onChange }) {
       render();
     } else if (kind === 'riser') {
       p.riserMaterial = el.value;
-    } else if (kind === 'surcharge') {
-      p.stringerSurchargePct = Math.max(0, Number(el.value) || 0);
     } else if (kind === 'post') {
       const row = p.postPrices[Number(el.dataset.i)];
       row[el.dataset.field] = el.dataset.field === 'unit' ? el.value : Math.max(0, Number(el.value) || 0);

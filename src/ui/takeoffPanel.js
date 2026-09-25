@@ -106,7 +106,7 @@ function summaryHTML(summary, takeoff, settings) {
 
   const bp = settings.boardPricing;
   const boardLine = bp
-    ? `<div>Stopnie, stopnie zabiegowe (wg formatek produkcyjnych, z noskiem), podesty${bp.riserMaterial === 'oak' ? ', podstopnie' : ''} i wangi: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie. Wangi z dopłatą <b>+${bp.stringerSurchargePct ?? 0}%</b>.</div>
+    ? `<div>Stopnie, stopnie zabiegowe (wg formatek produkcyjnych, z noskiem), podesty${bp.riserMaterial === 'oak' ? ', podstopnie' : ''} i wangi: <b>cennik desek ${esc(bp.species)} ${esc(bp.cls)}</b> — zł za metr bieżący wg głębokości i długości formatki (metoda kalkulatora DREWEX); odpad jest w cenie. Wangi jak zwykła deska z cennika (bez dopłaty).</div>
         <div>Słupy: cennik słupów wg przekroju. Klocki i wpusty wangi nie są liczone. Balustrada z modelu: ilości tralek (lista cięcia wg długości) i poręczy (metry bieżące) są wyliczone, ceny wpisujesz w „Cennik i materiały" (0 = bez ceny); słupki balustrady liczą się jak słupy. Pozycje ręczne poniżej są niezależne — nie wpisuj tam drugi raz tego samego.</div>`
     : '';
 

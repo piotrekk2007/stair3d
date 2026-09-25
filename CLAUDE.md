@@ -1198,15 +1198,50 @@ covering half of the editor.
 - **Editor**: anchors drawn as squares (`.pe-cp-post`, orange when moved), one "Wysokość na licu słupa" field, up/down
   arrows move them; the findings are ONE collapsed line (`<details class="pe-findings">` with per-severity counts,
   list capped at 110 px), the info strip capped at 22 % of the panel.
-- **Known (unchanged):** the first manual edit switches the side to MANUAL, which keeps every tread knot (no collinear
-  simplification) — with SPLINE the whole curve then shifts slightly. The closing knot id `end:top` is shared by every
-  group of a side.
-- **STRINGER-MIN-DEPTH from a hand edit is a WARNING** (user decision): `minDepthDiagnostic(…, manual)` — a board of a side
-  in MANUAL mode that ends up shallower than the minimum is kept and reported without blocking the takeoff; an AUTO
-  profile meets the minimum by construction, so there it stays an ERROR. A tread that a hand edit leaves OUTSIDE the
-  board (STRINGER-TREAD-SUPPORT) is still an ERROR — the tread has no support there.
+- **Fixed afterwards (see the next section):** the shared closing id `end:top` and the first edit reshaping the whole
+  board (SPLINE especially).
 Tests: `geometry/__tests__/stringerProfile.test.js` (post anchors, per-board overrides — the regression confirmed to
 fail on the old code — and PRUNE).
+
+## Stringer profile: one closing point per board group; a first edit stays local
+
+- **Closing point per group** (`stringerProfileModel.js` `closingAnchorId(lastSegmentId, isLastGroupOfSide)`): every
+  group of boards of a side used to close on the same id `end:top`, so one edit moved the closing point of every board
+  at once (at posts each board is its own group). Now only the side's LAST group keeps `end:top` (older project files
+  still land on the top board); the others close on `end:<segmentId>`.
+- **Every tread knot always exists; collinear unedited ones are passive.** `buildPitchKnots()` no longer simplifies
+  collinear knots (it used to — but only in AUTO, so the first edit switched the board to a denser knot set and
+  reshaped it: fillet legs shortened, the spline changed everywhere). `stringerProfileSolver.js` `passiveVertexIds` now
+  leaves the collinear, unedited knots out of the solve with the SAME test (`simplifyCollinear`) and reports them as
+  handles on the solved curve (`passiveControls`) — the AUTO profile is bit-for-bit what it was. Two neighbours on each
+  side of an edited point stay active (`EDIT_NEIGHBOURS_KEPT`; a Catmull-Rom piece depends on two knots either side).
+- **SPLINE, hand-edited**: the AUTO spline (depth push included) is solved once more without overrides
+  (`autoOf`), and the edited contour follows it: unedited knots are moved along their normal onto it
+  (`crossingAlong`, end segments extended), an edited point gets the same local push measured at its nominal place (so a
+  drag counts from where AUTO drew it), and every Catmull-Rom piece the edit cannot reach (none of knots i-1..i+2
+  edited) is copied from the AUTO curve (`followAutoAwayFromEdits`). Where every edit in reach moved its point only
+  OUTWARDS (dn >= 0), the piece is never let in past the AUTO curve — the spline's swing next to a bump made "deepen
+  this point" report STRINGER-MIN-DEPTH. An inward edit is still kept exactly and reported (WARNING), never corrected.
+  Measured on the default L: a first edit changed the board far from it by 50.5 mm (SPLINE) before, 0.000 mm now;
+  TANGENT_ARC 0.000 mm too.
+- **Editor arrows**: up/down moved a LOWER-contour point the wrong way (ArrowDown made the board shallower — the lower
+  contour's outward normal points down); `profileEditorPanel.js` now maps the arrows to screen up/down.
+- **Limits**: joining the AUTO copy to a spline piece is continuous in position, with a small change of direction (up
+  to about 3 degrees between 15 mm samples, measured). A control handle is drawn at the polygon point, not on the pushed
+  spline (unchanged from before).
+Tests: `geometry/__tests__/stringerProfile.test.js` (closing id per group, a closing-point edit moves only its board, a
+first edit changes nothing far from it for TANGENT_ARC/SPLINE, SPLINE deepening keeps the minimum depth — all four
+confirmed to fail on the old code).
+
+## Ceiling opening: larger ranges, "Dosuń otwór" to a corner or side of the stair
+
+The opening sliders ("Strop i otwór (ręczny)") now go up to 6000 mm (width and length) and the offsets ±6000 mm
+(width used to stop at 2500). `config/schema.js` `alignedOpeningOffsets(config, bounds, targetId)` +
+`OPENING_ALIGN_TARGETS` (4 corners, 4 sides — X min/max, Y min/max of `planLayout.bounds`, the same rectangle the
+offsets are measured from): a corner puts the opening's matching corner on the stair's plan corner (both offsets), a
+side sets only the offset across it. UI: "Dosuń otwór do" dropdown + "⇲ Dosuń otwór" button (`ui.js`, bounds from
+`main.js` `getPlanBounds`); it only writes `openingOffsetX/Y` (a locked field is left alone), then the normal rebuild +
+undo entry. Tests: `config/__tests__/openingAlign.test.js`.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
@@ -1393,7 +1428,8 @@ No panel or interaction computes geometry.
   extra services, balustrades, VAT/margin, cleats or housings (those get `pricingSource:
   'excluded'`, no cost, and are left out of the summary sums). **Stringer** = a normal board from
   the same table (thickness class × board width from the stringer parameter, e.g. 40×330 × its true
-  length, e.g. 2660) **+ a surcharge (default +20%, `stringerSurchargePct`)**. **Winder tread** =
+  length, e.g. 2660), **no surcharge** (user decision 2026-09-25 — the former +20 % `stringerSurchargePct` was
+  removed; an older project's saved value is dropped by `sanitizeBoardPricing` and ignored). **Winder tread** =
   its PRODUCTION BLANK: `TreadModel.winderBlank` (from `winderBlank.js` `computeWinderBlank(tread, nosing)`, the very same
   numbers the 2D plan and 3D labels show) is now also the takeoff STOCK for winders, replacing the
   old bounding rectangle. **The blank includes the nosing** (`config.nosing`): the front edge lies on

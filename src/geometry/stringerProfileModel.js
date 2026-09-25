@@ -47,6 +47,12 @@ export const PROFILE_CONTOURS = Object.freeze({ LOWER: 'lower', UPPER: 'upper' }
 // number of treads elsewhere in the flight. A vertex of the reference curve exists at each
 // tread's front corner and at the closing point past the last tread.
 export const END_ANCHOR_ID = 'end:top';
+// The closing point past the last tread of a group of boards. The side's LAST group keeps END_ANCHOR_ID (so an older
+// project's edit of "end:top" still lands where it did on the top board); every other group gets its own id — they used
+// to share END_ANCHOR_ID, so one edit moved the closing point of every board of the wanga at once.
+export function closingAnchorId(lastSegmentId, isLastGroupOfSide) {
+  return isLastGroupOfSide ? END_ANCHOR_ID : `end:${lastSegmentId}`;
+}
 export function anchorIdForTread(treadIndex) {
   return `support:step-${treadIndex}`;
 }

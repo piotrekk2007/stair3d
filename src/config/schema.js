@@ -267,6 +267,31 @@ export function deriveStairData(config) {
   };
 }
 
+// Dosunięcie otworu w stropie do narożnika albo boku rzutu schodów (planLayout.bounds — obrys obu linii wang, ten sam
+// prostokąt, od którego liczone są offsety otworu). Narożnik: otwór kładzie swój odpowiadający róg na rogu rzutu (oba
+// offsety); bok: tylko offset w poprzek tego boku, drugi zostaje. Zwraca nowe offsety (zaokrąglone do 1 mm).
+export const OPENING_ALIGN_TARGETS = [
+  { id: 'corner-xmin-ymin', label: 'róg X min / Y min', x: 'min', y: 'min' },
+  { id: 'corner-xmax-ymin', label: 'róg X max / Y min', x: 'max', y: 'min' },
+  { id: 'corner-xmin-ymax', label: 'róg X min / Y max', x: 'min', y: 'max' },
+  { id: 'corner-xmax-ymax', label: 'róg X max / Y max', x: 'max', y: 'max' },
+  { id: 'side-xmin', label: 'bok X min', x: 'min' },
+  { id: 'side-xmax', label: 'bok X max', x: 'max' },
+  { id: 'side-ymin', label: 'bok Y min (początek biegu)', y: 'min' },
+  { id: 'side-ymax', label: 'bok Y max', y: 'max' },
+];
+
+export function alignedOpeningOffsets(config, bounds, targetId) {
+  const target = OPENING_ALIGN_TARGETS.find((t) => t.id === targetId);
+  const out = { openingOffsetX: config.openingOffsetX, openingOffsetY: config.openingOffsetY };
+  if (!target || !bounds) return out;
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  if (target.x) out.openingOffsetX = Math.round(target.x === 'min' ? 0 : spanX - config.openingWidth);
+  if (target.y) out.openingOffsetY = Math.round(target.y === 'min' ? 0 : spanY - config.openingLength);
+  return out;
+}
+
 // Sprawdza, czy ręcznie zadany otwór w stropie (prostokąt) zapewnia min. skrajnię (minHeadroom)
 // nad każdym stopniem. Strop jest cienką płytą TYLKO na poziomie górnej kondygnacji — stopnie
 // nisko nad podłogą nie mają z nim żadnej kolizji niezależnie od pozycji otworu; sprawdzane są

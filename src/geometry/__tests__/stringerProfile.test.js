@@ -793,3 +793,69 @@ test('a hand edit that breaks the minimum depth does not block the takeoff (WARN
   assert.ok(minDepth.length > 0);
   assert.ok(minDepth.every((d) => d.severity === 'WARNING'));
 });
+
+// ---- closing point per group of boards; a first edit stays local ----
+
+// Regression: every group of boards of one side closed on the same id `end:top`, so one edit of it moved the closing
+// point of every board at once (at posts, each board is its own group).
+test('each group of boards has its own closing point; only the top one is end:top', () => {
+  const { geo } = flight(LWITH_POSTS);
+  const closingIds = geo.inner.map((g) => g.lowerControl.map((c) => c.id).filter((id) => id.startsWith('end:'))).flat();
+  assert.equal(new Set(closingIds).size, closingIds.length, `shared closing ids: ${closingIds}`);
+  assert.equal(closingIds.filter((id) => id === END_ANCHOR_ID).length, 1);
+  const last = geo.inner[geo.inner.length - 1];
+  assert.ok(last.lowerControl.some((c) => c.id === END_ANCHOR_ID), 'the top board keeps end:top (older project files)');
+});
+
+test('moving one board\u2019s closing point does not move another board', () => {
+  const base = flight(LWITH_POSTS);
+  const id = base.geo.inner[0].lowerControl.map((c) => c.id).find((x) => x.startsWith('end:'));
+  const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour: 'lower', anchorId: id, ds: 0, dn: 40 });
+  const { geo } = flight({ ...LWITH_POSTS, manualStringerProfileOverrides: overrides });
+  for (let i = 1; i < geo.inner.length; i++) assert.deepEqual(geo.inner[i].bottomProfile, base.geo.inner[i].bottomProfile, `board ${i} moved`);
+  assert.notDeepEqual(geo.inner[0].bottomProfile, base.geo.inner[0].bottomProfile, 'the edited board moved');
+});
+
+// Regression: the first manual edit used to switch the board to a denser knot set (and, for a spline, drop the AUTO
+// depth push), reshaping the whole board — measured 50 mm far from the edit on an L, 13.7 mm on a straight flight.
+test('a first edit changes the board only near the edited point (TANGENT_ARC and SPLINE)', () => {
+  for (const style of ['TANGENT_ARC', 'SPLINE']) {
+    for (const patch of [{}, { stairType: 'straight', treadsLegA: 14 }, { stringerCornerRadiusMm: 150 }]) {
+      const cfg = { ...patch, stringerTransitionStyle: style };
+      const auto = flight(cfg);
+      const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'outer', contour: 'lower', anchorId: anchorIdForTread(2), ds: 0, dn: 30 });
+      const edited = flight({ ...cfg, manualStringerProfileOverrides: overrides });
+      let far = 0;
+      let near = 0;
+      auto.geo.outer.forEach((g, i) => {
+        const e = edited.geo.outer[i];
+        const limit = auto.models.outer.segments[i].treadBearings.find((x) => x.treadIndex >= 5);
+        for (let u = g.ends.start.u; u <= g.ends.end.u; u += 10) {
+          const d = Math.abs(vAtU(e.bottomProfile, u) - vAtU(g.bottomProfile, u));
+          if (i > 0 || (limit && u > limit.finalUStart)) far = Math.max(far, d);
+          else near = Math.max(near, d);
+        }
+      });
+      assert.ok(far < 0.01, `${style} ${JSON.stringify(patch)}: far change ${far.toFixed(3)} mm`);
+      assert.ok(near > 5, `${style} ${JSON.stringify(patch)}: the edit itself is visible (${near.toFixed(1)} mm)`);
+    }
+  }
+});
+
+// Regression: with SPLINE a hand-edited contour lost the AUTO depth push and swung past the AUTO curve next to a bump,
+// so merely deepening a point reported the board as too shallow (STRINGER-MIN-DEPTH).
+test('SPLINE: deepening a point never makes the board shallower than the minimum; making it shallower is reported', () => {
+  for (const patch of [{}, { stairType: 'straight', treadsLegA: 14 }]) {
+    const cfg = { ...patch, stringerTransitionStyle: 'SPLINE' };
+    const required = flight(cfg).geo.outer[0].requiredDepthMm;
+    for (const dn of [0.001, 10, 40]) {
+      const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'outer', contour: 'lower', anchorId: anchorIdForTread(2), ds: 0, dn });
+      const g = flight({ ...cfg, manualStringerProfileOverrides: overrides }).geo.outer[0];
+      assert.ok(g.localDepthMm >= required - 0.1, `${JSON.stringify(patch)} dn=${dn}: depth ${g.localDepthMm.toFixed(2)}`);
+      assert.ok(!g.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-DEPTH'), `${JSON.stringify(patch)} dn=${dn}`);
+    }
+    const shallower = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'outer', contour: 'lower', anchorId: anchorIdForTread(2), ds: 0, dn: -20 });
+    const g = flight({ ...cfg, manualStringerProfileOverrides: shallower }).geo.outer[0];
+    assert.ok(g.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-DEPTH' && d.severity === 'WARNING'), 'kept and reported');
+  }
+});

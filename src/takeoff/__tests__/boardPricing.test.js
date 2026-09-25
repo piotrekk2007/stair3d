@@ -196,28 +196,23 @@ const synthetic = (over) => ({
   ...over,
 });
 
-test('a stringer 40 x 330 x 2660 mm is a normal board from the price list + 20%: 720 zł/mb x 2.66 m x 1.2 = 2298.24', () => {
+// User decision 2026-09-25: a stringer is a plain board from the price list — no surcharge (it used to be +20 %).
+test('a stringer 40 x 330 x 2660 mm is a normal board from the price list, no surcharge: 720 zl/mb x 2.66 m = 1915.20', () => {
   const [item] = applyBoardPricing([synthetic({})], createDefaultBoardPricing());
   assert.equal(item.pricingSource, 'board-table');
   assert.equal(item.priceBreakdown.thicknessClass, 40);
   assert.equal(item.priceBreakdown.chunks[0].rangeLabel, '300–360 mm');
   assert.equal(item.priceBreakdown.pricePerMb, 720);
-  assert.equal(item.priceBreakdown.surchargePct, 20);
-  assert.equal(item.calculatedCost, 2298.24);
+  assert.equal(item.calculatedCost, 1915.2);
+  assert.equal(item.unitPrice, 720);
   assert.equal(item.wasteFactor, 0, 'no separate waste on top of the price list');
 });
 
-test('the stringer surcharge is a setting (0% = plain board price)', () => {
-  const bp = { ...createDefaultBoardPricing(), stringerSurchargePct: 0 };
-  const [item] = applyBoardPricing([synthetic({})], bp);
+test('an older project with a saved stringer surcharge is priced without it', () => {
+  const bp = sanitizeBoardPricing({ ...createDefaultBoardPricing(), stringerSurchargePct: 20 });
+  assert.equal('stringerSurchargePct' in bp, false);
+  const [item] = applyBoardPricing([synthetic({})], { ...createDefaultBoardPricing(), stringerSurchargePct: 20 });
   assert.equal(item.calculatedCost, 1915.2);
-});
-
-test('the surcharge applies to stringers ONLY, not to treads', () => {
-  const t = buildPricedMaterialTakeoff(models(), { boardPricing: createDefaultBoardPricing() });
-  const tread = t.items.find((i) => i.sourceElementId === 'tread:step-0');
-  assert.equal(tread.priceBreakdown.surchargePct ?? 0, 0);
-  assert.equal(tread.calculatedCost, 342);
 });
 
 test('real stringers are priced by their parameter width and true length', () => {
@@ -225,7 +220,7 @@ test('real stringers are priced by their parameter width and true length', () =>
   const stringer = t.items.find((i) => i.elementType === 'STRINGER');
   assert.equal(stringer.calculatedDimensions.boardWidthMm, 330);
   assert.equal(stringer.priceBreakdown.chunks[0].rangeLabel, '300–360 mm');
-  const expected = Math.round(720 * (stringer.calculatedDimensions.lengthMm / 1000) * 1.2 * 100) / 100;
+  const expected = Math.round(720 * (stringer.calculatedDimensions.lengthMm / 1000) * 100) / 100;
   assert.equal(stringer.calculatedCost, expected);
 });
 

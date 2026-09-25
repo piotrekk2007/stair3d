@@ -69,7 +69,6 @@ export function createDefaultBoardPricing() {
     species: 'Dąb',
     cls: 'Klasa Natura',
     riserMaterial: RISER_MATERIALS.OAK,
-    stringerSurchargePct: 20, // dopłata do ceny wangi względem ceny deski z cennika
     // Słupy: najmniejszy przekrój z tabeli, który jest >= przekroju słupa. Wartości domyślne to
     // pozycje "Drewniany 80×80/100×100" z cennika DREWEX (cena za sztukę) + 110×110 = 200 zł/mb;
     // słup o większym przekroju zostaje niewyceniony, dopóki nie dopiszesz dla niego wiersza.
@@ -204,7 +203,7 @@ function boardBlankOf(item, riserMaterial) {
   return null;
 }
 
-function describeBreakdown(pricing, blank, lookup, cost, quantity, surchargePct) {
+function describeBreakdown(pricing, blank, lookup, cost, quantity) {
   const parts = [`${pricing.species} ${pricing.cls} (${lookup.multiplierPct}% ceny bazowej)`];
   parts.push(`grubość ${Math.round(blank.thicknessMm)} mm → klasa ${lookup.thicknessClass} mm`);
   parts.push(`formatka dł. ${Math.round(blank.lengthMm)} × głęb. ${Math.round(blank.depthMm)} mm`);
@@ -214,10 +213,8 @@ function describeBreakdown(pricing, blank, lookup, cost, quantity, surchargePct)
     parts.push(`przedział głęb. ${lookup.chunks[0].rangeLabel}${lookup.viaNearestRange ? ' (najbliższy)' : ''}`);
   }
   parts.push(`dł. ${lookup.tier.label}`);
-  if (surchargePct) parts.push(`dopłata wangi +${surchargePct}%`);
   const qty = quantity > 1 ? ` × ${quantity} szt.` : '';
-  const factor = surchargePct ? ` × ${(1 + surchargePct / 100).toFixed(2).replace('.', ',')}` : '';
-  parts.push(`${fmtPln(lookup.pricePerMb)} zł/mb × ${(blank.lengthMm / 1000).toFixed(3).replace('.', ',')} m${qty}${factor} = ${fmtPln(cost)} zł`);
+  parts.push(`${fmtPln(lookup.pricePerMb)} zł/mb × ${(blank.lengthMm / 1000).toFixed(3).replace('.', ',')} m${qty} = ${fmtPln(cost)} zł`);
   return `Cennik desek: ${parts.join(' · ')}`;
 }
 
@@ -284,21 +281,21 @@ export function applyBoardPricing(items, pricing) {
       return { ...base, priceBreakdown: null, notes: [...item.notes, `Brak ceny z cennika desek: ${lookup.reason}`] };
     }
 
-    const surchargePct = item.elementType === ELEMENT_TYPES.STRINGER ? Number(pricing.stringerSurchargePct) || 0 : 0;
-    const factor = 1 + surchargePct / 100;
-    const cost = round2(lookup.pricePerMb * (blank.lengthMm / 1000) * item.quantity * factor);
+    // A stringer is priced like any other board from the table — no surcharge (user decision 2026-09-25; an older
+    // project's `stringerSurchargePct` is ignored).
+    const cost = round2(lookup.pricePerMb * (blank.lengthMm / 1000) * item.quantity);
     const stockMeasure = item.wasteAdjustedUnit === 'm3' ? item.stockVolume : item.stockArea;
     return {
       ...base,
       // Cena dotyczy formatki (surowca), odpad jest w cenniku — bez drugiego doliczania.
       wasteFactor: 0,
       wasteAdjustedQuantity: stockMeasure,
-      unitPrice: round4(lookup.pricePerMb * factor),
+      unitPrice: round4(lookup.pricePerMb),
       priceUnit: 'mb',
       currency: 'PLN',
       calculatedCost: cost,
-      priceBreakdown: { pricePerMb: lookup.pricePerMb, surchargePct, lengthMm: blank.lengthMm, depthMm: blank.depthMm, thicknessClass: lookup.thicknessClass, chunks: lookup.chunks },
-      notes: [...item.notes, describeBreakdown(pricing, blank, lookup, cost, item.quantity, surchargePct)],
+      priceBreakdown: { pricePerMb: lookup.pricePerMb, lengthMm: blank.lengthMm, depthMm: blank.depthMm, thicknessClass: lookup.thicknessClass, chunks: lookup.chunks },
+      notes: [...item.notes, describeBreakdown(pricing, blank, lookup, cost, item.quantity)],
     };
   });
 }
@@ -373,7 +370,6 @@ export function sanitizeBoardPricing(value) {
     ? value.postPrices.filter((r) => r && isNum(r.sectionMm) && r.sectionMm > 0 && isNum(r.price) && r.price >= 0 && (r.unit === 'szt' || r.unit === 'mb')).map((r) => ({ sectionMm: r.sectionMm, price: r.price, unit: r.unit }))
     : null;
   return {
-    stringerSurchargePct: isNum(value.stringerSurchargePct) && value.stringerSurchargePct >= 0 ? value.stringerSurchargePct : fresh.stringerSurchargePct,
     postPrices: postPrices ?? fresh.postPrices,
     species: typeof value.species === 'string' ? value.species : fresh.species,
     cls: typeof value.cls === 'string' ? value.cls : fresh.cls,
