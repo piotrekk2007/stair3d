@@ -12,19 +12,11 @@
 
 import * as THREE from 'three';
 import { buildPrism, planToWorld } from './geometryUtils.js';
-import { rotate90CW } from './planLayout.js';
 import { traceability } from '../scene/traceability.js';
 
-// A board's thickness must extrude TOWARD the stair's interior (rule 5/RULES.md: the visible,
-// outward face sits flush with the tread edge) — never away from it. "Interior" from the
-// OUTER board's own straight-ahead direction is rotate90CW(direction) (the SAME canonical
-// "kierunek poprzeczny" convention as planLayout.js's frame chaining: right = rotate90CW(fwd)
-// always points from outer toward inner/dusza). From the INNER board it is the opposite
-// rotation. One shared definition, reused here instead of re-derived.
-function inwardDirection(direction, side) {
-  const cw = rotate90CW(direction);
-  return side === 'outer' ? cw : { x: -cw.x, y: -cw.y };
-}
+// A board's thickness extrudes TOWARD the stair's interior (the visible, outward face sits on the reference line)
+// — the direction is decided by the solver (StringerSegment.inwardNormal, planLayout.js inwardNormal, which also
+// handles a mirrored left-turn plan); the renderer only reads it.
 
 // Builds a world-space toWorld(u,v)->Vector3 function for one segment's own straight
 // referenceLine — u = distance along it from its start, v = world elevation. Every mesh for
@@ -65,7 +57,7 @@ function housingIndicatorMaterial(material) {
 function buildBoardMesh(segment, geo, side, material) {
   if (geo.outerContour.length === 0) return null;
   const toWorld = localFrameFor(segment);
-  const direction = inwardDirection(segment.referenceLine.direction, side);
+  const direction = segment.inwardNormal;
   const geometry = extrude(geo.outerContour, toWorld, direction, geo.thicknessMm);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData = traceability({ elementType: 'stringer', stringerId: side, geometrySourceId: `stringer:${side}:${geo.segmentId}` });
@@ -75,7 +67,7 @@ function buildBoardMesh(segment, geo, side, material) {
 function buildHousingIndicatorMeshes(segment, geo, side, material) {
   if (!geo.housings) return [];
   const toWorld = localFrameFor(segment);
-  const direction = inwardDirection(segment.referenceLine.direction, side);
+  const direction = segment.inwardNormal;
   const indicatorMaterial = housingIndicatorMaterial(material);
   // Recessed by half the housing depth from the inner face — a visual cue only (see
   // housingIndicatorMaterial's comment); the ANALYTICAL depth (geo.housings[].depth) is what a

@@ -102,6 +102,11 @@ export function buildProfileViewModel(geometries, model, config) {
       // else in the app shows it (the Plan 2D/3D housing recess mentioned in the old comment here is
       // a DIFFERENT, tread-width mechanism — edgeOverrides.js applyHousingRecess — not this one).
       housings: g.housings || [],
+      // The structural post the board butts into at either end (stringerSolver.js boardEndPosts): drawn so it is
+      // plain that the board stops at the post's face and the post is the joint.
+      posts: [segment?.startPost && { ...segment.startPost, end: 'start' }, segment?.endPost && { ...segment.endPost, end: 'end' }]
+        .filter(Boolean)
+        .map((p) => ({ postId: p.postId, end: p.end, uStart: p.centreU - p.sizeMm / 2, uEnd: p.centreU + p.sizeMm / 2, zBottom: p.elevation.bottom, zTop: p.elevation.top })),
       diagnostics: g.diagnostics,
     };
   });

@@ -73,7 +73,7 @@ Stała ostrzeżenie w zakładce: „obciążenia wg brytyjskiego załącznika kr
    - **Rozpiętość L** = długość − dwa oparcia. Wanga zajmuje pas [0, t] w głąb od łańcucha; koniec stopnia leży
      `recess` od łańcucha (`edgeOverrides.js` `housingRecessMm`: głębokość wpustu przy wpuszczanej, 0 przy
      nakładanej), więc stopień opiera się na długości `t − recess`, a środek oparcia jest `(t − recess)/2` od końca.
-     Domyślnie 868 − 2·12 = 844 mm.
+     Domyślnie (po poprawce wpustu: stopień kończy się na dnie wpustu, t − d = 24 mm od łańcucha) 852 − 2·8 = 836 mm; oparcie = głębokość wpustu 16 mm.
    - **Przekrój** `b × h`: `b` = pole stopnia / jego długość (prosty: głębokość + nosek; zabiegowy: średnia
      głębokość — prostokąt zastępczy), `h` = grubość stopnia. Rowek pod zakładkę podstopnia pominięty.
    - **Przypadki SGN** (nigdy razem, EN 1991-1-1): ciężar + równomierne `q·b` (średniotrwałe, k_mod 0,8):

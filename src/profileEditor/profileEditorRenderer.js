@@ -151,6 +151,12 @@ export function renderProfileEditorSVG(views, options) {
     const g = [];
     g.push(`<g class="pe-segment" data-seg-index="${i}" data-seg-id="${escapeHtml(view.segmentId)}">`);
 
+    // the structural posts the board butts into (drawn first, underneath the board)
+    for (const p of view.posts || []) {
+      const a = toSvg(seg, p.uStart, p.zTop);
+      g.push(`<rect class="pe-post" data-post-id="${escapeHtml(p.postId)}" x="${fmt(a.x)}" y="${fmt(a.y)}" width="${fmt(Math.max(0, p.uEnd - p.uStart))}" height="${fmt(p.zTop - p.zBottom)}"><title>${escapeHtml(p.postId)}</title></rect>`);
+    }
+
     // silhouette
     g.push(`<polygon class="pe-outline" points="${polylinePoints(seg, view.outline)}"/>`);
 

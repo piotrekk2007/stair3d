@@ -19,6 +19,7 @@ export function buildPlanLayout(config) {
       : config.stairType === 'U'
       ? buildMultiTurnLayout(config)
       : buildMultiTurnLayout(config, 1);
+  layout.handedness = layoutHandedness(config);
 
   // Ręczne przesunięcia krawędzi (przeciąganie na planie 2D) — jedno miejsce, więc każdy
   // konsument planLayout (widok 3D, plan 2D, wymiary, formatki zabiegowe) dostaje już
@@ -118,6 +119,27 @@ function mergeLandingPair(landingA, landingB) {
 // do wnętrza schodów), zamiast liczyć to na nowo własnym wzorem.
 export function rotate90CW(v) {
   return { x: v.y, y: -v.x };
+}
+
+// +1 when the layout is in its native "turn right" handedness, -1 when the whole plan was mirrored (mirrorX,
+// turnDirection === 'left' on an L/U stair). A straight stair is never mirrored.
+export function layoutHandedness(config) {
+  return config.stairType !== 'straight' && config.turnDirection === 'left' ? -1 : 1;
+}
+
+/**
+ * THE one answer to "which way is INTO the stair from a wanga's line" (the side the board's thickness, a
+ * balustrade's lateral offset, a post's centre go to). rotate90CW(forward) points from the outer toward the inner
+ * side only in the native right-turn frame; a mirrored (left-turn) plan flips it — which is what used to extrude
+ * every wanga of a left-turn stair OUTWARD, leaving a gap next to the treads.
+ * @param {{x:number,y:number}} direction  the line's own walking direction (unit)
+ * @param {'outer'|'inner'} side
+ * @param {1|-1} handedness  planLayout.handedness
+ */
+export function inwardNormal(direction, side, handedness) {
+  const cw = rotate90CW(direction);
+  const s = (side === 'outer' ? 1 : -1) * handedness;
+  return { x: cw.x * s, y: cw.y * s };
 }
 
 function makeFrame(origin, fwd) {

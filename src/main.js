@@ -543,7 +543,7 @@ function regeneratePlan2D() {
     selection,
     layers: viewState.plan2dLayers,
     postStates: Object.fromEntries((lastModels?.allPostModels || []).map((p) => [p.postId, { removed: p.removed, overridden: p.overridden }])),
-    extraPosts: (lastModels?.allPostModels || []).filter((p) => p.kind === 'railing'),
+    posts: lastModels?.allPostModels || [],
     railingModel: lastModels?.railingModel ?? null,
   });
   if (plan2dPanel.classList.contains('visible')) {

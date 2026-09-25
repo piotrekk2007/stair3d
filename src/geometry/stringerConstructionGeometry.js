@@ -267,11 +267,28 @@ function buildOverlayTop(effective) {
 // out to that face: the top edge never rises above a seat that is there, and the end face stays a
 // plumb line from the lower contour up to it.
 function extendCombToSpan(top, spanStart, spanEnd) {
-  const out = top.slice();
+  const out = clipCombToSpan(top, spanStart, spanEnd);
   if (out[0].u > spanStart + GEOMETRY_EPS) out.unshift({ u: spanStart, v: out[0].v });
   const last = out[out.length - 1];
   if (last.u < spanEnd - GEOMETRY_EPS) out.push({ u: spanEnd, v: last.v });
   return out;
+}
+
+// The notched top (non-decreasing in u, with plumb riser cuts) cut back to [spanStart, spanEnd] — a board that ends
+// at a post's face must not carry its notches past that face. Crossing points are interpolated along the edge; a
+// plumb edge exactly on a cut plane is kept whole.
+function clipCombToSpan(top, spanStart, spanEnd) {
+  const inside = (p) => p.u >= spanStart - GEOMETRY_EPS && p.u <= spanEnd + GEOMETRY_EPS;
+  const at = (a, b, u) => ({ u, v: a.v + ((b.v - a.v) * (u - a.u)) / (b.u - a.u) });
+  const out = [];
+  for (let i = 0; i < top.length; i++) {
+    const p = top[i];
+    const prev = top[i - 1];
+    if (prev && prev.u < spanStart - GEOMETRY_EPS && p.u > spanStart + GEOMETRY_EPS) out.push(at(prev, p, spanStart));
+    if (inside(p)) out.push(p);
+    if (prev && prev.u < spanEnd - GEOMETRY_EPS && p.u > spanEnd + GEOMETRY_EPS) out.push(at(prev, p, spanEnd));
+  }
+  return out.length > 0 ? out : top.slice();
 }
 
 const NOTCH_INSIDE_TURN = 1;
@@ -568,8 +585,12 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // widened to also cover the tread seats — at a postless lap joint the first/last seat reaches one
     // board thickness past the segment end, and if the lower contour stopped at the segment end while
     // the top ran on, the end face would be slanted. Both contours are cut at the SAME two planes.
-    const spanStart = Math.min(0, effective[0].uStart);
-    const spanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd);
+    // ...but never past a structural post: a board butts into the face of the post standing at its end
+    // (stringerSolver.js boardEndPosts — start newel, corner post, end newel); the post is the joint.
+    const seatSpanStart = Math.min(0, effective[0].uStart);
+    const seatSpanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd);
+    const spanStart = segment.startPost ? Math.max(seatSpanStart, segment.startPost.faceU) : seatSpanStart;
+    const spanEnd = segment.endPost ? Math.min(seatSpanEnd, segment.endPost.faceU) : seatSpanEnd;
     // A contour is continued along its end tangent to reach an end face only up to this steepness; a
     // steeper end edge (the narrow dusza treads of a tight winder) becomes a flat cap (see sliceCurveByU).
     const maxDrop = MAX_END_EXTENSION_SLOPE;
@@ -596,7 +617,14 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
     } else {
       outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
-      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config)];
+      // A seat that reaches under a post (the board stops at the post's face) is cut back to that face; one wholly
+      // beyond it is not cut at all. Only at a POST: elsewhere a housing deliberately shows its full length, nosing
+      // included, even past the board's own end (so a nosing poking out of the board is visible).
+      const clipStart = segment.startPost ? spanStart : -Infinity;
+      const clipEnd = segment.endPost ? spanEnd : Infinity;
+      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config)]
+        .map((h) => ({ ...h, uStart: Math.max(h.uStart, clipStart), uEnd: Math.min(h.uEnd, clipEnd) }))
+        .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
       diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
     }
 

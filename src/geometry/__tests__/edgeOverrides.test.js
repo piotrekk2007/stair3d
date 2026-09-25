@@ -135,10 +135,13 @@ test('a genuinely broken shared boundary (no overhang involved) is still reporte
 
 import { housingDepthFor } from '../stringerModel.js';
 
-test('both wangi housed: every tread narrows by the housing depth on BOTH sides, front and back', () => {
+test('both wangi housed: every tread ends at the housing bottom (t − d from the chain) on BOTH sides, front and back', () => {
   const cut = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const closed = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
-  const depth = housingDepthFor(createDefaultConfig().stringerThickness);
+  // The tread ends at the BOTTOM of the housing: the wanga occupies [0, t] in from its chain line and the housing is
+  // routed d into its inner face, so the tread end sits t − d from the chain (regression: it used to be d, i.e. 8 mm
+  // into solid wood at t = 40, d = 16).
+  const depth = createDefaultConfig().stringerThickness - housingDepthFor(createDefaultConfig().stringerThickness);
   assert.ok(depth > 0);
 
   for (const i of [0, 2, 5]) {
@@ -157,7 +160,10 @@ test('both wangi housed: every tread narrows by the housing depth on BOTH sides,
 test('mixed construction: only the HOUSED side recesses, the OVERLAY side stays at its nominal position', () => {
   const cut = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const mixed = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'cut' });
-  const depth = housingDepthFor(createDefaultConfig().stringerThickness);
+  // The tread ends at the BOTTOM of the housing: the wanga occupies [0, t] in from its chain line and the housing is
+  // routed d into its inner face, so the tread end sits t − d from the chain (regression: it used to be d, i.e. 8 mm
+  // into solid wood at t = 40, d = 16).
+  const depth = createDefaultConfig().stringerThickness - housingDepthFor(createDefaultConfig().stringerThickness);
 
   const [cutInner, cutOuter] = cut.treads[2].frontEdge;
   const [mixedInner, mixedOuter] = mixed.treads[2].frontEdge;
@@ -194,7 +200,7 @@ test('housing recess composes with a manual overhang: the overhang is measured f
 test('a housing depth that would collapse the tread (absurdly narrow stairWidth) is safely reverted, not silently applied', () => {
   const cut = build({ stairType: 'straight', treadsLegA: 4, stairWidth: 20, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const closed = build({ stairType: 'straight', treadsLegA: 4, stairWidth: 20, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' });
-  // 2x housing depth (32mm) against a 20mm-wide stair would invert the tread — reverted to nominal.
+  // 2x recess (2 x 24 mm) against a 20mm-wide stair would invert (or, shifted corner by corner, slide) the tread — reverted to nominal.
   assert.deepEqual(closed.treads[2].outline, cut.treads[2].outline);
 });
 

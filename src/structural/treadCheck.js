@@ -8,9 +8,9 @@
 //    tread both are its width; a winder is a long wedge whose two edges differ — the mean is its equivalent length.
 //  * span L = tread length minus the two bearing insets. A wanga occupies the band [0, t] in from its chain line
 //    (stringerRenderer extrudes inward); the tread's end sits `recess` in from the chain (edgeOverrides.js
-//    housingRecessMm: the housing depth on a housed side, 0 on an overlay side). So the tread bears on the wanga over
-//    t − recess, and its bearing centre is (t − recess)/2 in from the tread's end — read from the SAME recess the
-//    geometry uses, never re-derived.
+//    housingRecessMm: t − housing depth on a housed side = the housing's bottom, 0 on an overlay side). So the tread
+//    bears on the wanga over t − recess (the housing depth, or the whole thickness), and its bearing centre is
+//    (t − recess)/2 in from the tread's end — read from the SAME recess the geometry uses, never re-derived.
 //  * section b × h: b = outline area / tread length (a straight tread: going + nosing; a winder: its mean depth —
 //    an equivalent rectangle), h = config.treadThickness. A winder really behaves like a wedge-shaped plate (the
 //    corner one supported on two wangi at the corner); the equivalent beam is a simplification, not proven to be on

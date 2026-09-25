@@ -14,6 +14,7 @@
 // future cross-check between the two would compare against.
 
 import { normalizeVector } from './pathUtils.js';
+import { inwardNormal } from './planLayout.js';
 
 // A post shortened below this is treated as a mistake and the length edit is ignored (reported on the
 // model as `overrideRejected`) — a 100 mm stub is not a post.
@@ -24,6 +25,9 @@ export const MAX_POST_SIZE_MM = 300;
 const NEWEL_HEIGHT = 1000; // mm, wysokość słupka początkowego/końcowego ponad poziom podłogi
 // Two post positions closer than this are the same place (same 1 mm tolerance as the corner-post de-duplication).
 const POST_COINCIDENCE_MM = 1;
+// Below this (1 + cos of the angle between the two legs' normals) the legs double back on themselves and a mitre
+// point would fly off — the second leg's normal is used instead (same guard as railingSolver.js offsetLookup).
+const MITRE_MIN_DENOM = 0.1;
 
 function unitDir(pFrom, pTo) {
   return normalizeVector({ x: pTo.x - pFrom.x, y: pTo.y - pFrom.y });
@@ -33,7 +37,9 @@ function unitDir(pFrom, pTo) {
  * @typedef {Object} PostModel
  * @property {string} postId
  * @property {'start'|'end'|'corner'|'railing'} kind  'railing' = an end post of a balustrade section (railingSolver.js)
- * @property {{x:number,y:number}} position
+ * @property {{x:number,y:number}} position  centre of the post — on the inner wanga's axis for structural posts
+ * @property {{x:number,y:number}} [anchor]  structural posts: the inner-line chain point the post belongs to (start/end of
+ *   the inner line, a turn's inner corner) — how a wanga board finds the post it ends at (stringerSolver.js)
  * @property {{bottom:number, top:number}} elevation
  * @property {number} size  mm, przekrój kwadratowy (config.postSize; for a 'railing' post config.railingPostSizeMm or its own override)
  * @property {number} [nominalSize]  the size before a manual thickness edit (only railing posts can have one)
@@ -124,27 +130,73 @@ export function buildPostModels(planLayout, config) {
  *
  * @returns {PostModel[]}
  */
+// The inner line with consecutive duplicate points removed (a winder's dusza collapses several chain points onto
+// the corner), so every step has a real direction.
+function distinctPath(path) {
+  const out = [];
+  for (const p of path) if (out.length === 0 || Math.hypot(p.x - out[out.length - 1].x, p.y - out[out.length - 1].y) >= POST_COINCIDENCE_MM) out.push(p);
+  return out;
+}
+
+// Offsets a point of the inner line onto the inner wanga's AXIS (half its thickness into the stair). At a corner the
+// two legs' axes are offset lines that meet at the mitre point — that is where a corner post's centre belongs, so
+// both wangi run into it on their own axis. `before`/`after` are the legs' walking directions (either may be null
+// at the line's ends).
+function ontoWangaAxis(point, before, after, halfThickness, handedness) {
+  const a = before ? inwardNormal(before, 'inner', handedness) : null;
+  const b = after ? inwardNormal(after, 'inner', handedness) : null;
+  let n;
+  if (a && b) {
+    const denom = 1 + a.x * b.x + a.y * b.y;
+    n = denom < MITRE_MIN_DENOM ? b : { x: (a.x + b.x) / denom, y: (a.y + b.y) / denom };
+  } else {
+    n = a || b || { x: 0, y: 0 };
+  }
+  return { x: point.x + n.x * halfThickness, y: point.y + n.y * halfThickness };
+}
+
 export function buildAllPostModels(planLayout, config) {
   const { postSize, totalRise, hasCornerPost } = config;
-  const path = planLayout.innerFullPath;
+  const handedness = planLayout.handedness ?? 1;
+  const half = (config.stringerThickness || 0) / 2;
+  const path = distinctPath(planLayout.innerFullPath);
   const startPoint = path[0];
   const endPoint = path[path.length - 1];
+  const dirAt = (i) => (i >= 0 && i < path.length - 1 ? unitDir(path[i], path[i + 1]) : null);
 
+  // Every structural post stands on the inner wanga's AXIS (half its thickness in from the chain line — the board
+  // extrudes inward from that line, stringerRenderer.js), never centred on the chain line itself, where half of
+  // it would stick out of the stair. The balustrade's own posts already did so (railingSolver.js).
+  //
   // Nosek pierwszego stopnia leży dokładnie na frontEdge stopnia 0 — czyli tam, gdzie stoi
   // słup startowy. Przesuwamy słup DO PRZODU (zgodnie z kierunkiem wchodzenia) o połowę jego
   // rozmiaru, żeby jego tylne lico leżało na linii konstrukcyjnej — inaczej słup wizualnie
   // połyka/zasłania nosek pierwszego stopnia, bo oba sięgają w tę samą przestrzeń za linią startu.
-  const startForward = unitDir(path[0], path[1]);
+  const startForward = dirAt(0) || { x: 0, y: 1 };
+  const startOnAxis = ontoWangaAxis(startPoint, null, startForward, half, handedness);
   const startPosition = {
-    x: startPoint.x + startForward.x * (postSize / 2),
-    y: startPoint.y + startForward.y * (postSize / 2),
+    x: startOnAxis.x + startForward.x * (postSize / 2),
+    y: startOnAxis.y + startForward.y * (postSize / 2),
+  };
+  const endPosition = ontoWangaAxis(endPoint, dirAt(path.length - 2), null, half, handedness);
+  // A flight that starts (or ends) straight away with winders has no inner leg before (after) its corner; the
+  // stair's own first (last) walking direction — the outer line's first (last) side — stands in for it.
+  const outer = distinctPath(planLayout.outerFullPath);
+  const firstDir = outer.length > 1 ? unitDir(outer[0], outer[1]) : null;
+  const lastDir = outer.length > 1 ? unitDir(outer[outer.length - 2], outer[outer.length - 1]) : null;
+  const cornerPosition = (corner) => {
+    const i = path.findIndex((p) => Math.hypot(p.x - corner.x, p.y - corner.y) < POST_COINCIDENCE_MM);
+    if (i < 0) return corner;
+    const before = dirAt(i - 1) ?? (i === 0 ? firstDir : null);
+    const after = dirAt(i) ?? (i === path.length - 1 ? lastDir : null);
+    return ontoWangaAxis(corner, before, after, half, handedness);
   };
 
   const models = [
-    { postId: 'post-start', kind: 'start', position: startPosition, elevation: { bottom: 0, top: NEWEL_HEIGHT }, size: postSize },
+    { postId: 'post-start', kind: 'start', position: startPosition, anchor: startPoint, elevation: { bottom: 0, top: NEWEL_HEIGHT }, size: postSize },
     // Ostatni stopień nie ma noska na swojej przedniej (górnej) krawędzi — nosek jest tylko
     // na krawędziach czołowych — więc słup końcowy nie koliduje z niczym i zostaje wyśrodkowany.
-    { postId: 'post-end', kind: 'end', position: endPoint, elevation: { bottom: totalRise - NEWEL_HEIGHT, top: totalRise }, size: postSize },
+    { postId: 'post-end', kind: 'end', position: endPosition, anchor: endPoint, elevation: { bottom: totalRise - NEWEL_HEIGHT, top: totalRise }, size: postSize },
   ];
 
   if (hasCornerPost) {
@@ -156,7 +208,7 @@ export function buildAllPostModels(planLayout, config) {
       const isDuplicate = placedCorners.some((c) => Math.hypot(c.x - turn.innerCorner.x, c.y - turn.innerCorner.y) < POST_COINCIDENCE_MM);
       if (isDuplicate) return;
       placedCorners.push(turn.innerCorner);
-      models.push({ postId: `post-corner-${i}`, kind: 'corner', position: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
+      models.push({ postId: `post-corner-${i}`, kind: 'corner', position: cornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
     });
   }
 
@@ -166,7 +218,8 @@ export function buildAllPostModels(planLayout, config) {
   // start/end post is only kept when the user removed that corner post, so the spot is never left empty.
   const overrides = sanitizePostOverrides(config.manualPostOverrides);
   const coveredByCornerPost = (point) =>
-    models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && Math.hypot(m.position.x - point.x, m.position.y - point.y) < POST_COINCIDENCE_MM);
+    models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && Math.hypot(m.anchor.x - point.x, m.anchor.y - point.y) < POST_COINCIDENCE_MM);
+
   const kept = models.filter(
     (m) => !(m.postId === 'post-start' && coveredByCornerPost(startPoint)) && !(m.postId === 'post-end' && coveredByCornerPost(endPoint)),
   );

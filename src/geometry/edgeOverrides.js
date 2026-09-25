@@ -139,15 +139,19 @@ function shiftEdgeCorner(tread, edgeKey, sideIdx, offsetMm) {
   return { oldPoint: point, newPoint };
 }
 
-// Ile (mm, per strona) wpuszczana wanga wcina się w stopień — same reguły co
-// applyHousingRecess niżej, jako czysta funkcja config -> { inner, outer } (bez treads), żeby
-// treadSolver.js mogło policzyć DOKŁADNIE to samo wgłębienie przy budowaniu "nominal" (patrz
-// recessedEdge niżej) bez duplikowania warunku CLOSED/housingDepthFor w dwóch miejscach.
+// O ile (mm, per strona) koniec stopnia jest cofnięty od linii łańcucha przy wandze WPUSZCZANEJ — jako czysta
+// funkcja config -> { inner, outer } (bez treads), żeby treadSolver.js mogło policzyć DOKŁADNIE to samo
+// cofnięcie przy budowaniu "nominal" (patrz recessedEdge niżej), bez duplikowania warunku w dwóch miejscach.
+//
+// Wanga zajmuje pas [0, t] od łańcucha W GŁĄB schodów (lico zewnętrzne leży na łańcuchu — stringerRenderer.js),
+// a gniazdo jest frezowane w jej licu WEWNĘTRZNYM na głębokość d = housingDepthFor(t). Stopień kończy się na dnie
+// gniazda, czyli t − d od łańcucha (40 − 16 = 24 mm domyślnie). Wcześniej było tu samo d (16 mm) — stopień wchodził
+// wtedy 24 mm w deskę przy gnieździe 16 mm, czyli 8 mm w lite drewno wangi.
+// Wanga NAKŁADANA: stopień leży na wandze aż do jej lica zewnętrznego — cofnięcie 0.
 export function housingRecessMm(config) {
-  return {
-    inner: constructionTypeForSide(config, 'inner') === CONSTRUCTION_TYPES.CLOSED ? housingDepthFor(config.stringerThickness) : 0,
-    outer: constructionTypeForSide(config, 'outer') === CONSTRUCTION_TYPES.CLOSED ? housingDepthFor(config.stringerThickness) : 0,
-  };
+  const recessFor = (side) =>
+    constructionTypeForSide(config, side) === CONSTRUCTION_TYPES.CLOSED ? Math.max(0, config.stringerThickness - housingDepthFor(config.stringerThickness)) : 0;
+  return { inner: recessFor('inner'), outer: recessFor('outer') };
 }
 
 // Czysta wersja shiftEdgeCorner powyżej, operująca na SAMEJ parze punktów [wewnętrzny,
@@ -168,8 +172,8 @@ export function recessedEdge([inner, outer], innerDepthMm, outerDepthMm) {
 // Automatyczne wgłębienie krawędzi stopnia po stronie WPUSZCZANEJ (housed) wangi — konsekwencja
 // wybranego typu konstrukcji, NIE ręczna edycja użytkownika (patrz stringerModel.js
 // constructionTypeForSide). Na wandze wpuszczanej stopień jest wsuwany w gniazdo wyfrezowane w
-// jej licu wewnętrznym na głębokość housingDepthFor(stringerThickness) — jego widoczna/gotowa
-// krawędź nie sięga więc do nominalnej szerokości biegu, tylko kończy się `depth` mm wcześniej.
+// jej licu wewnętrznym na głębokość housingDepthFor(stringerThickness) — jego koniec leży więc na dnie
+// gniazda, housingRecessMm() od łańcucha (grubość wangi − głębokość gniazda).
 // Na wandze nakładanej stopień LEŻY na wandze (nie jest w nic wpuszczany) — ta strona zostaje
 // nietknięta, dokładnie jak dotychczas.
 //
@@ -190,6 +194,15 @@ export function applyHousingRecess(treads, config) {
   const result = treads.map(cloneTread);
   for (const tread of result) {
     if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
+
+    // Oba cofnięcia razem muszą się zmieścić w krawędzi stopnia. Test znaku pola niżej tego nie łapie, gdy
+    // pierwsze przesunięcie przeskoczy przez drugi róg: drugi liczy wtedy kierunek od już przesuniętego i cały
+    // stopień PRZESUWA się w bok zamiast się wywrócić (znak pola bez zmian).
+    const edgeLen = (e) => Math.hypot(e[1].x - e[0].x, e[1].y - e[0].y);
+    if (Math.min(edgeLen(tread.frontEdge), edgeLen(tread.backEdge)) <= recessMm.inner + recessMm.outer) {
+      console.warn(`Pominięto automatyczne wgłębienie stopnia ${tread.index}: przy tej szerokości biegu i głębokości wręgi stopień stałby się niepoprawny.`);
+      continue;
+    }
 
     const before = signedArea(tread);
     const moved = [];

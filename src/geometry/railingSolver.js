@@ -300,7 +300,8 @@ function buildSection(section, ctx) {
   const side = section.side;
   const constructionType = constructionTypeForSide(config, side);
   const offsetMm = config.railingLateralOffsetMm ?? (config.stringerThickness || 0) / 2;
-  const sign = side === 'outer' ? 1 : -1;
+  // Into the stair from this side's line (planLayout.js inwardNormal: also right for a mirrored left-turn plan).
+  const sign = (side === 'outer' ? 1 : -1) * (planLayout.handedness ?? 1);
   const handrailHeight = config.railingHandrailHeightMm;
   const railTop = (z) => z + config.railingHeightMm;
   const balusterSize = config.railingBalusterSizeMm;

@@ -114,6 +114,13 @@ Panel parametrów (folder "Balustrada") + tabela odcinków (strona, od, do, doda
 - wysokość poręczy: 900 mm nad linią nosków (domyślnie, konfigurowalna)
 - zakręt v1: łamana z prostych odcinków; poręcz gięta później
 
+## Poprawka: schody skręcające w lewo
+
+Przesunięcie poprzeczne balustrady (i grubość wang) szło przy skręcie w lewo NA ZEWNĄTRZ schodów — kierunek
+„do środka" był liczony tylko dla układu skrętu w prawo. Teraz jeden helper `planLayout.js` `inwardNormal`
+(z `planLayout.handedness`) dla wang, balustrady i słupów. Słupy konstrukcyjne stoją w osi wangi, tak jak słupki
+balustrady — ponowne użycie istniejącego słupa na końcu odcinka działa dzięki temu dokładniej.
+
 ## Zweryfikowane w etapie 1
 
 - Wanga jest wyciskana od linii odniesienia (łańcuch stopnia) w głąb schodów (`stringerRenderer.js` `inwardDirection`), więc jej oś

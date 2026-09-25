@@ -276,9 +276,11 @@ function stringerSpacingXML(planLayout, config) {
  * @param {Object<string,{removed?:boolean, overridden?:boolean}>} [options.postStates]  Stan słupów po
  *   ręcznych edycjach (z PostModel) — usunięty słup jest rysowany jako przerywany "duch" (nadal
  *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
+ * @param {Object[]|null} [options.posts]  Wszystkie słupy (buildStaircase allPostModels, także usunięte) —
+ *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, extraPosts = [], railingModel = null } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -321,28 +323,10 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     const stroke = selected ? '#1a5fb4' : state.overridden ? '#e07b00' : 'none';
     return `<rect class="post-marker${selected ? ' selected' : ''}${state.overridden ? ' overridden' : ''}" data-post-id="${postId}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(size)}" height="${fmt(size)}" fill="${selected ? '#1a5fb4' : '#5a3d24'}" stroke="${stroke}" stroke-width="30"/>`;
   };
-  const cornerIds = [];
-  const postsXML = planLayout.turns
-    .map((t, i) => {
-      const s = config.postSize;
-      const first = cornerIds.find((c) => Math.hypot(c.p.x - t.innerCorner.x, c.p.y - t.innerCorner.y) < 1);
-      const postId = first ? first.id : `post-corner-${i}`;
-      if (!first) cornerIds.push({ p: t.innerCorner, id: postId });
-      return postRect(postId, t.innerCorner.x - s / 2, -t.innerCorner.y - s / 2, s);
-    })
-    .join('');
-
-  const startPost = planLayout.innerFullPath[0];
-  const endPost = planLayout.innerFullPath[planLayout.innerFullPath.length - 1];
-  const startEndPostsXML = [
-    ['post-start', startPost],
-    ['post-end', endPost],
-  ]
-    // postSolver.js drops the start/end post when a corner post already stands there (a flight starting or
-    // ending with winders) — it is then absent from postStates (built from allPostModels) and not drawn.
-    .filter(([postId]) => Object.keys(postStates).length === 0 || postId in postStates)
-    .map(([postId, p]) => postRect(postId, p.x - config.postSize / 2, -p.y - config.postSize / 2, config.postSize))
-    .join('');
+  // Every post is drawn where its PostModel says it stands (postSolver.js — on the wanga's axis), never from a
+  // position re-derived here. `posts` = allPostModels (removed ones included, drawn as ghosts); `extraPosts` is the
+  // older name for the same list, kept for callers that only pass the balustrade posts.
+  const postsXML = (posts ?? extraPosts).map((p) => postRect(p.postId, p.position.x - p.size / 2, -p.position.y - p.size / 2, p.size)).join('');
 
   // Balustrade (geometry/railingSolver.js): the whole side path thin and dashed, the handrail runs on top of
   // it thick, balusters as dots; where the dashed line has no thick line on top, no handrail follows the path
@@ -366,8 +350,6 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
       .join('');
   })();
 
-  // Balustrade end posts (kind 'railing', postSolver.js/railingSolver.js): same marker, own size and id.
-  const railingPostsXML = extraPosts.map((p) => postRect(p.postId, p.position.x - p.size / 2, -p.position.y - p.size / 2, p.size)).join('');
 
   const footprintX = b.maxX - b.minX;
   const footprintY = b.maxY - b.minY;
@@ -410,8 +392,6 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${walklineXMLStr}
     ${runBoundariesXMLStr}
     ${postsXML}
-    ${startEndPostsXML}
-    ${railingPostsXML}
     ${railingLayerXML}
     ${arrowXML}
     ${widthsXML}

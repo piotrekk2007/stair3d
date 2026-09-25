@@ -1056,12 +1056,41 @@ final with creep (`k_def`, psi2 = 0.3) ≤ L/250. Landings skipped (need own fra
 `EC5-STRUCT-I-04` per tread > 100 %. New config (folder "Kontrola konstrukcji (orientacyjna)", also holds the class):
 `structuralStairUdlKnM2` 1.5, `structuralStairPointKn` 2.0 (UK defaults), `structuralTreadDeflectionRatio` 300,
 `structuralTreadFinalDeflectionRatio` 250. Tab: tread table (1-based numbers, click = select). Default L stair: straight
-57 %, the two middle winders 136/152 % (instantaneous deflection). **Found, not fixed:** a housed wanga occupies [0, t]
-in from its chain but the tread end sits `housingDepthFor(t)` (16) in from the chain — i.e. 24 mm into a 40 mm board,
-deeper than the 16 mm pocket (`applyHousingRecess` treats the chain as the wanga's inner face).
+56 %, the two middle winders 134/150 % (instantaneous deflection), after the housing-bottom fix below (span 836 mm,
+bearing = the 16 mm housing depth).
 
 **PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
 only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
+
+## Geometry fixes: left-turn wangi, housing bottom, posts on the wanga axis, boards end at posts
+
+Four real-project findings, fixed together (tests: `geometry/__tests__/postsAndWangi.test.js`, the housing tests in
+`edgeOverrides.test.js`; every one confirmed to fail without its fix):
+
+- **Left-turn stairs had every wanga extruded OUTWARD** (a gap between treads and boards in 3D). The "into the stair"
+  direction was `rotate90CW(forward)`, right only in the native right-turn frame; a left turn mirrors the whole plan
+  (`mirrorX`). `planLayout.js` now sets `layout.handedness` (+1, or -1 for a mirrored L/U — `layoutHandedness`) and
+  exports THE one helper `inwardNormal(direction, side, handedness)`. `stringerSolver.js` stores it per segment
+  (`StringerSegment.inwardNormal`), `stringerRenderer.js` only reads it; `railingSolver.js`'s lateral offset uses the
+  same handedness (the balustrade was offset outward on a left turn too).
+- **Housed tread end at the housing BOTTOM.** A wanga occupies [0, t] in from its chain line (outer face on the
+  chain); the housing is routed d = `housingDepthFor(t)` into its INNER face, so the tread ends t − d from the chain
+  (24 mm by default). `edgeOverrides.js` `housingRecessMm` returned d (16), i.e. the tread ran 8 mm into solid wood.
+  The "900 mm stair → ~884 mm tread per housed side" statement in the housing-recess section above is superseded:
+  it is now 900 − 2·24 = 852 with both sides housed. `applyHousingRecess` also gained an explicit check that both
+  recesses fit in the edge (the sign-of-area guard missed a first shift that jumps past the other corner, which
+  slides the tread sideways instead of inverting it).
+- **Structural posts stand on the inner wanga's AXIS** (`postSolver.js` `ontoWangaAxis`): start/end newels offset
+  t/2 into the stair, a corner post at the mitre point of the two legs' axes (a flight starting/ending with winders
+  borrows the stair's first/last walking direction). Each structural post carries `anchor` — its inner-line chain
+  point. The plan 2D now draws every post from `allPostModels` (option `posts`) instead of re-deriving positions.
+- **An inner wanga board ends at the face of the post at its end** (start newel, corner post, end newel) — the post is
+  the joint; how the boards are joined to it is a later detail. `stringerSolver.js` `boardEndPosts` attaches
+  `startPost`/`endPost` (`postId`, `centreU`, `faceU`, `sizeMm`, `elevation`) to each inner segment from
+  `buildPostModels` (matched by `anchor`); `stringerConstructionGeometry.js` cuts the span to those faces
+  (`clipCombToSpan` for the cut string's notched top; housings clipped only at a post). The profile editor draws the
+  posts (`stringerProfileView.js` `posts`, `.pe-post`). A removed corner post (or `hasCornerPost` off) = no post there,
+  lap joint as before.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

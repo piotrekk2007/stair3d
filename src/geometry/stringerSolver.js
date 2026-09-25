@@ -17,7 +17,8 @@
 
 import { cumulativeDistances, isCollinear, projectPointOntoLine, pointsEqual } from './pathUtils.js';
 import { COLLINEAR_EPS } from './tolerances.js';
-import { isCornerPostRemoved } from './postSolver.js';
+import { isCornerPostRemoved, buildPostModels } from './postSolver.js';
+import { inwardNormal } from './planLayout.js';
 import { profileParamsFromConfig } from './stringerProfileModel.js';
 import {
   CONSTRUCTION_TYPES,
@@ -153,6 +154,29 @@ function buildBearingsForWalk(walk, runs, treads, sideIdx) {
   return bearingsByRun;
 }
 
+// A board never runs past a structural post (start newel, corner post, end newel): it butts into the post's face,
+// and the post is where the two boards of a turn are joined (the joint itself — tenon, housing — is a later detail).
+// This finds, for one board of the INNER wanga, the post standing at its start / end chain point (postSolver.js
+// `anchor` — the SAME posts that are rendered and priced) and where that post's face lies along the board's own
+// reference line (local u). null when no post stands there (a postless lap joint, a removed post, the outer side).
+const POST_ANCHOR_TOLERANCE_MM = 1;
+function boardEndPosts(segment, posts) {
+  const { start, end, direction } = segment.referenceLine;
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < POST_ANCHOR_TOLERANCE_MM;
+  const centreU = (p) => (p.position.x - start.x) * direction.x + (p.position.y - start.y) * direction.y;
+  const describe = (p, faceSign) => ({
+    postId: p.postId,
+    centreU: centreU(p),
+    faceU: centreU(p) + (faceSign * p.size) / 2,
+    sizeMm: p.size,
+    elevation: { ...p.elevation },
+  });
+  const withAnchor = posts.filter((p) => p.anchor);
+  const atStart = withAnchor.find((p) => near(p.anchor, start));
+  const atEnd = withAnchor.find((p) => near(p.anchor, end));
+  return { startPost: atStart ? describe(atStart, +1) : null, endPost: atEnd ? describe(atEnd, -1) : null };
+}
+
 /**
  * @param {import('./planLayout.js').PlanLayout} planLayout  (already includes any manual
  *   edge overrides — see planLayout.js buildPlanLayout, which applies them before returning)
@@ -171,6 +195,8 @@ export function buildStringerModel(planLayout, config, side) {
   const constructionType = constructionTypeForSide(config, side);
 
   const walks = buildRawWalks(planLayout.treads, chainKey);
+  // Structural posts stand on the inner line only (postSolver.js), so only an inner board can end at one.
+  const posts = side === 'inner' ? buildPostModels(planLayout, config) : [];
 
   const segments = [];
   const segmentJoints = [];
@@ -202,11 +228,15 @@ export function buildStringerModel(planLayout, config, side) {
       const segment = {
         id: `${side}-seg-${segmentCounter++}`,
         referenceLine: { start: run.start, end: run.end, direction, length },
+        // Plan direction the board's thickness goes to from its reference line (into the stair) — decided here,
+        // from the layout's handedness, so the renderer never has to (planLayout.js inwardNormal).
+        inwardNormal: inwardNormal(direction, side, planLayout.handedness ?? 1),
         width: boardDepth,
         thickness: stringerThickness,
         constructionType,
         treadBearings,
       };
+      Object.assign(segment, boardEndPosts(segment, posts));
       assertReferenceLineIsStraight(segment);
       segments.push(segment);
       walkSegmentIds.push(segment.id);
