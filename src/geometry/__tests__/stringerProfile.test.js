@@ -395,7 +395,8 @@ test('override: moving a control point shallower than the minimum is KEPT and re
   const edited = flight({ ...STRAIGHT_CUT, manualStringerProfileOverrides: overrides }).geo.outer[0];
   assert.ok(edited.localDepthMm < 350 - 1);
   const d = edited.diagnostics.find((x) => x.ruleId === 'STRINGER-MIN-DEPTH');
-  assert.ok(d && d.severity === 'ERROR' && d.unit === 'mm');
+  // a hand edit is a design decision: kept and reported as a WARNING, never blocking the takeoff (user decision)
+  assert.ok(d && d.severity === 'WARNING' && d.unit === 'mm');
 });
 
 // Regression: SPLINE's own AUTO minimum-depth safety net (solveContour pushes the WHOLE curve
@@ -419,7 +420,7 @@ test('SPLINE: a manually moved point violating the minimum depth is KEPT and rep
   // The violation is real and reported, not silently pushed back into compliance.
   assert.ok(edited.localDepthMm < 350 - 1, `expected a real violation, got localDepthMm=${edited.localDepthMm}`);
   const d = edited.diagnostics.find((x) => x.ruleId === 'STRINGER-MIN-DEPTH');
-  assert.ok(d && d.severity === 'ERROR');
+  assert.ok(d && d.severity === 'WARNING');
 
   // A point far from the one that was dragged is essentially untouched — proof the fix didn't
   // silently fall back to a global push (which would have moved EVERY point, not just this one).
@@ -780,4 +781,15 @@ test('out-of-date edits: listed once for the wanga, removable with one PRUNE edi
   assert.equal(geo.inner.flatMap((g) => g.diagnostics).filter((d) => d.ruleId === 'STRINGER-OVERRIDE-ORPHANED').length, 1);
   const pruned = anchorEdit(overrides, { type: ANCHOR_EDITS.PRUNE, side: 'inner', ids: ['support:step-999'] });
   assert.equal(sanitizeForAnchors(pruned).inner, undefined, 'nothing left');
+});
+
+test('a hand edit that breaks the minimum depth does not block the takeoff (WARNING, user decision)', async () => {
+  const { buildStaircase } = await import('../buildStaircase.js');
+  const { runTakeoffValidationGate } = await import('../../takeoff/validationGate.js');
+  const overrides = setVertexOverride({}, 'outer', 'lower', anchorIdForTread(6), { dn: -60 });
+  const built = buildStaircase({ ...createDefaultConfig(), ...STRAIGHT_CUT, manualStringerProfileOverrides: overrides });
+  const gate = runTakeoffValidationGate(built);
+  const minDepth = gate.diagnostics.filter((d) => d.ruleId === 'STRINGER-MIN-DEPTH');
+  assert.ok(minDepth.length > 0);
+  assert.ok(minDepth.every((d) => d.severity === 'WARNING'));
 });

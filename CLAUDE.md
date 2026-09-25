@@ -1200,7 +1200,11 @@ covering half of the editor.
   list capped at 110 px), the info strip capped at 22 % of the panel.
 - **Known (unchanged):** the first manual edit switches the side to MANUAL, which keeps every tread knot (no collinear
   simplification) — with SPLINE the whole curve then shifts slightly. The closing knot id `end:top` is shared by every
-  group of a side. A manual edit that breaks the minimum depth stays a STRINGER-MIN-DEPTH ERROR (blocks the takeoff).
+  group of a side.
+- **STRINGER-MIN-DEPTH from a hand edit is a WARNING** (user decision): `minDepthDiagnostic(…, manual)` — a board of a side
+  in MANUAL mode that ends up shallower than the minimum is kept and reported without blocking the takeoff; an AUTO
+  profile meets the minimum by construction, so there it stays an ERROR. A tread that a hand edit leaves OUTSIDE the
+  board (STRINGER-TREAD-SUPPORT) is still an ERROR — the tread has no support there.
 Tests: `geometry/__tests__/stringerProfile.test.js` (post anchors, per-board overrides — the regression confirmed to
 fail on the old code — and PRUNE).
 

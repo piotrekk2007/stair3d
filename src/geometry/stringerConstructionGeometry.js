@@ -446,17 +446,20 @@ function minSectionDiagnostic(segmentId, valueMm, requiredMm) {
   });
 }
 
-function minDepthDiagnostic(segmentId, localDepthMm, requiredMm) {
+// A board edited by hand (the side is in MANUAL mode) that ends up shallower than the minimum depth is the user's
+// deliberate design decision: kept and reported as a WARNING — visible, never blocking the takeoff (user decision). An
+// AUTO profile meets the minimum by construction, so there it stays an ERROR (something is genuinely wrong).
+function minDepthDiagnostic(segmentId, localDepthMm, requiredMm, manual = false) {
   return createDiagnostic({
     ruleId: 'STRINGER-MIN-DEPTH',
-    severity: 'ERROR',
+    severity: manual ? 'WARNING' : 'ERROR',
     elementType: 'stringer',
     elementId: segmentId,
     parameter: 'minimumStringerDepthMm',
     value: Math.round(localDepthMm * 10) / 10,
     expected: `>= ${requiredMm}`,
     unit: 'mm',
-    message: `Wanga (${segmentId}) ma lokalnie mniejszą głębokość (${Math.round(localDepthMm)} mm) niż wymagane minimum ${requiredMm} mm.`,
+    message: `Wanga (${segmentId}) ma lokalnie mniejszą głębokość (${Math.round(localDepthMm)} mm) niż wymagane minimum ${requiredMm} mm${manual ? ' — skutek ręcznej edycji profilu (zachowana, bez blokady kosztorysu)' : ''}.`,
   });
 }
 
@@ -706,7 +709,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // depth reference (see stringerProfileSolver.js measureLocalDepth for why not a sliced one).
     const localDepthMm = measureLocalDepth(lowerGroupSlice, solved.depthReferenceCurve);
     if (params.minimumDepthMm > 0 && localDepthMm < params.minimumDepthMm - DEPTH_TOLERANCE_MM) {
-      diagnostics.push(minDepthDiagnostic(segment.id, localDepthMm, params.minimumDepthMm));
+      diagnostics.push(minDepthDiagnostic(segment.id, localDepthMm, params.minimumDepthMm, groupOverrides !== null));
     }
 
     if (hasSelfIntersection(outerContour)) {
