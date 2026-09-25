@@ -1080,6 +1080,13 @@ corner/end posts skipped (tied into the structure). WARNING `UK-GUID-I-02` (elem
 `postIdAt`), not the spot id; `validator/railingChecks.js` looks posts up by id first. Tab: balustrade table (click on
 a post selects it). Default L with an outer balustrade: the 3.14 m run over-deflects (40 mm).
 
+**Stage A5 (balustrade weight into the wangi) implemented — no baluster strength check (user decision):**
+`stringerCheck.js` now loads every baluster and every balustrade post onto the board it stands on (`boardIndexAt`, by
+plan position; a post whose foot is on the floor loads the floor), the handrail shared among the side's boards by
+length; one baluster's volume = its cut-list item volume / quantity (the takeoff's one volume rule). Checks carry
+`railingDetailKn` {handrail, balusters, posts}; tab column "bal. [kg]". Before, balustrade posts were missing from the
+wanga load and balusters were spread by length. The infill loads (0.5 kN/m², 0.35 kN) stay listed only as UK reference.
+
 **PL-LEGAL-A-01 (Blondel) lowered to WARNING, `blocksGeneration: false`** (user decision 2026-09-25: informational
 only — no takeoff block, no influence on geometry; the regulation itself stays a LEGAL_REQUIREMENT).
 

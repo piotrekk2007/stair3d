@@ -1,7 +1,7 @@
 # Kontrola konstrukcji (orientacyjna) — ciężary, obciążenia, wytrzymałość
 
-Status: **etapy A1–A4 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
-zakładka „Konstrukcja"; stopień jako belka; wanga jako belka pochyła; poręcz i słupki pod obciążeniem poziomym). Etap A5 (tralka) — plan poniżej, jeszcze nie ma kodu.
+Status: **etapy A1–A5 zaimplementowane** (tablica drewna, współczynniki EC5, ciężar własny wszystkich elementów,
+zakładka „Konstrukcja"; stopień jako belka; wanga jako belka pochyła; poręcz i słupki pod obciążeniem poziomym; ciężar balustrady w obciążeniu wang). Nośności tralek celowo nie liczymy (decyzja użytkownika).
 
 > **To jest kontrola orientacyjna. Nie zastępuje projektu konstrukcyjnego ani obliczeń konstruktora.** Program
 > upraszcza schemat statyczny (belki swobodnie podparte, wsporniki), nie liczy połączeń, drgań ani stateczności, a
@@ -123,8 +123,13 @@ Stała ostrzeżenie w zakładce: „obciążenia wg brytyjskiego załącznika kr
      wtedy, gdy stał tam ponownie użyty słup konstrukcyjny — teraz wskazuje słup, który faktycznie tam stoi.
    - **Przykład (domyślne L, balustrada po stronie zewnętrznej, poręcz 70×40, słupek 90):** bieg 2,55 m — 65 %, ugięcie
      17 mm; bieg 3,14 m — zginanie 98 %, ugięcie 40 mm > 25 mm (potrzebny słupek pośredni); słupek łączący 75 %.
-5. **Tralka (A5).** Wspornik od podstawy: obciążenie wypełnienia 0,5 kN/m² × rozstaw × wysokość,
-   `M = w·s·H²/2`.
+5. **Balustrada w obciążeniu wangi (A5, zrobione — decyzja użytkownika: bez nośności tralek).** Ciężar
+   balustrady trafia do kontroli wangi (3) tam, gdzie naprawdę stoi: każda tralka i każdy słupek balustrady — na deskę,
+   na której stoi (`stringerCheck.js` `boardIndexAt`, po położeniu w planie); słupek stojący na podłodze (stopa na
+   wysokości 0) obciąża podłogę, nie wangę; poręcz — rozdzielona na deski tej strony po długości (przenoszą ją tralki
+   i słupki). Ponownie użyte słupy konstrukcyjne stoją na podłodze — nie są liczone do wangi. Kolumna „bal. [kg]" w
+   tabeli wang, rozbicie na poręcz / tralki / słupki w dymku. Bilans (suma na deskach = poręcz + tralki + słupki nie
+   na podłodze) jest testem.
 
 ## Wynik i UI
 

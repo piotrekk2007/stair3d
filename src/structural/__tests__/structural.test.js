@@ -66,7 +66,7 @@ test('the report on a real stair weighs EVERYTHING, balustrade included, and the
   assert.ok(Math.abs(sum - report.selfWeight.totalMassKg) < 1e-9);
   assert.ok(report.selfWeight.totalMassKg > 0);
   assert.equal(report.disclaimer, STRUCTURAL_DISCLAIMER);
-  assert.ok(report.assumptions.some((a) => a.text.includes('(UK)')), 'the UK loads are listed as such');
+  assert.ok(report.assumptions.some((a) => a.status.startsWith('UK')), 'the UK loads are listed as such');
 });
 
 test('a structural finding reaches the validation gate but never as an ERROR', () => {
@@ -270,4 +270,35 @@ test('no balustrade: nothing to check; a larger line load raises the utilisation
   const a = checkRailing(railingBuilt({ stairType: 'straight' })).rails[0];
   const b = checkRailing(railingBuilt({ stairType: 'straight', structuralHandrailLineKnM: 0.74 })).rails[0];
   assert.ok(b.bendingUtil > a.bendingUtil);
+});
+
+// ---- A5: the balustrade's weight loads the wanga board it stands on (no baluster strength check — user decision) ----
+import { boardIndexAt } from '../stringerCheck.js';
+
+test('the whole balustrade weight reaches the wangi: handrail + every baluster + every balustrade post not on the floor', () => {
+  const b = railingBuilt();
+  const items = computeMaterialTakeoff(b, b.fullConfig);
+  const r = checkStringers(b, items);
+  const rho = TIMBER_STRENGTH_CLASSES.D30.rhomean;
+  const kn = (m3) => (m3 * rho * GRAVITY_M_S2) / 1000;
+  const vol = (pred) => items.filter(pred).reduce((s, i) => s + i.netVolume, 0);
+  const section = b.railingModel.sections[0];
+  const onWangaPosts = new Set(section.posts.filter((p) => p.elevation.bottom > 1).map((p) => `post:${p.postId}`));
+  const expected = kn(vol((i) => i.elementType === 'HANDRAIL') + vol((i) => i.elementType === 'BALUSTER') + vol((i) => onWangaPosts.has(i.sourceElementId)));
+  const carried = r.checks.reduce((s, c) => s + c.railingKn, 0);
+  assert.ok(Math.abs(carried - expected) < 1e-9, `carried ${carried} vs ${expected}`);
+  assert.ok(r.checks.some((c) => c.railingDetailKn.posts > 0), 'balustrade posts standing on the wanga load it');
+  assert.ok(section.posts.some((p) => p.elevation.bottom <= 1), 'this stair has a post on the floor, whose weight goes to the floor');
+});
+
+test('a baluster loads the board it stands on (by plan position), not a share of every board', () => {
+  const b = railingBuilt();
+  const segs = b.stringerModels.outer.segments;
+  const geos = b.stringerConstruction.outer;
+  const section = b.railingModel.sections[0];
+  const counts = segs.map(() => 0);
+  for (const bal of section.balusters) counts[boardIndexAt(bal.position, segs, geos)] += 1;
+  assert.ok(counts.every((n) => n > 0), 'balusters stand on both boards of the L');
+  assert.equal(boardIndexAt({ x: 0, y: 100 }, segs, geos), 0, 'a point along flight A is on the first board');
+  assert.equal(boardIndexAt({ x: 2000, y: 2250 }, segs, geos), 1, 'a point along flight B is on the second board');
 });

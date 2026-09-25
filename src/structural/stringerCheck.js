@@ -13,7 +13,9 @@
 //    solved local depth; CUT ("nakładana") — b = t, h = the throat under the notches (minRemainingSectionMm).
 //  * loads, spread uniformly over Lh: self-weight of the board (net volume minus housings), of every tread and riser
 //    it carries — each shared 50/50 between the two wangi, and among this side's boards by seat length — and of the
-//    balustrade standing on this side (handrail + balusters, shared among this side's boards by length); imposed
+//    balustrade on this side: every baluster and every balustrade post on the board it stands on (by plan position;
+//    a post standing on the floor loads the floor, not the wanga), the handrail shared among this side's boards by
+//    length (it is carried down through those balusters and posts); imposed
 //    UDL on the carried tread area (the same half share); OR the whole concentrated load at mid-span (a point load
 //    next to the wanga goes almost entirely into it). Never UDL and point load together.
 //  * ULS as for the treads (bending, shear with k_cr); SLS perpendicular to the board over L. The axial component of
@@ -36,6 +38,33 @@ const KG_PER_MM3 = (rhoKgM3) => rhoKgM3 / M3_TO_MM3;
 const WANGA_SHARE = 0.5; // each tread (and its riser, and its imposed load) is carried half by each wanga
 
 const seatLength = (b) => Math.max(0, b.finalUEnd - b.finalUStart);
+// A balustrade post whose foot is at (or below) this height stands on the floor, not on a wanga.
+const FLOOR_TOLERANCE_MM = 1;
+
+/**
+ * Index of the board (of one side) a plan point stands on: the board whose own span (its end faces, along its
+ * reference line) contains the point's projection, nearest across; if none, the nearest board end. -1 if no board.
+ */
+export function boardIndexAt(point, segments, geos) {
+  let best = -1;
+  let bestScore = Infinity;
+  segments.forEach((seg, i) => {
+    const g = geos[i];
+    if (!g?.ends) return;
+    const { start, direction } = seg.referenceLine;
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    const u = dx * direction.x + dy * direction.y;
+    const across = Math.abs(dx * direction.y - dy * direction.x);
+    const outside = Math.max(0, g.ends.start.u - u, u - g.ends.end.u);
+    const score = outside * 1e6 + across; // inside the span first, then nearest across
+    if (score < bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  });
+  return best;
+}
 const mm1 = (v) => v.toFixed(1).replace('.', ',');
 
 /**
@@ -50,6 +79,7 @@ const mm1 = (v) => v.toFixed(1).replace('.', ',');
  * @property {number} hMm
  * @property {number} permanentKn  total self-weight carried (board, treads, risers, balustrade)
  * @property {number} railingKn    of which the balustrade
+ * @property {{handrail:number, balusters:number, posts:number}} railingDetailKn  the balustrade split by element
  * @property {number} imposedKn    total imposed UDL carried
  * @property {number} bendingUtil
  * @property {number} shearUtil
@@ -98,11 +128,28 @@ export function checkStringers(models, items, options = {}) {
     const seatTotal = new Map();
     for (const seg of model.segments) for (const b of seg.treadBearings) seatTotal.set(b.treadIndex, (seatTotal.get(b.treadIndex) || 0) + seatLength(b));
 
-    // The balustrade on this side, shared among this side's boards by horizontal length.
-    const railingN = items
-      .filter((i) => (i.elementType === ELEMENT_TYPES.HANDRAIL || i.elementType === ELEMENT_TYPES.BALUSTER) && railingSides.get(String(i.sourceElementId).split(':')[1]) === side)
-      .reduce((sum, i) => sum + weightN((i.netVolume || 0) * M3_TO_MM3, i.elementType === ELEMENT_TYPES.HANDRAIL ? 'handrail' : 'balusters'), 0);
+    // The balustrade on this side (see the header): per board, split into handrail / balusters / posts.
+    const railingByBoard = model.segments.map(() => ({ handrail: 0, balusters: 0, posts: 0 }));
+    const boardAt = (point) => boardIndexAt(point, model.segments, geos);
+    const handrailN = items
+      .filter((i) => i.elementType === ELEMENT_TYPES.HANDRAIL && railingSides.get(String(i.sourceElementId).split(':')[1]) === side)
+      .reduce((sum, i) => sum + weightN((i.netVolume || 0) * M3_TO_MM3, 'handrail'), 0);
     const sideLengthH = geos.reduce((sum, g) => sum + (g?.ends ? Math.max(0, g.ends.end.u - g.ends.start.u) : 0), 0);
+    geos.forEach((g, k) => {
+      if (sideLengthH > 0 && g?.ends) railingByBoard[k].handrail = (handrailN * Math.max(0, g.ends.end.u - g.ends.start.u)) / sideLengthH;
+    });
+    for (const section of (models.railingModel?.sections || []).filter((sec) => sec.valid && sec.side === side)) {
+      for (const baluster of section.balusters) {
+        // one baluster's volume = its cut-list item's volume / quantity (takeoff/railingItems.js — one volume rule)
+        const item = items.find((it) => it.sourceElementId === `railing:${section.id}:baluster:${Math.round(baluster.heightMm)}`);
+        const k = boardAt(baluster.position);
+        if (item && k >= 0) railingByBoard[k].balusters += weightN(((item.netVolume || 0) * M3_TO_MM3) / (item.quantity || 1), 'balusters');
+      }
+      for (const post of section.posts.filter((p) => !p.removed && p.elevation.bottom > FLOOR_TOLERANCE_MM)) {
+        const k = boardAt(post.position);
+        if (k >= 0) railingByBoard[k].posts += weightN(volumeOf.get(`post:${post.postId}`), 'railingPosts');
+      }
+    }
 
     model.segments.forEach((seg, i) => {
       const g = geos[i];
@@ -141,7 +188,8 @@ export function checkStringers(models, items, options = {}) {
         G += share * weightN(volumeOf.get(`riser:${tread.stepId}`), 'risers');
         Q += share * udl * Math.abs(signedPolygonArea(tread.outline));
       }
-      const railingHere = sideLengthH > 0 ? (railingN * Lh) / sideLengthH : 0;
+      const rail = railingByBoard[i];
+      const railingHere = rail.handrail + rail.balusters + rail.posts;
       G += railingHere;
       const gh = G / Lh; // N/mm per horizontal mm
       const qh = Q / Lh;
@@ -180,6 +228,7 @@ export function checkStringers(models, items, options = {}) {
         hMm: h,
         permanentKn: G / KN_TO_N,
         railingKn: railingHere / KN_TO_N,
+        railingDetailKn: { handrail: rail.handrail / KN_TO_N, balusters: rail.balusters / KN_TO_N, posts: rail.posts / KN_TO_N },
         imposedKn: Q / KN_TO_N,
         bendingUtil,
         shearUtil,

@@ -1,6 +1,8 @@
 // "Konstrukcja" tab (right sidebar): renders the result of structural/index.js buildStructuralReport() — nothing is
 // computed here beyond formatting. The disclaimer and the UK-load warning are always shown.
 
+import { GRAVITY_M_S2 as GRAVITY } from '../structural/timberClasses.js';
+
 function esc(text) {
   return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
@@ -63,11 +65,12 @@ function stringerTableHTML(stringers) {
   const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
   const rows = stringers.checks
     .map(
-      (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
+      (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN: poręcz ${num(c.railingDetailKn.handrail, 2)}, tralki ${num(c.railingDetailKn.balusters, 2)}, słupki ${num(c.railingDetailKn.posts, 2)}), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
         <td>${sideLabel(c.side)} <span class="st-muted">${esc(c.segmentId.replace(/^(outer|inner)-seg-/, 'deska '))}</span></td>
         <td class="num">${Math.round(c.spanMm)}</td>
         <td class="num">${Math.round(c.angleDeg)}°</td>
         <td class="num">${Math.round(c.bMm)}×${Math.round(c.hMm)}</td>
+        <td class="num">${c.railingKn > 0 ? num((c.railingKn * 1000) / GRAVITY, 1) : '—'}</td>
         ${utilCell(c.bendingUtil)}
         ${utilCell(c.shearUtil)}
         <td class="num${c.deflectionInstMm > c.deflectionInstLimitMm ? ' st-over' : ''}" title="limit ${num(c.deflectionInstLimitMm, 1)} mm">${num(c.deflectionInstMm, 1)}</td>
@@ -82,10 +85,10 @@ function stringerTableHTML(stringers) {
   return `
     <div class="st-note ${worst > 1 ? 'warn' : ''}">Najbardziej wytężona deska wangi: ${pct(worst)}${worst > 1 ? ' — przekroczenie (ostrzeżenie w Walidacji)' : ''}.</div>
     <table class="st-table">
-      <thead><tr><th>Wanga</th><th>L [mm]</th><th>kąt</th><th>b×h</th><th>M</th><th>V</th><th>w_inst</th><th>w_fin</th><th>max</th></tr></thead>
+      <thead><tr><th>Wanga</th><th>L [mm]</th><th>kąt</th><th>b×h</th><th title="ciężar balustrady na tej desce">bal. [kg]</th><th>M</th><th>V</th><th>w_inst</th><th>w_fin</th><th>max</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="st-note">L — długość pochyła między końcami deski; b×h — przekrój obliczeniowy (wpuszczana: grubość − wpust; nakładana: gardziel pod wcięciem). Najedź na wiersz, by zobaczyć obciążenia (z balustradą).</div>
+    <div class="st-note">L — długość pochyła między końcami deski; b×h — przekrój obliczeniowy (wpuszczana: grubość − wpust; nakładana: gardziel pod wcięciem). bal. — ciężar balustrady na tej desce (tralki i słupki tam, gdzie stoją; poręcz po długości); najedź na wiersz, by zobaczyć obciążenia.</div>
     ${skipped}`;
 }
 
@@ -169,7 +172,7 @@ export function updateStructuralPanel(panel, report) {
     ${stringerTableHTML(report.stringers)}
     <h4>Balustrada — poręcz i słupki (obciążenie poziome)</h4>
     ${railingTableHTML(report.railing)}
-    <div class="st-note">Jeszcze nie liczone: tralka (etap A5, docs/architecture/STRUCTURAL_CHECKS.md).</div>
+    <div class="st-note">Nośność tralek nie jest liczona — ich ciężar (z poręczą i słupkami) obciąża wangę, na której stoją (kolumna „bal." w tabeli wang).</div>
     <h4>Założenia i źródła</h4>
     <ul class="st-assumptions">${assumptions}</ul>`;
 }
