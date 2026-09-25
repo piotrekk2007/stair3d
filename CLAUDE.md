@@ -285,7 +285,7 @@ RULES #5 — and is never touched by any profile parameter or override).
   maxExtensionSlope)`). Before, an exactly vertical first edge left the lower contour detached from its start
   face (no risers) and a near-vertical one was extrapolated to v = -1630 mm (with risers). Reproduced with the
   user's own project file; regression tests in `stringerProfile.test.js`.
-  **Blend to the previous board:** a flat cap is not what a real board looks like at a post either, so for a
+  **(Superseded — removed, see "At a post each board is independent" below.)** **Blend to the previous board:** a flat cap is not what a real board looks like at a post either, so for a
   capped start after a corner post `blendCappedStartsToPreviousEnd()` replaces the cap: the steep edge is continued
   down to the height of the PREVIOUS board's lower end (never lower — they meet at the post), then a tangent arc turns
   into a horizontal run to the vertical start face (`ends.start.blendedToPreviousEnd`). Nothing changes when the
@@ -904,7 +904,7 @@ uwagi walidacji" line plus one "BLAD/OSTRZEZENIE <ruleId> (xN)" line per rule. I
 is hidden or waived (waivers live in the takeoff gate, not here). A clean board is unchanged. Test:
 `export/__tests__/dxfExport.test.js`.
 
-## Winder "local widening": already done by the start blend — the depth finding was measuring the wrong curve
+## Winder "local widening": already done by the start blend — the depth finding was measuring the wrong curve (SUPERSEDED: the blend and `refreshDepthAfterBlend` were removed — see "At a post each board is independent")
 
 The open "local enlargement at a winder" item (STRINGER_CONSTRUCTION_SPEC.md, BWF-GUID-F-03) turned out
 to be mostly a measurement bug, found by probing 192 winder configs (L/U, cut/closed, 3-8 winders,
@@ -1148,6 +1148,23 @@ Reported with screenshots (a wavy stair edge at the winders and a gap in the pla
 - **Plan 2D draws each wanga board as its real footprint** (`stringerModel.js` `boardPlanFootprint`: thickness into
   the stair, between its own end faces — stopping at a post), options `stringerModels`/`stringerConstruction`; the
   chain polyline stays only as the hit area. The old centred stroke made the recessed treads look detached.
+
+## At a post each board is independent (user decision)
+
+With a structural post the wanga boards need no common course: each board butts into the post's face with its own
+profile, and the post is the support and the joint. Continuity is only solved where boards meet WITHOUT a post (a lap
+joint — one profile over the group, `groupSegmentsByLapJoint`). In `stringerConstructionGeometry.js`:
+- **removed** `clampCrossSegmentOvershoot` (clamped the next board's top to the previous board's top end),
+  `blendCappedStartsToPreviousEnd` (dragged a steep start down to the previous board's lower end with a horizontal run)
+  and `refreshDepthAfterBlend` (+ its `depthContexts`). A too-steep start at a post keeps the plain flat cap.
+- **`bearingsOnThisBoard`**: a tread whose whole seat lies behind the face of the post the board butts into (the narrow
+  dusza treads of a winder around a corner post) is carried by the post — it neither shapes the board's profile nor
+  gets a housing / support check in it.
+Effect: the board after a corner post is its own straight board from the post face (3 winders per turn: no stretched
+tail); the 3-winder cases that used to get STRINGER-TREAD-SUPPORT / -CONTOUR-SELF-INTERSECTION / -MIN-DEPTH ERRORs
+(blocking the takeoff) are clean. Tests: `stringerProfile.test.js` ("at a corner post … independent" — the board solved
+alone equals the one in the run), `stringerConstructionGeometry.test.js` ("tight winder: treads standing wholly on the
+corner post …"); both confirmed to fail on the old code.
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

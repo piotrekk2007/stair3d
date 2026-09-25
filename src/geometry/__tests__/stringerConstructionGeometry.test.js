@@ -730,29 +730,27 @@ test('cut wanga: riserRecess equals riserBoardThickness, independent of nosing',
   for (const b of modelOff.segments[0].treadBearings) assert.equal(b.riserRecess, 0);
 });
 
-// Regression: a tight winder (3 winders per turn — the dusza treads are ~13 mm wide, the board's
-// reference climbs almost vertically) got a STRINGER-MIN-DEPTH ERROR (21 mm) on a board whose FINAL
-// lower edge is 350 mm deep: the finding was measured on the flat-capped slice BEFORE
-// blendCappedStartsToPreviousEnd() deepened the board start down to the neighbour's end (the local
-// widening a winder needs). The depth is now re-measured on the final edge.
-test('tight winder (cut): the start blend\'s deepening is reflected in localDepthMm and no false MIN-DEPTH/MIN-SECTION is reported', () => {
+// A tread whose whole seat lies on the corner post (the narrow dusza treads of a tight winder) is carried by the POST:
+// it neither shapes the board after the post nor gets a housing in it — the board is not stretched toward it.
+test('tight winder: treads standing wholly on the corner post do not shape the next board and get no housing in it', () => {
   const { config, planLayout } = build({
     stairType: 'L',
     turn1Type: 'winder',
-    treadsLegA: 4,
-    treadsLegB: 4,
+    treadsLegA: 5,
+    treadsLegB: 5,
     windersPerTurn: 3,
-    totalRise: 2600,
-    treadGoing: 280,
-    stringerConstructionTypeOuter: 'cut',
-    stringerConstructionTypeInner: 'cut',
+    stringerConstructionTypeOuter: 'closed',
+    stringerConstructionTypeInner: 'closed',
   });
   const model = buildStringerModelsForFlight(planLayout, config).inner;
   const geos = buildStringerConstructionGeometry(model, config);
-  const blended = geos.filter((g) => g.ends.start.blendedToPreviousEnd);
-  assert.ok(blended.length > 0, 'this scenario must actually exercise the start blend');
-  for (const g of blended) {
-    assert.ok(g.localDepthMm >= config.minimumStringerDepthMm - 1, `${g.segmentId}: depth ${g.localDepthMm}`);
-    assert.ok(!g.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-DEPTH' || d.ruleId === 'STRINGER-MIN-SECTION'), `${g.segmentId}: ${g.diagnostics.map((d) => d.ruleId)}`);
-  }
+  const seg = model.segments[1];
+  const onPost = seg.treadBearings.filter((b) => b.finalUEnd <= seg.startPost.faceU);
+  assert.ok(onPost.length > 0, 'this scenario must have treads standing on the post');
+  const housed = new Set(geos[1].housings.map((h) => h.treadIndex));
+  for (const b of onPost) assert.ok(!housed.has(b.treadIndex), `tread ${b.treadIndex} is on the post, not in the board`);
+  // the board's lower edge is one straight line from the post face (no stretched run toward the previous board)
+  const bottom = geos[1].bottomProfile;
+  const slope = (a, c) => (c.v - a.v) / (c.u - a.u);
+  for (let i = 1; i < bottom.length - 1; i++) assert.ok(Math.abs(slope(bottom[i - 1], bottom[i]) - slope(bottom[i], bottom[i + 1])) < 1e-6);
 });

@@ -117,8 +117,18 @@ function computeOpenCornerExtensions(model, hasCornerPost) {
 // Applies riser-recess (owns-start only) and corner-extension (first/last bearing only) to get
 // each bearing's EFFECTIVE [uStart, uEnd] — the exact same adjustments the old per-bearing
 // renderer applied, now producing inputs to one continuous contour instead of N rectangles.
+// A tread whose whole seat lies on a structural post (behind the face the board butts into — e.g. the narrow dusza
+// treads of a winder around a corner post) is carried by the POST, not by this board: it does not shape the board's
+// profile, and the board gets no housing / support check for it. (If nothing would be left, nothing is dropped.)
+function bearingsOnThisBoard(segment) {
+  const startFace = segment.startPost ? segment.startPost.faceU : -Infinity;
+  const endFace = segment.endPost ? segment.endPost.faceU : Infinity;
+  const onBoard = segment.treadBearings.filter((b) => b.finalUEnd > startFace + GEOMETRY_EPS && b.finalUStart < endFace - GEOMETRY_EPS);
+  return onBoard.length > 0 ? onBoard : segment.treadBearings;
+}
+
 function effectiveBearings(segment, extendStart, extendEnd) {
-  const bearings = segment.treadBearings;
+  const bearings = bearingsOnThisBoard(segment);
   return bearings.map((b, i) => {
     let uStart = b.finalUStart;
     let uEnd = b.finalUEnd;
@@ -450,9 +460,6 @@ function minDepthDiagnostic(segmentId, localDepthMm, requiredMm) {
   });
 }
 
-// What a board needs to re-measure its depth AFTER the post-passes below reshaped its lower edge
-// (a group-frame reference curve and this board's offset in it). Kept off the result object.
-const depthContexts = new WeakMap();
 
 // PERPENDICULAR distance (not a raw vertical Z gap — see file header) from every bearing
 // corner to the solved bottom contour — the true remaining material thickness at that point.
@@ -755,7 +762,6 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       minRemainingSectionMm,
       diagnostics,
     };
-    depthContexts.set(result, { referenceCurve: solved.depthReferenceCurve, segStart, effective, minDepthMm: params.minimumDepthMm, minSectionRequired: minRequired });
     bySegmentId.set(segment.id, result);
   });
 
@@ -769,25 +775,6 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
  *   stringerTopMarginMm/stringerMinRemainingSectionMm/treadThickness/hasCornerPost; never mutated.
  * @returns {import('./stringerModel.js').StringerSegmentConstructionGeometry[]}
  */
-// At a CORNER_POST joint (see groupSegmentsByLapJoint's header — a real post genuinely
-// interrupts the run, so the two sides are deliberately solved independently, never forced
-// into one continuous profile) each side's own boundary knot, right next to the post, is
-// reached by extrapolating that side's OWN local slope backward/forward past its own real
-// bearing data. For a segment whose first few treads are much NARROWER than the rest (the
-// classic case: treads right next to the inner "dusza" on a winder are far narrower than
-// straight-flight treads), that local slope is far steeper than the segment's overall pitch —
-// and extrapolating a steep line, THEN extrapolating its own perpendicular OFFSET again
-// (offsetting shifts a steep segment's own u-domain further, requiring an even larger backward
-// extrapolation to reach u=0) compounds into a boundary point far below/above where it
-// physically belongs — a real, reported symptom: one board's end visibly overshooting past
-// where the post-jointed neighbour's own end already sits.
-//
-// A post can absorb SOME difference between the two sides (that is the whole reason
-// CORNER_POST joints don't require exact continuity — see groupSegmentsByLapJoint) but not an
-// unbounded one. This clamps each segment's own boundary elevation so it never overshoots PAST
-// the immediately preceding segment's own corresponding boundary — a sanity bound, not a
-// continuity requirement: the two sides may still legitimately differ (the post covers that),
-// they just may not cross past each other.
 // Re-checks the self-intersection diagnostic on `geo` after a post-hoc boundary clamp changed
 // its outerContour — shared by every clamp below, since moving a boundary point can (rarely)
 // fix or introduce a self-intersection. The min-section/support-containment numbers describe
@@ -809,37 +796,6 @@ function recheckSelfIntersection(geo) {
         message: `Kontur wangi (${geo.segmentId}) jest samoprzecinający się — geometria nieprawidłowa.`,
       })
     );
-  }
-}
-
-function clampCrossSegmentOvershoot(orderedGeometries) {
-  for (let i = 1; i < orderedGeometries.length; i++) {
-    const prev = orderedGeometries[i - 1];
-    const curr = orderedGeometries[i];
-    if (!prev.bottomProfile || !curr.bottomProfile) continue;
-    let changed = false;
-
-    // The LOWER contour is deliberately NOT clamped to the neighbour's end. It used to be raised to
-    // the previous board's bottom end, which turned the start of a steep board (the narrow "dusza"
-    // treads after a winder post) into a beak: the first edge no longer followed the board's own
-    // straight line, and the local depth there fell BELOW the minimum. The lower edge now runs
-    // straight to the start face, lower than the neighbour's end if it must — the post covers the
-    // difference. (Reported with a screenshot of inner-seg-1; see the regression test.)
-
-    if (prev.topProfile && curr.topProfile) {
-      const prevTopEnd = prev.topProfile[prev.topProfile.length - 1];
-      const currTopStart = curr.topProfile[0];
-      if (currTopStart.v > prevTopEnd.v) {
-        currTopStart.v = prevTopEnd.v;
-        changed = true;
-      }
-    }
-
-    // outerContour's bottom (and, for closed, top) points are the SAME object references as
-    // bottomProfile/topProfile (see buildGroupConstructionGeometry: `bottomPolyline.slice().
-    // reverse()` copies the ARRAY, not the points) — mutating the point above already updated
-    // outerContour too.
-    if (changed) recheckSelfIntersection(curr);
   }
 }
 
@@ -932,66 +888,11 @@ function syncCurveStartsToPolylines(geo) {
   if (geo.constructionType === CONSTRUCTION_TYPES.CLOSED) sync(geo.upperCurve, geo.topProfile);
 }
 
-// At the start of a board that follows a corner post, a steep first edge cannot simply be continued to the
-// start face (it would run metres below the floor), so it ends in a flat cap (see sliceCurveByU). A flat cap is
-// not what a real board looks like there either: the lower edge should come down to the post SLANTED and
-// SMOOTH, but never lower than the previous board's own lower end (they meet at the post). So the cap is
-// replaced by: the steep edge continued down to the neighbour's end height, then a tangent arc turning
-// into a horizontal run to the start face. Nothing changes when the neighbour's end is not lower than the cap.
-const START_BLEND_MIN_DROP_MM = 1;
-// Share of the shorter of the two legs the arc's tangent length may use (leaves a straight piece on each leg).
-const START_BLEND_LEG_SHARE = 0.9;
-
-function blendCappedStartsToPreviousEnd(ordered) {
-  for (let i = 1; i < ordered.length; i++) {
-    const curr = ordered[i];
-    const prev = ordered[i - 1];
-    if (!curr.ends.start.capped || !prev.bottomProfile || prev.bottomProfile.length === 0 || curr.lowerCurve.length < 2) continue;
-    const cap = curr.lowerCurve[0];
-    const steep = curr.lowerCurve[1];
-    if (cap.type !== 'line' || steep.type !== 'line') continue;
-    const p1 = cap.b;
-    const previousEndV = prev.bottomProfile[prev.bottomProfile.length - 1].v;
-    if (p1.v - previousEndV < START_BLEND_MIN_DROP_MM) continue;
-    const len = Math.hypot(steep.b.u - steep.a.u, steep.b.v - steep.a.v);
-    const d = { u: (steep.b.u - steep.a.u) / len, v: (steep.b.v - steep.a.v) / len };
-    if (d.v <= GEOMETRY_EPS) continue;
-    // where the steep edge's own line, continued downward, reaches the neighbour's end height
-    const legAlongSteep = (p1.v - previousEndV) / d.v;
-    const corner = { u: p1.u - d.u * legAlongSteep, v: previousEndV };
-    const start = { u: cap.a.u, v: previousEndV };
-    const legFlat = corner.u - start.u;
-    if (legFlat <= GEOMETRY_EPS) continue; // the steep line already reaches the start face at that height
-    const turn = Math.atan2(d.v, d.u); // turn from the horizontal run into the steep edge
-    const tangent = START_BLEND_LEG_SHARE * Math.min(legFlat, legAlongSteep);
-    const { curve } = filletPolyline([start, corner, p1], [0, tangent / Math.tan(turn / 2), 0]);
-
-    const oldBottomLength = curr.bottomProfile.length;
-    curr.lowerCurve = [...curve, ...curr.lowerCurve.slice(1)];
-    curr.bottomProfile = curveToPolyline(curr.lowerCurve);
-    // outerContour ends with the bottom edge, reversed (see buildGroupConstructionGeometry)
-    curr.outerContour.splice(curr.outerContour.length - oldBottomLength, oldBottomLength, ...curr.bottomProfile.slice().reverse());
-    curr.ends.start = { u: start.u, cut: 'VERTICAL', capped: false, blendedToPreviousEnd: true };
-    recheckSelfIntersection(curr);
-  }
-}
-
-// The start-of-board blend (above) deepens a capped board start down to the neighbouring board's
-// end — that IS the local widening a tight winder's dusza needs. The depth findings were measured on
-// the un-blended (flat-capped) slice, so a board the blend already made deep enough was still reported
-// as too shallow. Re-measure the FINAL lower edge for exactly those boards and replace the two
-// depth findings; nothing else is touched.
-function refreshDepthAfterBlend(ordered) {
-  for (const geo of ordered) {
-    const ctx = depthContexts.get(geo);
-    if (!ctx || !geo.ends.start.blendedToPreviousEnd) continue;
-    geo.localDepthMm = measureLocalDepth(translateCurveU(geo.lowerCurve, ctx.segStart), ctx.referenceCurve);
-    geo.diagnostics = geo.diagnostics.filter((d) => d.ruleId !== 'STRINGER-MIN-DEPTH' && d.ruleId !== 'STRINGER-MIN-SECTION');
-    if (ctx.minDepthMm > 0 && geo.localDepthMm < ctx.minDepthMm - DEPTH_TOLERANCE_MM) geo.diagnostics.push(minDepthDiagnostic(geo.segmentId, geo.localDepthMm, ctx.minDepthMm));
-    if (geo.constructionType === CONSTRUCTION_TYPES.CUT) geo.minRemainingSectionMm = computeMinRemainingSectionCut(ctx.effective, geo.bottomProfile);
-    if (geo.minRemainingSectionMm < ctx.minSectionRequired) geo.diagnostics.push(minSectionDiagnostic(geo.segmentId, geo.minRemainingSectionMm, ctx.minSectionRequired));
-  }
-}
+// At a structural post the boards do NOT have to meet (user decision): each board butts into the post's face with its
+// own profile, and the post is the support and the joint. Earlier stages forced continuity there — the next board's
+// top clamped to the previous board's top end, and a steep start "blended" down to the previous board's lower end with
+// a long horizontal run — which stretched the board. Both are gone; continuity is only solved where boards meet
+// WITHOUT a post (a lap joint — one profile over the whole group, groupSegmentsByLapJoint).
 
 export function buildStringerConstructionGeometry(model, config) {
   const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model, config.hasCornerPost);
@@ -1004,9 +905,6 @@ export function buildStringerConstructionGeometry(model, config) {
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
-  clampCrossSegmentOvershoot(ordered);
-  blendCappedStartsToPreviousEnd(ordered);
-  refreshDepthAfterBlend(ordered);
   clampFirstSegmentToFloor(ordered);
   ordered.forEach(syncCurveStartsToPolylines);
   return ordered;
