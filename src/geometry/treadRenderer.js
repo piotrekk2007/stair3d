@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { buildPrism, planToWorld } from './geometryUtils.js';
 import { traceability } from '../scene/traceability.js';
 
-// No true CSG (see stringerRenderer.js's housing-indicator comment for the same rule-11
+// No true CSG (stringerRenderer.js builds a housed board's pockets the same way — layered extrusions, rule-11
 // rationale — this project adds no boolean-geometry dependency without a concrete need): a
 // tread with a notch (TreadModel.notch, treadSolver.js buildNotch) is instead built as TWO plain
 // prisms glued together — a full-footprint slab ABOVE the notch's own height, and a

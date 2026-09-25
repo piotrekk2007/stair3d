@@ -23,7 +23,7 @@ import { profileParamsFromConfig } from './stringerProfileModel.js';
 import {
   CONSTRUCTION_TYPES,
   CONNECTION_TYPES,
-  housingDepthFor,
+  housingDepthMm,
   constructionTypeForSide,
   MIN_NEWEL_TENON_THICKNESS_MM,
   MIN_NEWEL_TENON_LENGTH_MM,
@@ -281,7 +281,7 @@ export function buildStringerModel(planLayout, config, side) {
     serviceClass: 'SC1', // heated interior — see EC5-STRUCT-I-03 in docs/rules/TECHNICAL_RULES_CATALOGUE.md
   };
   const manufacturing = {
-    housingDepth: constructionType === CONSTRUCTION_TYPES.CLOSED ? housingDepthFor(stringerThickness) : null,
+    housingDepth: constructionType === CONSTRUCTION_TYPES.CLOSED ? housingDepthMm(config) : null,
     tenonThickness: MIN_NEWEL_TENON_THICKNESS_MM,
     tenonLength: MIN_NEWEL_TENON_LENGTH_MM,
   };

@@ -1124,6 +1124,31 @@ Four real-project findings, fixed together (tests: `geometry/__tests__/postsAndW
   posts (`stringerProfileView.js` `posts`, `.pe-post`). A removed corner post (or `hasCornerPost` off) = no post there,
   lap joint as before.
 
+## Housed wanga: straight tread ends, housing-depth parameter, real pockets in 3D, boards in the plan
+
+Reported with screenshots (a wavy stair edge at the winders and a gap in the plan; boxes sticking OUT of the wanga in
+3D instead of recesses). Tests: `geometry/__tests__/housingPockets.test.js` (each confirmed to fail without its fix).
+
+- **`config.stringerHousingDepthMm`** (default **20** — user decision; UI "Wpust stopnia w wangę (wpuszczana)"):
+  how far a tread enters a housed wanga. `stringerModel.js` `housingDepthMm(config)` is THE value every consumer
+  reads (recess, housings, min section, manufacturing, structural check); an older project without the field falls
+  back to the BWF formula `housingDepthFor(t)`; never through the board (`MIN_HOUSING_BACK_MM`).
+- **Tread ends lie on a line PARALLEL to the wanga**, t − d from its chain line (`edgeOverrides.js`
+  `recessTreadToWangi`): each corner moves along its own edge to that offset line; a chain vertex inside the tread
+  (the outer corner of an L) moves to the mitre of both offset lines. Before, corners moved `depth` along the edge —
+  on diagonal winder edges that gave a different perpendicular recess per tread (wavy edge) and the corner vertex did
+  not move. Computed from the ORIGINAL points (order-independent); the same function gives treadSolver.js's nominal
+  edges (`recessedEdges`), so an unedited tread is never flagged as manually edited.
+- **Real pockets in 3D**: `stringerConstructionGeometry.js` exposes `housingPockets` (every housing cut back to the
+  board — span, lower/upper edge — then united with `rectUnion.js` `unionRectangles`; with risers a tread's and a
+  riser's housings join into one stepped pocket) and `pocketDepthMm`. `stringerRenderer.js` builds a housed board as
+  two plain extrusions merged: the solid outer layer (t − d) and the inner layer (d) with the pockets as holes
+  (`geometryUtils.js` `buildPrismWithHoles`) — no CSG. The old housing "indicator" boxes (extruded OUT of the inner
+  face) are gone; nothing of a wanga reaches past its thickness.
+- **Plan 2D draws each wanga board as its real footprint** (`stringerModel.js` `boardPlanFootprint`: thickness into
+  the stair, between its own end faces — stopping at a post), options `stringerModels`/`stringerConstruction`; the
+  chain polyline stays only as the hit area. The old centred stroke made the recessed treads look detached.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

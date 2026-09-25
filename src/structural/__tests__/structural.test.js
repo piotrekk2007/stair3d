@@ -155,7 +155,7 @@ test('the report carries the tread checks and their findings', () => {
 // ---- A3: wangi as inclined beams ----
 import { checkStringers, STEEP_BOARD_MAX_DEG } from '../stringerCheck.js';
 import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
-import { housingDepthFor } from '../../geometry/stringerModel.js';
+import { housingDepthMm } from '../../geometry/stringerModel.js';
 
 const stringerChecksOf = (patch = {}) => {
   const b = builtWith(patch);
@@ -166,7 +166,7 @@ test('wanga section: housed = (t − housing depth) × local depth; overlay = t 
   const housed = stringerChecksOf({ stairType: 'straight', treadsLegA: 14 });
   const t = housed.built.fullConfig.stringerThickness;
   const c = housed.result.checks[0];
-  assert.equal(c.bMm, t - housingDepthFor(t));
+  assert.equal(c.bMm, t - housingDepthMm(housed.built.fullConfig));
   assert.equal(c.hMm, housed.built.stringerConstruction[c.side][0].localDepthMm);
   const cut = stringerChecksOf({ stairType: 'straight', treadsLegA: 14, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
   const k = cut.result.checks[0];

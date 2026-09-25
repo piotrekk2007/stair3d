@@ -544,6 +544,8 @@ function regeneratePlan2D() {
     layers: viewState.plan2dLayers,
     postStates: Object.fromEntries((lastModels?.allPostModels || []).map((p) => [p.postId, { removed: p.removed, overridden: p.overridden }])),
     posts: lastModels?.allPostModels || [],
+    stringerModels: lastModels?.stringerModels || null,
+    stringerConstruction: lastModels?.stringerConstruction || null,
     railingModel: lastModels?.railingModel ?? null,
   });
   if (plan2dPanel.classList.contains('visible')) {

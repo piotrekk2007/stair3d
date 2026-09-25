@@ -133,7 +133,7 @@ test('a genuinely broken shared boundary (no overhang involved) is still reporte
 // independently (each wanga has its own construction type — see stringerModel.js
 // constructionTypeForSide).
 
-import { housingDepthFor } from '../stringerModel.js';
+import { housingDepthMm } from '../stringerModel.js';
 
 test('both wangi housed: every tread ends at the housing bottom (t − d from the chain) on BOTH sides, front and back', () => {
   const cut = build({ stairType: 'straight', treadsLegA: 6, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' });
@@ -141,7 +141,7 @@ test('both wangi housed: every tread ends at the housing bottom (t − d from th
   // The tread ends at the BOTTOM of the housing: the wanga occupies [0, t] in from its chain line and the housing is
   // routed d into its inner face, so the tread end sits t − d from the chain (regression: it used to be d, i.e. 8 mm
   // into solid wood at t = 40, d = 16).
-  const depth = createDefaultConfig().stringerThickness - housingDepthFor(createDefaultConfig().stringerThickness);
+  const depth = createDefaultConfig().stringerThickness - housingDepthMm(createDefaultConfig());
   assert.ok(depth > 0);
 
   for (const i of [0, 2, 5]) {
@@ -163,7 +163,7 @@ test('mixed construction: only the HOUSED side recesses, the OVERLAY side stays 
   // The tread ends at the BOTTOM of the housing: the wanga occupies [0, t] in from its chain line and the housing is
   // routed d into its inner face, so the tread end sits t − d from the chain (regression: it used to be d, i.e. 8 mm
   // into solid wood at t = 40, d = 16).
-  const depth = createDefaultConfig().stringerThickness - housingDepthFor(createDefaultConfig().stringerThickness);
+  const depth = createDefaultConfig().stringerThickness - housingDepthMm(createDefaultConfig());
 
   const [cutInner, cutOuter] = cut.treads[2].frontEdge;
   const [mixedInner, mixedOuter] = mixed.treads[2].frontEdge;

@@ -153,10 +153,11 @@ test('bearing elevation derives from riser height / tread thickness, unaffected 
   });
 });
 
-test('manufacturing constraints: housing depth follows max(12mm, 0.4*thickness) for a closed string', () => {
+test('manufacturing constraints: housing depth is the stringerHousingDepthMm parameter (default 20), the BWF formula only for an older project without it', () => {
   const { model } = buildModel({ stairType: 'straight', treadsLegA: 4, stringerThickness: 40, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }, 'outer');
-  assert.equal(model.manufacturing.housingDepth, housingDepthFor(40));
-  assert.equal(model.manufacturing.housingDepth, 16); // max(12, 0.4*40) = 16
+  assert.equal(model.manufacturing.housingDepth, 20);
+  const legacy = buildModel({ stairType: 'straight', treadsLegA: 4, stringerThickness: 40, stringerHousingDepthMm: undefined, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' }, 'outer');
+  assert.equal(legacy.model.manufacturing.housingDepth, housingDepthFor(40)); // max(12, 0.4*40) = 16
 });
 
 test('manufacturing constraints: a cut string has no housing depth', () => {

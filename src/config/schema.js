@@ -105,6 +105,9 @@ export function createDefaultConfig() {
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
     // wartości domyślne to jawnie oznaczone założenia produkcyjne (MANUFACTURING_ASSUMPTION),
     // NIE liczby z normy — patrz docs/architecture/STRINGER_CONSTRUCTION_MODEL.md.
+    // mm, jak głęboko stopień wchodzi w wangę WPUSZCZANĄ (głębokość gniazda w licu wewnętrznym) — decyzja użytkownika:
+    // ok. 20 mm, zmienialne. Starszy projekt bez tego pola: wzór BWF max(12, 0.4·grubość) (stringerModel.js housingDepthMm).
+    stringerHousingDepthMm: 20,
     stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje NAD GÓRNĄ PŁASZCZYZNĘ STOPNIA
     // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
     // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).

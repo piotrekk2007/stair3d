@@ -10,7 +10,7 @@
 import { pointsEqual, normalizeVector } from './pathUtils.js';
 import { shiftFrontEdge } from './nosingUtils.js';
 import { computeWinderBlank } from './winderBlank.js';
-import { recessedEdge, housingRecessMm } from './edgeOverrides.js';
+import { recessedEdges, housingRecessMm } from './edgeOverrides.js';
 
 /**
  * @typedef {Object} TreadEdgeInfo
@@ -90,10 +90,7 @@ export function nominalEdgesOf(tread, config) {
 
   const recessMm = housingRecessMm(config);
   if (recessMm.inner === 0 && recessMm.outer === 0) return { front, back };
-  return {
-    front: recessedEdge(front, recessMm.inner, recessMm.outer),
-    back: recessedEdge(back, recessMm.inner, recessMm.outer),
-  };
+  return recessedEdges({ frontEdge: front, backEdge: back, innerChain: tread.innerChain, outerChain: tread.outerChain }, recessMm);
 }
 
 // Stopień prosty nie ma jednego globalnego "kierunku wchodzenia" w danych — da się go jednak

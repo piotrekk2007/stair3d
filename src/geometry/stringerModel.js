@@ -71,6 +71,38 @@ export function housingDepthFor(stringerThickness) {
 }
 
 /**
+ * The board's footprint in PLAN: its reference line (the wanga's outer face) between the board's own end faces,
+ * and the same line moved its thickness into the stair (StringerSegment.inwardNormal). What the plan 2D draws — the
+ * real board, not a line centred on the chain.
+ * @param {Object} segment  StringerSegment (referenceLine, inwardNormal, thickness)
+ * @param {Object} [geometry]  its StringerSegmentConstructionGeometry (ends); without it the reference line's length
+ * @returns {{x:number,y:number}[]} 4 corners
+ */
+export function boardPlanFootprint(segment, geometry) {
+  const { start, direction, length } = segment.referenceLine;
+  const n = segment.inwardNormal || { x: 0, y: 0 };
+  const t = segment.thickness;
+  const u0 = geometry?.ends ? geometry.ends.start.u : 0;
+  const u1 = geometry?.ends ? geometry.ends.end.u : length;
+  const at = (u, w) => ({ x: start.x + direction.x * u + n.x * w, y: start.y + direction.y * u + n.y * w });
+  return [at(u0, 0), at(u1, 0), at(u1, t), at(u0, t)];
+}
+
+// Wood that must stay behind a housing (the housing can never go right through the board).
+export const MIN_HOUSING_BACK_MM = 1;
+
+/**
+ * THE housing depth used by the geometry (how far a tread enters a housed wanga): the user's
+ * config.stringerHousingDepthMm (default 20 mm — user decision), falling back to the BWF minimum formula
+ * housingDepthFor(t) for an older project without the field; never through the board.
+ */
+export function housingDepthMm(config) {
+  const t = config.stringerThickness;
+  const d = Number.isFinite(config.stringerHousingDepthMm) ? config.stringerHousingDepthMm : housingDepthFor(t);
+  return Math.min(Math.max(0, d), Math.max(0, t - MIN_HOUSING_BACK_MM));
+}
+
+/**
  * @typedef {Object} StringerReferenceGeometry
  * @property {{x:number,y:number}} start   Plan-space start of the physical board's straight axis
  * @property {{x:number,y:number}} end     Plan-space end

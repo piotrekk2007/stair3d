@@ -70,7 +70,8 @@
 
 import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
-import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthFor } from './stringerModel.js';
+import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm } from './stringerModel.js';
+import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
 import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, END_ANCHOR_ID, DEPTH_TOLERANCE_MM } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
 import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
@@ -266,6 +267,36 @@ function buildOverlayTop(effective) {
 // board's span — e.g. the first seat of a board after a post) continues FLAT at its own elevation
 // out to that face: the top edge never rises above a seat that is there, and the end face stays a
 // plumb line from the lower contour up to it.
+// v of a u-monotone polyline at u (linear between its vertices, clamped at its ends).
+function polylineVAt(poly, u) {
+  if (!poly || poly.length === 0) return null;
+  if (u <= poly[0].u) return poly[0].v;
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1];
+    const b = poly[i];
+    if (u <= b.u) return b.u - a.u < GEOMETRY_EPS ? Math.max(a.v, b.v) : a.v + ((b.v - a.v) * (u - a.u)) / (b.u - a.u);
+  }
+  return poly[poly.length - 1].v;
+}
+
+const POCKET_INSET_MM = 0.5; // keeps a pocket strictly inside the board outline (never touching an edge)
+
+function pocketsWithinBoard(housings, spanStart, spanEnd, bottom, top, outline) {
+  const rects = [];
+  for (const h of housings) {
+    const uStart = Math.max(h.uStart, spanStart + POCKET_INSET_MM);
+    const uEnd = Math.min(h.uEnd, spanEnd - POCKET_INSET_MM);
+    if (uEnd - uStart <= GEOMETRY_EPS) continue;
+    const us = [uStart, uEnd, ...bottom.map((p) => p.u).filter((u) => u > uStart && u < uEnd)];
+    const lowest = Math.max(...us.map((u) => polylineVAt(bottom, u)));
+    const highest = top ? Math.min(...[uStart, uEnd, ...top.map((p) => p.u).filter((u) => u > uStart && u < uEnd)].map((u) => polylineVAt(top, u))) : Infinity;
+    const vBottom = Math.max(h.bottomV, lowest + POCKET_INSET_MM);
+    const vTop = Math.min(h.topV, highest - POCKET_INSET_MM);
+    if (vTop - vBottom > GEOMETRY_EPS) rects.push({ uStart, uEnd, vBottom, vTop });
+  }
+  return unionRectangles(rects).filter((poly) => poly.every((p) => pointInPolygonUV(p, outline)));
+}
+
 function extendCombToSpan(top, spanStart, spanEnd) {
   const out = clipCombToSpan(top, spanStart, spanEnd);
   if (out[0].u > spanStart + GEOMETRY_EPS) out.unshift({ u: spanStart, v: out[0].v });
@@ -305,7 +336,7 @@ function buildCombCurve(top, notchRadiusMm) {
 // Housing height matches the tread's own thickness (a real parametric value already in the
 // model, config.treadThickness) — the slot the tread's end actually sits in — never an
 // invented number; housing DEPTH (how far it's routed into the board's face) reuses the
-// existing BWF-cited housingDepthFor() (see stringerModel.js), unchanged from before this file.
+// housingDepthMm(config) (see stringerModel.js — the user's parameter, BWF formula as the fallback).
 //
 // uStart/uEnd extend `bearing.uStart`/`.uEnd` (the tread's STRUCTURAL, non-nosed front/back
 // corners) backward by config.nosing on the OWNED front corner only: the tread is one physical
@@ -343,7 +374,7 @@ function buildCombCurve(top, notchRadiusMm) {
 // preserving any OTHER contribution already baked into `uStart` (e.g. a lap-joint corner's own
 // `extendStart`), then the nosing extension applies on top exactly as before.
 function buildHousings(effective, config) {
-  const depth = housingDepthFor(config.stringerThickness);
+  const depth = housingDepthMm(config);
   const nosing = config.nosing > 0 ? config.nosing : 0;
   return effective.map((b) => ({
     kind: 'tread',
@@ -374,7 +405,7 @@ function buildRiserHousings(effective, config) {
   if (!config.hasRiserBoards) return [];
   const riserThickness = config.riserBoardThickness > 0 ? config.riserBoardThickness : 0;
   if (!(riserThickness > 0)) return [];
-  const depth = housingDepthFor(config.stringerThickness);
+  const depth = housingDepthMm(config);
   const overlap = config.riserTopOverlapMm > 0 ? config.riserTopOverlapMm : 0;
   return effective
     .filter((b) => b.ownsStart)
@@ -628,9 +659,15 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
     }
 
+    // The pockets actually routed into a housed board's inner face (what the 3D board shows as recesses): each
+    // housing cut back to the board (its span, and between its lower and upper edge — e.g. the first riser's housing
+    // below the floor), then the overlapping / touching ones (a tread's housing and the riser's under it, the next
+    // step's) united into outline polygons (rectUnion.js). A pocket that would still leave the board is dropped.
+    const housingPockets = housings ? pocketsWithinBoard(housings, spanStart, spanEnd, bottomPolyline, topPolyline, outerContour) : [];
+
     const minRemainingSectionMm =
       constructionType === CONSTRUCTION_TYPES.CLOSED
-        ? config.stringerThickness - housingDepthFor(config.stringerThickness)
+        ? config.stringerThickness - housingDepthMm(config)
         : computeMinRemainingSectionCut(effective, bottomPolyline);
     const minRequired = config.stringerMinRemainingSectionMm ?? 0;
     if (minRemainingSectionMm < minRequired) diagnostics.push(minSectionDiagnostic(segment.id, minRemainingSectionMm, minRequired));
@@ -708,6 +745,8 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
         end: { u: spanEnd, cut: 'VERTICAL' },
       },
       housings,
+      housingPockets,
+      pocketDepthMm: housings ? housingDepthMm(config) : 0,
       boardWidthMm: boardWidth,
       thicknessMm: segment.thickness,
       localDepthMm,

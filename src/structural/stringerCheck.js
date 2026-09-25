@@ -21,7 +21,7 @@
 //  * ULS as for the treads (bending, shear with k_cr); SLS perpendicular to the board over L. The axial component of
 //    the load along the pitch is ignored.
 
-import { housingDepthFor, CONSTRUCTION_TYPES } from '../geometry/stringerModel.js';
+import { housingDepthMm, CONSTRUCTION_TYPES } from '../geometry/stringerModel.js';
 import { signedPolygonArea } from '../geometry/pathUtils.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { ELEMENT_TYPES } from '../takeoff/takeoffTypes.js';
@@ -170,7 +170,7 @@ export function checkStringers(models, items, options = {}) {
       const L = Lh / cos;
 
       const closed = g.constructionType === CONSTRUCTION_TYPES.CLOSED;
-      const b = closed ? config.stringerThickness - housingDepthFor(config.stringerThickness) : config.stringerThickness;
+      const b = closed ? config.stringerThickness - housingDepthMm(config) : config.stringerThickness;
       const h = closed ? g.localDepthMm : g.minRemainingSectionMm;
       if (!(b > 0 && h > 0 && Number.isFinite(h))) return skip('brak wyliczonego przekroju');
       const W = (b * h * h) / 6;

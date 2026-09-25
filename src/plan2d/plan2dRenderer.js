@@ -12,6 +12,7 @@ import { computeWinderBlank } from '../geometry/winderBlank.js';
 import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { smoothPath } from './smoothPath.js';
+import { boardPlanFootprint } from '../geometry/stringerModel.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -276,11 +277,13 @@ function stringerSpacingXML(planLayout, config) {
  * @param {Object<string,{removed?:boolean, overridden?:boolean}>} [options.postStates]  Stan słupów po
  *   ręcznych edycjach (z PostModel) — usunięty słup jest rysowany jako przerywany "duch" (nadal
  *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
+ * @param {{outer, inner}|null} [options.stringerModels]  StringerModel po stronach + [options.stringerConstruction]
+ *   ich geometria konstrukcyjna — wangi rysowane jako prawdziwe deski w rzucie (boardPlanFootprint).
  * @param {Object[]|null} [options.posts]  Wszystkie słupy (buildStaircase allPostModels, także usunięte) —
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -301,11 +304,21 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
 
   // Wangi są zaznaczalne (etap 10): niewidoczna, szeroka nakładka ułatwia trafienie kliknięciem,
   // a data-side (outer|inner) to jawny identyfikator modelu — main.js nie zgaduje go z geometrii.
+  // Each board is drawn as its REAL plan footprint (stringerModel.js boardPlanFootprint: thickness into the stair,
+  // between its own end faces — stopping at a post), so the treads visibly enter it; the chain polyline underneath
+  // is only a wide transparent hit area. Without the models (older callers) the chain line is drawn as before.
   const stringerPath = (side, pts) => {
     const selected = selection?.elementType === 'stringer' && selection.stringerId === side;
+    const model = stringerModels?.[side];
+    const geos = stringerConstruction?.[side] || [];
+    const boards = model
+      ? model.segments
+          .map((seg, i) => `<polygon points="${polygonPoints(boardPlanFootprint(seg, geos[i]))}" fill="${selected ? '#1a5fb4' : '#8a5a34'}" stroke="${selected ? '#0d3b73' : '#5a3d24'}" stroke-width="4"/>`)
+          .join('')
+      : `<polyline points="${polygonPoints(pts)}" fill="none" stroke="${selected ? '#1a5fb4' : '#8a5a34'}" stroke-width="${selected ? 46 : 30}"/>`;
     return `
     <g class="stringer-path${selected ? ' selected' : ''}" data-side="${side}">
-      <polyline points="${polygonPoints(pts)}" fill="none" stroke="${selected ? '#1a5fb4' : '#8a5a34'}" stroke-width="${selected ? 46 : 30}"/>
+      ${boards}
       <polyline points="${polygonPoints(pts)}" fill="none" stroke="transparent" stroke-width="110" pointer-events="stroke"/>
     </g>`;
   };
