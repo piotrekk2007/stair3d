@@ -156,7 +156,7 @@ function buildPosts(configPatch) {
   return buildAllPostModels(planLayout, fullConfig);
 }
 
-test('buildPostDXF: a plain section-width x length rectangle, with a title block', () => {
+test('buildPostDXF: the post unfolded — its 4 faces side by side (section wide, full length) + a plan section, with a title block', () => {
   const posts = buildPosts({});
   const post = posts.find((p) => p.postId === 'post-start');
   const dxf = buildPostDXF(post);
@@ -164,11 +164,13 @@ test('buildPostDXF: a plain section-width x length rectangle, with a title block
   assert.ok(dxf.trim().endsWith('0\nEOF'));
   assert.ok(dxf.includes('8\nOUTLINE'));
   const lines = [...dxf.matchAll(/0\nLINE\n8\nOUTLINE\n10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n11\n(-?[\d.]+)\n21\n(-?[\d.]+)\n31\n0/g)];
-  assert.equal(lines.length, 4, 'a plain rectangle is exactly 4 lines');
-  const us = lines.flatMap((m) => [+m[1], +m[3]]);
-  const vs = lines.flatMap((m) => [+m[2], +m[4]]);
-  assert.equal(Math.max(...us) - Math.min(...us), post.size);
-  assert.equal(Math.max(...vs) - Math.min(...vs), post.elevation.top - post.elevation.bottom);
+  assert.equal(lines.length, 5 * 4, '4 face rectangles + the plan section');
+  const height = post.elevation.top - post.elevation.bottom;
+  // the four faces: rectangles post.size wide and the post's full length tall, next to each other
+  const tall = lines.filter((m) => Math.abs(Math.abs(+m[4] - +m[2]) - height) < 1e-6);
+  const us = [...new Set(tall.map((m) => +m[1]))].sort((a, b) => a - b);
+  assert.deepEqual(us, [0, 1, 2, 3, 4].map((k) => k * post.size));
+  for (const face of ['lico S', 'lico E', 'lico N', 'lico W']) assert.ok(dxf.includes(face), face);
   assert.ok(dxf.includes(`Slup: ${post.postId}`));
   assert.ok(dxf.includes('Skala 1:1'));
 });
@@ -343,4 +345,39 @@ test('railing DXF: one sheet with every handrail piece and the whole baluster cu
 test('railing DXF: nothing to draw -> null (no empty file)', () => {
   const r = buildStaircase(createDefaultConfig());
   assert.equal(buildRailingDXF(r.railingModel), null);
+});
+
+
+// ---- joints (stage 1): the housings (wręg) the stringers enter in the posts ----
+import { buildStaircase as buildForJoints } from '../../geometry/buildStaircase.js';
+import { createDefaultConfig as defaultsForJoints } from '../../config/schema.js';
+
+test('post DXF: every pocket a stringer enters is drawn on its face, where and as deep as the joint model says', () => {
+  const m = buildForJoints({ ...defaultsForJoints(), stairType: 'L', postHousingDepthMm: 20 });
+  const post = m.postModels.find((p) => p.postId === 'post-corner-0');
+  const pockets = m.joints.pocketsByPost[post.postId];
+  assert.equal(pockets.length, 2, 'both inner boards of the turn enter the corner post');
+  const dxf = buildPostDXF(post, pockets);
+  const housingLines = [...dxf.matchAll(/0\nLINE\n8\nHOUSINGS\n10\n(-?[\d.]+)\n20\n(-?[\d.]+)\n30\n0\n11\n(-?[\d.]+)\n21\n(-?[\d.]+)\n31\n0/g)];
+  assert.equal(housingLines.length, pockets.length * 4 * 2, 'each pocket: a rectangle on its face + one in the plan section');
+  assert.equal((dxf.match(/wreg wangi .* gl\. 20 mm/g) || []).length, 2);
+  // the pocket on face k of the unfolding sits at k*size + size/2 + s, from the post's bottom
+  const order = ['S', 'E', 'N', 'W'];
+  for (const p of pockets) {
+    const u0 = order.indexOf(p.faceId) * post.size + post.size / 2 + p.sMin;
+    const v0 = p.zMin - post.elevation.bottom;
+    assert.ok(housingLines.some((x) => Math.abs(+x[1] - u0) < 1e-3 && Math.abs(+x[2] - v0) < 1e-3), `${p.faceId}: pocket corner at ${u0}, ${v0}`);
+  }
+  assert.ok(dxf.includes('Gniazda (wregi): 2'));
+});
+
+test('stringer DXF: a board entering a post shows the post face line and the housing depth', () => {
+  const m = buildForJoints({ ...defaultsForJoints(), stairType: 'L', postHousingDepthMm: 20 });
+  const g = m.stringerConstruction.inner[0];
+  const dxf = buildStringerBoardDXF(g, { segment: m.stringerModels.inner.segments[0], config: m.fullConfig });
+  assert.ok(dxf.includes('8\nJOINTS'));
+  assert.ok(dxf.includes('lico slupa post-corner-0 - wreg gl. 20 mm'));
+  assert.ok(dxf.includes('lico slupa post-start - wreg gl. 20 mm'));
+  const joints = [...dxf.matchAll(/0\nLINE\n8\nJOINTS\n10\n(-?[\d.]+)\n/g)].map((x) => +x[1]);
+  assert.ok(joints.some((u) => Math.abs(u - g.ends.end.intoPost.faceU) < 1e-3), 'the line sits on the post face');
 });

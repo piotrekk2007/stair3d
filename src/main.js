@@ -962,12 +962,12 @@ function withoutHighlight(fn) {
 
 function exportPostDXF(postId) {
   const post = lastModels?.allPostModels?.find((p) => p.postId === postId);
-  const dxf = post ? buildPostDXF(post) : null;
+  const dxf = post ? buildPostDXF(post, lastModels?.joints?.pocketsByPost?.[post.postId] || []) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slup_${postId}.dxf`, 'application/dxf');
 }
 
 function exportAllPostsDXF() {
-  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels) : null;
+  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels, lastModels?.joints?.pocketsByPost || {}) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slupy.dxf`, 'application/dxf');
 }
 

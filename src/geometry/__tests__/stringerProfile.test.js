@@ -690,7 +690,7 @@ for (const type of ['closed', 'cut']) {
       const g = geo.inner[1];
       assert.equal(g.ends.start.blendedToPreviousEnd, undefined, 'never blended down to the previous board');
       assert.equal(g.ends.start.cut, 'VERTICAL');
-      assert.ok(Math.abs(g.ends.start.u - seg.startPost.faceU) < 1e-6, 'starts at the post face');
+      assert.ok(Math.abs(g.ends.start.u - (seg.startPost.faceU - config.postHousingDepthMm)) < 1e-6, 'starts the housing depth inside the post');
       // the same board solved on its own (no previous board at all) comes out identical
       const alone = buildStringerConstructionGeometry({ ...model, segments: [seg], segmentJoints: [] }, config)[0];
       assert.deepEqual(alone.outerContour, g.outerContour);
@@ -753,7 +753,8 @@ test('post anchors: moving one up/down the post moves the board edge at the post
       const a = g[`${contour}Control`].find((c) => c.id === id);
       const edge = contour === 'lower' ? g.bottomProfile : g.topProfile;
       assert.ok(Math.abs(a.v - a.nominal.v - 120) < 1e-6);
-      assert.ok(Math.abs(vAtU(edge, g.ends.start.u) - (a.nominal.v + 120)) < 0.5, `${style} ${contour}: edge ${vAtU(edge, g.ends.start.u).toFixed(1)} vs ${(a.nominal.v + 120).toFixed(1)}`);
+      const face = seg.startPost.faceU; // the anchor sits on the post FACE (the board itself goes on into the post's housing)
+      assert.ok(Math.abs(vAtU(edge, face) - (a.nominal.v + 120)) < 0.5, `${style} ${contour}: edge ${vAtU(edge, face).toFixed(1)} vs ${(a.nominal.v + 120).toFixed(1)}`);
     }
     // reset removes it again
     const moved = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'inner', contour: 'lower', anchorId: id, ds: 120, dn: 0 });

@@ -70,7 +70,7 @@
 
 import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
-import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm } from './stringerModel.js';
+import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm, postHousingDepthMm } from './stringerModel.js';
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
 import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, closingAnchorId, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
@@ -693,8 +693,13 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     const topRiserHere = carriesTopRiser(segment, effective, constructionType, config, lastTreadIndex);
     const topRiserEnd = topRiserHere ? effective[effective.length - 1].finalUEnd + config.riserBoardThickness : -Infinity;
     const seatSpanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd, topRiserEnd);
-    const spanStart = segment.startPost ? Math.max(seatSpanStart, segment.startPost.faceU) : seatSpanStart;
-    const spanEnd = segment.endPost ? Math.min(seatSpanEnd, segment.endPost.faceU) : seatSpanEnd;
+    // At a structural post the board goes ON, with its full section, `postHousingDepthMm` into the pocket (wręg) in the
+    // post's face (user decision: joint = full-section housing; jointSolver.js builds the matching pocket in the post).
+    const intoPost = postHousingDepthMm(config);
+    const reachesStartPost = segment.startPost && seatSpanStart <= segment.startPost.faceU + GEOMETRY_EPS;
+    const reachesEndPost = segment.endPost && seatSpanEnd >= segment.endPost.faceU - GEOMETRY_EPS;
+    const spanStart = segment.startPost ? (reachesStartPost ? segment.startPost.faceU - intoPost : seatSpanStart) : seatSpanStart;
+    const spanEnd = segment.endPost ? (reachesEndPost ? segment.endPost.faceU + intoPost : seatSpanEnd) : seatSpanEnd;
     // A contour is continued along its end tangent to reach an end face only up to this steepness; a
     // steeper end edge (the narrow dusza treads of a tight winder) becomes a flat cap (see sliceCurveByU).
     const maxDrop = MAX_END_EXTENSION_SLOPE;
@@ -724,8 +729,9 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       // A seat that reaches under a post (the board stops at the post's face) is cut back to that face; one wholly
       // beyond it is not cut at all. Only at a POST: elsewhere a housing deliberately shows its full length, nosing
       // included, even past the board's own end (so a nosing poking out of the board is visible).
-      const clipStart = segment.startPost ? spanStart : -Infinity;
-      const clipEnd = segment.endPost ? spanEnd : Infinity;
+      // (cut back to the post FACE, not to the board's end inside the post's pocket)
+      const clipStart = segment.startPost ? segment.startPost.faceU : -Infinity;
+      const clipEnd = segment.endPost ? segment.endPost.faceU : Infinity;
       housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config), ...(topRiserHere ? [buildTopRiserHousing(effective[effective.length - 1], config)] : [])]
         .map((h) => ({ ...h, uStart: Math.max(h.uStart, clipStart), uEnd: Math.min(h.uEnd, clipEnd) }))
         .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
@@ -814,8 +820,8 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
         // `capped`: the first lower edge was too steep to be continued to the start face and got a flat
         // cap (see sliceCurveByU); blendCappedStartsToPreviousEnd() then turns that cap into a smooth
         // transition down to the neighbouring board's end.
-        start: { u: spanStart, cut: 'VERTICAL', capped: startCapped },
-        end: { u: spanEnd, cut: 'VERTICAL' },
+        start: { u: spanStart, cut: 'VERTICAL', capped: startCapped, intoPost: reachesStartPost ? { postId: segment.startPost.postId, faceU: segment.startPost.faceU, depthMm: intoPost } : null },
+        end: { u: spanEnd, cut: 'VERTICAL', intoPost: reachesEndPost ? { postId: segment.endPost.postId, faceU: segment.endPost.faceU, depthMm: intoPost } : null },
       },
       housings,
       housingPockets,
@@ -935,7 +941,7 @@ function clampFirstSegmentToFloor(orderedGeometries) {
     const floorU = trimmedBottom[0].u;
     const topStartV = first.topProfile ? first.topProfile[0].v : oc[0].v;
     if (floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS) oc.push({ u: startU, v: 0 });
-    first.ends.start = { u: floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS ? startU : Math.min(floorU, trimmedTop ? trimmedTop[0].u : floorU), cut: 'FLOOR_HORIZONTAL', floorU };
+    first.ends.start = { ...first.ends.start, u: floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS ? startU : Math.min(floorU, trimmedTop ? trimmedTop[0].u : floorU), cut: 'FLOOR_HORIZONTAL', floorU };
   }
 
   if (changed) recheckSelfIntersection(first);

@@ -96,6 +96,16 @@ export const MIN_HOUSING_BACK_MM = 1;
  * config.stringerHousingDepthMm (default 20 mm — user decision), falling back to the BWF minimum formula
  * housingDepthFor(t) for an older project without the field; never through the board.
  */
+/**
+ * How deep a stringer enters a structural post's pocket (wręg) with its full section — THE value for the board's length
+ * at a post (stringerConstructionGeometry.js) and the pocket in the post (jointSolver.js). Never negative; an older
+ * project without the field gets 0 (the board butts against the post face, as before).
+ */
+export function postHousingDepthMm(config) {
+  const d = Number(config?.postHousingDepthMm);
+  return Number.isFinite(d) && d > 0 ? d : 0;
+}
+
 export function housingDepthMm(config) {
   const t = config.stringerThickness;
   const d = Number.isFinite(config.stringerHousingDepthMm) ? config.stringerHousingDepthMm : housingDepthFor(t);

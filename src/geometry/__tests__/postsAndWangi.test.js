@@ -58,20 +58,25 @@ test('structural posts stand on the inner wanga\'s axis (half its thickness into
   }
 });
 
-test('an inner wanga board ends at the face of the post standing at its end — it never runs past or into the post', () => {
-  for (const patch of [{}, { stairType: 'U' }, { stairType: 'straight' }, { treadsLegA: 0 }, { stringerConstructionTypeInner: 'cut' }]) {
+// User decision 2026-09-28: stringer ↔ post = a full-section housing (wręg) — the board goes exactly postHousingDepthMm
+// INTO the post (0 = it ends at the post face, as before), never further; tread housings still stop at the face.
+test('an inner wanga board enters the post at its end by exactly postHousingDepthMm (0 = ends at the face), never further', () => {
+  for (const patch of [{}, { stairType: 'U' }, { stairType: 'straight' }, { treadsLegA: 0 }, { stringerConstructionTypeInner: 'cut' }, { postHousingDepthMm: 0 }, { postHousingDepthMm: 30 }]) {
     const r = built(patch);
+    const d = r.fullConfig.postHousingDepthMm;
     const segments = r.stringerModels.inner.segments;
     r.stringerConstruction.inner.forEach((g, i) => {
       const seg = segments[i];
       const us = g.outerContour.map((p) => p.u);
       if (seg.startPost) {
-        assert.ok(Math.abs(g.ends.start.u - seg.startPost.faceU) < 1e-6, `${JSON.stringify(patch)} ${seg.id}: starts at ${seg.startPost.postId}'s face`);
-        assert.ok(Math.min(...us) >= seg.startPost.faceU - 1e-6, `${JSON.stringify(patch)} ${seg.id}: contour reaches into ${seg.startPost.postId}`);
+        assert.ok(Math.abs(g.ends.start.u - (seg.startPost.faceU - d)) < 1e-6, `${JSON.stringify(patch)} ${seg.id}: starts ${d} mm inside ${seg.startPost.postId}`);
+        assert.ok(Math.min(...us) >= seg.startPost.faceU - d - 1e-6, `${JSON.stringify(patch)} ${seg.id}: contour reaches further into ${seg.startPost.postId}`);
+        assert.equal(g.ends.start.intoPost?.depthMm ?? 0, d);
       }
       if (seg.endPost) {
-        assert.ok(Math.abs(g.ends.end.u - seg.endPost.faceU) < 1e-6, `${JSON.stringify(patch)} ${seg.id}: ends at ${seg.endPost.postId}'s face`);
-        assert.ok(Math.max(...us) <= seg.endPost.faceU + 1e-6, `${JSON.stringify(patch)} ${seg.id}: contour reaches into ${seg.endPost.postId}`);
+        assert.ok(Math.abs(g.ends.end.u - (seg.endPost.faceU + d)) < 1e-6, `${JSON.stringify(patch)} ${seg.id}: ends ${d} mm inside ${seg.endPost.postId}`);
+        assert.ok(Math.max(...us) <= seg.endPost.faceU + d + 1e-6, `${JSON.stringify(patch)} ${seg.id}: contour reaches further into ${seg.endPost.postId}`);
+        assert.equal(g.ends.end.intoPost?.postId, seg.endPost.postId);
       }
       for (const h of g.housings || []) {
         if (seg.startPost) assert.ok(h.uStart >= seg.startPost.faceU - 1e-6);
@@ -98,6 +103,6 @@ test('the profile editor view carries the posts a board butts into', () => {
   const views = buildProfileViewModel(r.stringerConstruction.inner, r.stringerModels.inner, r.fullConfig);
   assert.deepEqual(views[0].posts.map((p) => p.postId), ['post-start', 'post-corner-0']);
   const corner = views[0].posts.find((p) => p.postId === 'post-corner-0');
-  assert.ok(Math.abs(corner.uStart - views[0].span.uEnd) < 1e-6, 'the board ends exactly at the drawn post');
+  assert.ok(Math.abs(views[0].span.uEnd - corner.uStart - r.fullConfig.postHousingDepthMm) < 1e-6, 'the board goes exactly the housing depth into the drawn post');
   assert.equal(buildProfileViewModel(r.stringerConstruction.outer, r.stringerModels.outer, r.fullConfig)[0].posts.length, 0);
 });

@@ -16,6 +16,7 @@
 import { lineSegment, curveStart, curveEnd, reverseCurve, curveToPolyline, polylineToCurve } from '../geometry/profileCurve.js';
 import { GEOMETRY_EPS } from '../geometry/tolerances.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
+import { POST_FACES, POST_FACE_ORDER, vRangeWithin } from '../geometry/jointSolver.js';
 
 // Real gap (mm) left between boards when several are laid out on one sheet — same figure as the
 // on-screen editor's own SEGMENT_GAP_MM (profileEditor/profileEditorRenderer.js): a comfortable
@@ -154,6 +155,23 @@ function housingEntities(geometry, offsetU) {
   return out;
 }
 
+// Where the board enters a structural post's housing (ends.*.intoPost — jointSolver.js / stringerConstructionGeometry.js):
+// a line across the board at the post FACE (the part beyond it goes into the post) and its depth.
+function postJointEntities(geometry, offsetU) {
+  const out = [];
+  for (const end of ['start', 'end']) {
+    const into = geometry.ends?.[end]?.intoPost;
+    if (!into || !(into.depthMm > 0) || !geometry.outerContour?.length) continue;
+    const vr = vRangeWithin(geometry.outerContour, into.faceU, into.faceU);
+    if (!vr) continue;
+    const u = into.faceU + offsetU;
+    out.push(lineEntity({ u, v: vr.min }, { u, v: vr.max }, 'JOINTS'));
+    const labelU = end === 'end' ? u - 150 : u + 5;
+    out.push(textEntity(`lico slupa ${into.postId} - wreg gl. ${Math.round(into.depthMm)} mm`, { u: labelU, v: vr.max + 10 }, 12, 'JOINTS'));
+  }
+  return out;
+}
+
 function bearingEntities(segment, offsetU) {
   const out = [];
   for (const b of segment?.treadBearings || []) {
@@ -200,7 +218,7 @@ function titleEntities(lines, bounds) {
 function wrapDxf(entityLines) {
   const header = ['0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC'];
   const layer = (name, color) => ['0', 'LAYER', '2', name, '70', '0', '62', String(color), '6', 'CONTINUOUS'];
-  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '5', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('NOTCH', 6), ...layer('BEARINGS', 5), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
+  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '6', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('NOTCH', 6), ...layer('BEARINGS', 5), ...layer('JOINTS', 4), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
   const entities = ['0', 'SECTION', '2', 'ENTITIES', ...entityLines, '0', 'ENDSEC'];
   return [...header, ...tables, ...entities, '0', 'EOF'].join('\n');
 }
@@ -217,7 +235,7 @@ export function buildStringerBoardDXF(geometry, { segment, config } = {}) {
   const outline = buildBoardOutlineCurve(geometry);
   if (!outline) return null;
   const bounds = boundsOf(outline);
-  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config), bounds)];
+  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...postJointEntities(geometry, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config), bounds)];
   return wrapDxf(entities);
 }
 
@@ -243,7 +261,7 @@ export function buildStringerAllBoardsDXF(geometries, { model, config } = {}) {
       return moved;
     });
     const segment = model?.segments?.find((s) => s.id === geometry.segmentId);
-    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...bearingEntities(segment, offsetU));
+    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...postJointEntities(geometry, offsetU), ...bearingEntities(segment, offsetU));
     entities.push(...titleEntities(titleLines(geometry, config), boundsOf(shifted)));
   }
   if (!any) return null;
@@ -252,35 +270,77 @@ export function buildStringerAllBoardsDXF(geometries, { model, config } = {}) {
 
 // --- posts (slupy) ---------------------------------------------------------------------------------
 //
-// A post (PostModel, postSolver.js) is deliberately a plain square prism — position, a square
-// section (config.postSize) and a top/bottom elevation, no joinery geometry — so its production
-// drawing is just that: a rectangle (section width x real length), no curves, no housings.
+// A post (PostModel, postSolver.js) is a square prism; what is machined into it comes from the joint model
+// (jointSolver.js pocketsByPost — stage 1: the housings the stringers enter). The drawing UNFOLDS the post: its four
+// faces side by side in the order you walk round it (S, E, N, W — each face's right edge is the next one's left),
+// each post-size wide and post-length tall, every pocket drawn on its face with its depth, and a small plan section
+// naming the faces. Face coordinates: horizontal = to the right of someone looking at the face, vertical = from the
+// post's bottom.
 
 const POST_KIND_LABELS_PL = Object.freeze({ start: 'poczatkowy', end: 'koncowy', corner: 'narozny' });
 // Real gap (mm) between posts laid out on one sheet — same spirit as BOARD_GAP_MM above, its own
 // constant because a post's own footprint (its section width) is much smaller than a board's.
 const POST_GAP_MM = 150;
 
-function postRectEntities(post, offsetU) {
+const POST_SECTION_GAP_MM = 80; // between the unfolded faces and the plan section beside them
+
+function rectLines(u0, v0, u1, v1, layer) {
+  const c = [{ u: u0, v: v0 }, { u: u1, v: v0 }, { u: u1, v: v1 }, { u: u0, v: v1 }];
+  return c.map((p, i) => lineEntity(p, c[(i + 1) % 4], layer));
+}
+
+// Width of one post's block on a sheet: 4 unfolded faces + the plan section.
+function postBlockWidth(post) {
+  return 4 * post.size + POST_SECTION_GAP_MM + post.size;
+}
+
+function postEntities(post, pockets, offsetU) {
   const height = post.elevation.top - post.elevation.bottom;
-  const corners = [
-    { u: offsetU, v: 0 },
-    { u: offsetU + post.size, v: 0 },
-    { u: offsetU + post.size, v: height },
-    { u: offsetU, v: height },
-  ];
+  const size = post.size;
   const out = [];
-  for (let i = 0; i < 4; i++) out.push(lineEntity(corners[i], corners[(i + 1) % 4], 'OUTLINE'));
+  POST_FACE_ORDER.forEach((faceId, k) => {
+    const u0 = offsetU + k * size;
+    out.push(...rectLines(u0, 0, u0 + size, height, 'OUTLINE'));
+    out.push(textEntity(`lico ${faceId} (${POST_FACES[faceId].label})`, { u: u0 + 5, v: -30 }, 14, 'TEXT'));
+    for (const p of pockets.filter((x) => x.faceId === faceId)) {
+      const a = u0 + size / 2 + p.sMin;
+      const b = u0 + size / 2 + p.sMax;
+      const z0 = p.zMin - post.elevation.bottom;
+      const z1 = p.zMax - post.elevation.bottom;
+      out.push(...rectLines(a, z0, b, z1, 'HOUSINGS'));
+      const open = [p.openTop ? 'otwarte u gory' : null, p.openBottom ? 'otwarte u dolu' : null].filter(Boolean).join(', ');
+      out.push(textEntity(`${p.label} gl. ${Math.round(p.depthMm)} mm`, { u: a, v: z0 - 16 }, 10, 'HOUSINGS'));
+      out.push(textEntity(`od dolu slupa ${Math.round(z0)}-${Math.round(z1)} mm${open ? ` (${open})` : ''}`, { u: a, v: z0 - 30 }, 10, 'HOUSINGS'));
+    }
+  });
+  // plan section: which face is which, with the pockets' depth marked on their faces
+  const su = offsetU + 4 * size + POST_SECTION_GAP_MM;
+  const sv = height - size;
+  out.push(...rectLines(su, sv, su + size, sv + size, 'OUTLINE'));
+  const mid = { u: su + size / 2, v: sv + size / 2 };
+  for (const faceId of POST_FACE_ORDER) {
+    const n = POST_FACES[faceId].normal;
+    out.push(textEntity(faceId, { u: mid.u + n.x * (size / 2 + 12) - 5, v: mid.v + n.y * (size / 2 + 12) - 5 }, 12, 'TEXT'));
+  }
+  for (const p of pockets) {
+    const n = POST_FACES[p.faceId].normal;
+    const ax = { x: -n.y, y: n.x };
+    const pt = (k, s) => ({ u: mid.u + n.x * k + ax.x * s, v: mid.v + n.y * k + ax.y * s });
+    const c = [pt(size / 2, p.sMin), pt(size / 2, p.sMax), pt(size / 2 - p.depthMm, p.sMax), pt(size / 2 - p.depthMm, p.sMin)];
+    c.forEach((q, i) => out.push(lineEntity(q, c[(i + 1) % 4], 'HOUSINGS')));
+  }
+  out.push(textEntity('przekroj (rzut)', { u: su, v: sv - 45 }, 10, 'TEXT'));
   return out;
 }
 
-function postTitleLines(post) {
+function postTitleLines(post, pockets = []) {
   const height = post.elevation.top - post.elevation.bottom;
   return [
     `Slup: ${post.postId}`,
     `Rodzaj: ${POST_KIND_LABELS_PL[post.kind] || post.kind}`,
     `Przekroj: ${post.size} x ${post.size} mm`,
     `Dlugosc: ${Math.round(height)} mm`,
+    pockets.length ? `Gniazda (wregi): ${pockets.length} - rozwiniecie 4 licow ${POST_FACE_ORDER.join(', ')}` : 'Bez gniazd - rozwiniecie 4 licow',
     'Skala 1:1 - wszystkie wymiary w mm',
   ];
 }
@@ -289,24 +349,28 @@ function isValidPost(post) {
   return !!post && !post.removed && post.elevation?.top > post.elevation?.bottom && post.size > 0;
 }
 
-/** One post, full size, as a standalone DXF: a plain section-width x length rectangle + title block. */
-export function buildPostDXF(post) {
+/**
+ * One post, full size, as a standalone DXF: its four faces unfolded with the pockets machined into them (from the
+ * joint model — jointSolver.js pocketsByPost[postId]), a plan section and a title block.
+ */
+export function buildPostDXF(post, pockets = []) {
   if (!isValidPost(post)) return null;
   const height = post.elevation.top - post.elevation.bottom;
-  const entities = [...postRectEntities(post, 0), ...titleEntities(postTitleLines(post), { minU: 0, maxV: height })];
+  const entities = [...postEntities(post, pockets || [], 0), ...titleEntities(postTitleLines(post, pockets || []), { minU: 0, maxV: height })];
   return wrapDxf(entities);
 }
 
 /** Every post the stair actually has (removed ones excluded), laid out side by side on one sheet. */
-export function buildAllPostsDXF(posts) {
+export function buildAllPostsDXF(posts, pocketsByPost = {}) {
   const valid = (posts || []).filter(isValidPost);
   if (valid.length === 0) return null;
   const entities = [];
   let cursor = 0;
   for (const post of valid) {
     const height = post.elevation.top - post.elevation.bottom;
-    entities.push(...postRectEntities(post, cursor), ...titleEntities(postTitleLines(post), { minU: cursor, maxV: height }));
-    cursor += post.size + POST_GAP_MM;
+    const pockets = pocketsByPost?.[post.postId] || [];
+    entities.push(...postEntities(post, pockets, cursor), ...titleEntities(postTitleLines(post, pockets), { minU: cursor, maxV: height }));
+    cursor += postBlockWidth(post) + POST_GAP_MM;
   }
   return wrapDxf(entities);
 }

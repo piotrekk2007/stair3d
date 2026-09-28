@@ -80,3 +80,54 @@ export function buildPrismWithHoles(pts2D, holes, toWorld, extrudeDir, depth) {
   geometry.computeVertexNormals();
   return geometry;
 }
+
+// An axis-aligned box with axis-aligned box-shaped pockets taken out (a post with its housings — jointSolver.js), as
+// one closed mesh WITHOUT CSG: the box is cut into a grid along every pocket boundary, the cells inside a pocket are
+// dropped, and only faces between a kept cell and a dropped/outside one are emitted (so there are no internal faces).
+// `outer` and `holes` are {minX,maxX,minY,maxY,minZ,maxZ} in WORLD coordinates (three.js: y up).
+export function buildBoxWithBoxPockets(outer, holes) {
+  const cuts = (lo, hi, key) => {
+    const vals = [outer[lo], outer[hi]];
+    for (const h of holes) vals.push(Math.min(Math.max(h[lo], outer[lo]), outer[hi]), Math.min(Math.max(h[hi], outer[lo]), outer[hi]));
+    return [...new Set(vals.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
+  };
+  const xs = cuts('minX', 'maxX');
+  const ys = cuts('minY', 'maxY');
+  const zs = cuts('minZ', 'maxZ');
+  const nx = xs.length - 1;
+  const ny = ys.length - 1;
+  const nz = zs.length - 1;
+  const solid = (i, j, k) => {
+    if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) return false;
+    const cx = (xs[i] + xs[i + 1]) / 2;
+    const cy = (ys[j] + ys[j + 1]) / 2;
+    const cz = (zs[k] + zs[k + 1]) / 2;
+    return !holes.some((h) => cx > h.minX && cx < h.maxX && cy > h.minY && cy < h.maxY && cz > h.minZ && cz < h.maxZ);
+  };
+  const positions = [];
+  const normals = [];
+  const quad = (p0, p1, p2, p3, n) => {
+    for (const p of [p0, p1, p2, p0, p2, p3]) {
+      positions.push(p[0], p[1], p[2]);
+      normals.push(n[0], n[1], n[2]);
+    }
+  };
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      for (let k = 0; k < nz; k++) {
+        if (!solid(i, j, k)) continue;
+        const [x0, x1, y0, y1, z0, z1] = [xs[i], xs[i + 1], ys[j], ys[j + 1], zs[k], zs[k + 1]];
+        if (!solid(i + 1, j, k)) quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]);
+        if (!solid(i - 1, j, k)) quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0]);
+        if (!solid(i, j + 1, k)) quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0]);
+        if (!solid(i, j - 1, k)) quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0]);
+        if (!solid(i, j, k + 1)) quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
+        if (!solid(i, j, k - 1)) quad([x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [0, 0, -1]);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  return geometry;
+}

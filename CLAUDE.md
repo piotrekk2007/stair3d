@@ -1360,6 +1360,30 @@ Client mode's HUD (`ui/viewportHud.js`) has a group "Zdjęcie dla Klienta":
 - Pure parts tested in `scene/__tests__/presentationImage.test.js`; browser-verified: a 2560×1440 PNG from a 1280×720
   view with the logo in the chosen corner, corner/size changes and removal remembered.
 
+## Joints between elements — stage 1: stringer ↔ post = full-section housing (implemented)
+
+See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user decisions 2026-09-28, the 4 stages).
+`src/geometry/jointSolver.js` (pure) `buildJointModel({stringerModels, stringerConstruction, postModels})` →
+`{joints, pocketsByPost, diagnostics}` — every consumer draws the same joint:
+- **The stringer enters the post**: `config.postHousingDepthMm` (20, DO WERYFIKACJI — `CO-MFG-J-POST-HOUSING`; 0 = ends at
+  the face as before; `stringerModel.js postHousingDepthMm`) — `stringerConstructionGeometry.js` ends a board that
+  reaches a structural post that far PAST the post face (`ends.*.intoPost = {postId, faceU, depthMm}`); tread housings
+  are still clipped at the face; post anchors stay on the face.
+- **The pocket in the post**: a rectangle on the face the board enters (faces E/N/W/S by plan normal; `s` to the right
+  of a viewer outside the face), as wide as the board is thick, as tall as the board's section over the whole depth it
+  enters (`vRangeWithin` of the contour), clipped to the post (`openTop/openBottom`). Diagnostics (WARNING, through the
+  takeoff gate): `JOINT-POST-POCKETS-OVERLAP`, `JOINT-POST-FACE-SKEW`, `JOINT-POST-POCKET-OUTSIDE`.
+- **3D**: `postRenderer.js renderPosts(models, material, pocketsByPost)` — `geometryUtils.js buildBoxWithBoxPockets`
+  (grid of cells, only outer faces — no CSG; volume-tested).
+- **DXF**: the post drawing is now the post UNFOLDED — 4 faces S, E, N, W side by side + a plan section, every pocket
+  with its depth and its height from the post's bottom (`buildPostDXF(post, pockets)`, `buildAllPostsDXF(posts,
+  pocketsByPost)`); the stringer drawing marks the post face and the housing depth (layer `JOINTS`).
+- **Next**: stage 2 treads/risers ↔ post (the winder treads at the corner post still pass through the post in 3D),
+  stage 3 stringer ↔ stringer at a postless corner (butt joint into a housing; today the two outer boards overlap in a
+  thickness × thickness square at the turn), stage 4 connectors (holes, takeoff).
+Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.test.js`; the "board ends at the post
+face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

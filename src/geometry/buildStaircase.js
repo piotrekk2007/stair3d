@@ -9,6 +9,7 @@ import { buildStringerConstructionGeometry } from './stringerConstructionGeometr
 import { renderStringers } from './stringerRenderer.js';
 import { buildPostModels, buildAllPostModels } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
+import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
@@ -91,7 +92,9 @@ export function buildStaircase(inputConfig) {
   root.add(renderStringers(stringerModels.outer, stringerConstruction.outer, stringerMaterial, 'StringerOuter'));
   root.add(renderStringers(stringerModels.inner, stringerConstruction.inner, stringerMaterial, 'StringerInner'));
 
-  const postsGroup = renderPosts(postModels, postMaterial);
+  // How the elements are joined (jointSolver.js): stage 1 = the pockets (wręg) the stringers enter in the posts.
+  const joints = buildJointModel({ stringerModels, stringerConstruction, postModels });
+  const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
 
   if (config.hasRiserBoards) {
@@ -117,5 +120,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints };
 }

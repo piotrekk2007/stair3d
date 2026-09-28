@@ -110,6 +110,10 @@ export function createDefaultConfig() {
     // mm, jak głęboko stopień wchodzi w wangę WPUSZCZANĄ (głębokość gniazda w licu wewnętrznym) — decyzja użytkownika:
     // ok. 20 mm, zmienialne. Starszy projekt bez tego pola: wzór BWF max(12, 0.4·grubość) (stringerModel.js housingDepthMm).
     stringerHousingDepthMm: 20,
+    // mm, jak głęboko wanga wchodzi PEŁNYM PRZEKROJEM we wręg (gniazdo) w licu słupa konstrukcyjnego (decyzja
+    // użytkownika 2026-09-28: złącze wanga–słup = wręg pełnym przekrojem). 20 = wartość wyjściowa DO WERYFIKACJI
+    // (CO-MFG-J-POST-HOUSING; ta sama co wpust stopnia w wangę) — brak źródła. 0 = wanga dochodzi do lica słupa.
+    postHousingDepthMm: 20,
     stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje NAD GÓRNĄ PŁASZCZYZNĘ STOPNIA
     // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
     // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).

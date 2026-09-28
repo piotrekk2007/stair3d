@@ -12,6 +12,20 @@ import { defineRuleSet } from '../schema.js';
 
 export const manufacturingAssumptions = defineRuleSet([
   {
+    ruleId: 'CO-MFG-J-POST-HOUSING',
+    category: 'J',
+    description: 'A stringer meets a structural post (newel, corner post) by entering, with its FULL cross-section, a pocket (wreg) milled into the post face; the post DXF shows the pocket, the stringer is lengthened by its depth.',
+    condition: 'pocket depth = postHousingDepthMm (0 = stringer butts against the post face); pocket = the stringer section over the depth, clipped to the post',
+    configRefs: ['postHousingDepthMm'],
+    ruleType: 'MANUFACTURING_ASSUMPTION',
+    jurisdiction: 'COMPANY',
+    source: 'Joint type chosen by the user (2026-09-28). No source for the 20 mm default — placeholder mirroring stringerHousingDepthMm. For comparison, BWF-GUID-F-02 (BWF Guide §6.2.3) describes a TENON joint instead: tenon >= 12 mm thick, >= 45 mm long.',
+    severity: 'INFO',
+    blocksGeneration: false,
+    needsVerification: true,
+    notes: 'Connectors (stair bolts / dowels) through this joint are a separate, later stage.',
+  },
+  {
     ruleId: 'CO-MFG-J-TOP-NOSING',
     category: 'J',
     description: 'Stairs with risers end with a riser too: at the top, on the slab edge, a thinner "fajkowy" nosing tread is laid flush with the upper floor, and the last riser stands under it (from the underside of the last tread up to the underside of that nosing tread, plus the usual riser-into-tread overlap).',
