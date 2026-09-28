@@ -114,9 +114,10 @@ export function createDefaultConfig() {
     // użytkownika 2026-09-28: złącze wanga–słup = wręg pełnym przekrojem). 20 = wartość wyjściowa DO WERYFIKACJI
     // (CO-MFG-J-POST-HOUSING; ta sama co wpust stopnia w wangę) — brak źródła. 0 = wanga dochodzi do lica słupa.
     postHousingDepthMm: 20,
-    // mm, jak głęboko stopień / podstopień przechodzący przez słup konstrukcyjny wchodzi w gniazdo w jego licu (etap 2
-    // złączy); reszta elementu jest wycięta wokół słupa. 20 = wartość wyjściowa DO WERYFIKACJI (CO-MFG-J-POST-TREAD-HOUSING,
-    // ta sama co wpust stopnia w wangę). 0 = element wycięty równo z licem słupa, bez gniazda.
+    // mm, jak głęboko STOPIEŃ przechodzący przez słup konstrukcyjny wchodzi w gniazdo w jego licu (etap 2 złączy) — jednym
+    // czopem na licu, o które opiera się najbardziej, na pełnej szerokości styku; reszta wycięta równo z licami słupa.
+    // Podstopień (nienośny) nie ma gniazda — tylko wycięty równo ze słupem. 20 = wartość wyjściowa DO WERYFIKACJI
+    // (CO-MFG-J-POST-TREAD-HOUSING, ta sama co wpust stopnia w wangę). 0 = stopień wycięty równo z licem słupa, bez gniazda.
     postTreadHousingDepthMm: 20,
     // Łączniki złączy wang (etap 4 złączy, decyzja użytkownika 2026-09-28: "jako parametry") — śruba schodowa przez
     // słup (albo na głębokość w słupie) i przez czoło wangi do gniazda nakrętki w jej licu wewnętrznym; tak samo

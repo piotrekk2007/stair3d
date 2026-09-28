@@ -46,6 +46,16 @@ prawo dla patrzącego na lico z zewnątrz (0 = oś słupa), `z` = wysokość w �
 
 ## Etap 2 (zrobiony): stopnie i podstopnie ↔ słup
 
+**Zasada obowiązująca (decyzja użytkownika 2026-09-28, zastępuje opis niżej):** końcówkę stopnia frezujemy jak
+najmniej, stopień ma mieć jak największe podparcie i wchodzić w słup (lub wangę) możliwie szeroko. Na KAŻDYM słupie
+konstrukcyjnym (początkowym, końcowym, narożnym) stopień dostaje jedno proste wycięcie wokół słupa i jeden czop: na licu,
+o które opiera się najbardziej (największy styk z pasem lica na całej jego szerokości), na pełnej szerokości stopnia w
+tym miejscu, na głębokość `postTreadHousingDepthMm`; na pozostałych licach cięty równo. Gniazdo w słupie = szerokość
+czopa × grubość stopnia × głębokość. Nie ma już czopów na kilku licach (dawna zasada słupków początkowego/końcowego)
+ani czopa tylko w środkowej części lica (dawna zasada słupa narożnego — zostawiała drobne „schodki”). **Podstopień**
+nie jest nośny: tylko wycięty równo z licami słupa, bez gniazda (złącze `RISER_POST_CUT`). Poniżej — opis wcześniejszej
+wersji.
+
 - `config.postTreadHousingDepthMm` (UI „Wpust stopnia/podstopnia w słup [mm]"; katalog `CO-MFG-J-POST-TREAD-HOUSING`;
   20 mm DO WERYFIKACJI; 0 = element wycięty równo z licem słupa, bez gniazda). `jointSolver.js postTreadHousingDepthMm`
   (nigdy przez słup: najwyżej połowa przekroju − 1 mm).

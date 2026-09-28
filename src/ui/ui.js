@@ -163,7 +163,7 @@ export function createUI({
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad stopniem (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerHousingDepthMm', 5, 40, 1).name('Wpust stopnia w wangę (wpuszczana) [mm]'), 'stringerHousingDepthMm');
   lockable(build.add(config, 'postHousingDepthMm', 0, 40, 1).name('Wręg wangi w słupie [mm] (0 = do lica)'), 'postHousingDepthMm');
-  lockable(build.add(config, 'postTreadHousingDepthMm', 0, 40, 1).name('Wpust stopnia/podstopnia w słup [mm]'), 'postTreadHousingDepthMm');
+  lockable(build.add(config, 'postTreadHousingDepthMm', 0, 40, 1).name('Wpust stopnia w słup [mm]'), 'postTreadHousingDepthMm');
   lockable(build.add(config, 'jointConnectorCount', 0, 4, 1).name('Łączniki wang: liczba na złącze'), 'jointConnectorCount');
   lockable(build.add(config, 'jointConnectorSpacingMm', 30, 300, 5).name('Łączniki: rozstaw [mm]'), 'jointConnectorSpacingMm');
   lockable(build.add(config, 'jointConnectorDiameterMm', 6, 16, 1).name('Łączniki: średnica śruby [mm]'), 'jointConnectorDiameterMm');

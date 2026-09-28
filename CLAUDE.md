@@ -1386,6 +1386,14 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
 - **DXF**: the post drawing is now the post UNFOLDED — 4 faces S, E, N, W side by side + a plan section, every pocket
   with its depth and its height from the post's bottom (`buildPostDXF(post, pockets)`, `buildAllPostsDXF(posts,
   pocketsByPost)`); the stringer drawing marks the post face and the housing depth (layer `JOINTS`).
+- **Stage 2 revised (user rule 2026-09-28: "the tread end milled as little as possible, largest support, into the post
+  as widely as it can; the riser is not load-bearing, no housing"):** at EVERY structural post a tread gets ONE plain
+  notch and ONE tongue — on the face whose full-width band it overlaps most, across the tread's full width there
+  (`jointSolver.js removalAtPost`: subtract the post square minus that band, one rectangle); the other faces are cut
+  flush. This replaces both the newel rule below (tongues on every face, a U round the post) and the corner-post rule
+  (a tongue only in a face's middle part, which left small steps). Risers are cut flush, no pocket (joint type
+  `RISER_POST_CUT`, `depthMm 0`). `postTreadHousingDepthMm` now concerns treads only (UI "Wpust stopnia w słup").
+  Tests: `treadPostJoints.test.js` (rewritten; fails on the old code). The text below describes the earlier rule.
 - **Stage 2 (implemented): treads/risers ↔ post.** `config.postTreadHousingDepthMm` (20, DO WERYFIKACJI —
   `CO-MFG-J-POST-TREAD-HOUSING`; 0 = cut flush with the post, no pocket). Every tread and riser panel passing through a
   structural post (in plan AND in height; balustrade posts excluded) is cut around it — outline minus the post's core

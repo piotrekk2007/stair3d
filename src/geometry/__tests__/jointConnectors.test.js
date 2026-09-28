@@ -104,7 +104,7 @@ test('findings: too shallow a section, unavoidable crossing, a weakened post, a 
   assert.equal(edge[0].elementId, 'post-start');
   assert.ok(edge[0].message.includes(`${CONNECTOR_EDGE_DISTANCE_FACTOR}d`));
   // many bolts close together on a thin post: crossings cannot be avoided, and the post loses most of its section
-  const bad = build({ jointConnectorSpacingMm: 20, jointConnectorCount: 4, postSize: 80 });
+  const bad = build({ jointConnectorSpacingMm: 20, jointConnectorCount: 4, postSize: 70 });
   const ids = connectorFindings(bad).map((d) => d.ruleId);
   assert.ok(ids.includes('JOINT-CONNECTOR-CLASH'));
   assert.ok(ids.includes('JOINT-POST-WEAKENED'));

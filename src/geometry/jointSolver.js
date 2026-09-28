@@ -116,30 +116,27 @@ function faceRect(post, faceId, k0, k1, s0, s1) {
 }
 
 /**
- * What to take out of an element at a post, and where it keeps a tongue:
- *  - ordinary post: everything inside the core (post square shrunk by the depth) — the element keeps a tongue in the
- *    band of EVERY face it crosses;
- *  - corner post (user decision 2026-09-28: no "fork" of thin prongs round the post's corner): the element is cut FLUSH
- *    with the post faces and keeps ONE tongue — on the face it bears on most, only within that face's middle part (not
- *    its corner strips), so it never wraps the corner. No contact with a face's middle part = flush, no tongue.
- * Returns { rects: convex polygons to subtract, bands: [{faceId, band}] where tongues/pockets are }.
+ * What to take out of a TREAD at a post, and where its end goes into the post (user rule 2026-09-28: "the tread's end
+ * is milled as little as possible, it keeps the largest support, and it enters the post as widely as it can"):
+ * ONE plain notch round the post and ONE tongue — on the face the tread bears on most (the largest overlap with that
+ * face's full-width band), across the FULL width of the tread there, `depth` into the post. Everything else of the
+ * tread inside the post is cut flush with the post faces — never tongues on several faces round a corner (the former
+ * newel rule) nor a tongue kept only in a face's middle part (the former corner-post rule, which left small steps at
+ * the face's corners). Same at every structural post. depth 0 (or no contact with any face band) = cut flush.
+ * Returns { rects: convex polygons to subtract, bands: [{faceId, band}] where the tongue/pocket is }.
  */
-function removalAtPost(outline, post, depth, singleFace) {
+function removalAtPost(outline, post, depth) {
   const h = post.size / 2;
   if (!(depth > 0)) return { rects: [square(post.position, h)], bands: [] };
-  if (!singleFace) return { rects: [square(post.position, h - depth)], bands: POST_FACE_ORDER.map((faceId) => ({ faceId, band: faceBand(post, faceId, depth) })) };
   let best = null;
   for (const faceId of POST_FACE_ORDER) {
-    const band = faceRect(post, faceId, h - depth, h, -(h - depth), h - depth);
+    const band = faceBand(post, faceId, depth);
     const area = polygonArea(clipToConvex(outline, band));
     if (area >= MIN_OVERLAP_MM2 && (!best || area > best.area)) best = { faceId, band, area };
   }
   if (!best) return { rects: [square(post.position, h)], bands: [] };
-  const f = best.faceId;
-  return {
-    rects: [faceRect(post, f, -h, h - depth, -h, h), faceRect(post, f, h - depth, h, -h, -(h - depth)), faceRect(post, f, h - depth, h, h - depth, h)],
-    bands: [{ faceId: f, band: best.band }],
-  };
+  // the post square without the chosen face's band is one rectangle
+  return { rects: [faceRect(post, best.faceId, -h, h - depth, -h, h)], bands: [{ faceId: best.faceId, band: best.band }] };
 }
 
 // Subtract convex polygons one after another, keeping the largest piece each time; returns the kept piece, how many
@@ -165,7 +162,7 @@ function cutAroundPost(outline, post, depth, zRange) {
   if (!(zRange.top > post.elevation.bottom + GEOMETRY_EPS && zRange.bottom < post.elevation.top - GEOMETRY_EPS)) return null;
   const h = post.size / 2;
   if (polygonArea(clipToConvex(outline, square(post.position, h))) < MIN_OVERLAP_MM2) return null;
-  const removal = removalAtPost(outline, post, depth, post.kind === 'corner');
+  const removal = removalAtPost(outline, post, depth);
   const { kept, maxPieces, droppedMm2, total } = subtractAll(outline, removal.rects);
   const pockets = [];
   if (depth > 0) {
@@ -295,19 +292,17 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
     }
     if (touched) treadCuts[tread.stepId] = { outline, holes, undersides, droppedMm2 };
   }
+  // A riser carries no load (user rule 2026-09-28), so it is not housed in the post: only cut flush with its faces.
   for (const riser of riserModels || []) {
     riser.panels.forEach((panel, k) => {
       let poly = riserPanelPolygon(riser, panel);
       let touched = false;
       for (const post of structuralPosts) {
-        const depth = postTreadHousingDepthMm(config, post.size);
-        const cut = cutAroundPost(poly, post, depth, riser.elevation);
+        const cut = cutAroundPost(poly, post, 0, riser.elevation);
         if (!cut || !cut.kept) continue;
         touched = true;
         poly = cut.kept.outer;
-        const label = riser.atTop ? 'podstopien gorny' : `podstopien ${Number(String(riser.stepId).replace('step-', '')) + 1}`;
-        const jointId = `joint:${post.postId}:${riser.riserId}:${k}`;
-        joints.push({ id: jointId, type: 'RISER_POST_HOUSING', postId: post.postId, riserId: riser.riserId, panelIndex: k, depthMm: depth, pockets: cut.pockets.map((p) => ({ ...p, jointId, kind: 'riser', label })) });
+        joints.push({ id: `joint:${post.postId}:${riser.riserId}:${k}`, type: 'RISER_POST_CUT', postId: post.postId, riserId: riser.riserId, panelIndex: k, depthMm: 0, pockets: [] });
       }
       if (touched) riserCuts[`${riser.riserId}:${k}`] = poly;
     });

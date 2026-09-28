@@ -14,8 +14,8 @@ export const manufacturingAssumptions = defineRuleSet([
   {
     ruleId: 'CO-MFG-J-POST-TREAD-HOUSING',
     category: 'J',
-    description: 'A tread or riser that passes through a structural post (the first/last tread at a newel, the narrow winder treads at a corner post) is cut around the post and enters a pocket milled into each post face it crosses.',
-    condition: 'element outline minus the post core (post square shrunk by postTreadHousingDepthMm); pocket per crossed face = the crossing width x the element thickness x that depth',
+    description: 'A tread that passes through a structural post (the first/last tread at a newel, the winder treads at a corner post) gets ONE plain notch round the post and enters it with ONE tongue — on the face it bears on most, across its full width there — milling the tread end as little as possible for the largest support (user rule 2026-09-28). A riser carries no load: it is only cut flush with the post, no pocket.',
+    condition: 'tread outline minus (post square without the chosen face band, postTreadHousingDepthMm deep); one pocket = the tongue width x the tread thickness x that depth; risers: outline minus the post square',
     configRefs: ['postTreadHousingDepthMm'],
     ruleType: 'MANUFACTURING_ASSUMPTION',
     jurisdiction: 'COMPANY',
