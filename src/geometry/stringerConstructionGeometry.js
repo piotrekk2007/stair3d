@@ -77,6 +77,7 @@ import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver
 import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
+import { topRiserElevation } from './riserSolver.js';
 
 // tan(70 degrees): the steepest end edge that is still continued along its own line to the end face.
 // The ordinary steep dusza of a normal winder is ~58 degrees (slope 1.6) and stays a straight line;
@@ -433,6 +434,34 @@ function buildRiserHousings(effective, config) {
     }));
 }
 
+// The gniazdo for the TOP riser (riserSolver.js buildTopRiserModel — under the fajkowy nosing tread on the slab):
+// it stands right behind the LAST tread (front face on its back edge, `finalUEnd`), riserBoardThickness deep, at the
+// SAME elevation as the riser model (topRiserElevation — one formula for both). Only on the board that carries the
+// last tread; the caller also lengthens that board so it covers the riser's ends (its end face = the riser's back
+// face = the slab face).
+function buildTopRiserHousing(lastBearing, config) {
+  const { bottom, top } = topRiserElevation(lastBearing.treadIndex, config);
+  return {
+    kind: 'riser',
+    atTop: true,
+    treadIndex: lastBearing.treadIndex + 1,
+    uStart: lastBearing.finalUEnd,
+    uEnd: lastBearing.finalUEnd + config.riserBoardThickness,
+    topV: top,
+    bottomV: bottom,
+    depth: housingDepthMm(config),
+  };
+}
+
+// Does this board carry the stair's last tread, so the top riser butts into it (housed wanga, risers on, and no
+// structural post at this end — a post takes the riser's end there instead)?
+function carriesTopRiser(segment, effective, constructionType, config, lastTreadIndex) {
+  if (constructionType !== CONSTRUCTION_TYPES.CLOSED || !config.hasRiserBoards || !(config.riserBoardThickness > 0)) return false;
+  if (segment.endPost || effective.length === 0) return false;
+  const last = effective[effective.length - 1];
+  return last.treadIndex === lastTreadIndex && last.ownsEnd !== false;
+}
+
 // --- Diagnostics -------------------------------------------------------------------------------
 
 function minSectionDiagnostic(segmentId, valueMm, requiredMm) {
@@ -602,7 +631,7 @@ function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
   return { ...profileOverrides, lower, upper, anchors, inserted };
 }
 
-function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set(), isLastGroupOfSide = true) {
+function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set(), isLastGroupOfSide = true, lastTreadIndex = null) {
   const withBearings = group.filter((s) => s.treadBearings.length > 0);
   if (withBearings.length === 0) return group.map(emptySegmentGeometry);
 
@@ -655,7 +684,10 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // ...but never past a structural post: a board butts into the face of the post standing at its end
     // (stringerSolver.js boardEndPosts — start newel, corner post, end newel); the post is the joint.
     const seatSpanStart = Math.min(0, effective[0].uStart);
-    const seatSpanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd);
+    // The board carrying the last tread of a housed wanga also covers the TOP riser's end (buildTopRiserHousing).
+    const topRiserHere = carriesTopRiser(segment, effective, constructionType, config, lastTreadIndex);
+    const topRiserEnd = topRiserHere ? effective[effective.length - 1].finalUEnd + config.riserBoardThickness : -Infinity;
+    const seatSpanEnd = Math.max(segmentLengths[i], effective[effective.length - 1].uEnd, topRiserEnd);
     const spanStart = segment.startPost ? Math.max(seatSpanStart, segment.startPost.faceU) : seatSpanStart;
     const spanEnd = segment.endPost ? Math.min(seatSpanEnd, segment.endPost.faceU) : seatSpanEnd;
     // A contour is continued along its end tangent to reach an end face only up to this steepness; a
@@ -689,7 +721,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       // included, even past the board's own end (so a nosing poking out of the board is visible).
       const clipStart = segment.startPost ? spanStart : -Infinity;
       const clipEnd = segment.endPost ? spanEnd : Infinity;
-      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config)]
+      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config), ...(topRiserHere ? [buildTopRiserHousing(effective[effective.length - 1], config)] : [])]
         .map((h) => ({ ...h, uStart: Math.max(h.uStart, clipStart), uEnd: Math.min(h.uEnd, clipEnd) }))
         .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
       diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
@@ -960,7 +992,9 @@ export function buildStringerConstructionGeometry(model, config) {
   const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
   const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
   const usedOverrideIds = new Set();
-  const results = groups.flatMap((group, g) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds, g === groups.length - 1));
+  // the stair's last tread (the highest one this wanga carries) — the top riser butts into the board carrying it
+  const lastTreadIndex = Math.max(-1, ...model.segments.flatMap((s) => s.treadBearings.map((b) => b.treadIndex)));
+  const results = groups.flatMap((group, g) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds, g === groups.length - 1, lastTreadIndex));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));

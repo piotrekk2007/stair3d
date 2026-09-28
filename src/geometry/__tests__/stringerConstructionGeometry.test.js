@@ -205,7 +205,8 @@ test('housed + riser boards: every ownsStart bearing also gets a kind:"riser" ho
   const bearings = model.segments[0].treadBearings;
 
   const treadHousings = geo.housings.filter((h) => h.kind === 'tread');
-  const riserHousings = geo.housings.filter((h) => h.kind === 'riser');
+  // (the top riser's own housing — at the end of the board carrying the last tread — is tested separately below)
+  const riserHousings = geo.housings.filter((h) => h.kind === 'riser' && !h.atTop);
   assert.equal(treadHousings.length, bearings.length);
   assert.equal(riserHousings.length, bearings.filter((b) => b.ownsStart).length);
 
@@ -753,4 +754,51 @@ test('tight winder: treads standing wholly on the corner post do not shape the n
   const bottom = geos[1].bottomProfile;
   const slope = (a, c) => (c.v - a.v) / (c.u - a.u);
   for (let i = 1; i < bottom.length - 1; i++) assert.ok(Math.abs(slope(bottom[i - 1], bottom[i]) - slope(bottom[i], bottom[i + 1])) < 1e-6);
+});
+
+
+// ---- the TOP riser's housing (under the fajkowy nosing tread) in a housed wanga ----
+import { buildRiserModels } from '../riserSolver.js';
+
+test('housed + riser boards: the board carrying the last tread gets a housing for the TOP riser, exactly where the riser model stands, and reaches past it', () => {
+  for (const side of ['outer', 'inner']) {
+    const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', hasRiserBoards: true, riserBoardThickness: 22, riserTopOverlapMm: 12, topNosingThicknessMm: 18 });
+    const model = buildStringerModel(planLayout, config, side);
+    const geos = buildStringerConstructionGeometry(model, config);
+    const lastSeg = model.segments[model.segments.length - 1];
+    const lastGeo = geos[geos.length - 1];
+    const top = lastGeo.housings.filter((h) => h.atTop);
+    if (lastSeg.endPost) {
+      assert.equal(top.length, 0, `${side}: a post at the end takes the riser's end — no housing in the board`);
+      continue;
+    }
+    assert.equal(top.length, 1, side);
+    const h = top[0];
+    const lastBearing = lastSeg.treadBearings[lastSeg.treadBearings.length - 1];
+    const riser = buildRiserModels(planLayout, config).find((r) => r.atTop);
+    assert.equal(h.kind, 'riser');
+    assert.equal(h.uStart, lastBearing.finalUEnd, 'front face on the last tread back edge');
+    assert.equal(h.uEnd, lastBearing.finalUEnd + 22);
+    assert.equal(h.bottomV, riser.elevation.bottom, 'same elevation as the riser model');
+    assert.equal(h.topV, riser.elevation.top);
+    assert.ok(lastGeo.ends.end.u >= h.uEnd - 1e-6, `${side}: the board covers the riser's end (end ${lastGeo.ends.end.u}, riser back face ${h.uEnd})`);
+    // a real pocket is routed for it (not dropped for leaving the board)
+    const inPocket = lastGeo.housingPockets.some((poly) => poly.some((p) => Math.abs(p.u - (h.uEnd - 0.5)) < 1 && p.v > h.bottomV));
+    assert.ok(inPocket, `${side}: the top riser's pocket is in the board`);
+    // only one board, and only there
+    assert.equal(geos.flatMap((g) => g.housings || []).filter((x) => x.atTop).length, 1);
+  }
+});
+
+test('no top-riser housing without risers, on a cut (overlay) wanga, and the board end is unchanged then', () => {
+  const base = { ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed' };
+  const off = build({ ...base, hasRiserBoards: false });
+  const offGeo = buildStringerConstructionGeometry(buildStringerModel(off.planLayout, off.config, 'outer'), off.config);
+  assert.equal(offGeo.flatMap((g) => g.housings || []).filter((h) => h.atTop).length, 0);
+  const cut = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasRiserBoards: true });
+  const cutGeo = buildStringerConstructionGeometry(buildStringerModel(cut.planLayout, cut.config, 'outer'), cut.config);
+  assert.ok(cutGeo.every((g) => !g.housings || g.housings.every((h) => !h.atTop)));
+  const on = build({ ...base, hasRiserBoards: true });
+  const onGeo = buildStringerConstructionGeometry(buildStringerModel(on.planLayout, on.config, 'outer'), on.config);
+  assert.ok(onGeo[onGeo.length - 1].ends.end.u > offGeo[offGeo.length - 1].ends.end.u, 'with the top riser the housed board reaches further');
 });

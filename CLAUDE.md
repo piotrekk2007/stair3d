@@ -1321,9 +1321,17 @@ stropie: grubość [mm]"). Consumers: the takeoff prices it like any riser (`ris
 `CONSTRAINT-RISER-FOLLOWS-FINAL-EDGE` checks it against the last tread's FINAL back edge, a 3D click on it selects the
 last tread. **Notes/limits:** the fajkowy tread itself is not modelled (fitted with the floor); the riser face is the
 stair's end line, so the slab face sits `riserBoardThickness` behind it (the last going stays exact, face to face);
-no housing for it in a housed wanga (it stands past the wanga's end) and the profile editor does not draw it; the
-wanga's load check does not count it (it is carried by the slab). Tests: `geometry/__tests__/riserModel.test.js`
-(position/elevation, fajkowy thickness, constraint, takeoff item), existing riser-count tests updated (+1).
+the wanga's load check does not count it (it is carried by the slab).
+**Housed wanga: a gniazdo for it.** `stringerConstructionGeometry.js`: the board carrying the stair's LAST tread of a
+closed (wpuszczana) wanga, with risers on and NO structural post at its end (a post takes the riser's end there),
+gets `buildTopRiserHousing` — `kind 'riser'`, `atTop: true`, `treadIndex` = last + 1, `u` = [last bearing's
+`finalUEnd`, + `riserBoardThickness`], elevation from `riserSolver.js` `topRiserElevation` (ONE formula shared with the
+riser model) — and its span is lengthened to the riser's back face so the board covers the riser's ends (end face =
+slab face; the pocket is routed 0.5 mm short of it, like every pocket). The profile editor draws it (green, like
+every riser housing) and the DXF labels it "wpust podstopnia"; a cut (overlay) wanga is unchanged. Tests: `geometry/__tests__/riserModel.test.js`
+(position/elevation, fajkowy thickness, constraint, takeoff item), existing riser-count tests updated (+1);
+`stringerConstructionGeometry.test.js` (the top housing matches the riser model and sits in the board; none without
+risers / on a cut wanga — both confirmed to fail on the old code).
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

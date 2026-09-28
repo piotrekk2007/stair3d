@@ -212,13 +212,24 @@ function buildWinderBackPanels(tread, finalEdge) {
  * @param {import('./planLayout.js').Tread} lastTread
  * @returns {RiserModel & {atTop: true, belowStepId: string}}
  */
-export function buildTopRiserModel(lastTread, config) {
-  const { riserHeight, treadThickness, riserBoardThickness, riserTopOverlapMm, totalRise } = config;
+/**
+ * Wysokość OSTATNIEGO podstopnia — jedno źródło dla modelu podstopnia (niżej) i gniazda w wandze wpuszczanej
+ * (stringerConstructionGeometry.js buildTopRiserHousing), żeby nigdy się nie rozjechały.
+ */
+export function topRiserElevation(lastTreadIndex, config) {
+  const { riserHeight, treadThickness, riserTopOverlapMm, totalRise } = config;
   const nosingThickness = Number.isFinite(config.topNosingThicknessMm) && config.topNosingThicknessMm >= 0 ? config.topNosingThicknessMm : 0;
-  const index = lastTread.index + 1;
+  const index = lastTreadIndex + 1;
   const floorLevel = Number.isFinite(totalRise) ? totalRise : (index + 1) * riserHeight;
-  const top = floorLevel - nosingThickness + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0);
-  const bottom = index * riserHeight - treadThickness;
+  return {
+    bottom: index * riserHeight - treadThickness,
+    top: floorLevel - nosingThickness + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0),
+  };
+}
+
+export function buildTopRiserModel(lastTread, config) {
+  const { riserBoardThickness } = config;
+  const { bottom, top } = topRiserElevation(lastTread.index, config);
 
   const nominal = nominalEdgesOf(lastTread, config).back;
   const final = lastTread.backEdge;
