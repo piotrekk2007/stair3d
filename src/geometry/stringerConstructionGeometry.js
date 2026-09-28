@@ -513,7 +513,12 @@ function computeMinRemainingSectionCut(effective, bottomPolyline) {
 // <= 0) has no support at all there, not just thin material — a stronger statement than the
 // WARNING-level STRINGER-MIN-SECTION check, and reported per affected tread rather than only
 // as one aggregate minimum.
-function checkCutSupportFailure(effective, bottomPolyline, segmentId) {
+// Like STRINGER-MIN-DEPTH (minDepthDiagnostic): on a board edited by hand (MANUAL side) a missing support is the
+// user's deliberate design, kept and reported as a WARNING — visible in Walidacja and in the board's DXF, never
+// blocking the takeoff (user decision 2026-09-28). In AUTO it stays an ERROR: there it means broken geometry.
+const supportSeverity = (manual) => (manual ? 'WARNING' : 'ERROR');
+const MANUAL_SUPPORT_NOTE = ' — skutek ręcznej edycji profilu (zachowana, bez blokady kosztorysu)';
+function checkCutSupportFailure(effective, bottomPolyline, segmentId, manual = false) {
   const diags = [];
   for (const b of effective) {
     const distStart = distancePointToPolyline({ u: b.uStart, v: b.bearingElevation }, bottomPolyline);
@@ -522,12 +527,12 @@ function checkCutSupportFailure(effective, bottomPolyline, segmentId) {
       diags.push(
         createDiagnostic({
           ruleId: 'STRINGER-TREAD-SUPPORT',
-          severity: 'ERROR',
+          severity: supportSeverity(manual),
           elementType: 'stringer',
           elementId: segmentId,
           parameter: 'treadSupport',
           value: b.treadIndex,
-          message: `Stopień o indeksie ${b.treadIndex} nie ma podparcia na wandze (${segmentId}) — dolna krawędź przechodzi przez lub nad miejscem oparcia.`,
+          message: `Stopień o indeksie ${b.treadIndex} nie ma podparcia na wandze (${segmentId}) — dolna krawędź przechodzi przez lub nad miejscem oparcia${manual ? MANUAL_SUPPORT_NOTE : ''}.`,
         })
       );
     }
@@ -541,7 +546,7 @@ function checkCutSupportFailure(effective, bottomPolyline, segmentId) {
 // exactly the check that would have caught the original bug: on the un-fixed 2-point pitch
 // line, an intermediate winder bearing's true elevation could fall OUTSIDE the naive
 // (uStart/uEnd-only) envelope, i.e. a tread the solved board doesn't actually reach.
-function checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segmentId) {
+function checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segmentId, manual = false) {
   const diags = [];
   for (const b of effective) {
     for (const u of [b.uStart, b.uEnd]) {
@@ -551,12 +556,12 @@ function checkClosedSupportContainment(effective, topPolyline, bottomPolyline, s
         diags.push(
           createDiagnostic({
             ruleId: 'STRINGER-TREAD-SUPPORT',
-            severity: 'ERROR',
+            severity: supportSeverity(manual),
             elementType: 'stringer',
             elementId: segmentId,
             parameter: 'treadSupport',
             value: b.treadIndex,
-            message: `Stopień o indeksie ${b.treadIndex} wykracza poza bryłę wangi (${segmentId}) — brak podparcia w tym miejscu.`,
+            message: `Stopień o indeksie ${b.treadIndex} wykracza poza bryłę wangi (${segmentId}) — brak podparcia w tym miejscu${manual ? MANUAL_SUPPORT_NOTE : ''}.`,
           })
         );
         break;
@@ -713,7 +718,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       const comb = buildCombCurve(extendCombToSpan(buildOverlayTop(effective), spanStart, spanEnd), params.notchRadiusMm);
       upperCurve = comb.curve;
       outerContour = [...comb.polyline, ...bottomPolyline.slice().reverse()];
-      diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id));
+      diagnostics.push(...checkCutSupportFailure(effective, bottomPolyline, segment.id, groupOverrides !== null));
     } else {
       outerContour = [...topPolyline, ...bottomPolyline.slice().reverse()];
       // A seat that reaches under a post (the board stops at the post's face) is cut back to that face; one wholly
@@ -724,7 +729,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config), ...(topRiserHere ? [buildTopRiserHousing(effective[effective.length - 1], config)] : [])]
         .map((h) => ({ ...h, uStart: Math.max(h.uStart, clipStart), uEnd: Math.min(h.uEnd, clipEnd) }))
         .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
-      diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id));
+      diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id, groupOverrides !== null));
     }
 
     // The pockets actually routed into a housed board's inner face (what the 3D board shows as recesses): each

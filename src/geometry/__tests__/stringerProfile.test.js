@@ -859,3 +859,27 @@ test('SPLINE: deepening a point never makes the board shallower than the minimum
     assert.ok(g.diagnostics.some((d) => d.ruleId === 'STRINGER-MIN-DEPTH' && d.severity === 'WARNING'), 'kept and reported');
   }
 });
+
+// User decision 2026-09-28: a tread left without support by a HAND edit is kept and reported as a WARNING (it no longer
+// blocks the takeoff); an AUTO profile never loses support, so there it would still be an ERROR.
+import { buildMaterialTakeoff } from '../../takeoff/index.js';
+import { buildStaircase } from '../buildStaircase.js';
+
+test('a hand edit that lifts the board off a tread: STRINGER-TREAD-SUPPORT is a WARNING, the takeoff is not blocked by it', () => {
+  // (on a cut board a lift that big also cuts through the notches — STRINGER-CONTOUR-SELF-INTERSECTION, a broken
+  // outline that rightly stays an ERROR — so the support warning is checked on the housed board)
+  for (const type of ['closed']) {
+    const base = { ...createDefaultConfig(), stairType: 'straight', treadsLegA: 14, stringerConstructionTypeOuter: type, stringerConstructionTypeInner: type, stringerTransitionStyle: 'SHARP' };
+    const auto = buildStaircase(base);
+    assert.ok(!auto.stringerConstruction.outer.flatMap((g) => g.diagnostics).some((d) => d.ruleId === 'STRINGER-TREAD-SUPPORT'), `${type}: AUTO keeps every support`);
+    // drag the lower contour at tread 6 up by 250 mm — above the housings of the treads around it
+    const overrides = anchorEdit({}, { type: ANCHOR_EDITS.MOVE_VERTEX, side: 'outer', contour: 'lower', anchorId: anchorIdForTread(6), ds: 0, dn: -250 });
+    const built = buildStaircase({ ...base, manualStringerProfileOverrides: overrides });
+    const support = built.stringerConstruction.outer.flatMap((g) => g.diagnostics).filter((d) => d.ruleId === 'STRINGER-TREAD-SUPPORT');
+    assert.ok(support.length > 0, `${type}: the lost support is reported`);
+    assert.ok(support.every((d) => d.severity === 'WARNING'), `${type}: ${support.map((d) => d.severity)}`);
+    assert.match(support[0].message, /ręcznej edycji/);
+    const gate = buildMaterialTakeoff(built, {});
+    assert.ok(!gate.diagnostics.some((d) => d.ruleId === 'STRINGER-TREAD-SUPPORT' && d.severity === 'ERROR'));
+  }
+});

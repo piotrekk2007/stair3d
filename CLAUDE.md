@@ -1200,6 +1200,15 @@ covering half of the editor.
   list capped at 110 px), the info strip capped at 22 % of the panel.
 - **Fixed afterwards (see the next section):** the shared closing id `end:top` and the first edit reshaping the whole
   board (SPLINE especially).
+- **STRINGER-MIN-DEPTH from a hand edit is a WARNING** (user decision): `minDepthDiagnostic(…, manual)` — a board of a side
+  in MANUAL mode that ends up shallower than the minimum is kept and reported without blocking the takeoff; an AUTO
+  profile meets the minimum by construction, so there it stays an ERROR.
+- **STRINGER-TREAD-SUPPORT from a hand edit is a WARNING too** (user decision 2026-09-28): `checkCutSupportFailure`/
+  `checkClosedSupportContainment` take `manual` (= the group has overrides) — a tread a hand edit leaves outside the
+  board is kept and reported ("…skutek ręcznej edycji profilu"), never blocking the takeoff; in AUTO it stays an ERROR.
+  A lift so big that the board's outline crosses itself (on a cut board: through the notches) is still
+  `STRINGER-CONTOUR-SELF-INTERSECTION`, an ERROR — the board itself is broken. Test: `stringerProfile.test.js`
+  ("a hand edit that lifts the board off a tread", confirmed to fail on the old code).
 Tests: `geometry/__tests__/stringerProfile.test.js` (post anchors, per-board overrides — the regression confirmed to
 fail on the old code — and PRUNE).
 
