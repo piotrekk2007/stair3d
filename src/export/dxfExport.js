@@ -65,6 +65,10 @@ function arcEntity(prim, layer) {
   return ['0', 'ARC', '8', layer, '10', fmt(prim.center.u), '20', fmt(prim.center.v), '30', '0', '40', fmt(prim.radius), '50', fmt(a1), '51', fmt(a2)].join('\n');
 }
 
+function circleEntity(center, radius, layer) {
+  return ['0', 'CIRCLE', '8', layer, '10', fmt(center.u), '20', fmt(center.v), '30', '0', '40', fmt(radius)].join('\n');
+}
+
 function textEntity(text, pos, heightMm, layer) {
   return ['0', 'TEXT', '8', layer, '10', fmt(pos.u), '20', fmt(pos.v), '30', '0', '40', fmt(heightMm), '1', escapeDxfText(text)].join('\n');
 }
@@ -182,6 +186,28 @@ function postJointEntities(geometry, offsetU) {
   return out;
 }
 
+// Connector holes in a board (joints stage 4 — jointSolver.js holesBySegment): an AXIAL hole from the board's end
+// face to the nut-access bore (drawn as a centre line + the bore's circle on the inner face), or a CROSS hole through
+// the board (a circle). One label per distinct text, at its first hole.
+function connectorHoleEntities(holes, offsetU) {
+  const out = [];
+  const labelled = new Set();
+  for (const h of holes || []) {
+    if (h.kind === 'axial') {
+      out.push(lineEntity({ u: h.u0 + offsetU, v: h.v }, { u: h.u1 + offsetU, v: h.v }, 'JOINTS'));
+      if (h.nutBoreMm > 0) out.push(circleEntity({ u: h.u1 + offsetU, v: h.v }, h.nutBoreMm / 2, 'JOINTS'));
+    } else {
+      out.push(circleEntity({ u: h.u + offsetU, v: h.v }, h.diameterMm / 2, 'JOINTS'));
+    }
+    if (!labelled.has(h.label)) {
+      labelled.add(h.label);
+      const u = (h.kind === 'axial' ? Math.min(h.u0, h.u1) : h.u) + offsetU;
+      out.push(textEntity(h.label, { u, v: h.v - 30 }, 10, 'JOINTS'));
+    }
+  }
+  return out;
+}
+
 function bearingEntities(segment, offsetU) {
   const out = [];
   for (const b of segment?.treadBearings || []) {
@@ -207,13 +233,14 @@ function diagnosticLines(geometry) {
   return ['UWAGA: deska ma nierozwiazane uwagi walidacji - sprawdz zakladke Walidacja', ...[...byRule].map(([key, n]) => `  ${key.replace('ERROR', 'BLAD').replace('WARNING', 'OSTRZEZENIE')}${n > 1 ? ` (x${n})` : ''}`)];
 }
 
-function titleLines(geometry, config) {
+function titleLines(geometry, config, holes = []) {
   const typeLabel = CONSTRUCTION_TYPE_LABELS_PL[geometry.constructionType] || geometry.constructionType;
   return [
     `Deska: ${geometry.segmentId}`,
     `Typ: ${typeLabel}`,
     geometry.localDepthMm != null ? `Glebokosc lokalna min.: ${Math.round(geometry.localDepthMm)} mm` : null,
     config?.stringerThickness ? `Grubosc materialu: ${config.stringerThickness} mm` : null,
+    holes?.length ? `Otwory na laczniki: ${holes.length} (warstwa JOINTS)` : null,
     ...diagnosticLines(geometry),
     'Skala 1:1 - wszystkie wymiary w mm',
   ].filter(Boolean);
@@ -241,11 +268,11 @@ function wrapDxf(entityLines) {
  * `segment` (the matching StringerModel segment, for treadBearings) and `config` are optional —
  * without them the drawing is still correct, just without those extras.
  */
-export function buildStringerBoardDXF(geometry, { segment, config } = {}) {
+export function buildStringerBoardDXF(geometry, { segment, config, holes } = {}) {
   const outline = buildBoardOutlineCurve(geometry);
   if (!outline) return null;
   const bounds = boundsOf(outline);
-  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...postJointEntities(geometry, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config), bounds)];
+  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...postJointEntities(geometry, 0), ...connectorHoleEntities(holes, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config, holes), bounds)];
   return wrapDxf(entities);
 }
 
@@ -254,7 +281,7 @@ export function buildStringerBoardDXF(geometry, { segment, config } = {}) {
  * DXF — an overview sheet rather than a per-board file. `model` (the StringerModel for this side,
  * for treadBearings) and `config` are optional, same as above.
  */
-export function buildStringerAllBoardsDXF(geometries, { model, config } = {}) {
+export function buildStringerAllBoardsDXF(geometries, { model, config, holesBySegment = {} } = {}) {
   const entities = [];
   let cursor = 0;
   let any = false;
@@ -271,8 +298,9 @@ export function buildStringerAllBoardsDXF(geometries, { model, config } = {}) {
       return moved;
     });
     const segment = model?.segments?.find((s) => s.id === geometry.segmentId);
-    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...postJointEntities(geometry, offsetU), ...bearingEntities(segment, offsetU));
-    entities.push(...titleEntities(titleLines(geometry, config), boundsOf(shifted)));
+    const holes = holesBySegment?.[geometry.segmentId] || [];
+    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...postJointEntities(geometry, offsetU), ...connectorHoleEntities(holes, offsetU), ...bearingEntities(segment, offsetU));
+    entities.push(...titleEntities(titleLines(geometry, config, holes), boundsOf(shifted)));
   }
   if (!any) return null;
   return wrapDxf(entities);
@@ -304,7 +332,7 @@ function postBlockWidth(post) {
   return 4 * post.size + POST_SECTION_GAP_MM + post.size;
 }
 
-function postEntities(post, pockets, offsetU) {
+function postEntities(post, pockets, offsetU, holes = []) {
   const height = post.elevation.top - post.elevation.bottom;
   const size = post.size;
   const out = [];
@@ -321,6 +349,12 @@ function postEntities(post, pockets, offsetU) {
       const open = [p.openTop ? 'otwarte u gory' : null, p.openBottom ? 'otwarte u dolu' : null].filter(Boolean).join(', ');
       out.push(textEntity(`${p.label} gl. ${Math.round(p.depthMm)} mm`, { u: a, v: z0 - 16 }, 10, 'HOUSINGS'));
       out.push(textEntity(`od dolu slupa ${Math.round(z0)}-${Math.round(z1)} mm${open ? ` (${open})` : ''}`, { u: a, v: z0 - 30 }, 10, 'HOUSINGS'));
+    }
+    // connector holes on this face (joints stage 4): a circle each, height from the post's bottom
+    for (const h of holes.filter((x) => x.faceId === faceId)) {
+      const c = { u: u0 + size / 2 + h.s, v: h.z - post.elevation.bottom };
+      out.push(circleEntity(c, h.diameterMm / 2, 'JOINTS'));
+      out.push(textEntity(`${h.label}, od dolu ${Math.round(c.v)} mm`, { u: c.u + h.diameterMm, v: c.v + 4 }, 8, 'JOINTS'));
     }
   });
   // plan section: which face is which, with the pockets' depth marked on their faces
@@ -339,20 +373,30 @@ function postEntities(post, pockets, offsetU) {
     const c = [pt(size / 2, p.sMin), pt(size / 2, p.sMax), pt(size / 2 - p.depthMm, p.sMax), pt(size / 2 - p.depthMm, p.sMin)];
     c.forEach((q, i) => out.push(lineEntity(q, c[(i + 1) % 4], 'HOUSINGS')));
   }
+  // connector axes in the section (the drilled length from the face)
+  for (const h of holes.filter((x) => !x.exit)) {
+    const n = POST_FACES[h.faceId].normal;
+    const ax = { x: -n.y, y: n.x };
+    const pt = (k) => ({ u: mid.u + n.x * k + ax.x * h.s, v: mid.v + n.y * k + ax.y * h.s });
+    out.push(lineEntity(pt(size / 2), pt(size / 2 - Math.min(h.depthMm, size)), 'JOINTS'));
+  }
   out.push(textEntity('przekroj (rzut)', { u: su, v: sv - 45 }, 10, 'TEXT'));
   return out;
 }
 
-function postTitleLines(post, pockets = []) {
+function postTitleLines(post, pockets = [], holes = [], weakening = null) {
   const height = post.elevation.top - post.elevation.bottom;
+  const drilled = holes.filter((h) => !h.exit);
   return [
     `Slup: ${post.postId}`,
     `Rodzaj: ${POST_KIND_LABELS_PL[post.kind] || post.kind}`,
     `Przekroj: ${post.size} x ${post.size} mm`,
     `Dlugosc: ${Math.round(height)} mm`,
     pockets.length ? `Gniazda (wregi): ${pockets.length} - rozwiniecie 4 licow ${POST_FACE_ORDER.join(', ')}` : 'Bez gniazd - rozwiniecie 4 licow',
+    drilled.length ? `Otwory na laczniki: ${drilled.length}${drilled.some((h) => h.through) ? ' (przelotowe - wyjscie na licu przeciwnym)' : ''}` : null,
+    weakening ? `Najslabszy przekroj netto: ${Math.round(weakening.netFraction * 100)} % na wys. ${Math.round(weakening.zMm - post.elevation.bottom)} mm od dolu` : null,
     'Skala 1:1 - wszystkie wymiary w mm',
-  ];
+  ].filter(Boolean);
 }
 
 function isValidPost(post) {
@@ -363,15 +407,15 @@ function isValidPost(post) {
  * One post, full size, as a standalone DXF: its four faces unfolded with the pockets machined into them (from the
  * joint model — jointSolver.js pocketsByPost[postId]), a plan section and a title block.
  */
-export function buildPostDXF(post, pockets = []) {
+export function buildPostDXF(post, pockets = [], { holes = [], weakening = null } = {}) {
   if (!isValidPost(post)) return null;
   const height = post.elevation.top - post.elevation.bottom;
-  const entities = [...postEntities(post, pockets || [], 0), ...titleEntities(postTitleLines(post, pockets || []), { minU: 0, maxV: height })];
+  const entities = [...postEntities(post, pockets || [], 0, holes || []), ...titleEntities(postTitleLines(post, pockets || [], holes || [], weakening), { minU: 0, maxV: height })];
   return wrapDxf(entities);
 }
 
 /** Every post the stair actually has (removed ones excluded), laid out side by side on one sheet. */
-export function buildAllPostsDXF(posts, pocketsByPost = {}) {
+export function buildAllPostsDXF(posts, pocketsByPost = {}, { holesByPost = {}, postWeakening = {} } = {}) {
   const valid = (posts || []).filter(isValidPost);
   if (valid.length === 0) return null;
   const entities = [];
@@ -379,7 +423,8 @@ export function buildAllPostsDXF(posts, pocketsByPost = {}) {
   for (const post of valid) {
     const height = post.elevation.top - post.elevation.bottom;
     const pockets = pocketsByPost?.[post.postId] || [];
-    entities.push(...postEntities(post, pockets, cursor), ...titleEntities(postTitleLines(post, pockets), { minU: cursor, maxV: height }));
+    const holes = holesByPost?.[post.postId] || [];
+    entities.push(...postEntities(post, pockets, cursor, holes), ...titleEntities(postTitleLines(post, pockets, holes, postWeakening?.[post.postId]), { minU: cursor, maxV: height }));
     cursor += postBlockWidth(post) + POST_GAP_MM;
   }
   return wrapDxf(entities);

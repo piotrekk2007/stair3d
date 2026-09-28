@@ -164,6 +164,13 @@ export function createUI({
   lockable(build.add(config, 'stringerHousingDepthMm', 5, 40, 1).name('Wpust stopnia w wangę (wpuszczana) [mm]'), 'stringerHousingDepthMm');
   lockable(build.add(config, 'postHousingDepthMm', 0, 40, 1).name('Wręg wangi w słupie [mm] (0 = do lica)'), 'postHousingDepthMm');
   lockable(build.add(config, 'postTreadHousingDepthMm', 0, 40, 1).name('Wpust stopnia/podstopnia w słup [mm]'), 'postTreadHousingDepthMm');
+  lockable(build.add(config, 'jointConnectorCount', 0, 4, 1).name('Łączniki wang: liczba na złącze'), 'jointConnectorCount');
+  lockable(build.add(config, 'jointConnectorSpacingMm', 30, 300, 5).name('Łączniki: rozstaw [mm]'), 'jointConnectorSpacingMm');
+  lockable(build.add(config, 'jointConnectorDiameterMm', 6, 16, 1).name('Łączniki: średnica śruby [mm]'), 'jointConnectorDiameterMm');
+  lockable(build.add(config, 'jointConnectorBoardDepthMm', 40, 200, 5).name('Łączniki: w głąb wangi do nakrętki [mm]'), 'jointConnectorBoardDepthMm');
+  lockable(build.add(config, 'jointConnectorNutBoreMm', 15, 50, 1).name('Łączniki: gniazdo nakrętki Ø [mm]'), 'jointConnectorNutBoreMm');
+  live(build.add(config, 'jointConnectorPostMode', { 'Przez cały słup': 'through', 'Ślepo, na głębokość': 'blind' })).name('Łączniki w słupie');
+  lockable(build.add(config, 'jointConnectorPostDepthMm', 20, 160, 5).name('Łączniki ślepe: głębokość w słupie [mm]'), 'jointConnectorPostDepthMm');
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');

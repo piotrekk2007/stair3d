@@ -963,12 +963,14 @@ function withoutHighlight(fn) {
 
 function exportPostDXF(postId) {
   const post = lastModels?.allPostModels?.find((p) => p.postId === postId);
-  const dxf = post ? buildPostDXF(post, lastModels?.joints?.pocketsByPost?.[post.postId] || []) : null;
+  const j = lastModels?.joints;
+  const dxf = post ? buildPostDXF(post, j?.pocketsByPost?.[post.postId] || [], { holes: j?.holesByPost?.[post.postId] || [], weakening: j?.postWeakening?.[post.postId] || null }) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slup_${postId}.dxf`, 'application/dxf');
 }
 
 function exportAllPostsDXF() {
-  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels, lastModels?.joints?.pocketsByPost || {}) : null;
+  const j = lastModels?.joints;
+  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels, j?.pocketsByPost || {}, { holesByPost: j?.holesByPost || {}, postWeakening: j?.postWeakening || {} }) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slupy.dxf`, 'application/dxf');
 }
 

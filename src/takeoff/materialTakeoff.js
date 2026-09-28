@@ -23,6 +23,7 @@ import { boundingRectAlong, minAreaRectUV } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
 import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
 import { buildRailingItems } from './railingItems.js';
+import { buildConnectorItems } from './connectorItems.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
@@ -326,7 +327,7 @@ function buildPostItems(postModels, config, wasteFactors) {
  * @param {{wasteFactors?: Object}} [options]
  * @returns {import('./takeoffTypes.js').MaterialTakeoffItem[]}  Cost fields are all null — see pricing.js.
  */
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel }, config, options = {}) {
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
     ...buildTreadItems(treadModels, config, wasteFactors),
@@ -335,5 +336,6 @@ export function computeMaterialTakeoff({ treadModels, riserModels, stringerModel
     ...buildStringerSideItems('inner', stringerModels.inner, stringerConstruction.inner, config, wasteFactors),
     ...buildPostItems(postModels, config, wasteFactors),
     ...buildRailingItems(railingModel, config, wasteFactors),
+    ...buildConnectorItems(joints, config, wasteFactors),
   ];
 }

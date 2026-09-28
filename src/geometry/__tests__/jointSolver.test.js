@@ -32,7 +32,8 @@ test('every inner board end at a structural post gets ONE housing in that post, 
       const post = m.postModels.find((p) => p.postId === j.postId);
       assert.ok(j.pocket.zMin >= post.elevation.bottom - 1e-6 && j.pocket.zMax <= post.elevation.top + 1e-6);
     }
-    assert.deepEqual(m.joints.diagnostics, [], JSON.stringify(patch));
+    // (the connectors have their own findings — e.g. a cut board is too shallow at the newel for 2 bolts; see jointConnectors.test.js)
+    assert.deepEqual(m.joints.diagnostics.filter((d) => !d.ruleId.startsWith('JOINT-CONNECTOR')), [], JSON.stringify(patch));
   }
 });
 

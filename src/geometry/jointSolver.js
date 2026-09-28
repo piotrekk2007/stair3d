@@ -17,6 +17,7 @@
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 import { subtractConvex, clipToConvex, polygonArea } from './polygonClip.js';
+import { buildConnectors } from './jointConnectors.js';
 
 const MIN_OVERLAP_MM2 = 1; // a tread/riser touching a post by less than this is not a joint
 // A post cutting a tread in two keeps the larger piece; the smaller one is just cut off (typically the narrow tip of a
@@ -192,7 +193,8 @@ function cutAroundPost(outline, post, depth, zRange) {
  * @param {{stringerModels: {outer, inner}, stringerConstruction: {outer: Array, inner: Array}, postModels: Array,
  *   treadModels?: Array, riserModels?: Array, config?: Object}} models
  * @returns {{joints: Array, pocketsByPost: Record<string, Array>, treadCuts: Record<string, Object>,
- *   riserCuts: Record<string, Array>, diagnostics: Array}}
+ *   riserCuts: Record<string, Array>, connectors: Array, holesByPost: Record<string, Array>,
+ *   holesBySegment: Record<string, Array>, postWeakening: Record<string, Object>, diagnostics: Array}}
  */
 export function buildJointModel({ stringerModels, stringerConstruction, postModels, treadModels = [], riserModels = [], config = {} }) {
   const joints = [];
@@ -329,7 +331,10 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
       }
     }
   }
-  return { joints, pocketsByPost, treadCuts, riserCuts, diagnostics };
+  // stage 4: the bolts through the stringer joints, and what their holes (with the pockets) leave of each post
+  const bolts = buildConnectors(joints, { stringerModels, stringerConstruction, posts, pocketsByPost, config, vRangeWithin });
+  diagnostics.push(...bolts.diagnostics);
+  return { joints, pocketsByPost, treadCuts, riserCuts, connectors: bolts.connectors, holesByPost: bolts.holesByPost, holesBySegment: bolts.holesBySegment, postWeakening: bolts.postWeakening, diagnostics };
 }
 
 /** Per tread: its cut outline and the posts it enters — what the tread DXF needs ({[stepId]: {cut, posts}}). */

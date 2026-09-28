@@ -14,6 +14,7 @@ const ELEMENT_LABEL_PL = {
   HANDRAIL: 'Poręcze',
   BASERAIL: 'Podporęcze',
   BALUSTER: 'Tralki (lista cięcia)',
+  CONNECTOR: 'Łączniki (bez ceny)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -109,7 +110,7 @@ export function describeDimensions(d) {
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
 
-const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)'];
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Łączniki (bez ceny)'];
 
 function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
@@ -131,6 +132,8 @@ function categoryOf(item, winderStepIds) {
       return 'Podporęcze (z modelu)';
     case 'BALUSTER':
       return 'Tralki (z modelu)';
+    case 'CONNECTOR':
+      return 'Łączniki (bez ceny)';
     default:
       return null; // wpusty — poza kosztorysem
   }

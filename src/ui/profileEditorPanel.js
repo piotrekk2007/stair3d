@@ -620,7 +620,7 @@ export function createProfileEditor(container, handlers) {
       return;
     }
     const segment = model?.segments.find((s) => s.id === segmentId);
-    const dxf = buildStringerBoardDXF(geometry, { segment, config });
+    const dxf = buildStringerBoardDXF(geometry, { segment, config, holes: ctx.models.joints?.holesBySegment?.[segmentId] || [] });
     if (!dxf) {
       showToast('Tej deski nie da się wyeksportować — brak policzonej geometrii (sprawdź Walidację).');
       return;
@@ -633,7 +633,7 @@ export function createProfileEditor(container, handlers) {
     const geo = ctx.models.stringerConstruction[state.side];
     const model = ctx.models.stringerModels[state.side];
     const config = ctx.models.fullConfig || ctx.config;
-    const dxf = geo ? buildStringerAllBoardsDXF(geo, { model, config }) : null;
+    const dxf = geo ? buildStringerAllBoardsDXF(geo, { model, config, holesBySegment: ctx.models.joints?.holesBySegment || {} }) : null;
     if (!dxf) {
       showToast('Brak policzonej geometrii tej wangi do wyeksportowania (sprawdź Walidację).');
       return;

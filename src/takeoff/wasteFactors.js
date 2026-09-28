@@ -17,6 +17,7 @@ export const DEFAULT_WASTE_FACTORS = Object.freeze({
   HANDRAIL: 0.1, // cut to length with mitres at the ends
   BASERAIL: 0.1, // same as the handrail
   BALUSTER: 0.03, // short identical pieces, little offcut
+  CONNECTOR: 0, // hardware counted in pieces — no offcut
 });
 
 /**

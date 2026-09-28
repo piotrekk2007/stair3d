@@ -1413,7 +1413,22 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
   overlapped by a thickness × thickness square. DXF: "wreg pod wange B" in A, "lico wangi A" line on B; joint model
   `STRINGER_STRINGER_BUTT`. Five older tests that assumed the old meeting were updated (continuity now allows the
   profile's rise over the butt gap). Test: `jointSolver.test.js` ("postless corner …", fails on the old code).
-- **Next**: stage 4 connectors (holes, takeoff).
+- **Stage 4 (implemented): connectors (stair bolts) in the stringer joints.** `src/geometry/jointConnectors.js`
+  (pure, called at the end of `buildJointModel`) → `joints.connectors`/`holesByPost`/`holesBySegment`/`postWeakening`.
+  Stringer ↔ post and stringer ↔ stringer joints are bolted (treads/risers in post pockets are not). Config (all DO
+  WERYFIKACJI, `CO-MFG-J-CONNECTORS`): `jointConnectorCount` 2 (0 = none; an older project without it = none),
+  `jointConnectorSpacingMm` 120, `jointConnectorDiameterMm` 10, `jointConnectorBoardDepthMm` 100 (joint face → nut
+  bore), `jointConnectorNutBoreMm` 30, `jointConnectorPostMode` 'through'|'blind' + `jointConnectorPostDepthMm` 60.
+  Bolts are centred on the stringer's section at the joint face; if they would cross another joint's holes in the same
+  post (two boards into adjacent faces of a corner post at nearly one height — e.g. with risers) the solver moves the
+  group in d/2 steps, at most one spacing (`shiftMm`); otherwise WARNING `JOINT-CONNECTOR-CLASH`. Also
+  `JOINT-CONNECTOR-EDGE` (3d from an edge, EN 1995-1-1 tab. 8.4 quoted from memory — to verify; a cut board at the
+  start newel is too shallow for 2 bolts), `-SPACING`, `-SHORT`, and the post-weakening check `JOINT-POST-WEAKENED`
+  (net plan section at every hole/pocket height < 50 %, judgement threshold). DXF: circles on the post faces (exit on
+  the opposite face when through) + axes in the section + weakest net section in the title; on a board the bolt axis
+  and nut bore (or a through circle). Takeoff: `takeoff/connectorItems.js`, element `CONNECTOR` per joint (quantity =
+  bolts, "Śruba schodowa M10 × L"), material `joint-connector` UNPRICED, summary line "Łączniki (bez ceny)". Not in 3D.
+  Test: `geometry/__tests__/jointConnectors.test.js` (the crossing test fails without the group shift).
 Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.test.js`; the "board ends at the post
 face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth; stage 2:
 `geometry/__tests__/polygonClip.test.js`, `treadPostJoints.test.js` (fails on the stage-1 code).

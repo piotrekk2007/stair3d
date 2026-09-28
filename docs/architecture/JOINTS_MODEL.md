@@ -93,11 +93,45 @@ spotykają) — deska PRZED narożnikiem (A) przechodzi, deska za nim (B) dochod
 - DXF wangi: wręg w A opisany „wreg pod wange B gl. N mm", na B linia lica A „lico wangi A - wreg gl. N mm" (warstwa
   JOINTS). Model złączy: `STRINGER_STRINGER_BUTT` (lista pod etap 4). Profil edytora rysuje wręg jak każde gniazdo.
 
-## Etap następny
+## Etap 4 (zrobiony): łączniki (śruby schodowe) złączy wang
 
-4. **Łączniki**: liczba/rozstaw jako parametry, otwory na DXF wangi i słupa, pozycje w kosztorysie; kontrola
-   osłabienia słupa.
+`src/geometry/jointConnectors.js` (czysty), wywoływany na końcu `buildJointModel` → `connectors`, `holesByPost`,
+`holesBySegment`, `postWeakening` (+ diagnostyki). Skręcane są złącza **wanga ↔ słup** (`STRINGER_POST_HOUSING`) i
+**wanga ↔ wanga** (`STRINGER_STRINGER_BUTT`); stopnie/podstopnie w gniazdach słupa — nie (klejone, poza zakresem).
 
-Testy: `src/geometry/__tests__/jointSolver.test.js`, `src/export/__tests__/dxfExport.test.js` (DXF słupa i wangi),
+- **Parametry** (wszystkie DO WERYFIKACJI, katalog `CO-MFG-J-CONNECTORS`; UI w folderze konstrukcji):
+  `jointConnectorCount` 2 (0 = bez łączników), `jointConnectorSpacingMm` 120 (w pionie, symetrycznie względem środka
+  przekroju wangi na licu złącza), `jointConnectorDiameterMm` 10 (M10 = otwór), `jointConnectorBoardDepthMm` 100 (od
+  lica złącza w głąb wangi do środka gniazda nakrętki), `jointConnectorNutBoreMm` 30 (gniazdo nakrętki w licu
+  wewnętrznym wangi), `jointConnectorPostMode` `'through'` (przez cały słup, podkładka/zaślepka po drugiej stronie) /
+  `'blind'` + `jointConnectorPostDepthMm` 60 (od lica). Starszy projekt bez tych pól = bez łączników.
+- **Wanga ↔ słup**: otwór na licu z gniazdem (środek grubości wangi), przy `through` wyjście na licu przeciwnym (`s`
+  lustrzane); w wandze oś od czoła (dno gniazda) do gniazda nakrętki. Długość śruby = cała oś: `przekrój słupa +
+  głębokość w wandze` (przelotowo) albo `głębokość w słupie + głębokość w wandze` (ślepo).
+- **Wanga ↔ wanga**: przez deskę A (od jej lica zewnętrznego, w kierunku B) — w A otwór poprzeczny (okrąg), w B oś od
+  czoła do gniazda nakrętki; długość = grubość A wzdłuż B + głębokość w B.
+- **Wysokości otworów to decyzja solvera**: środek przekroju; jeśli otwory przecięłyby otwory innego złącza w tym samym
+  słupie (dwie deski wchodzące w sąsiednie lica słupa narożnego na prawie tej samej wysokości — np. z podstopniami),
+  cała grupa przesuwa się w górę/dół krokami d/2, najwyżej o rozstaw, do najbliższej wysokości, która je omija i trzyma
+  odległość od krawędzi (`shiftMm` w łączniku). Nie da się → zostaje na środku i jest ostrzeżenie.
+- **Kontrola (WARNING, przez bramkę kosztorysu)**: `JOINT-CONNECTOR-EDGE` (bliżej niż 3d od krawędzi wangi / końca
+  słupa — EN 1995-1-1 tab. 8.4, a4,c = 3d dla śrub, przytoczone z pamięci, DO WERYFIKACJI; np. wanga nakładana ma przy
+  słupku początkowym tylko ~135 mm przekroju, więc 2 śruby co 120 mm się nie mieszczą), `JOINT-CONNECTOR-CLASH`
+  (otwory krzyżują się w słupie), `JOINT-CONNECTOR-SPACING` (gniazda nakrętek nachodzą na siebie),
+  `JOINT-CONNECTOR-SHORT` (łącznik ślepy nie sięga za wręg), **`JOINT-POST-WEAKENED`** — osłabienie słupa: na każdej
+  wysokości otworu/gniazda przekrój netto = przekrój − gniazda (szer. × głęb.) − otwory (Ø × długość), nakładania
+  liczone podwójnie (bezpiecznie); poniżej 50 % (próg z oceny, do weryfikacji) ostrzeżenie; najsłabsze miejsce każdego
+  słupa w `postWeakening`.
+- **DXF**: słup — okrąg na licu dla każdego otworu (z opisem i wysokością od dołu), oś otworu w przekroju, w tytule
+  liczba otworów i najsłabszy przekrój netto; wanga — oś otworu + okrąg gniazda nakrętki (albo okrąg otworu
+  przelotowego), liczba otworów w tytule (warstwa JOINTS).
+- **Kosztorys**: `takeoff/connectorItems.js` — pozycja `CONNECTOR` na złącze, ilość = liczba śrub, „Śruba schodowa
+  M10 × L", materiał `joint-connector` **bez ceny** (brak w cenniku — koszt pusty, podsumowanie „Łączniki (bez ceny)"
+  liczy je jako niewycenione), bez objętości drewna (ciężar własny ich nie liczy).
+- Ograniczenia: brak otworów w 3D (za małe, niewidoczne); nie sprawdza, czy otwór trafia w gniazdo stopnia/podstopnia
+  w słupie; jeden rodzaj łącznika i wspólne parametry dla wszystkich złączy; bez nośności łącznika.
+
+Testy: `src/geometry/__tests__/jointSolver.test.js`, `jointConnectors.test.js` (etap 4 — test „holes of different
+joints never cross" nie przechodzi bez przesuwania grup), `src/export/__tests__/dxfExport.test.js` (DXF słupa i wangi),
 `postsAndWangi.test.js` / `stringerProfile.test.js` (wanga wchodzi w słup dokładnie na głębokość wręgu),
 `polygonClip.test.js`, `treadPostJoints.test.js` (etap 2).

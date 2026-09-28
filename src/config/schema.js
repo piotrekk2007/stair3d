@@ -118,6 +118,16 @@ export function createDefaultConfig() {
     // złączy); reszta elementu jest wycięta wokół słupa. 20 = wartość wyjściowa DO WERYFIKACJI (CO-MFG-J-POST-TREAD-HOUSING,
     // ta sama co wpust stopnia w wangę). 0 = element wycięty równo z licem słupa, bez gniazda.
     postTreadHousingDepthMm: 20,
+    // Łączniki złączy wang (etap 4 złączy, decyzja użytkownika 2026-09-28: "jako parametry") — śruba schodowa przez
+    // słup (albo na głębokość w słupie) i przez czoło wangi do gniazda nakrętki w jej licu wewnętrznym; tak samo
+    // wanga dochodząca doczołowo do drugiej. WSZYSTKIE wartości DO WERYFIKACJI (CO-MFG-J-CONNECTORS), brak źródła.
+    jointConnectorCount: 2, // szt. na złącze (0 = bez łączników — tylko klej/wręg)
+    jointConnectorSpacingMm: 120, // mm, rozstaw w pionie, symetrycznie względem środka przekroju wangi na licu złącza
+    jointConnectorDiameterMm: 10, // mm, średnica śruby = otworu (M10)
+    jointConnectorBoardDepthMm: 100, // mm, od lica złącza w głąb wangi do środka gniazda nakrętki
+    jointConnectorNutBoreMm: 30, // mm, średnica gniazda nakrętki wierconego w licu wewnętrznym wangi
+    jointConnectorPostMode: 'through', // 'through' = przez cały słup (podkładka/zaślepka po drugiej stronie), 'blind' = na głębokość
+    jointConnectorPostDepthMm: 60, // mm, tylko 'blind': głębokość otworu w słupie liczona od lica
     stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje NAD GÓRNĄ PŁASZCZYZNĘ STOPNIA
     // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
     // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).
