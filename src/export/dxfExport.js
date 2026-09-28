@@ -149,7 +149,7 @@ function housingEntities(geometry, offsetU) {
       { u: h.uStart + offsetU, v: h.topV },
     ];
     for (let i = 0; i < 4; i++) out.push(lineEntity(corners[i], corners[(i + 1) % 4], 'HOUSINGS'));
-    const label = h.kind === 'riser' ? 'wpust podstopnia' : 'wpust';
+    const label = h.kind === 'riser' ? 'wpust podstopnia' : h.kind === 'butt' ? `wreg pod wange ${h.segmentId}` : 'wpust';
     out.push(textEntity(`${label} gl. ${Math.round(h.depth)} mm`, { u: corners[0].u, v: corners[0].v - 15 }, 12, 'HOUSINGS'));
   }
   return out;
@@ -168,6 +168,16 @@ function postJointEntities(geometry, offsetU) {
     out.push(lineEntity({ u, v: vr.min }, { u, v: vr.max }, 'JOINTS'));
     const labelU = end === 'end' ? u - 150 : u + 5;
     out.push(textEntity(`lico slupa ${into.postId} - wreg gl. ${Math.round(into.depthMm)} mm`, { u: labelU, v: vr.max + 10 }, 12, 'JOINTS'));
+  }
+  // joints stage 3: this board butts into the previous one at a postless corner — mark that board's face
+  const butt = geometry.ends?.start?.butt;
+  if (butt && geometry.outerContour?.length) {
+    const vr = vRangeWithin(geometry.outerContour, butt.faceU, butt.faceU);
+    if (vr) {
+      const u = butt.faceU + offsetU;
+      out.push(lineEntity({ u, v: vr.min }, { u, v: vr.max }, 'JOINTS'));
+      out.push(textEntity(butt.housed ? `lico wangi ${butt.intoSegmentId} - wreg gl. ${Math.round(butt.depthMm)} mm` : `doczolowo do wangi ${butt.intoSegmentId}`, { u: u + 5, v: vr.max + 10 }, 12, 'JOINTS'));
+    }
   }
   return out;
 }

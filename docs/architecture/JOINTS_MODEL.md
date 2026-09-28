@@ -53,6 +53,12 @@ prawo dla patrzącego na lico z zewnątrz (0 = oś słupa), `z` = wysokość w �
   słupek balustrady), jest **wycinany wokół słupa**: obrys minus „rdzeń" słupa (kwadrat słupa zmniejszony o głębokość
   wpustu) — `polygonClip.js subtractConvex` (Weiler–Atherton dla wypukłej dziury, bez zależności). To, co zostaje
   w pasie między licem a rdzeniem, to czop wchodzący w gniazdo.
+- **Słup narożny — bez „widelca"** (decyzja użytkownika 2026-09-28): element jest cięty RÓWNO z licami słupa i dostaje
+  JEDEN czop — na licu, o które opiera się najbardziej, tylko w środkowej części lica (bez pasów przy narożnikach
+  słupa), więc nigdy nie obejmuje narożnika cienkimi zębami. Brak styku ze środkową częścią lica = cięcie równo, bez
+  czopa. (`jointSolver.js removalAtPost`; słupki początkowy/końcowy bez zmian — tam stopień obejmuje słup z trzech
+  stron bez cienkich zębów.) `polygonClip.js cleanPolygon` usuwa zdublowane i współliniowe wierzchołki po kolejnych
+  odejmowaniach.
 - **Gniazdo** na każdym licu, przez które przechodzi element (`clipToConvex` z pasem lica): szerokość = zakres
   przejścia na osi lica, wysokość = grubość stopnia / wysokość podstopnia, głębokość = parametr (`kind: 'tread'|'riser'`,
   opis „stopien N" / „podstopien N").
@@ -68,10 +74,25 @@ prawo dla patrzącego na lico z zewnątrz (0 = oś słupa), `z` = wysokość w �
 - Ograniczenia: rowek pod zakładkę podstopnia w DXF stopnia (`treadNotchEntities`) jest rysowany z niewyciętego
   obrysu; kosztorys liczy powierzchnię/formatkę stopnia jak dotąd (wycięcie jest niewielkie).
 
-## Etapy następne
+## Etap 3 (zrobiony): wanga ↔ wanga — doczołowo we wręg (narożnik bez słupa)
 
-3. **Wanga ↔ wanga** (narożnik bez słupa, zawsze zewnętrzna wanga na zakręcie): doczołowo we wręg. Dziś obie deski
-   dochodzą do zewnętrznego narożnika i w rzucie nachodzą na siebie kwadratem grubość × grubość.
+`stringerConstructionGeometry.js computeOpenCornerExtensions` (każde złącze `LAP_JOINT`, którego linie łańcucha się
+spotykają) — deska PRZED narożnikiem (A) przechodzi, deska za nim (B) dochodzi do niej:
+- **narożnik wypukły** (zewnętrzna wanga na zakręcie — B odchodzi w stronę wewnętrznej normalnej A): A kończy się
+  dokładnie w zewnętrznym narożniku, B zaczyna się na WEWNĘTRZNYM licu A minus głębokość wręgu (`ends.start.butt =
+  {intoSegmentId, depthMm, faceU, housed: true}`), a w wewnętrznym licu A powstaje wręg `kind: 'butt'` na szerokość
+  grubości B i wysokość przekroju B na głębokości wejścia (`addButtHousings`, po zbudowaniu wszystkich desek; dla wangi
+  nakładanej górna krawędź z konturu). Głębokość = `housingDepthMm` (ta sama co wpust stopnia w wangę — rysowana tą
+  samą techniką warstw; bez nowej niezweryfikowanej liczby).
+- **narożnik wklęsły** (wewnętrzna wanga po usunięciu słupa narożnego): A przechodzi o grubość za narożnik (przykrywa
+  kwadrat narożnika), B dochodzi do niej równo, bez wręgu (wręg musiałby być w ZEWNĘTRZNYM licu A — nieobsługiwane).
+- Wcześniej obie deski dochodziły do narożnika (albo, przy wyłączonym „Słupie na zakręcie", obie wychodziły o grubość
+  za niego — pierwsza wystawała poza zewnętrzne lico drugiej) i w rzucie nachodziły na siebie kwadratem 40 × 40 mm.
+- DXF wangi: wręg w A opisany „wreg pod wange B gl. N mm", na B linia lica A „lico wangi A - wreg gl. N mm" (warstwa
+  JOINTS). Model złączy: `STRINGER_STRINGER_BUTT` (lista pod etap 4). Profil edytora rysuje wręg jak każde gniazdo.
+
+## Etap następny
+
 4. **Łączniki**: liczba/rozstaw jako parametry, otwory na DXF wangi i słupa, pozycje w kosztorysie; kontrola
    osłabienia słupa.
 

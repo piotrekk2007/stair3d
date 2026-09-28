@@ -19,6 +19,31 @@ export function polygonArea(poly) {
 const ccw = (poly) => (signedPolygonArea(poly) < 0 ? [...poly].reverse() : poly);
 const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 
+// Drops repeated points (closer than 1 µm) and vertices lying on a straight line between their neighbours — what
+// successive subtractions of shapes sharing an edge leave behind (0-length edges, a corner on a straight side).
+const CLEAN_EPS_MM = 1e-3;
+export function cleanPolygon(poly) {
+  let pts = poly.slice();
+  let changed = true;
+  while (changed && pts.length > 3) {
+    changed = false;
+    for (let i = 0; i < pts.length && pts.length > 3; i++) {
+      const prev = pts[(i - 1 + pts.length) % pts.length];
+      const p = pts[i];
+      const next = pts[(i + 1) % pts.length];
+      const len = Math.hypot(next.x - prev.x, next.y - prev.y) || 1;
+      const duplicate = Math.hypot(p.x - prev.x, p.y - prev.y) < CLEAN_EPS_MM;
+      const onLine = Math.abs(cross(prev, p, next)) / len < CLEAN_EPS_MM && (p.x - prev.x) * (next.x - p.x) + (p.y - prev.y) * (next.y - p.y) >= 0;
+      if (duplicate || onLine) {
+        pts.splice(i, 1);
+        changed = true;
+        i--;
+      }
+    }
+  }
+  return pts;
+}
+
 /** subject ∩ clip (clip convex). Returns a polygon (possibly empty). */
 export function clipToConvex(subject, clip) {
   const c = ccw(clip);
@@ -152,7 +177,8 @@ export function subtractConvex(subjectIn, holeIn) {
       }
       k = onA ? (k + 1) % aList.length : (k - 1 + bList.length) % bList.length;
     }
-    if (ring.length >= 3 && polygonArea(ring) > 1e-6) pieces.push({ outer: ring, holes: [] });
+    const clean = cleanPolygon(ring);
+    if (clean.length >= 3 && polygonArea(clean) > 1e-6) pieces.push({ outer: clean, holes: [] });
   }
   return pieces;
 }

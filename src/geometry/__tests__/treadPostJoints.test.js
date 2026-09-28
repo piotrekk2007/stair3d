@@ -44,14 +44,15 @@ test('every tread passing through a structural post is cut around it: nothing le
       for (const p of posts) {
         const core = square(p, p.size / 2 - d);
         assert.ok(polygonArea(clipToConvex(cut.outline, core)) < 1, `${JSON.stringify(patch)} ${tread.stepId}: something left in ${p.postId}'s core`);
-        // the tongue into the post: exactly the part of the tread within the housing depth of the faces
-        if (d > 0) assert.ok(polygonArea(clipToConvex(cut.outline, square(p, p.size / 2))) > 1, `${tread.stepId}: no tongue into ${p.postId}`);
-        else assert.ok(polygonArea(clipToConvex(cut.outline, square(p, p.size / 2))) < 1, `${tread.stepId}: depth 0 = cut flush with the post`);
+        if (d === 0) assert.ok(polygonArea(clipToConvex(cut.outline, square(p, p.size / 2))) < 1, `${tread.stepId}: depth 0 = cut flush with the post`);
+        else if (p.kind !== 'corner') assert.ok(polygonArea(clipToConvex(cut.outline, square(p, p.size / 2))) > 1, `${tread.stepId}: no tongue into ${p.postId}`);
       }
-      // what was removed is only (part of) the post
-      const removed = polygonArea(tread.outline) - polygonArea(cut.outline) - (cut.droppedMm2 || 0);
-      const overlap = posts.reduce((s, p) => s + polygonArea(clipToConvex(tread.outline, square(p, p.size / 2 - d))), 0);
-      assert.ok(Math.abs(removed - overlap) < 1, `${tread.stepId}: removed ${removed} vs core overlap ${overlap}`);
+      // at a newel (start/end post) what was removed is exactly the post's core
+      if (posts.every((p) => p.kind !== 'corner')) {
+        const removed = polygonArea(tread.outline) - polygonArea(cut.outline) - (cut.droppedMm2 || 0);
+        const overlap = posts.reduce((s, p) => s + polygonArea(clipToConvex(tread.outline, square(p, p.size / 2 - d))), 0);
+        assert.ok(Math.abs(removed - overlap) < 1, `${tread.stepId}: removed ${removed} vs core overlap ${overlap}`);
+      }
     }
     assert.ok(cutCount >= 2, JSON.stringify(patch));
   }
@@ -123,4 +124,34 @@ test('DXF: the tread is drawn cut around the post (with the post outline and the
   const postDxf = buildPostDXF(post, m.joints.pocketsByPost[post.postId]);
   assert.match(postDxf, /stopien \d+ gl\. 20 mm/);
   assert.match(postDxf, /podstopien \d+ gl\. 20 mm/);
+});
+
+// User decision 2026-09-28: at the corner post no "fork" of thin prongs round the post's corner — the element is cut
+// flush with the post faces and keeps ONE tongue, on the face it bears on most, within that face's middle part.
+test('corner post: treads and risers are cut flush with the faces, with at most one tongue in the middle of one face', () => {
+  for (const patch of [{}, { stairType: 'U' }, { turnDirection: 'left' }, { windersPerTurn: 3 }]) {
+    const m = build(patch);
+    const d = m.fullConfig.postTreadHousingDepthMm;
+    for (const post of structural(m).filter((p) => p.kind === 'corner')) {
+      const h = post.size / 2;
+      for (const j of m.joints.joints.filter((x) => x.postId === post.postId && x.type !== 'STRINGER_POST_HOUSING')) {
+        assert.ok(j.pockets.length <= 1, `${JSON.stringify(patch)} ${j.id}: ${j.pockets.length} pockets`);
+        for (const p of j.pockets) assert.ok(p.sMin >= -(h - d) - 1e-6 && p.sMax <= h - d + 1e-6, `${j.id}: tongue reaches the face's corner strip`);
+        if (j.type !== 'TREAD_POST_HOUSING') continue;
+        const cut = m.joints.treadCuts[j.stepId].outline;
+        const inPost = polygonArea(clipToConvex(cut, square(post, h)));
+        if (j.pockets.length === 0) {
+          assert.ok(inPost < 1, `${j.id}: no tongue, so nothing may be left in the post`);
+          continue;
+        }
+        // everything of the tread left inside the post is the tongue: in the pocket's face band, within its middle part
+        const f = j.pockets[0].faceId;
+        const n = { E: [1, 0], N: [0, 1], W: [-1, 0], S: [0, -1] }[f];
+        const a = faceAxis(f);
+        const pt = (k, s) => ({ x: post.position.x + n[0] * k + a.x * s, y: post.position.y + n[1] * k + a.y * s });
+        const band = [pt(h - d, -(h - d)), pt(h, -(h - d)), pt(h, h - d), pt(h - d, h - d)];
+        assert.ok(Math.abs(inPost - polygonArea(clipToConvex(cut, band))) < 1, `${JSON.stringify(patch)} ${j.id}: tread material in the post outside its one tongue`);
+      }
+    }
+  }
 });

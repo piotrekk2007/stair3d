@@ -106,16 +106,70 @@ export function riserPanelPolygon(riser, panel) {
  * post's core) and enters a pocket in every face it crosses. Returns the new outline (largest piece), its holes, and
  * the pockets; `null` when the element does not reach the post.
  */
+// A rectangle in a face's own frame: `k` along the face normal (from the post's centre), `s` along the face axis.
+function faceRect(post, faceId, k0, k1, s0, s1) {
+  const n = POST_FACES[faceId].normal;
+  const a = faceAxis(faceId);
+  const pt = (k, sv) => ({ x: post.position.x + n.x * k + a.x * sv, y: post.position.y + n.y * k + a.y * sv });
+  return [pt(k0, s0), pt(k1, s0), pt(k1, s1), pt(k0, s1)];
+}
+
+/**
+ * What to take out of an element at a post, and where it keeps a tongue:
+ *  - ordinary post: everything inside the core (post square shrunk by the depth) — the element keeps a tongue in the
+ *    band of EVERY face it crosses;
+ *  - corner post (user decision 2026-09-28: no "fork" of thin prongs round the post's corner): the element is cut FLUSH
+ *    with the post faces and keeps ONE tongue — on the face it bears on most, only within that face's middle part (not
+ *    its corner strips), so it never wraps the corner. No contact with a face's middle part = flush, no tongue.
+ * Returns { rects: convex polygons to subtract, bands: [{faceId, band}] where tongues/pockets are }.
+ */
+function removalAtPost(outline, post, depth, singleFace) {
+  const h = post.size / 2;
+  if (!(depth > 0)) return { rects: [square(post.position, h)], bands: [] };
+  if (!singleFace) return { rects: [square(post.position, h - depth)], bands: POST_FACE_ORDER.map((faceId) => ({ faceId, band: faceBand(post, faceId, depth) })) };
+  let best = null;
+  for (const faceId of POST_FACE_ORDER) {
+    const band = faceRect(post, faceId, h - depth, h, -(h - depth), h - depth);
+    const area = polygonArea(clipToConvex(outline, band));
+    if (area >= MIN_OVERLAP_MM2 && (!best || area > best.area)) best = { faceId, band, area };
+  }
+  if (!best) return { rects: [square(post.position, h)], bands: [] };
+  const f = best.faceId;
+  return {
+    rects: [faceRect(post, f, -h, h - depth, -h, h), faceRect(post, f, h - depth, h, -h, -(h - depth)), faceRect(post, f, h - depth, h, h - depth, h)],
+    bands: [{ faceId: f, band: best.band }],
+  };
+}
+
+// Subtract convex polygons one after another, keeping the largest piece each time; returns the kept piece, how many
+// pieces the element fell into at the worst step, and the area cut off (all pieces but the kept one).
+function subtractAll(outline, rects) {
+  let kept = { outer: outline, holes: [] };
+  let dropped = 0;
+  let maxPieces = 1;
+  let total = polygonArea(outline);
+  for (const r of rects) {
+    const pieces = subtractConvex(kept.outer, r);
+    if (pieces.length === 0) return { kept: null, maxPieces: 0, droppedMm2: total, total };
+    const sorted = pieces.slice().sort((p, q) => polygonArea(q.outer) - polygonArea(p.outer));
+    const real = pieces.filter((p) => polygonArea(p.outer) > MIN_OVERLAP_MM2).length;
+    maxPieces = Math.max(maxPieces, real);
+    dropped += pieces.reduce((sum, p) => sum + polygonArea(p.outer), 0) - polygonArea(sorted[0].outer);
+    kept = { outer: sorted[0].outer, holes: [...kept.holes, ...sorted[0].holes] };
+  }
+  return { kept, maxPieces, droppedMm2: dropped, total };
+}
+
 function cutAroundPost(outline, post, depth, zRange) {
   if (!(zRange.top > post.elevation.bottom + GEOMETRY_EPS && zRange.bottom < post.elevation.top - GEOMETRY_EPS)) return null;
   const h = post.size / 2;
   if (polygonArea(clipToConvex(outline, square(post.position, h))) < MIN_OVERLAP_MM2) return null;
-  const pieces = subtractConvex(outline, square(post.position, h - depth));
-  const kept = pieces.slice().sort((p, q) => polygonArea(q.outer) - polygonArea(p.outer))[0] || null;
+  const removal = removalAtPost(outline, post, depth, post.kind === 'corner');
+  const { kept, maxPieces, droppedMm2, total } = subtractAll(outline, removal.rects);
   const pockets = [];
   if (depth > 0) {
-    for (const faceId of POST_FACE_ORDER) {
-      const tongue = clipToConvex(outline, faceBand(post, faceId, depth));
+    for (const { faceId, band } of removal.bands) {
+      const tongue = clipToConvex(outline, band);
       if (polygonArea(tongue) < MIN_OVERLAP_MM2) continue;
       const a = faceAxis(faceId);
       const s = tongue.map((p) => (p.x - post.position.x) * a.x + (p.y - post.position.y) * a.y);
@@ -131,9 +185,7 @@ function cutAroundPost(outline, post, depth, zRange) {
       });
     }
   }
-  const total = pieces.reduce((sum, p) => sum + polygonArea(p.outer), 0);
-  const droppedMm2 = kept ? total - polygonArea(kept.outer) : 0;
-  return { kept, split: pieces.length > 1 && droppedMm2 > SPLIT_WARN_FRACTION * total, droppedMm2, swallowed: pieces.length === 0, pockets };
+  return { kept, rects: removal.rects, split: maxPieces > 1 && droppedMm2 > SPLIT_WARN_FRACTION * total, droppedMm2, swallowed: !kept, pockets };
 }
 
 /**
@@ -202,6 +254,15 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
     });
   }
 
+  // --- stage 3: two boards meeting at a corner without a post (stringerConstructionGeometry.js butts) ---
+  for (const side of ['outer', 'inner']) {
+    for (const g of stringerConstruction?.[side] || []) {
+      const butt = g?.ends?.start?.butt;
+      if (!butt) continue;
+      joints.push({ id: `joint:${butt.intoSegmentId}:${g.segmentId}`, type: 'STRINGER_STRINGER_BUTT', side, segmentId: g.segmentId, intoSegmentId: butt.intoSegmentId, depthMm: butt.depthMm, housed: butt.housed, pockets: [] });
+    }
+  }
+
   // --- stage 2: treads and risers that pass through a structural post ---
   const treadCuts = {};
   const riserCuts = {};
@@ -225,7 +286,7 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
       holes = [...holes, ...cut.kept.holes];
       droppedMm2 += cut.droppedMm2;
       if (notchOutline) {
-        const n = subtractConvex(notchOutline, square(post.position, post.size / 2 - depth)).sort((p, q) => polygonArea(q.outer) - polygonArea(p.outer))[0];
+        const n = subtractAll(notchOutline, cut.rects).kept;
         notchOutline = n ? n.outer : null;
       }
       const jointId = `joint:${post.postId}:${tread.stepId}`;

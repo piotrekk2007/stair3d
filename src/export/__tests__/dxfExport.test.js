@@ -132,7 +132,7 @@ test('buildStringerBoardDXF / housings: the owned front corner of a housing exte
   const g = geometries.find((geo) => (geo.housings || []).length > 0);
   assert.ok(g);
   const segment = model.segments.find((s) => s.id === g.segmentId);
-  for (const h of g.housings) {
+  for (const h of g.housings.filter((x) => x.kind !== 'butt')) {
     const bearing = segment.treadBearings.find((b) => b.treadIndex === h.treadIndex);
     const expectedStart = bearing.finalUStart + (bearing.ownsStart && bearing.riserRecess > 0 ? bearing.riserRecess : 0);
     assert.equal(h.uStart, bearing.ownsStart ? expectedStart - config.nosing : expectedStart);

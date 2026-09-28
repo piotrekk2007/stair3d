@@ -461,7 +461,12 @@ test('joint bug fix: the OUTER stringer (always a lap joint, never a corner post
     if (!a.bottomProfile || !b.bottomProfile) continue;
     const aEnd = a.bottomProfile[a.bottomProfile.length - 1];
     const bStart = b.bottomProfile[0];
-    assert.ok(Math.abs(aEnd.v - bStart.v) < 1e-6, `${a.segmentId} ends at v=${aEnd.v}, but ${b.segmentId} starts at v=${bStart.v} — a real gap in the board's underside at the joint`);
+    // (joints stage 3: B butts into A — it starts `gap` further along the SAME continuous profile, so the only
+    // difference allowed is the profile's own rise over that gap)
+    const gap = Math.max(0, b.ends.start.u);
+    const slope = (p) => Math.abs((p[p.length - 1].v - p[p.length - 2].v) / (p[p.length - 1].u - p[p.length - 2].u || 1));
+    const rise = Math.max(slope(a.bottomProfile), Math.abs((b.bottomProfile[1].v - b.bottomProfile[0].v) / (b.bottomProfile[1].u - b.bottomProfile[0].u || 1))) * gap;
+    assert.ok(Math.abs(aEnd.v - bStart.v) <= rise + 1e-6, `${a.segmentId} ends at v=${aEnd.v}, but ${b.segmentId} starts at v=${bStart.v} — a real gap in the board's underside at the joint`);
   }
 });
 
@@ -639,9 +644,14 @@ test('overshoot bug fix: clamping does not touch a lap-jointed pair (already exa
   const model = buildStringerModel(planLayout, config, 'outer');
   const geometries = buildStringerConstructionGeometry(model, config);
   for (let i = 1; i < geometries.length; i++) {
-    const prevEnd = geometries[i - 1].bottomProfile[geometries[i - 1].bottomProfile.length - 1];
-    const currStart = geometries[i].bottomProfile[0];
-    assert.ok(Math.abs(currStart.v - prevEnd.v) < 1e-6, 'a lap-jointed pair must remain exactly continuous, not merely clamped');
+    const prev = geometries[i - 1].bottomProfile;
+    const curr = geometries[i].bottomProfile;
+    const prevEnd = prev[prev.length - 1];
+    const currStart = curr[0];
+    // the butting board starts `gap` further along the same profile (joints stage 3) — no clamping on top of that
+    const gap = Math.max(0, geometries[i].ends.start.u);
+    const slope = Math.max(Math.abs((prevEnd.v - prev[prev.length - 2].v) / (prevEnd.u - prev[prev.length - 2].u || 1)), Math.abs((curr[1].v - currStart.v) / (curr[1].u - currStart.u || 1)));
+    assert.ok(Math.abs(currStart.v - prevEnd.v) <= slope * gap + 1e-6, 'a lap-jointed pair must remain exactly continuous, not merely clamped');
   }
 });
 

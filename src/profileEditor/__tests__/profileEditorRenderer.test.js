@@ -125,10 +125,11 @@ test('renderProfileEditorSVG: draws a housing rectangle per tread for a closed w
   const svg = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
   assert.equal((svg.match(/class="pe-housing"/g) || []).length, closed.flatMap((v) => v.housings).length);
 
+  // a cut wanga has no tread/riser housings — only (joints stage 3) the housing the next board butts into at a corner
   const cut = views({ stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' }).views;
-  assert.equal(cut[0].housings.length, 0);
+  assert.equal(cut.flatMap((v) => v.housings).filter((h) => h.kind !== 'butt').length, 0);
   const cutSvg = renderProfileEditorSVG(cut, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10 }).svg;
-  assert.ok(!cutSvg.includes('pe-housing'));
+  assert.equal((cutSvg.match(/class="pe-housing/g) || []).length, cut.flatMap((v) => v.housings).length);
 
   const off = renderProfileEditorSVG(closed, { viewport: { x: 0, y: -3000, width: 6000, height: 3500 }, pxToMm: 10, layers: { housings: false } }).svg;
   assert.ok(!off.includes('pe-housing'));

@@ -103,3 +103,37 @@ test('3D: the post mesh is the box with the pockets taken out (closed, exact vol
   assert.ok(Math.abs(Math.abs(meshVolume(corner1.geometry)) - (full - removed)) < 1, 'the rendered corner post has its two pockets');
   assert.ok(Math.abs(meshVolume(corner.geometry)) < full - removed, 'with tread housings too, even more is taken out');
 });
+
+// ---- stage 3: two boards meeting at a corner without a post ----
+import { boardPlanFootprint } from '../stringerModel.js';
+import { clipToConvex, polygonArea } from '../polygonClip.js';
+
+test('postless corner: the boards no longer overlap — at the outer (convex) corner only the tongue in the housing, at a concave one nothing', () => {
+  for (const patch of [{}, { hasCornerPost: false }, { turnDirection: 'left' }, { stairType: 'U' }, { stringerConstructionTypeOuter: 'cut' }]) {
+    const m = build(patch);
+    const t = m.fullConfig.stringerThickness;
+    const d = Math.min(m.fullConfig.stringerHousingDepthMm, t - 1);
+    for (const side of ['outer', 'inner']) {
+      const segs = m.stringerModels[side].segments;
+      const geos = m.stringerConstruction[side];
+      for (let i = 1; i < segs.length; i++) {
+        const butt = geos[i].ends.start.butt;
+        if (!butt) continue;
+        const fa = boardPlanFootprint(segs[i - 1], geos[i - 1]);
+        const fb = boardPlanFootprint(segs[i], geos[i]);
+        const overlap = polygonArea(clipToConvex(fa, fb));
+        const expected = butt.housed ? d * t : 0;
+        assert.ok(Math.abs(overlap - expected) < 1, `${JSON.stringify(patch)} ${side} ${segs[i].id}: overlap ${overlap} vs ${expected}`);
+        const joint = m.joints.joints.find((j) => j.type === 'STRINGER_STRINGER_BUTT' && j.segmentId === segs[i].id);
+        assert.ok(joint, 'listed in the joint model');
+        if (butt.housed) {
+          const h = geos[i - 1].housings.find((x) => x.kind === 'butt');
+          assert.ok(h && Math.abs(h.uEnd - h.uStart - t) < 1e-6, 'the housing in the through board is as wide as the butting board is thick');
+          assert.ok(geos[i - 1].housingPockets.length > 0);
+        }
+      }
+    }
+    // the outer stringer at a turn always butts into a housing
+    assert.ok(m.stringerConstruction.outer.slice(1).every((g) => g.ends.start.butt?.housed), JSON.stringify(patch));
+  }
+});

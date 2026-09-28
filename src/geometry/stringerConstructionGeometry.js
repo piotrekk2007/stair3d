@@ -78,6 +78,7 @@ import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, p
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 import { topRiserElevation } from './riserSolver.js';
+import { vRangeWithin } from './jointSolver.js';
 
 // tan(70 degrees): the steepest end edge that is still continued along its own line to the end face.
 // The ordinary steep dusza of a normal winder is ~58 degrees (slope 1.6) and stays a straight line;
@@ -88,31 +89,70 @@ function toXY(p) {
   return { x: p.u, y: p.v };
 }
 
-// --- Corner extension (moved here from stringerRenderer.js — a geometric decision, not a
-// rendering one) — when there is no corner post, two segments meeting at a real corner must
-// overlap by one board thickness (a simple lap-joint equivalent) so their extrusions don't
-// leave a visible gap at the joint. See the original comment history in git for the full
-// derivation; the logic itself is unchanged, only its home moved.
-function computeOpenCornerExtensions(model, hasCornerPost) {
-  const { segments, segmentJoints = [], side } = model;
+// --- Two boards meeting at a corner WITHOUT a post (joints stage 3 — docs/architecture/JOINTS_MODEL.md) ---------
+//
+// User decision 2026-09-28: a butt joint into a housing. The board BEFORE the corner (A) runs through the corner; the
+// board after it (B) butts against A. Where the corner is CONVEX (the outer wanga at a turn: B leaves in the direction
+// of A's inward normal) A ends exactly at the outer corner and B starts at A's INNER face minus the housing depth — it
+// enters a housing routed into A's inner face (as deep as the tread housings in a wanga, housingDepthMm, so the board
+// is drawn with the same layered technique). Where it is CONCAVE (the inner wanga whose corner post was removed) A runs
+// on one thickness past the corner to cover the corner square and B butts flush against A's face — a housing there
+// would have to be on A's OUTER face, not supported. Before this stage both boards simply ran to (or past) the corner
+// and overlapped in a thickness x thickness square.
+// Returns { extendEndOf, extendStartOf } (bearing-seat extensions, as before) and `butts`: segmentId (of B) ->
+// { u: B's start (local u), intoSegmentId: A, depthMm, housed, housingU: [u0, u1] on A }.
+function computeOpenCornerExtensions(model, hasCornerPost, config = {}) {
+  const { segments, segmentJoints = [] } = model;
   const extendEndOf = new Set();
   const extendStartOf = new Set();
+  const butts = new Map();
+  const dot = (a, b) => a.x * b.x + a.y * b.y;
 
   for (let i = 0; i < segments.length - 1; i++) {
-    // With corner posts on, only an INNER-side turn whose post the user removed (a lap joint there,
-    // see stringerSolver.js) has no post to hide the seam and so needs the overlap.
-    if (hasCornerPost) {
-      const joint = segmentJoints.find((j) => j.beforeSegmentId === segments[i].id);
-      if (side !== 'inner' || joint?.type !== CONNECTION_TYPES.LAP_JOINT) continue;
-    }
-    const a = segments[i].referenceLine;
-    const b = segments[i + 1].referenceLine;
-    if (pointsEqual(a.end, b.start)) {
+    const joint = segmentJoints.find((j) => j.beforeSegmentId === segments[i].id);
+    if (joint ? joint.type !== CONNECTION_TYPES.LAP_JOINT : hasCornerPost) continue;
+    const A = segments[i];
+    const B = segments[i + 1];
+    if (!pointsEqual(A.referenceLine.end, B.referenceLine.start)) continue;
+    const dirA = A.referenceLine.direction;
+    const dirB = B.referenceLine.direction;
+    const dBA = dot(dirB, A.inwardNormal); // > 0: B leaves into A's inner side (convex corner)
+    const dAB = dot(dirA, B.inwardNormal); // > 0: A arrives from B's outer side (concave corner)
+    const lenA = A.referenceLine.length;
+    if (dBA > 0.5) {
+      const depth = Math.min(housingDepthMm(config), Math.max(0, A.thickness - 1));
+      const face = A.thickness / dBA;
+      butts.set(B.id, { u: face - depth, intoSegmentId: A.id, depthMm: depth, housed: depth > 0, housingU: [lenA - B.thickness / Math.max(-dAB, 1e-6), lenA] });
+    } else if (dAB > 0.5) {
+      extendEndOf.add(i);
+      butts.set(B.id, { u: 0, intoSegmentId: A.id, depthMm: 0, housed: false, housingU: null });
+    } else {
       extendEndOf.add(i);
       extendStartOf.add(i + 1);
     }
   }
-  return { extendEndOf, extendStartOf };
+  return { extendEndOf, extendStartOf, butts };
+}
+
+// After every board is built: the housing each butting board enters in the board it butts into (convex corners). The
+// pocket spans the butting board's thickness along A and its section over the depth it enters.
+function addButtHousings(model, ordered, butts) {
+  for (const [bId, butt] of butts) {
+    if (!butt.housed) continue;
+    const gB = ordered.find((g) => g?.segmentId === bId);
+    const iA = model.segments.findIndex((s) => s.id === butt.intoSegmentId);
+    const gA = ordered[iA];
+    if (!gA?.outerContour?.length || !gB?.outerContour?.length) continue;
+    const vr = vRangeWithin(gB.outerContour, butt.u, butt.u + butt.depthMm);
+    if (!vr) continue;
+    const housing = { kind: 'butt', segmentId: bId, uStart: butt.housingU[0], uEnd: butt.housingU[1], bottomV: vr.min, topV: vr.max, depth: butt.depthMm };
+    gA.housings = [...(gA.housings || []), housing];
+    // a cut board has no separate top line: its notched top is the first part of its outline (before the bottom edge)
+    const top = gA.topProfile || gA.outerContour.slice(0, gA.outerContour.length - (gA.bottomProfile?.length || 0));
+    gA.housingPockets = pocketsWithinBoard(gA.housings, gA.ends.start.u, gA.ends.end.u, gA.bottomProfile, top, gA.outerContour);
+    if (!(gA.pocketDepthMm > 0)) gA.pocketDepthMm = butt.depthMm;
+    gA.ends.end.buttedBy = { segmentId: bId, depthMm: butt.depthMm, housingU: butt.housingU };
+  }
 }
 
 // Applies riser-recess (owns-start only) and corner-extension (first/last bearing only) to get
@@ -688,7 +728,9 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // the top ran on, the end face would be slanted. Both contours are cut at the SAME two planes.
     // ...but never past a structural post: a board butts into the face of the post standing at its end
     // (stringerSolver.js boardEndPosts — start newel, corner post, end newel); the post is the joint.
-    const seatSpanStart = Math.min(0, effective[0].uStart);
+    const butt = extendInfo.get(segment.id)?.butt || null;
+    // a board butting into the previous one at a postless corner starts where computeOpenCornerExtensions says
+    const seatSpanStart = butt ? butt.u : Math.min(0, effective[0].uStart);
     // The board carrying the last tread of a housed wanga also covers the TOP riser's end (buildTopRiserHousing).
     const topRiserHere = carriesTopRiser(segment, effective, constructionType, config, lastTreadIndex);
     const topRiserEnd = topRiserHere ? effective[effective.length - 1].finalUEnd + config.riserBoardThickness : -Infinity;
@@ -820,7 +862,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
         // `capped`: the first lower edge was too steep to be continued to the start face and got a flat
         // cap (see sliceCurveByU); blendCappedStartsToPreviousEnd() then turns that cap into a smooth
         // transition down to the neighbouring board's end.
-        start: { u: spanStart, cut: 'VERTICAL', capped: startCapped, intoPost: reachesStartPost ? { postId: segment.startPost.postId, faceU: segment.startPost.faceU, depthMm: intoPost } : null },
+        start: { u: spanStart, cut: 'VERTICAL', capped: startCapped, intoPost: reachesStartPost ? { postId: segment.startPost.postId, faceU: segment.startPost.faceU, depthMm: intoPost } : null, butt: butt ? { intoSegmentId: butt.intoSegmentId, depthMm: butt.depthMm, faceU: butt.u + butt.depthMm, housed: butt.housed } : null },
         end: { u: spanEnd, cut: 'VERTICAL', intoPost: reachesEndPost ? { postId: segment.endPost.postId, faceU: segment.endPost.faceU, depthMm: intoPost } : null },
       },
       housings,
@@ -996,9 +1038,9 @@ function reportOutOfDateOverrides(ordered, profileOverrides, used) {
 }
 
 export function buildStringerConstructionGeometry(model, config) {
-  const { extendStartOf, extendEndOf } = computeOpenCornerExtensions(model, config.hasCornerPost);
+  const { extendStartOf, extendEndOf, butts } = computeOpenCornerExtensions(model, config.hasCornerPost, config);
   const extendInfo = new Map(
-    model.segments.map((segment, segIdx) => [segment.id, { extendStart: extendStartOf.has(segIdx), extendEnd: extendEndOf.has(segIdx) }])
+    model.segments.map((segment, segIdx) => [segment.id, { extendStart: extendStartOf.has(segIdx), extendEnd: extendEndOf.has(segIdx), butt: butts.get(segment.id) || null }])
   );
   const groups = groupSegmentsByLapJoint(model.segments, model.segmentJoints);
   const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
@@ -1011,6 +1053,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
   clampFirstSegmentToFloor(ordered);
   ordered.forEach(syncCurveStartsToPolylines);
+  addButtHousings(model, ordered, butts);
   reportOutOfDateOverrides(ordered, profileOverrides, usedOverrideIds);
   return ordered;
 }

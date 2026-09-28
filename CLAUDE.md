@@ -1384,15 +1384,28 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
   (post square shrunk by the depth), `polygonClip.js subtractConvex` (Weiler–Atherton for a convex hole, no dependency)
   — and gets a pocket on every face it crosses (`clipToConvex` with the face band; `kind 'tread'|'riser'`). Output:
   `joints.treadCuts[stepId] = {outline, holes, notchOutline, droppedMm2}`, `joints.riserCuts['riserId:panel'] = polygon`,
-  pockets in `pocketsByPost`. A post splitting a tread keeps the larger piece; a small piece (the winder tip behind the
+  pockets in `pocketsByPost`. **Corner post — no "fork"** (user decision 2026-09-28): there the element is cut FLUSH
+  with the post faces and keeps ONE tongue, on the face it bears on most, within that face's middle part only
+  (`removalAtPost`/`subtractAll`; `polygonClip.js cleanPolygon` drops duplicate/collinear vertices); newels unchanged.
+  A post splitting a tread keeps the larger piece; a small piece (the winder tip behind the
   corner post, ~0.5 %) is just cut off, `JOINT-TREAD-SPLIT` only from 5 % (judgement threshold); `JOINT-TREAD-INSIDE-POST`.
   Consumers: `treadRenderer.js buildTreadMesh(model, cut)`, `riserRenderer.js` (cut panel = vertical prism),
   `postRenderer.js`, tread DXF `buildTreadDXF(tread, joint)` / `buildAllTreadsDXF(treads, treadJointsByStep(...))` (cut
   outline, the post outline on layer JOINTS, "Wyciecie wokol slupa …, wpust w slup gl. N mm"), post DXF pockets
   "stopien N"/"podstopien N". The pocket-overlap warning now only compares STRINGER pockets. Limits: the riser-overlap
   groove in the tread DXF is still drawn from the uncut outline; the takeoff area/blank of a tread is unchanged.
-- **Next**: stage 3 stringer ↔ stringer at a postless corner (butt joint into a housing; today the two outer boards
-  overlap in a thickness × thickness square at the turn), stage 4 connectors (holes, takeoff).
+- **Stage 3 (implemented): stringer ↔ stringer at a postless corner = butt joint into a housing.**
+  `stringerConstructionGeometry.js computeOpenCornerExtensions` (every `LAP_JOINT` whose chain lines meet; returns
+  `butts`): the board BEFORE the corner (A) runs through, the next one (B) butts into it. CONVEX corner (the outer
+  wanga at a turn): A ends exactly at the outer corner, B starts at A's inner face minus `housingDepthMm`
+  (`ends.start.butt`), and A gets a `kind: 'butt'` housing (B's thickness wide, B's section tall — `addButtHousings`
+  after all boards are built; a cut board's top taken from its outline) rendered as a pocket like the tread housings.
+  CONCAVE corner (inner wanga with its corner post removed): A runs one thickness past the corner, B butts flush, no
+  housing (it would be on A's OUTER face). Before: both boards ran to (or, with hasCornerPost off, past) the corner and
+  overlapped by a thickness × thickness square. DXF: "wreg pod wange B" in A, "lico wangi A" line on B; joint model
+  `STRINGER_STRINGER_BUTT`. Five older tests that assumed the old meeting were updated (continuity now allows the
+  profile's rise over the butt gap). Test: `jointSolver.test.js` ("postless corner …", fails on the old code).
+- **Next**: stage 4 connectors (holes, takeoff).
 Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.test.js`; the "board ends at the post
 face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth; stage 2:
 `geometry/__tests__/polygonClip.test.js`, `treadPostJoints.test.js` (fails on the stage-1 code).
