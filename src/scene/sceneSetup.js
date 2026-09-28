@@ -209,6 +209,21 @@ export function createScene(container) {
     labelRenderer,
     helpers: { grid, axes, ground, shadowCatcher },
     fitShadowToBox,
+    // Zdjęcie widoku (tryb prezentacji): jeden render w `scale` razy większej rozdzielczości niż ekran, skopiowany od
+    // razu do zwykłego canvasa (bez preserveDrawingBuffer — kopia w tym samym zadaniu co render), potem powrót do
+    // normalnej rozdzielczości. Tylko scena 3D — panele i przyciski HUD to HTML obok, więc na zdjęcie nie trafiają.
+    captureImage(scale = 2) {
+      const prevRatio = renderer.getPixelRatio();
+      renderer.setPixelRatio(prevRatio * scale);
+      renderer.render(scene, activeCamera);
+      const out = document.createElement('canvas');
+      out.width = renderer.domElement.width;
+      out.height = renderer.domElement.height;
+      out.getContext('2d').drawImage(renderer.domElement, 0, 0);
+      renderer.setPixelRatio(prevRatio);
+      renderer.render(scene, activeCamera);
+      return out;
+    },
     setBackground: (hex) => {
       scene.background = new THREE.Color(hex);
     },

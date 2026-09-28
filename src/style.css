@@ -396,6 +396,53 @@ html, body {
   cursor: pointer;
 }
 
+/* Logo firmy w trybie prezentacji — położenie/wielkość z main.js placeLogoOverlay (ta sama formuła co na zdjęciu). */
+#presentation-logo {
+  position: absolute;
+  z-index: 21;
+  pointer-events: none;
+  object-fit: contain;
+}
+
+#app.client-mode #presentation-logo.client-only {
+  display: block;
+}
+
+#presentation-logo[hidden],
+#app.client-mode #presentation-logo[hidden] {
+  display: none !important;
+}
+
+#viewport-hud .vh-primary {
+  width: 100%;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+#viewport-hud .vh-logo-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+#viewport-hud .vh-logo-opts[hidden],
+#viewport-hud [data-logo-remove][hidden] {
+  display: none;
+}
+
+#viewport-hud .vh-note {
+  font-size: 11px;
+  color: #666;
+  max-width: 180px;
+  margin-top: 3px;
+}
+
+#viewport-hud .vh-note:empty {
+  display: none;
+}
+
 .client-only {
   display: none;
 }

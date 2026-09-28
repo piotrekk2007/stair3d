@@ -1343,6 +1343,23 @@ every riser housing) and the DXF labels it "wpust podstopnia"; a cut (overlay) w
 `stringerConstructionGeometry.test.js` (the top housing matches the riser model and sits in the board; none without
 risers / on a cut wanga — both confirmed to fail on the old code).
 
+## Presentation mode: "Zapisz zdjęcie" + company logo
+
+Client mode's HUD (`ui/viewportHud.js`) has a group "Zdjęcie dla Klienta":
+- **📷 Zapisz zdjęcie (PNG)**: `sceneSetup.js` `captureImage(scale = 2)` renders the scene ONCE at 2× the screen's pixel
+  ratio and copies it to a 2D canvas in the same task (no `preserveDrawingBuffer` needed), then restores the size — only
+  the 3D scene, so HUD panels/buttons never end up in the image. `main.js` `savePresentationSnapshot` draws the logo on
+  it and downloads `presentationFileName(projectName)` (`<project>_prezentacja_YYYY-MM-DD_HHMM.png`).
+- **Logo firmy**: "Wczytaj logo…" (PNG/JPG/WebP/SVG; raster logos downscaled to 1200 px, transparency kept), corner
+  (4) and size (8–40 % of the width), "Usuń logo". Shown on screen in client mode (`#presentation-logo`) at EXACTLY the
+  place/relative size it gets on the photo — one formula, `scene/presentationImage.js` `logoRect` (margin 3 % of the
+  shorter side, a very tall logo capped at 40 % of the height). It is a COMPANY setting, not a project one: kept in this
+  browser's `localStorage` (`stair3d.presentationLogo`, sanitized by `sanitizeLogoSettings` — only image data URLs),
+  never in the project file or the model history; if the browser refuses to store it, it works until the tab is closed
+  and the panel says so.
+- Pure parts tested in `scene/__tests__/presentationImage.test.js`; browser-verified: a 2560×1440 PNG from a 1280×720
+  view with the logo in the chosen corner, corner/size changes and removal remembered.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

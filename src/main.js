@@ -3,6 +3,7 @@ import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
 import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
+import { defaultLogoSettings, sanitizeLogoSettings, logoRect, presentationFileName } from './scene/presentationImage.js';
 import { editRailingSections } from './geometry/railingSolver.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
@@ -434,7 +435,124 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   },
   onCeilingChange: (visible) => handleViewChange('showCeiling', visible),
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
+  onSnapshot: () => savePresentationSnapshot(),
+  onLogoFile: (file) => loadLogoFile(file),
+  onLogoRemove: () => {
+    logoSettings = { ...logoSettings, dataUrl: null };
+    storeLogoSettings();
+    applyLogo('Logo usunięte.');
+  },
+  onLogoSettings: (patch) => {
+    logoSettings = sanitizeLogoSettings({ ...logoSettings, ...patch });
+    storeLogoSettings();
+    placeLogoOverlay();
+  },
 });
+
+// ---------------------------------------------------------------------------------------------
+// Tryb prezentacji: logo firmy (na ekranie i na zdjęciach) + „Zapisz zdjęcie". Logo to ustawienie FIRMY, nie
+// projektu: pamiętane w tej przeglądarce (localStorage), nie w pliku projektu i nie w historii modelu.
+// ---------------------------------------------------------------------------------------------
+const LOGO_STORAGE_KEY = 'stair3d.presentationLogo';
+const LOGO_MAX_PX = 1200; // większe logo jest zmniejszane przed zapamiętaniem (ostre na zdjęciu 2×, mieści się w pamięci)
+let logoSettings = (() => {
+  try {
+    return sanitizeLogoSettings(JSON.parse(localStorage.getItem(LOGO_STORAGE_KEY) || 'null'));
+  } catch {
+    return defaultLogoSettings();
+  }
+})();
+let logoStoreFailed = false;
+function storeLogoSettings() {
+  try {
+    localStorage.setItem(LOGO_STORAGE_KEY, JSON.stringify(logoSettings));
+    logoStoreFailed = false;
+  } catch {
+    logoStoreFailed = true; // np. tryb prywatny / brak miejsca — logo działa do zamknięcia karty
+  }
+}
+
+const logoOverlay = document.createElement('img');
+logoOverlay.id = 'presentation-logo';
+logoOverlay.className = 'client-only';
+logoOverlay.alt = 'Logo';
+logoOverlay.hidden = true;
+ws.mainEl.appendChild(logoOverlay);
+
+// Logo na ekranie w tym samym miejscu i tej samej wielkości (względnie) co na zdjęciu — logoRect, jedna formuła.
+function placeLogoOverlay() {
+  const has = !!logoSettings.dataUrl && logoOverlay.complete && logoOverlay.naturalWidth >= 0;
+  logoOverlay.hidden = !logoSettings.dataUrl;
+  if (!has) return;
+  const box = viewport.getBoundingClientRect();
+  const hostBox = ws.mainEl.getBoundingClientRect();
+  const r = logoRect({ imageWidth: box.width, imageHeight: box.height, logoWidth: logoOverlay.naturalWidth || 1, logoHeight: logoOverlay.naturalHeight || 1, corner: logoSettings.corner, sizePct: logoSettings.sizePct });
+  Object.assign(logoOverlay.style, { left: `${box.left - hostBox.left + r.x}px`, top: `${box.top - hostBox.top + r.y}px`, width: `${r.width}px`, height: `${r.height}px` });
+}
+function applyLogo(message = '') {
+  if (logoSettings.dataUrl) {
+    logoOverlay.onload = () => placeLogoOverlay();
+    logoOverlay.src = logoSettings.dataUrl;
+  } else {
+    logoOverlay.removeAttribute('src');
+  }
+  placeLogoOverlay();
+  viewportHudApi.syncLogo(logoSettings, logoStoreFailed ? `${message} Uwaga: przeglądarka nie pozwoliła zapamiętać logo — będzie dostępne do zamknięcia karty.`.trim() : message);
+}
+window.addEventListener('resize', placeLogoOverlay);
+new ResizeObserver(placeLogoOverlay).observe(viewport);
+
+// Wczytanie pliku logo: SVG bez zmian, obraz rastrowy zmniejszony do LOGO_MAX_PX (PNG — przezroczystość zostaje).
+function loadLogoFile(file) {
+  if (!/^image\//.test(file.type)) {
+    viewportHudApi.syncLogo(logoSettings, 'To nie jest plik obrazu.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result);
+    const done = (url) => {
+      logoSettings = sanitizeLogoSettings({ ...logoSettings, dataUrl: url });
+      storeLogoSettings();
+      applyLogo(`Wczytano: ${file.name}`);
+    };
+    if (file.type === 'image/svg+xml') return done(dataUrl);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, LOGO_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+      if (scale >= 1) return done(dataUrl);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      done(c.toDataURL('image/png'));
+    };
+    img.onerror = () => viewportHudApi.syncLogo(logoSettings, 'Nie udało się odczytać obrazu.');
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+// „Zapisz zdjęcie": render 2× + logo w wybranym rogu -> PNG do pobrania.
+function savePresentationSnapshot() {
+  const canvas = sceneApi.captureImage(2);
+  const ctx = canvas.getContext('2d');
+  if (logoSettings.dataUrl && logoOverlay.complete && logoOverlay.naturalWidth > 0) {
+    const r = logoRect({ imageWidth: canvas.width, imageHeight: canvas.height, logoWidth: logoOverlay.naturalWidth, logoHeight: logoOverlay.naturalHeight, corner: logoSettings.corner, sizePct: logoSettings.sizePct });
+    ctx.drawImage(logoOverlay, r.x, r.y, r.width, r.height);
+  }
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = presentationFileName(projectMeta.name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+applyLogo();
 
 // ---------------------------------------------------------------------------------------------
 // Zaznaczenie: jedno źródło prawdy, wiele widoków (2D, 3D, Inspektor, Walidacja, Kosztorys)

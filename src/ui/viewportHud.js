@@ -3,6 +3,8 @@
 // rodzeństwo #viewport (tak jak #plan2d-hud dla planu) — nigdy wewnątrz canvasa. Czysto
 // interakcyjny: woła callbacki, nie dotyka geometrii ani modelu.
 
+import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../scene/presentationImage.js';
+
 export const LAYERS_3D = [
   ['Treads', 'Stopnie'],
   ['RiserBoards', 'Podstopnie'],
@@ -31,8 +33,12 @@ const VIEWS = [
  * @param {(mode: 'perspective'|'orthographic') => void} opts.onCameraMode
  * @param {(visible: boolean) => void} opts.onCeilingChange
  * @param {(hex: string) => void} opts.onBackgroundChange
+ * @param {() => void} [opts.onSnapshot]                 „Zapisz zdjęcie" (tryb prezentacji)
+ * @param {(file: File) => void} [opts.onLogoFile]       wybrany plik logo
+ * @param {() => void} [opts.onLogoRemove]
+ * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onBackgroundChange }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -58,6 +64,20 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       <div class="vh-title">Tło</div>
       <input type="color" data-bg value="#f4f2ee" title="Kolor tła prezentacji" />
     </div>
+    <div class="vh-group client-only">
+      <div class="vh-title">Zdjęcie dla Klienta</div>
+      <button type="button" data-snapshot class="vh-primary" title="Zapisuje bieżący widok jako obraz PNG (2× rozdzielczość ekranu), z logo, jeśli jest wczytane">📷 Zapisz zdjęcie (PNG)</button>
+      <div class="vh-buttons">
+        <button type="button" data-logo-load title="Logo firmy na zdjęciach i w prezentacji (PNG/JPG/SVG; zapamiętane w tej przeglądarce)">Wczytaj logo…</button>
+        <button type="button" data-logo-remove hidden>Usuń logo</button>
+      </div>
+      <input type="file" data-logo-file accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
+      <div class="vh-logo-opts" hidden>
+        <label>Róg <select data-logo-corner>${LOGO_CORNERS.map((c) => `<option value="${c.id}">${c.label}</option>`).join('')}</select></label>
+        <label>Wielkość <input type="range" data-logo-size min="${LOGO_SIZE_PCT.min}" max="${LOGO_SIZE_PCT.max}" step="1" value="${LOGO_SIZE_PCT.default}" /></label>
+      </div>
+      <div class="vh-note" data-logo-status></div>
+    </div>
   `;
   container.appendChild(hud);
 
@@ -73,8 +93,30 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
   hud.querySelector('[data-camera-mode]').addEventListener('change', (e) => onCameraMode(e.target.value));
   hud.querySelector('[data-bg]').addEventListener('input', (e) => onBackgroundChange(e.target.value));
 
+  const fileInput = hud.querySelector('[data-logo-file]');
+  hud.querySelector('[data-snapshot]').addEventListener('click', () => onSnapshot && onSnapshot());
+  hud.querySelector('[data-logo-load]').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = ''; // ten sam plik można wybrać ponownie
+    if (file && onLogoFile) onLogoFile(file);
+  });
+  hud.querySelector('[data-logo-remove]').addEventListener('click', () => onLogoRemove && onLogoRemove());
+  hud.querySelector('[data-logo-corner]').addEventListener('change', (e) => onLogoSettings && onLogoSettings({ corner: e.target.value }));
+  hud.querySelector('[data-logo-size]').addEventListener('input', (e) => onLogoSettings && onLogoSettings({ sizePct: Number(e.target.value) }));
+
   return {
     hud,
+    // Stan kontrolek logo z ustawień (po wczytaniu z pamięci / zmianie) + krótki komunikat.
+    syncLogo(settings, message = '') {
+      const has = !!settings.dataUrl;
+      hud.querySelector('[data-logo-remove]').hidden = !has;
+      hud.querySelector('.vh-logo-opts').hidden = !has;
+      hud.querySelector('[data-logo-load]').textContent = has ? 'Zmień logo…' : 'Wczytaj logo…';
+      hud.querySelector('[data-logo-corner]').value = settings.corner;
+      hud.querySelector('[data-logo-size]').value = String(settings.sizePct);
+      hud.querySelector('[data-logo-status]').textContent = message;
+    },
     syncCeiling(visible) {
       hud.querySelector('[data-ceiling]').checked = visible;
     },
