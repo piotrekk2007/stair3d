@@ -68,7 +68,9 @@ function assertWinderArchitectureIsSound(planLayout, config, label) {
   // built uniformly (no per-case branching on "how bad" the direction mismatch is).
   const risers = buildRiserModels(planLayout, config).flatMap(buildRiserMeshGeometries);
   const nonWinderRiserCount = planLayout.treads.filter((t) => t.type !== 'winder').length;
-  const expectedCount = winderTreads.length * WINDER_RISER_FAN_PANELS + nonWinderRiserCount;
+  // + the top riser (under the fajkowy nosing tread): a fan too when the stair ends on a winder
+  const topRiserPanels = planLayout.treads[planLayout.treads.length - 1].type === 'winder' ? WINDER_RISER_FAN_PANELS : 1;
+  const expectedCount = winderTreads.length * WINDER_RISER_FAN_PANELS + nonWinderRiserCount + topRiserPanels;
   assert.equal(risers.length, expectedCount, `${label}: expected ${expectedCount} riser panels (${winderTreads.length} winder treads x ${WINDER_RISER_FAN_PANELS} fan panels + ${nonWinderRiserCount} straight/landing panels), got ${risers.length}`);
 
   for (const geo of risers) {

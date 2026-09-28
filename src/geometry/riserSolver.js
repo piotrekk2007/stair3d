@@ -196,10 +196,67 @@ export function buildRiserModel(tread, config) {
   };
 }
 
+// Zabieg jako ostatni stopień: fan paneli wzdłuż jego TYLNEJ krawędzi (ten sam układ co buildWinderPanels,
+// kierunki konstrukcyjne z winderInfo.backEdge).
+function buildWinderBackPanels(tread, finalEdge) {
+  const { innerDirection, outerDirection } = tread.winderInfo.backEdge;
+  return buildWinderPanels({ winderInfo: { frontEdge: { innerDirection, outerDirection } } }, finalEdge);
+}
+
+/**
+ * OSTATNI podstopień — pod stopniem „fajkowym" na stropie (config.topNosingThicknessMm; sam stopień fajkowy
+ * kładzie się z podłogą i nie jest modelowany). Traktuje podłogę piętra jak „stopień nr n": ta sama konwencja co
+ * każdy inny podstopień — lico na krawędzi, od której zaczyna się stopień wyżej (tu: TYLNA krawędź ostatniego
+ * stopnia), grubość w głąb, pod stopień wyżej (tu: pod stopień fajkowy / strop), dół = spód stopnia niżej
+ * (ostatniego), góra = spód stopnia wyżej (podłoga − grubość stopnia fajkowego) + zakładka riserTopOverlapMm.
+ * @param {import('./planLayout.js').Tread} lastTread
+ * @returns {RiserModel & {atTop: true, belowStepId: string}}
+ */
+export function buildTopRiserModel(lastTread, config) {
+  const { riserHeight, treadThickness, riserBoardThickness, riserTopOverlapMm, totalRise } = config;
+  const nosingThickness = Number.isFinite(config.topNosingThicknessMm) && config.topNosingThicknessMm >= 0 ? config.topNosingThicknessMm : 0;
+  const index = lastTread.index + 1;
+  const floorLevel = Number.isFinite(totalRise) ? totalRise : (index + 1) * riserHeight;
+  const top = floorLevel - nosingThickness + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0);
+  const bottom = index * riserHeight - treadThickness;
+
+  const nominal = nominalEdgesOf(lastTread, config).back;
+  const final = lastTread.backEdge;
+  const frontEdge = { nominal, final, overridden: !edgesEqual(nominal, final) };
+  // kierunek „w głąb" = kierunek biegu ostatniego stopnia (ten sam, w którym jego własny podstopień idzie pod niego)
+  const { panels, directionSpreadDeg } =
+    lastTread.type === 'winder' && lastTread.winderInfo?.backEdge
+      ? buildWinderBackPanels(lastTread, final)
+      : (() => {
+          const own = buildStraightOrLandingPanel(lastTread, lastTread.frontEdge);
+          const [inner, outer] = final;
+          return { panels: [{ p0: inner, p1: outer, direction: own.panels[0].direction, width: panelWidth(inner, outer) }], directionSpreadDeg: 0 };
+        })();
+
+  return {
+    riserId: 'riser-top',
+    stepId: 'step-top',
+    belowStepId: `step-${lastTread.index}`,
+    atTop: true,
+    type: 'top',
+    elevation: { bottom, top },
+    thickness: riserBoardThickness,
+    inward: true,
+    frontEdge,
+    panels,
+    directionSpreadDeg,
+    maxPanelWidth: Math.max(...panels.map((p) => p.width)),
+  };
+}
+
 // Pomija stopnie, dla których podstopień miałby zerową/ujemną grubość (config niespójny albo
 // hasRiserBoards wyłączone) — filtrowanie na poziomie WSADU modeli, nie wewnątrz buildRiserModel
 // (który zawsze opisuje "jak wyglądałby podstopień", niezależnie od tego, czy ma sens go pokazać).
+// Schody z podstopniami kończą się podstopniem (pod stopniem fajkowym na stropie) — buildTopRiserModel.
 export function buildRiserModels(planLayout, config) {
   if (!config.hasRiserBoards) return [];
-  return planLayout.treads.map((tread) => buildRiserModel(tread, config)).filter((model) => model.thickness > 0);
+  const risers = planLayout.treads.map((tread) => buildRiserModel(tread, config));
+  const last = planLayout.treads[planLayout.treads.length - 1];
+  if (last) risers.push(buildTopRiserModel(last, config));
+  return risers.filter((model) => model.thickness > 0 && model.elevation.top > model.elevation.bottom);
 }

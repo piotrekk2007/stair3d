@@ -169,6 +169,8 @@ export function createUI({
   live(build.add(config, 'hasRiserBoards')).name('Podstopnie (zamknięty stopień)');
   lockable(build.add(config, 'riserBoardThickness', 10, 50, 1).name('Grubość podstopnia [mm]'), 'riserBoardThickness');
   lockable(build.add(config, 'riserTopOverlapMm', 0, 30, 1).name('Zakładka podstopnia w stopień [mm]'), 'riserTopOverlapMm');
+  // ostatni podstopień (na stropie) stoi pod stopniem fajkowym — jego grubość ustala górę tego podstopnia
+  lockable(build.add(config, 'topNosingThicknessMm', 0, 60, 1).name('Stopień fajkowy na stropie: grubość [mm]'), 'topNosingThicknessMm');
 
   // Balustrada (geometry/railingSolver.js): parametry poręczy/tralek + lista odcinków. Wszystko to `config`
   // (cofanie i plik projektu działają), więc zmiana idzie normalną drogą live -> rebuild -> commit.

@@ -61,7 +61,7 @@ test('every riser panel mesh carries stepId + a panel-indexed geometrySourceId',
   for (const mesh of group.children) {
     assert.equal(mesh.userData.elementType, 'riser');
     assert.match(mesh.userData.stepId, /^step-\d+$/);
-    assert.match(mesh.userData.geometrySourceId, /^riser:step-\d+:panel-\d+$/);
+    assert.match(mesh.userData.geometrySourceId, /^riser:step-(\d+|top):panel-\d+$/);
   }
   // geometrySourceId must be unique per mesh — no two panels collapse onto the same source id.
   const ids = group.children.map((m) => m.userData.geometrySourceId);

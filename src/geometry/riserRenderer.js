@@ -60,7 +60,8 @@ export function renderRisers(riserModels, material) {
     for (const { geometry, panelIndex } of buildRiserMeshEntries(model)) {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `RiserBoard_${i++}`;
-      mesh.userData = traceability({ elementType: 'riser', stepId: model.stepId, geometrySourceId: `riser:${model.stepId}:panel-${panelIndex}` });
+      // the top riser (under the fajkowy nosing tread) has no tread of its own: a click selects the last tread it stands behind
+      mesh.userData = traceability({ elementType: 'riser', stepId: model.atTop ? model.belowStepId : model.stepId, geometrySourceId: `riser:${model.stepId}:panel-${panelIndex}` });
       group.add(mesh);
     }
   }

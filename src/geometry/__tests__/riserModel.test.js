@@ -88,10 +88,10 @@ test('angleBetweenDeg: 0° for identical directions, 90° for perpendicular, nea
   assert.ok(Math.abs(angleBetweenDeg({ x: 1, y: 0 }, { x: -1, y: 0 }) - 180) < 1e-9);
 });
 
-test('buildRiserModels: empty when hasRiserBoards is false, one model per tread otherwise', () => {
+test('buildRiserModels: empty when hasRiserBoards is false, one model per tread plus the top one otherwise', () => {
   const { config: withRisers, planLayout } = build({ stairType: 'straight', treadsLegA: 4 });
   assert.equal(buildRiserModels(planLayout, { ...withRisers, hasRiserBoards: false }).length, 0);
-  assert.equal(buildRiserModels(planLayout, withRisers).length, 4);
+  assert.equal(buildRiserModels(planLayout, withRisers).length, 5);
 });
 
 test('buildRiserModels: riserBoardThickness=0 is filtered out, not returned as degenerate models', () => {
@@ -107,7 +107,7 @@ test('buildRiserModels: riserBoardThickness=0 is filtered out, not returned as d
 test('nosing=0 does not remove the riser board — thickness comes ONLY from riserBoardThickness', () => {
   const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 3, nosing: 0, riserBoardThickness: 40 });
   const models = buildRiserModels(planLayout, config);
-  assert.equal(models.length, 3);
+  assert.equal(models.length, 4, '3 treads + the top riser');
   for (const m of models) assert.equal(m.thickness, 40);
 });
 
@@ -222,4 +222,57 @@ test('Test topology — a shared boundary edited via ONE tread\'s override is se
   // ...and the owning riser (step7, whose frontEdge IS this boundary) reads that same point.
   const riser7 = buildRiserModel(edited.planLayout.treads[boundaryIndex], edited.config);
   assert.deepEqual(riser7.frontEdge.final[1], movedPoint);
+});
+
+// ---- the top riser (under the fajkowy nosing tread on the slab) ----
+import { buildTreadModels } from '../treadSolver.js';
+import { checkRiserFollowsFinalTreadEdge } from '../../constraints/geometricConstraints.js';
+import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
+import { buildStaircase } from '../buildStaircase.js';
+
+test('stairs with risers end with a riser: on the last tread’s back edge, from its underside to under the fajkowy tread', () => {
+  for (const patch of [{ stairType: 'straight', treadsLegA: 12 }, { stairType: 'L', turn1Type: 'winder' }, { stairType: 'L', turnDirection: 'left' }]) {
+    const { config, planLayout } = build({ ...patch, topNosingThicknessMm: 22, riserTopOverlapMm: 10 });
+    const models = buildRiserModels(planLayout, config);
+    const top = models.find((m) => m.atTop);
+    assert.ok(top, JSON.stringify(patch));
+    assert.equal(models.filter((m) => m.atTop).length, 1);
+    const last = planLayout.treads[planLayout.treads.length - 1];
+    // the same convention as every riser: bottom = underside of the tread below, top = underside of the tread above + overlap
+    assert.ok(Math.abs(top.elevation.bottom - ((last.index + 1) * config.riserHeight - config.treadThickness)) < 1e-6);
+    assert.ok(Math.abs(top.elevation.top - (config.totalRise - 22 + 10)) < 1e-6);
+    // standing on the last tread's back edge, across its whole width
+    assert.deepEqual(top.panels[0].p0, last.backEdge[0]);
+    assert.deepEqual(top.panels[top.panels.length - 1].p1, last.backEdge[1]);
+    assert.equal(top.thickness, config.riserBoardThickness);
+    // board goes forward (in the walking direction of the last tread), like the others go under the tread above
+    const own = buildRiserModel(last, config);
+    const d0 = top.panels[0].direction;
+    const d1 = own.panels[0].direction;
+    assert.ok(d0.x * d1.x + d0.y * d1.y > 0.7, 'same "into the stair" sense as the last tread’s own riser');
+    assert.equal(top.stepId, 'step-top');
+    assert.equal(top.belowStepId, `step-${last.index}`);
+  }
+});
+
+test('no top riser without risers; a thicker fajkowy tread lowers its top edge', () => {
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6 });
+  assert.equal(buildRiserModels(planLayout, { ...config, hasRiserBoards: false }).length, 0);
+  const thin = buildRiserModels(planLayout, { ...config, topNosingThicknessMm: 15 }).find((m) => m.atTop);
+  const thick = buildRiserModels(planLayout, { ...config, topNosingThicknessMm: 30 }).find((m) => m.atTop);
+  assert.ok(Math.abs(thin.elevation.top - thick.elevation.top - 15) < 1e-6);
+});
+
+test('the top riser follows the last tread’s FINAL back edge (constraint), and is a takeoff item like any riser', () => {
+  const { config, planLayout } = build({ stairType: 'straight', treadsLegA: 6 });
+  const treadModels = buildTreadModels(planLayout, config);
+  const risers = buildRiserModels(planLayout, config);
+  assert.deepEqual(checkRiserFollowsFinalTreadEdge(treadModels, risers), []);
+  const broken = risers.map((r) => (r.atTop ? { ...r, panels: [{ ...r.panels[0], p0: { x: r.panels[0].p0.x + 50, y: r.panels[0].p0.y } }] } : r));
+  assert.equal(checkRiserFollowsFinalTreadEdge(treadModels, broken).length, 1);
+  const built = buildStaircase({ ...createDefaultConfig(), stairType: 'straight', treadsLegA: 6, hasRiserBoards: true });
+  const items = computeMaterialTakeoff(built, built.fullConfig);
+  const riserItems = items.filter((i) => i.elementType === 'RISER');
+  assert.equal(riserItems.length, 7, '6 treads + the top riser');
+  assert.ok(riserItems.some((i) => i.sourceElementId === 'riser:step-top'));
 });

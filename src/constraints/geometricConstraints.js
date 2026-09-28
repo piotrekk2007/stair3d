@@ -244,9 +244,10 @@ export function checkRiserFollowsFinalTreadEdge(treadModels, riserModels) {
   const diags = [];
   const treadByStep = new Map(treadModels.map((t) => [t.stepId, t]));
   for (const riser of riserModels) {
-    const tread = treadByStep.get(riser.stepId);
+    // the top riser (riserSolver.js buildTopRiserModel) stands on the LAST tread's back edge, every other on its own front edge
+    const tread = treadByStep.get(riser.atTop ? riser.belowStepId : riser.stepId);
     if (!tread || riser.panels.length === 0) continue;
-    const [innerFinal, outerFinal] = tread.frontEdge.final;
+    const [innerFinal, outerFinal] = riser.atTop ? tread.backEdge.final : tread.frontEdge.final;
     const first = riser.panels[0];
     const last = riser.panels[riser.panels.length - 1];
     if (!pointsEqual(first.p0, innerFinal)) {

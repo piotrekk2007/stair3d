@@ -137,6 +137,11 @@ export function createDefaultConfig() {
     // buildNotch()/TreadModel.notch i riserSolver.js (podnosi RiserModel.elevation.top o tyle samo,
     // żeby obie strony złącza się zgadzały). Tylko przy hasRiserBoards=true; 0 = styk na styk.
     riserTopOverlapMm: 10, // mm, zakładka podstopnia w stopień nad nim
+    // Stopień „fajkowy" na stropie: na końcu schodów, na krawędzi stropu, kładzie się cieńszy stopień równający się
+    // z podłogą piętra. Przy schodach z podstopniami (hasRiserBoards) OSTATNI podstopień stoi pod nim — od spodu
+    // ostatniego stopnia do spodu tego stopnia (+ ta sama zakładka riserTopOverlapMm). Grubość zależy od podłogi —
+    // 20 mm to wartość wyjściowa DO WERYFIKACJI (CO-MFG-J-TOP-NOSING), nie norma.
+    topNosingThicknessMm: 20, // mm, grubość stopnia fajkowego na stropie
 
     // Balustrada (geometry/railingSolver.js, docs/architecture/RAILING_MODEL.md): poręcz + tralki na odcinkach
     // wybranych przez użytkownika. railingSections = [{ id, side: 'outer'|'inner', fromStep, toStep|null }]

@@ -12,6 +12,20 @@ import { defineRuleSet } from '../schema.js';
 
 export const manufacturingAssumptions = defineRuleSet([
   {
+    ruleId: 'CO-MFG-J-TOP-NOSING',
+    category: 'J',
+    description: 'Stairs with risers end with a riser too: at the top, on the slab edge, a thinner "fajkowy" nosing tread is laid flush with the upper floor, and the last riser stands under it (from the underside of the last tread up to the underside of that nosing tread, plus the usual riser-into-tread overlap).',
+    condition: 'hasRiserBoards => top riser: bottom = underside of the last tread, top = totalRise - topNosingThicknessMm + riserTopOverlapMm',
+    configRefs: ['hasRiserBoards', 'topNosingThicknessMm', 'riserTopOverlapMm'],
+    ruleType: 'MANUFACTURING_ASSUMPTION',
+    jurisdiction: 'COMPANY',
+    source: 'Company practice as described by the user (2026-09-28); the 20 mm default thickness of the nosing tread is a placeholder — it must match the actual upper floor finish.',
+    severity: 'INFO',
+    blocksGeneration: false,
+    needsVerification: true,
+    notes: 'The fajkowy nosing tread itself is not modelled (it is fitted with the floor); only the top riser under it is drawn, priced and exported.',
+  },
+  {
     ruleId: 'CO-MFG-J-01',
     category: 'J',
     description: 'Standard stock thickness increments available for treads and risers (workshop-specific — depends on supplier and planer/thicknesser setup).',

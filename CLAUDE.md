@@ -1307,6 +1307,24 @@ maps to meshes that already exist, and changes the lights.
 Tests: `scene/__tests__/woodTexture.test.js` (deterministic, contrast, seamless tiling, grain axis, UVs never move a
 vertex, every built mesh has UVs, finish handling).
 
+## Stairs with risers end with a riser (under the fajkowy nosing tread on the slab)
+
+Company practice (user, 2026-09-28): on the slab edge a thinner "fajkowy" nosing tread is laid flush with the upper
+floor, so a stair with risers (`hasRiserBoards`) ends with a riser under it. `riserSolver.js` `buildTopRiserModel(lastTread,
+config)` treats the upper floor as tread n with the SAME convention as every riser: front face on the edge where the
+tread above starts (= the LAST tread's final back edge), thickness forward under it, bottom = underside of the last
+tread, top = `totalRise − config.topNosingThicknessMm + riserTopOverlapMm`. A last winder tread gets a fan
+(`winderInfo.backEdge` directions). Model fields: `riserId 'riser-top'`, `stepId 'step-top'`, `atTop: true`,
+`belowStepId` (the last tread), `type 'top'`; `buildRiserModels` appends it. New config `topNosingThicknessMm` (20 —
+a placeholder DO WERYFIKACJI, it must match the upper floor; catalogue `CO-MFG-J-TOP-NOSING`; UI "Stopień fajkowy na
+stropie: grubość [mm]"). Consumers: the takeoff prices it like any riser (`riser:step-top`), the self-weight includes it,
+`CONSTRAINT-RISER-FOLLOWS-FINAL-EDGE` checks it against the last tread's FINAL back edge, a 3D click on it selects the
+last tread. **Notes/limits:** the fajkowy tread itself is not modelled (fitted with the floor); the riser face is the
+stair's end line, so the slab face sits `riserBoardThickness` behind it (the last going stays exact, face to face);
+no housing for it in a housed wanga (it stands past the wanga's end) and the profile editor does not draw it; the
+wanga's load check does not count it (it is carried by the slab). Tests: `geometry/__tests__/riserModel.test.js`
+(position/elevation, fajkowy thickness, constraint, takeoff item), existing riser-count tests updated (+1).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
