@@ -61,23 +61,47 @@ export function outwardNormalFromForward(forwardDir) {
 // pod podstopień), a boczne krawędzie (innerChain/outerChain) PRZEDŁUŻA wzdłuż ich własnego
 // kierunku aż do przecięcia z tą przesuniętą prostą — dzięki temu boki zostają równoległe
 // do wang nawet w zabiegu, gdzie krawędź czołowa nie jest prostopadła do boków.
+//
+// Kierunek boku bierzemy z KOŃCOWEGO konturu stopnia (sąsiad narożnika czoła, który nie jest drugim narożnikiem
+// czoła), a nie z surowego łańcucha wangi (innerChain[0] -> innerChain[1]): narożnik czoła bywa już przesunięty
+// (stopień cofnięty do dna wpustu wangi wpuszczanej, ręczna edycja), więc prosta "narożnik -> innerChain[1]" nie jest
+// bokiem stopnia. Na zabiegowym z bardzo krótkim bokiem przy duszy (kilkanaście mm przy słupie narożnym) dawała
+// dowolny kierunek i narożnik noska lądował daleko na przesuniętej prostej — kontur domykał się dodatkową, ukośną
+// krawędzią, czyli czoło stopnia się "łamało" (zgłoszone 2026-09-28). Łańcuch zostaje tylko jako rezerwa.
+function sideDirection(outline, corner, otherCorner, chain) {
+  const i = (outline || []).findIndex((p) => Math.hypot(p.x - corner.x, p.y - corner.y) < 1e-6);
+  if (i >= 0) {
+    const n = outline.length;
+    for (const step of [1, -1]) {
+      const first = outline[(i + step + n) % n];
+      if (Math.hypot(first.x - otherCorner.x, first.y - otherCorner.y) < 1e-6) continue; // that way is the front edge
+      // walk away from the corner past zero-length edges
+      for (let k = 1; k < n; k++) {
+        const q = outline[(i + step * k + n * k) % n];
+        const d = { x: q.x - corner.x, y: q.y - corner.y };
+        if (Math.hypot(d.x, d.y) > 1e-6) return d;
+      }
+    }
+  }
+  const next = chain?.[1];
+  return next ? { x: next.x - corner.x, y: next.y - corner.y } : null;
+}
+
 export function shiftFrontEdge(tread, distance) {
-  const { frontEdge, innerChain, outerChain } = tread;
+  const { frontEdge, innerChain, outerChain, outline } = tread;
   const [inner0, outer0] = frontEdge;
   if (distance === 0) return { newInner0: inner0, newOuter0: outer0 };
 
   const { normal, frontDir } = outwardNormalFromOutline(tread);
   const shiftedFrontPoint = { x: inner0.x + normal.x * distance, y: inner0.y + normal.y * distance };
 
-  const innerNext = innerChain[1];
-  const innerDir = { x: innerNext.x - inner0.x, y: innerNext.y - inner0.y };
+  const innerDir = sideDirection(outline, inner0, outer0, innerChain) || frontDir;
   const newInner0 = lineIntersect(inner0, innerDir, shiftedFrontPoint, frontDir) || {
     x: inner0.x + normal.x * distance,
     y: inner0.y + normal.y * distance,
   };
 
-  const outerNext = outerChain[1];
-  const outerDir = { x: outerNext.x - outer0.x, y: outerNext.y - outer0.y };
+  const outerDir = sideDirection(outline, outer0, inner0, outerChain) || frontDir;
   const newOuter0 = lineIntersect(outer0, outerDir, shiftedFrontPoint, frontDir) || {
     x: outer0.x + normal.x * distance,
     y: outer0.y + normal.y * distance,

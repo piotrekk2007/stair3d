@@ -1433,6 +1433,21 @@ Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.tes
 face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth; stage 2:
 `geometry/__tests__/polygonClip.test.js`, `treadPostJoints.test.js` (fails on the stage-1 code).
 
+## Bug fix: the nosed front of a winder at the corner post broke part-way
+
+Reported 2026-09-28 with the user's project (U, 3 winders per turn, housed wangi, corner posts): the front of the
+winder treads next to the corner post was not straight. `nosingUtils.js` `shiftFrontEdge()` (nosing forward, the riser
+groove backward) slides the front corners along the tread's SIDES — but took the side direction from the raw wanga
+chain (`innerChain[0] -> innerChain[1]`), while the front corner had already been moved (recessed to the housing bottom
+by `recessTreadToWangi`, or edited by hand). On a winder whose dusza side is only 18-30 mm long that line pointed
+anywhere: the nosed corner landed up to ~250 mm off along the shifted front and the outline closed with an extra slanted
+edge. Now `sideDirection()` takes it from the tread's FINAL outline (the corner's neighbour that is not the other front
+corner, skipping zero-length edges; the chain only as a fallback). Straight treads were off by ~2 mm the same way. A side
+lying along the front line itself (a winder starting exactly at the inner corner) still falls back to moving the corner
+square to the front. Where the nosed corner reaches into a corner post the tread is cut at the post by the joint model
+(stage 2) — the line of the front is never bent. Test: `geometry/__tests__/winderNosing.test.js` (the user's stair +
+an L/U x left/right x 3-5 winders x housed/overlay grid; fails on the old code).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own
