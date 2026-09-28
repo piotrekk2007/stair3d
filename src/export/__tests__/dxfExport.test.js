@@ -353,7 +353,7 @@ import { buildStaircase as buildForJoints } from '../../geometry/buildStaircase.
 import { createDefaultConfig as defaultsForJoints } from '../../config/schema.js';
 
 test('post DXF: every pocket a stringer enters is drawn on its face, where and as deep as the joint model says', () => {
-  const m = buildForJoints({ ...defaultsForJoints(), stairType: 'L', postHousingDepthMm: 20 });
+  const m = buildForJoints({ ...defaultsForJoints(), stairType: 'L', postHousingDepthMm: 20, postTreadHousingDepthMm: 0 });
   const post = m.postModels.find((p) => p.postId === 'post-corner-0');
   const pockets = m.joints.pocketsByPost[post.postId];
   assert.equal(pockets.length, 2, 'both inner boards of the turn enter the corner post');

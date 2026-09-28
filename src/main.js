@@ -4,6 +4,7 @@ import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
 import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
 import { defaultLogoSettings, sanitizeLogoSettings, logoRect, presentationFileName } from './scene/presentationImage.js';
+import { treadJointsByStep } from './geometry/jointSolver.js';
 import { editRailingSections } from './geometry/railingSolver.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
@@ -973,12 +974,12 @@ function exportAllPostsDXF() {
 
 function exportTreadDXF(stepId) {
   const tread = lastModels?.treadModels?.find((t) => t.stepId === stepId);
-  const dxf = tread ? buildTreadDXF(tread) : null;
+  const dxf = tread ? buildTreadDXF(tread, treadJointsByStep(lastModels?.joints, lastModels?.postModels)[tread.stepId] || null) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_${stepId}.dxf`, 'application/dxf');
 }
 
 function exportAllTreadsDXF() {
-  const dxf = lastModels?.treadModels ? buildAllTreadsDXF(lastModels.treadModels) : null;
+  const dxf = lastModels?.treadModels ? buildAllTreadsDXF(lastModels.treadModels, treadJointsByStep(lastModels?.joints, lastModels?.postModels)) : null;
   if (dxf) downloadTextFile(dxf, `${fileBaseName()}_stopnie.dxf`, 'application/dxf');
 }
 

@@ -12,6 +12,19 @@ import { defineRuleSet } from '../schema.js';
 
 export const manufacturingAssumptions = defineRuleSet([
   {
+    ruleId: 'CO-MFG-J-POST-TREAD-HOUSING',
+    category: 'J',
+    description: 'A tread or riser that passes through a structural post (the first/last tread at a newel, the narrow winder treads at a corner post) is cut around the post and enters a pocket milled into each post face it crosses.',
+    condition: 'element outline minus the post core (post square shrunk by postTreadHousingDepthMm); pocket per crossed face = the crossing width x the element thickness x that depth',
+    configRefs: ['postTreadHousingDepthMm'],
+    ruleType: 'MANUFACTURING_ASSUMPTION',
+    jurisdiction: 'COMPANY',
+    source: 'Joint stage 2 of the user-chosen joint plan (2026-09-28). No source for the 20 mm default — placeholder mirroring stringerHousingDepthMm; BWF-GUID-F-01 (housing depth >= max(12 mm, 0.4 x string thickness)) concerns tread housings in a string, not in a newel.',
+    severity: 'INFO',
+    blocksGeneration: false,
+    needsVerification: true,
+  },
+  {
     ruleId: 'CO-MFG-J-POST-HOUSING',
     category: 'J',
     description: 'A stringer meets a structural post (newel, corner post) by entering, with its FULL cross-section, a pocket (wreg) milled into the post face; the post DXF shows the pocket, the stringer is lengthened by its depth.',

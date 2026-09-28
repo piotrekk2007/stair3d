@@ -36,10 +36,20 @@ function buildPanelGeometry(panel, elevation, thickness, inward) {
 // this panel's position within `riserModel.panels` (0 for a straight/landing riser's single
 // panel; 0..WINDER_RISER_FAN_PANELS-1 for a winder's fan), used to build a stable
 // geometrySourceId (see traceability.js) without inventing a new per-panel id in the model.
-function buildRiserMeshEntries(riserModel) {
+// `riserCuts` (jointSolver.js) — a panel cut around a structural post it passes through (stage 2 of the joints): its
+// plan polygon, extruded vertically over the riser's height. Already decided there.
+function buildRiserMeshEntries(riserModel, riserCuts = {}) {
   const entries = [];
   riserModel.panels.forEach((panel, panelIndex) => {
-    const geometry = buildPanelGeometry(panel, riserModel.elevation, riserModel.thickness, riserModel.inward);
+    const cut = riserCuts[`${riserModel.riserId}:${panelIndex}`];
+    const geometry = cut
+      ? buildPrism(
+          cut.map((p) => ({ u: p.x, v: p.y })),
+          (u, v) => planToWorld(u, v, riserModel.elevation.bottom),
+          new THREE.Vector3(0, 1, 0),
+          riserModel.elevation.top - riserModel.elevation.bottom
+        )
+      : buildPanelGeometry(panel, riserModel.elevation, riserModel.thickness, riserModel.inward);
     if (geometry) entries.push({ geometry, panelIndex });
   });
   return entries;
@@ -52,12 +62,12 @@ export function buildRiserMeshGeometries(riserModel) {
   return buildRiserMeshEntries(riserModel).map((e) => e.geometry);
 }
 
-export function renderRisers(riserModels, material) {
+export function renderRisers(riserModels, material, riserCuts = {}) {
   const group = new THREE.Group();
   group.name = 'RiserBoards';
   let i = 0;
   for (const model of riserModels) {
-    for (const { geometry, panelIndex } of buildRiserMeshEntries(model)) {
+    for (const { geometry, panelIndex } of buildRiserMeshEntries(model, riserCuts)) {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `RiserBoard_${i++}`;
       // the top riser (under the fajkowy nosing tread) has no tread of its own: a click selects the last tread it stands behind

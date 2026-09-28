@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { buildPrism, planToWorld } from './geometryUtils.js';
+import { buildPrism, buildPrismWithHoles, planToWorld } from './geometryUtils.js';
 import { traceability } from '../scene/traceability.js';
 
 // No true CSG (stringerRenderer.js builds a housed board's pockets the same way — layered extrusions, rule-11
@@ -15,28 +15,29 @@ import { traceability } from '../scene/traceability.js';
 // reduced-footprint (notch-receded) slab BELOW it — which is exact for this specific shape (a
 // straight-sided rabbet along one edge, never a curved or undercut groove), unlike the housing
 // indicator's own deliberate approximation.
-export function buildTreadMesh(treadModel) {
-  const pts2D = treadModel.outline.map((p) => ({ u: p.x, v: p.y }));
+// `cut` (jointSolver.js treadCuts[stepId]) — the tread cut around a structural post it passes through (stage 2 of the
+// joints): its outline, any hole (a post standing inside a landing) and the cut notch outline. Already decided there.
+export function buildTreadMesh(treadModel, cut = null) {
+  const toUV = (poly) => poly.map((p) => ({ u: p.x, v: p.y }));
+  const pts2D = toUV(cut ? cut.outline : treadModel.outline);
+  const holes = cut ? (cut.holes || []).map(toUV) : [];
   const up = new THREE.Vector3(0, 1, 0);
+  const slab = (pts, z, depth) => (holes.length ? buildPrismWithHoles(pts, holes, (u, v) => planToWorld(u, v, z), up, depth) : buildPrism(pts, (u, v) => planToWorld(u, v, z), up, depth));
   if (!treadModel.notch) {
-    return buildPrism(pts2D, (u, v) => planToWorld(u, v, treadModel.elevation.bottom), up, treadModel.thickness);
+    return slab(pts2D, treadModel.elevation.bottom, treadModel.thickness);
   }
-  const { depthMm, outline: notchOutline } = treadModel.notch;
-  const upperSlab = buildPrism(pts2D, (u, v) => planToWorld(u, v, treadModel.elevation.bottom + depthMm), up, treadModel.thickness - depthMm);
-  const lowerSlab = buildPrism(
-    notchOutline.map((p) => ({ u: p.x, v: p.y })),
-    (u, v) => planToWorld(u, v, treadModel.elevation.bottom),
-    up,
-    depthMm
-  );
+  const { depthMm } = treadModel.notch;
+  const notchOutline = cut ? cut.notchOutline || cut.outline : treadModel.notch.outline;
+  const upperSlab = slab(pts2D, treadModel.elevation.bottom + depthMm, treadModel.thickness - depthMm);
+  const lowerSlab = slab(toUV(notchOutline), treadModel.elevation.bottom, depthMm);
   return mergeGeometries([upperSlab, lowerSlab]);
 }
 
-export function renderTreads(treadModels, material) {
+export function renderTreads(treadModels, material, treadCuts = {}) {
   const group = new THREE.Group();
   group.name = 'Treads';
   for (const model of treadModels) {
-    const mesh = new THREE.Mesh(buildTreadMesh(model), material);
+    const mesh = new THREE.Mesh(buildTreadMesh(model, treadCuts[model.stepId] || null), material);
     mesh.name = `Tread_${model.index}_${model.type}`;
     mesh.userData = traceability({ elementType: 'tread', stepId: model.stepId, geometrySourceId: `tread:${model.stepId}` });
     group.add(mesh);

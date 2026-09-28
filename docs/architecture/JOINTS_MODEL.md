@@ -44,15 +44,37 @@ prawo dla patrzącego na lico z zewnątrz (0 = oś słupa), `z` = wysokość w �
   `JOINT-POST-POCKET-OUTSIDE` (wanga nie trafia w słup / jest szersza niż lico).
 - Kosztorys: deska wangi jest dłuższa o głębokość wręgu na każdym końcu przy słupie (kontur).
 
+## Etap 2 (zrobiony): stopnie i podstopnie ↔ słup
+
+- `config.postTreadHousingDepthMm` (UI „Wpust stopnia/podstopnia w słup [mm]"; katalog `CO-MFG-J-POST-TREAD-HOUSING`;
+  20 mm DO WERYFIKACJI; 0 = element wycięty równo z licem słupa, bez gniazda). `jointSolver.js postTreadHousingDepthMm`
+  (nigdy przez słup: najwyżej połowa przekroju − 1 mm).
+- Każdy stopień i każdy panel podstopnia, który w rzucie i na wysokości przechodzi przez słup konstrukcyjny (nie
+  słupek balustrady), jest **wycinany wokół słupa**: obrys minus „rdzeń" słupa (kwadrat słupa zmniejszony o głębokość
+  wpustu) — `polygonClip.js subtractConvex` (Weiler–Atherton dla wypukłej dziury, bez zależności). To, co zostaje
+  w pasie między licem a rdzeniem, to czop wchodzący w gniazdo.
+- **Gniazdo** na każdym licu, przez które przechodzi element (`clipToConvex` z pasem lica): szerokość = zakres
+  przejścia na osi lica, wysokość = grubość stopnia / wysokość podstopnia, głębokość = parametr (`kind: 'tread'|'riser'`,
+  opis „stopien N" / „podstopien N").
+- Słup może rozciąć stopień na części — zostaje większa. Mały odcięty kawałek (np. wąski koniuszek stopnia zabiegowego
+  za słupem narożnym, ok. 0,5 % stopnia) jest po prostu odcinany (`treadCuts[*].droppedMm2`); ostrzeżenie
+  `JOINT-TREAD-SPLIT` dopiero od 5 % stopnia (próg z oceny, nie ze źródła). Stopień prawie cały w słupie:
+  `JOINT-TREAD-INSIDE-POST`. Słup stojący wewnątrz stopnia (np. podestu) daje otwór (`holes`).
+- Konsumenci: `treadRenderer.js` (wycięty obrys, otwory, wycięty wpust pod podstopień), `riserRenderer.js` (wycięty
+  panel jako pionowy graniastosłup), `postRenderer.js` (gniazda), DXF stopnia (`buildTreadDXF(tread, joint)` — wycięty
+  obrys, obrys słupa na warstwie JOINTS, wiersz „Wyciecie wokol slupa …, wpust w slup gl. N mm"; `treadJointsByStep`),
+  DXF słupa (gniazda stopni i podstopni na rozwinięciu). Ostrzeżenie o nachodzących gniazdach dotyczy tylko gniazd wang
+  (stopień obejmujący narożnik słupa ma gniazda na dwóch licach z definicji).
+- Ograniczenia: rowek pod zakładkę podstopnia w DXF stopnia (`treadNotchEntities`) jest rysowany z niewyciętego
+  obrysu; kosztorys liczy powierzchnię/formatkę stopnia jak dotąd (wycięcie jest niewielkie).
+
 ## Etapy następne
 
-2. **Stopnie/podstopnie ↔ słup**: gniazda w słupie pod stopnie opierające się na słupie (wąskie stopnie zabiegowe przy
-   słupie narożnym, pierwszy/ostatni stopień przy słupkach) i pod podstopnie; wycięcie stopnia wokół słupa (także w DXF
-   stopnia). Dziś stopnie zabiegowe przy słupie narożnym przechodzą przez słup w 3D.
 3. **Wanga ↔ wanga** (narożnik bez słupa, zawsze zewnętrzna wanga na zakręcie): doczołowo we wręg. Dziś obie deski
    dochodzą do zewnętrznego narożnika i w rzucie nachodzą na siebie kwadratem grubość × grubość.
 4. **Łączniki**: liczba/rozstaw jako parametry, otwory na DXF wangi i słupa, pozycje w kosztorysie; kontrola
    osłabienia słupa.
 
 Testy: `src/geometry/__tests__/jointSolver.test.js`, `src/export/__tests__/dxfExport.test.js` (DXF słupa i wangi),
-`postsAndWangi.test.js` / `stringerProfile.test.js` (wanga wchodzi w słup dokładnie na głębokość wręgu).
+`postsAndWangi.test.js` / `stringerProfile.test.js` (wanga wchodzi w słup dokładnie na głębokość wręgu),
+`polygonClip.test.js`, `treadPostJoints.test.js` (etap 2).

@@ -16,8 +16,9 @@ test('every inner board end at a structural post gets ONE housing in that post, 
     m.stringerModels.inner.segments.forEach((seg) => {
       expected += (seg.startPost ? 1 : 0) + (seg.endPost ? 1 : 0);
     });
-    assert.equal(m.joints.joints.length, expected, JSON.stringify(patch));
-    for (const j of m.joints.joints) {
+    const stringerJoints = m.joints.joints.filter((j) => j.type === 'STRINGER_POST_HOUSING');
+    assert.equal(stringerJoints.length, expected, JSON.stringify(patch));
+    for (const j of stringerJoints) {
       const seg = m.stringerModels.inner.segments.find((s) => s.id === j.segmentId);
       const ref = seg.referenceLine;
       const dir = { x: (ref.end.x - ref.start.x) / ref.length, y: (ref.end.y - ref.start.y) / ref.length };
@@ -37,7 +38,7 @@ test('every inner board end at a structural post gets ONE housing in that post, 
 
 test("the pocket is as tall as the board's section over the whole depth it enters", () => {
   const m = build({});
-  for (const j of m.joints.joints) {
+  for (const j of m.joints.joints.filter((x) => x.type === 'STRINGER_POST_HOUSING')) {
     const i = m.stringerModels.inner.segments.findIndex((s) => s.id === j.segmentId);
     const g = m.stringerConstruction.inner[i];
     const range = j.end === 'end' ? [j.faceU, j.faceU + j.depthMm] : [j.faceU - j.depthMm, j.faceU];
@@ -50,7 +51,7 @@ test("the pocket is as tall as the board's section over the whole depth it enter
 });
 
 test('depth 0 = no joints (the board ends at the post face); deep pockets meeting inside a post are reported', () => {
-  assert.equal(build({ postHousingDepthMm: 0 }).joints.joints.length, 0);
+  assert.equal(build({ postHousingDepthMm: 0 }).joints.joints.filter((j) => j.type === 'STRINGER_POST_HOUSING').length, 0);
   const deep = build({ postHousingDepthMm: 60 });
   assert.ok(deep.joints.diagnostics.some((d) => d.ruleId === 'JOINT-POST-POCKETS-OVERLAP' && d.elementId === 'post-corner-0' && d.severity === 'WARNING'));
   // removed corner post -> lap joint, nothing to machine there
@@ -92,8 +93,13 @@ test('3D: the post mesh is the box with the pockets taken out (closed, exact vol
   const posts = m.root.getObjectByName('Posts');
   const corner = posts.children.find((c) => c.name.startsWith('Post_Corner'));
   const post = m.postModels.find((p) => p.postId === 'post-corner-0');
-  const pockets = m.joints.pocketsByPost['post-corner-0'];
+  // (stage 1 only: no tread housings in the post, so the removed volume is just the two stringer pockets)
+  const m1 = build({ postTreadHousingDepthMm: 0 });
+  const corner1 = m1.root.getObjectByName('Posts').children.find((c) => c.name.startsWith('Post_Corner'));
+  const pockets = m1.joints.pocketsByPost['post-corner-0'];
   const full = post.size * post.size * (post.elevation.top - post.elevation.bottom);
   const removed = pockets.reduce((s, p) => s + (p.sMax - p.sMin) * p.depthMm * (p.zMax - p.zMin), 0);
-  assert.ok(Math.abs(Math.abs(meshVolume(corner.geometry)) - (full - removed)) < 1, 'the rendered corner post has its two pockets');
+  assert.equal(pockets.length, 2);
+  assert.ok(Math.abs(Math.abs(meshVolume(corner1.geometry)) - (full - removed)) < 1, 'the rendered corner post has its two pockets');
+  assert.ok(Math.abs(meshVolume(corner.geometry)) < full - removed, 'with tread housings too, even more is taken out');
 });

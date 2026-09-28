@@ -435,7 +435,43 @@ function isValidTread(tread) {
   return !!tread && Array.isArray(tread.outline) && tread.outline.length >= 3;
 }
 
-function treadTitleLines(tread) {
+// Stage 2 of the joints (jointSolver.js): a tread passing through a structural post is cut around it (`cut.outline`,
+// `cut.holes`) and enters the post's pockets. The drawing shows the CUT outline, the post's outline over the tread
+// (layer JOINTS — the strip between it and the cut is the tongue that goes into the post) and a title line per post.
+// `joint` = { cut, posts: [{postId, position, size, depthMm}] } or null.
+function treadJointEntities(tread, joint, offsetU) {
+  if (!joint?.posts?.length) return [];
+  const toLocal = treadLocalFrame(tread);
+  const out = [];
+  for (const p of joint.posts) {
+    const h = p.size / 2;
+    const sq = [
+      { x: p.position.x - h, y: p.position.y - h },
+      { x: p.position.x + h, y: p.position.y - h },
+      { x: p.position.x + h, y: p.position.y + h },
+      { x: p.position.x - h, y: p.position.y + h },
+    ].map((q) => {
+      const l = toLocal(q);
+      return { u: l.u + offsetU, v: l.v };
+    });
+    out.push(...polygonEntities(sq, 'JOINTS'));
+    out.push(textEntity(`slup ${p.postId}`, { u: Math.min(...sq.map((q) => q.u)), v: Math.min(...sq.map((q) => q.v)) - 14 }, 10, 'JOINTS'));
+  }
+  return out;
+}
+
+function treadCutOutline(tread, joint, offsetU) {
+  const toLocal = treadLocalFrame(tread);
+  const shift = (poly) => poly.map((q) => {
+    const l = toLocal(q);
+    return { u: l.u + offsetU, v: l.v };
+  });
+  const outer = joint?.cut ? shift(joint.cut.outline) : shift(tread.outline);
+  const holes = joint?.cut ? (joint.cut.holes || []).map(shift) : [];
+  return [...polygonEntities(outer, 'OUTLINE'), ...holes.flatMap((h) => polygonEntities(h, 'OUTLINE'))];
+}
+
+function treadTitleLines(tread, joint = null) {
   const typeLabel = TREAD_TYPE_LABELS_PL[tread.type] || tread.type;
   const lines = [
     `Stopien: ${tread.stepId}`,
@@ -447,20 +483,26 @@ function treadTitleLines(tread) {
   // takeoff/2D-plan/3D labels already use as the raw board to cut this tread from — worth stating
   // alongside the finished outline above, not instead of it.
   if (tread.winderBlank) lines.push(`Formatka surowa: ${Math.round(tread.winderBlank.length)} x ${Math.round(tread.winderBlank.depth)} mm`);
+  for (const p of joint?.posts || []) {
+    lines.push(p.depthMm > 0 ? `Wyciecie wokol slupa ${p.postId}, wpust w slup gl. ${Math.round(p.depthMm)} mm` : `Wyciecie wokol slupa ${p.postId} (do lica)`);
+  }
   lines.push('Skala 1:1 - wszystkie wymiary w mm');
   return lines;
 }
 
-/** One tread, full size, as a standalone DXF: its real (nosed) outline + a title block. */
-export function buildTreadDXF(tread) {
+/**
+ * One tread, full size, as a standalone DXF: its real (nosed) outline — cut around a structural post it passes through
+ * (`joint`, stage 2 of the joints) — + a title block.
+ */
+export function buildTreadDXF(tread, joint = null) {
   if (!isValidTread(tread)) return null;
   const local = localTreadOutline(tread);
-  const entities = [...polygonEntities(local, 'OUTLINE'), ...treadNotchEntities(tread, 0), ...titleEntities(treadTitleLines(tread), boundsOfPoints(local))];
+  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadJointEntities(tread, joint, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
   return wrapDxf(entities);
 }
 
 /** Every tread the stair has, laid out side by side on one sheet, each in its own local frame. */
-export function buildAllTreadsDXF(treads) {
+export function buildAllTreadsDXF(treads, jointsByStep = {}) {
   const valid = (treads || []).filter(isValidTread);
   if (valid.length === 0) return null;
   const entities = [];
@@ -471,7 +513,8 @@ export function buildAllTreadsDXF(treads) {
     const offsetU = cursor - bounds.minU;
     cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
     const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
-    entities.push(...polygonEntities(shifted, 'OUTLINE'), ...treadNotchEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread), boundsOfPoints(shifted)));
+    const joint = jointsByStep[tread.stepId] || null;
+    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadJointEntities(tread, joint, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }

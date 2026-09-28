@@ -114,6 +114,10 @@ export function createDefaultConfig() {
     // użytkownika 2026-09-28: złącze wanga–słup = wręg pełnym przekrojem). 20 = wartość wyjściowa DO WERYFIKACJI
     // (CO-MFG-J-POST-HOUSING; ta sama co wpust stopnia w wangę) — brak źródła. 0 = wanga dochodzi do lica słupa.
     postHousingDepthMm: 20,
+    // mm, jak głęboko stopień / podstopień przechodzący przez słup konstrukcyjny wchodzi w gniazdo w jego licu (etap 2
+    // złączy); reszta elementu jest wycięta wokół słupa. 20 = wartość wyjściowa DO WERYFIKACJI (CO-MFG-J-POST-TREAD-HOUSING,
+    // ta sama co wpust stopnia w wangę). 0 = element wycięty równo z licem słupa, bez gniazda.
+    postTreadHousingDepthMm: 20,
     stringerTopMarginMm: 50, // mm, TYLKO 'closed' — o ile górna krawędź deski wystaje NAD GÓRNĄ PŁASZCZYZNĘ STOPNIA
     // (powierzchnię, po której się chodzi — czyli ponad ewentualny nosek), nie nad jego spodem;
     // patrz stringerProfileSolver.js solveStringerProfile (treadThicknessMm doliczane wewnętrznie).

@@ -1378,11 +1378,24 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
 - **DXF**: the post drawing is now the post UNFOLDED — 4 faces S, E, N, W side by side + a plan section, every pocket
   with its depth and its height from the post's bottom (`buildPostDXF(post, pockets)`, `buildAllPostsDXF(posts,
   pocketsByPost)`); the stringer drawing marks the post face and the housing depth (layer `JOINTS`).
-- **Next**: stage 2 treads/risers ↔ post (the winder treads at the corner post still pass through the post in 3D),
-  stage 3 stringer ↔ stringer at a postless corner (butt joint into a housing; today the two outer boards overlap in a
-  thickness × thickness square at the turn), stage 4 connectors (holes, takeoff).
+- **Stage 2 (implemented): treads/risers ↔ post.** `config.postTreadHousingDepthMm` (20, DO WERYFIKACJI —
+  `CO-MFG-J-POST-TREAD-HOUSING`; 0 = cut flush with the post, no pocket). Every tread and riser panel passing through a
+  structural post (in plan AND in height; balustrade posts excluded) is cut around it — outline minus the post's core
+  (post square shrunk by the depth), `polygonClip.js subtractConvex` (Weiler–Atherton for a convex hole, no dependency)
+  — and gets a pocket on every face it crosses (`clipToConvex` with the face band; `kind 'tread'|'riser'`). Output:
+  `joints.treadCuts[stepId] = {outline, holes, notchOutline, droppedMm2}`, `joints.riserCuts['riserId:panel'] = polygon`,
+  pockets in `pocketsByPost`. A post splitting a tread keeps the larger piece; a small piece (the winder tip behind the
+  corner post, ~0.5 %) is just cut off, `JOINT-TREAD-SPLIT` only from 5 % (judgement threshold); `JOINT-TREAD-INSIDE-POST`.
+  Consumers: `treadRenderer.js buildTreadMesh(model, cut)`, `riserRenderer.js` (cut panel = vertical prism),
+  `postRenderer.js`, tread DXF `buildTreadDXF(tread, joint)` / `buildAllTreadsDXF(treads, treadJointsByStep(...))` (cut
+  outline, the post outline on layer JOINTS, "Wyciecie wokol slupa …, wpust w slup gl. N mm"), post DXF pockets
+  "stopien N"/"podstopien N". The pocket-overlap warning now only compares STRINGER pockets. Limits: the riser-overlap
+  groove in the tread DXF is still drawn from the uncut outline; the takeoff area/blank of a tread is unchanged.
+- **Next**: stage 3 stringer ↔ stringer at a postless corner (butt joint into a housing; today the two outer boards
+  overlap in a thickness × thickness square at the turn), stage 4 connectors (holes, takeoff).
 Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.test.js`; the "board ends at the post
-face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth.
+face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth; stage 2:
+`geometry/__tests__/polygonClip.test.js`, `treadPostJoints.test.js` (fails on the stage-1 code).
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 

@@ -16,6 +16,12 @@
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
+import { subtractConvex, clipToConvex, polygonArea } from './polygonClip.js';
+
+const MIN_OVERLAP_MM2 = 1; // a tread/riser touching a post by less than this is not a joint
+// A post cutting a tread in two keeps the larger piece; the smaller one is just cut off (typically the narrow tip of a
+// winder behind a corner post). It is only reported when it is a real part of the tread (a judgement threshold).
+const SPLIT_WARN_FRACTION = 0.05;
 
 export const POST_FACES = Object.freeze({
   E: { id: 'E', normal: { x: 1, y: 0 }, label: '+X' },
@@ -64,14 +70,83 @@ function finding(severity, ruleId, elementId, message, extra = {}) {
   return createDiagnostic({ ruleId, severity, elementType: 'post', elementId, parameter: 'postHousingDepthMm', message, ...extra });
 }
 
+const square = (c, h) => [
+  { x: c.x - h, y: c.y - h },
+  { x: c.x + h, y: c.y - h },
+  { x: c.x + h, y: c.y + h },
+  { x: c.x - h, y: c.y + h },
+];
+
+/** The strip of a post between face `faceId` and the core `depth` further in, across the whole face (plan polygon). */
+function faceBand(post, faceId, depth) {
+  const n = POST_FACES[faceId].normal;
+  const a = faceAxis(faceId);
+  const h = post.size / 2;
+  const pt = (k, s) => ({ x: post.position.x + n.x * k + a.x * s, y: post.position.y + n.y * k + a.y * s });
+  return [pt(h - depth, -h), pt(h, -h), pt(h, h), pt(h - depth, h)];
+}
+
+/** How deep a tread / riser enters a post's pocket (etap 2) — never negative, never through the post. */
+export function postTreadHousingDepthMm(config, postSize) {
+  const d = Number(config?.postTreadHousingDepthMm);
+  const depth = Number.isFinite(d) && d > 0 ? d : 0;
+  return Math.min(depth, Math.max(0, postSize / 2 - 1));
+}
+
+// The plan rectangle a riser panel occupies (riserRenderer.js extrudes the panel line by the thickness — forward,
+// under the tread, for an ordinary riser).
+export function riserPanelPolygon(riser, panel) {
+  const sign = riser.inward ? 1 : -1;
+  const e = { x: panel.direction.x * riser.thickness * sign, y: panel.direction.y * riser.thickness * sign };
+  return [panel.p0, panel.p1, { x: panel.p1.x + e.x, y: panel.p1.y + e.y }, { x: panel.p0.x + e.x, y: panel.p0.y + e.y }];
+}
+
 /**
- * @param {{stringerModels: {outer, inner}, stringerConstruction: {outer: Array, inner: Array}, postModels: Array}} models
- * @returns {{joints: Array, pocketsByPost: Record<string, Array>, diagnostics: Array}}
+ * Stage 2: an element (tread / riser panel) that passes through a structural post is cut around it (outline minus the
+ * post's core) and enters a pocket in every face it crosses. Returns the new outline (largest piece), its holes, and
+ * the pockets; `null` when the element does not reach the post.
  */
-export function buildJointModel({ stringerModels, stringerConstruction, postModels }) {
+function cutAroundPost(outline, post, depth, zRange) {
+  if (!(zRange.top > post.elevation.bottom + GEOMETRY_EPS && zRange.bottom < post.elevation.top - GEOMETRY_EPS)) return null;
+  const h = post.size / 2;
+  if (polygonArea(clipToConvex(outline, square(post.position, h))) < MIN_OVERLAP_MM2) return null;
+  const pieces = subtractConvex(outline, square(post.position, h - depth));
+  const kept = pieces.slice().sort((p, q) => polygonArea(q.outer) - polygonArea(p.outer))[0] || null;
+  const pockets = [];
+  if (depth > 0) {
+    for (const faceId of POST_FACE_ORDER) {
+      const tongue = clipToConvex(outline, faceBand(post, faceId, depth));
+      if (polygonArea(tongue) < MIN_OVERLAP_MM2) continue;
+      const a = faceAxis(faceId);
+      const s = tongue.map((p) => (p.x - post.position.x) * a.x + (p.y - post.position.y) * a.y);
+      pockets.push({
+        faceId,
+        sMin: Math.max(-h, Math.min(...s)),
+        sMax: Math.min(h, Math.max(...s)),
+        zMin: Math.max(post.elevation.bottom, zRange.bottom),
+        zMax: Math.min(post.elevation.top, zRange.top),
+        depthMm: depth,
+        openBottom: zRange.bottom < post.elevation.bottom - GEOMETRY_EPS,
+        openTop: zRange.top > post.elevation.top + GEOMETRY_EPS,
+      });
+    }
+  }
+  const total = pieces.reduce((sum, p) => sum + polygonArea(p.outer), 0);
+  const droppedMm2 = kept ? total - polygonArea(kept.outer) : 0;
+  return { kept, split: pieces.length > 1 && droppedMm2 > SPLIT_WARN_FRACTION * total, droppedMm2, swallowed: pieces.length === 0, pockets };
+}
+
+/**
+ * @param {{stringerModels: {outer, inner}, stringerConstruction: {outer: Array, inner: Array}, postModels: Array,
+ *   treadModels?: Array, riserModels?: Array, config?: Object}} models
+ * @returns {{joints: Array, pocketsByPost: Record<string, Array>, treadCuts: Record<string, Object>,
+ *   riserCuts: Record<string, Array>, diagnostics: Array}}
+ */
+export function buildJointModel({ stringerModels, stringerConstruction, postModels, treadModels = [], riserModels = [], config = {} }) {
   const joints = [];
   const diagnostics = [];
   const posts = new Map((postModels || []).filter((p) => !p.removed).map((p) => [p.postId, p]));
+  const structuralPosts = [...posts.values()].filter((p) => p.kind !== 'railing');
 
   for (const side of ['outer', 'inner']) {
     const model = stringerModels?.[side];
@@ -127,13 +202,65 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
     });
   }
 
-  const pocketsByPost = {};
-  for (const j of joints) (pocketsByPost[j.postId] ||= []).push(j.pocket);
+  // --- stage 2: treads and risers that pass through a structural post ---
+  const treadCuts = {};
+  const riserCuts = {};
+  for (const tread of treadModels || []) {
+    let outline = tread.outline;
+    let notchOutline = tread.notch?.outline || null;
+    let holes = [];
+    let droppedMm2 = 0;
+    let touched = false;
+    for (const post of structuralPosts) {
+      const depth = postTreadHousingDepthMm(config, post.size);
+      const cut = cutAroundPost(outline, post, depth, tread.elevation);
+      if (!cut) continue;
+      touched = true;
+      if (cut.swallowed || !cut.kept) {
+        diagnostics.push(finding('WARNING', 'JOINT-TREAD-INSIDE-POST', post.postId, `Stopień ${tread.index + 1} leży prawie cały w słupie ${post.postId} — nie da się go wyciąć wokół słupa.`, { parameter: 'postTreadHousingDepthMm' }));
+        continue;
+      }
+      if (cut.split) diagnostics.push(finding('WARNING', 'JOINT-TREAD-SPLIT', post.postId, `Słup ${post.postId} przecina stopień ${tread.index + 1} na części — zostaje większa.`, { parameter: 'postTreadHousingDepthMm' }));
+      outline = cut.kept.outer;
+      holes = [...holes, ...cut.kept.holes];
+      droppedMm2 += cut.droppedMm2;
+      if (notchOutline) {
+        const n = subtractConvex(notchOutline, square(post.position, post.size / 2 - depth)).sort((p, q) => polygonArea(q.outer) - polygonArea(p.outer))[0];
+        notchOutline = n ? n.outer : null;
+      }
+      const jointId = `joint:${post.postId}:${tread.stepId}`;
+      const pockets = cut.pockets.map((p) => ({ ...p, jointId, kind: 'tread', label: `stopien ${tread.index + 1}` }));
+      joints.push({ id: jointId, type: 'TREAD_POST_HOUSING', postId: post.postId, stepId: tread.stepId, depthMm: depth, pockets });
+    }
+    if (touched) treadCuts[tread.stepId] = { outline, holes, notchOutline, droppedMm2 };
+  }
+  for (const riser of riserModels || []) {
+    riser.panels.forEach((panel, k) => {
+      let poly = riserPanelPolygon(riser, panel);
+      let touched = false;
+      for (const post of structuralPosts) {
+        const depth = postTreadHousingDepthMm(config, post.size);
+        const cut = cutAroundPost(poly, post, depth, riser.elevation);
+        if (!cut || !cut.kept) continue;
+        touched = true;
+        poly = cut.kept.outer;
+        const label = riser.atTop ? 'podstopien gorny' : `podstopien ${Number(String(riser.stepId).replace('step-', '')) + 1}`;
+        const jointId = `joint:${post.postId}:${riser.riserId}:${k}`;
+        joints.push({ id: jointId, type: 'RISER_POST_HOUSING', postId: post.postId, riserId: riser.riserId, panelIndex: k, depthMm: depth, pockets: cut.pockets.map((p) => ({ ...p, jointId, kind: 'riser', label })) });
+      }
+      if (touched) riserCuts[`${riser.riserId}:${k}`] = poly;
+    });
+  }
 
-  // A post weakened by its own pockets: two pockets whose volumes meet inside the post (deep pockets on adjacent or
-  // opposite faces at the same height) leave no solid core there.
-  for (const [postId, pockets] of Object.entries(pocketsByPost)) {
+  const pocketsByPost = {};
+  for (const j of joints) for (const p of j.pockets || [j.pocket]) (pocketsByPost[j.postId] ||= []).push(p);
+
+  // A post weakened by its own pockets: two STRINGER pockets whose volumes meet inside the post (deep pockets on
+  // adjacent or opposite faces at the same height) leave no solid core there. (A tread wrapping a post corner has
+  // pockets on two faces meeting at that corner by design — not a weakness.)
+  for (const [postId, allPockets] of Object.entries(pocketsByPost)) {
     const post = posts.get(postId);
+    const pockets = allPockets.filter((p) => p.kind === 'stringer');
     const boxes = pockets.map((p) => pocketBox(post, p));
     for (let a = 0; a < boxes.length; a++) {
       for (let b = a + 1; b < boxes.length; b++) {
@@ -143,7 +270,21 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
       }
     }
   }
-  return { joints, pocketsByPost, diagnostics };
+  return { joints, pocketsByPost, treadCuts, riserCuts, diagnostics };
+}
+
+/** Per tread: its cut outline and the posts it enters — what the tread DXF needs ({[stepId]: {cut, posts}}). */
+export function treadJointsByStep(jointModel, postModels) {
+  const out = {};
+  const posts = new Map((postModels || []).map((p) => [p.postId, p]));
+  for (const j of jointModel?.joints || []) {
+    if (j.type !== 'TREAD_POST_HOUSING') continue;
+    const post = posts.get(j.postId);
+    if (!post) continue;
+    const entry = (out[j.stepId] ||= { cut: jointModel.treadCuts?.[j.stepId] || null, posts: [] });
+    entry.posts.push({ postId: post.postId, position: post.position, size: post.size, depthMm: j.depthMm });
+  }
+  return out;
 }
 
 /**

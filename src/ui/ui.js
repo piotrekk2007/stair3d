@@ -163,6 +163,7 @@ export function createUI({
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad stopniem (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerHousingDepthMm', 5, 40, 1).name('Wpust stopnia w wangę (wpuszczana) [mm]'), 'stringerHousingDepthMm');
   lockable(build.add(config, 'postHousingDepthMm', 0, 40, 1).name('Wręg wangi w słupie [mm] (0 = do lica)'), 'postHousingDepthMm');
+  lockable(build.add(config, 'postTreadHousingDepthMm', 0, 40, 1).name('Wpust stopnia/podstopnia w słup [mm]'), 'postTreadHousingDepthMm');
   lockable(build.add(config, 'stringerMinRemainingSectionMm', 10, 60, 5).name('Min. grubość drewna (próg) [mm]'), 'stringerMinRemainingSectionMm');
   live(build.add(config, 'hasCornerPost')).name('Słup konstrukcyjny na zakręcie');
   lockable(build.add(config, 'postSize', 60, 160, 5).name('Przekrój słupa [mm]'), 'postSize');

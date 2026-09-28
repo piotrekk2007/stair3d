@@ -85,20 +85,22 @@ export function buildStaircase(inputConfig) {
   const allPostModels = [...buildAllPostModels(planLayout, fullConfig), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);
 
+  // How the elements are joined (jointSolver.js): stringers into posts (stage 1), treads/risers cut around posts and
+  // into them (stage 2). Decided before any rendering — treads, risers and posts are drawn from it.
+  const joints = buildJointModel({ stringerModels, stringerConstruction, postModels, treadModels, riserModels: config.hasRiserBoards ? riserModels : [], config: fullConfig });
+
   const root = new THREE.Group();
   root.name = 'Staircase';
 
-  root.add(renderTreads(treadModels, treadMaterial));
+  root.add(renderTreads(treadModels, treadMaterial, joints.treadCuts));
   root.add(renderStringers(stringerModels.outer, stringerConstruction.outer, stringerMaterial, 'StringerOuter'));
   root.add(renderStringers(stringerModels.inner, stringerConstruction.inner, stringerMaterial, 'StringerInner'));
 
-  // How the elements are joined (jointSolver.js): stage 1 = the pockets (wręg) the stringers enter in the posts.
-  const joints = buildJointModel({ stringerModels, stringerConstruction, postModels });
   const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
 
   if (config.hasRiserBoards) {
-    root.add(renderRisers(riserModels, riserBoardMaterial));
+    root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));
   }
 
   if (railingModel.enabled) {
