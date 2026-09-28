@@ -13,15 +13,19 @@ export const APPEARANCE_ELEMENTS = Object.freeze([
   { key: 'baluster', label: 'Tralki' },
 ]);
 
-// Domyślne kolory: elementy drewniane w kolorze zdjęcia dębu (z wykończeniem 'oakPhoto' = zdjęcie bez zmian),
-// słupy ciemniejsze jako akcent (jak dotąd). Starszy projekt ma swoje kolory zapisane w pliku.
+// Ciepły, miodowy „dąb naturalny" (user decision 2026-09-28: cieplejszy niż sam kolor zdjęcia #c19f71 — więcej
+// czerwieni, mniej niebieskiego; dobrany na oko pod wygląd olejowanego dębu, nie z pomiaru).
+export const OAK_NATURAL_COLOR = '#c89a62';
+
+// Domyślne kolory: elementy drewniane w ciepłym „dębie naturalnym" (zdjęcie dębu lekko ocieplone — patrz
+// applyAppearanceToMaterials), słupy ciemniejsze jako akcent. Starszy projekt ma swoje kolory zapisane w pliku.
 export const DEFAULT_APPEARANCE = Object.freeze({
-  tread: '#c19f71',
-  riser: '#c19f71',
-  stringer: '#c19f71',
+  tread: OAK_NATURAL_COLOR,
+  riser: OAK_NATURAL_COLOR,
+  stringer: OAK_NATURAL_COLOR,
   post: '#5a3d24',
-  railing: '#c19f71',
-  baluster: '#c19f71',
+  railing: OAK_NATURAL_COLOR,
+  baluster: OAK_NATURAL_COLOR,
 });
 
 // Wykończenie każdego elementu (klucz w obiekcie: `${element}Finish`):
@@ -36,7 +40,7 @@ export const finishKey = (key) => `${key}Finish`;
 
 export const COLOR_PRESETS = Object.freeze([
   { id: 'oak-photo', label: 'Dąb (kolor ze zdjęcia)', hex: OAK_PHOTO_COLOR },
-  { id: 'oak-natural', label: 'Dąb naturalny', hex: '#d8c39a' },
+  { id: 'oak-natural', label: 'Dąb naturalny', hex: OAK_NATURAL_COLOR },
   { id: 'oak-light', label: 'Dąb jasny', hex: '#e6d3ac' },
   { id: 'oak-dark', label: 'Dąb ciemny', hex: '#8a5a34' },
   { id: 'walnut', label: 'Orzech', hex: '#5a3d24' },

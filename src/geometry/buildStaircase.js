@@ -21,15 +21,15 @@ import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTe
 // Wypukłość porów/słojów z tekstury dębu (bumpMap) — wartość dobrana na oko w widoku 3D, tylko wizualna.
 const OAK_BUMP_SCALE = 0.6;
 
-const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
+const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
 // Jeden wspólny materiał dla wang wewn.+zewn. — dzięki temu "Zaznacz wg materiału" w SketchUp
 // (działa niezależnie od tego, czy import zachował hierarchię grup z DAE) chwyta OD RAZU
 // całe wangi, a nie tylko jedną stronę.
 const stringerMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.7, metalness: 0.02, side: THREE.DoubleSide });
 const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.65, metalness: 0.02 });
-const railingMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.7, metalness: 0.02 });
+const railingMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7, metalness: 0.02 });
 // Own material for the balusters, so their colour can differ from the handrail's (scene/appearance.js 'baluster').
-const balusterMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.7, metalness: 0.02 });
+const balusterMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7, metalness: 0.02 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()

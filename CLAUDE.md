@@ -1298,8 +1298,9 @@ maps to meshes that already exist, and changes the lights.
   `woodGrain.js` `getOakPhotoTexture()` (`new URL(…, import.meta.url)` — Vite bundles it as a hashed asset; node tests
   never load it). Its physical size `OAK_PHOTO_SPAN_MM` = 2800 × 1620 mm is an ASSUMPTION (typical decor scan), to
   verify. Its mean colour `#c19f71` was measured from the file; the photo finish tints per channel by chosen/mean
-  (capped ×2), so choosing that colour (preset "Dąb (kolor ze zdjęcia)", now the default of treads, risers, stringers,
-  handrail and balusters; posts stay dark) shows the photo unchanged, another colour stains it.
+  (capped ×2), so choosing that colour (preset "Dąb (kolor ze zdjęcia)") shows the photo unchanged, another colour
+  stains it. **Default = a warmer "Dąb naturalny"** `OAK_NATURAL_COLOR` `#c89a62` (user decision 2026-09-28: more red,
+  less blue than the photo; chosen by eye) for treads, risers, stringers, handrail and balusters; posts stay dark.
 - **UVs are in metres of wood**; each texture sets its own `repeat` (1000 / its span), so the same geometry fits both
   the photo and the generated oak.
 - **Finish per element** (`scene/appearance.js`): `treadFinish`/`riserFinish`/… = `'oakPhoto'` (default), `'oak'`

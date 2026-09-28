@@ -51,3 +51,14 @@ test('project file: appearance round-trips at the top level; an older file witho
   delete old.appearance;
   assert.deepEqual(parseProjectFile(JSON.stringify(old)).meta.appearance, defaultAppearance());
 });
+
+test('the default natural oak is warmer than the oak photo itself (more red, less blue) and is the "Dąb naturalny" preset', async () => {
+  const { OAK_NATURAL_COLOR, OAK_PHOTO_COLOR } = await import('../appearance.js');
+  const rgb = (hex) => hex.match(/[0-9a-f]{2}/gi).map((h) => parseInt(h, 16));
+  const [nr, , nb] = rgb(OAK_NATURAL_COLOR);
+  const [pr, , pb] = rgb(OAK_PHOTO_COLOR);
+  assert.ok(nr - nb > pr - pb, 'warmer: a bigger red-blue gap');
+  assert.equal(DEFAULT_APPEARANCE.tread, OAK_NATURAL_COLOR);
+  assert.equal(COLOR_PRESETS.find((p) => p.id === 'oak-natural').hex, OAK_NATURAL_COLOR);
+  assert.equal(COLOR_PRESETS.find((p) => p.id === 'oak-photo').hex, OAK_PHOTO_COLOR, 'the exact photo colour stays available');
+});
