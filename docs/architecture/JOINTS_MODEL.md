@@ -71,6 +71,8 @@ prawo dla patrzącego na lico z zewnątrz (0 = oś słupa), `z` = wysokość w �
   obrys, obrys słupa na warstwie JOINTS, wiersz „Wyciecie wokol slupa …, wpust w slup gl. N mm"; `treadJointsByStep`),
   DXF słupa (gniazda stopni i podstopni na rozwinięciu). Ostrzeżenie o nachodzących gniazdach dotyczy tylko gniazd wang
   (stopień obejmujący narożnik słupa ma gniazda na dwóch licach z definicji).
+- Stopień wycięty wokół słupa z rowkiem pod podstopień: spód poniżej wysokości rowka = wycięty obrys minus pas rowka
+  (`treadCuts[*].undersides`) — nosek zachowuje pełną grubość stopnia (poprawka 2026-09-28).
 - Ograniczenia: rowek pod zakładkę podstopnia w DXF stopnia (`treadNotchEntities`) jest rysowany z niewyciętego
   obrysu; kosztorys liczy powierzchnię/formatkę stopnia jak dotąd (wycięcie jest niewielkie).
 

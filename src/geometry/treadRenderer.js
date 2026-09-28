@@ -26,11 +26,13 @@ export function buildTreadMesh(treadModel, cut = null) {
   if (!treadModel.notch) {
     return slab(pts2D, treadModel.elevation.bottom, treadModel.thickness);
   }
+  // below the riser groove: the underside pieces decided by the solver (treadSolver.js notchUndersides — the outline
+  // minus ONLY the groove strip, so the nosing keeps its full thickness), or the joint model's for a cut tread
   const { depthMm } = treadModel.notch;
-  const notchOutline = cut ? cut.notchOutline || cut.outline : treadModel.notch.outline;
+  const undersides = (cut ? cut.undersides : treadModel.notch.undersides) || [cut ? cut.outline : treadModel.notch.outline];
   const upperSlab = slab(pts2D, treadModel.elevation.bottom + depthMm, treadModel.thickness - depthMm);
-  const lowerSlab = slab(toUV(notchOutline), treadModel.elevation.bottom, depthMm);
-  return mergeGeometries([upperSlab, lowerSlab]);
+  const lowerSlabs = undersides.map((poly) => slab(toUV(poly), treadModel.elevation.bottom, depthMm));
+  return mergeGeometries([upperSlab, ...lowerSlabs]);
 }
 
 export function renderTreads(treadModels, material, treadCuts = {}) {

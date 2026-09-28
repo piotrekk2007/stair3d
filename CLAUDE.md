@@ -833,7 +833,15 @@ underside to receive that overlap.
   rationale already used for not adding true CSG elsewhere in this codebase). Exact, not
   approximate, for this specific shape (a straight-sided rabbet along one edge, never a curved or
   undercut groove). An un-notched tread renders exactly as before (single prism, untouched code
-  path).
+  path). **Fixed 2026-09-28 (reported: "a 10 mm groove makes the nosing 10 mm thinner"):** the lower slab
+  used to be the notch-receded outline WITHOUT the nosing, so the nosing lost the groove's depth. Now the
+  groove is only the strip between the structural front edge and that edge receded by the riser thickness
+  (`TreadModel.notch.strip`); the lower slab is the nosed outline MINUS that strip
+  (`notch.undersides`, `treadSolver.js` `notchUndersides` — usually two pieces: the nosing and the tread
+  behind the groove), so the nosing keeps the full tread thickness. A tread cut around a post gets its
+  `undersides` from the cut outline in `jointSolver.js` (`treadCuts[*].undersides`). `notch.outline`
+  (receded) is kept for the tread DXF's groove drawing. Test: `treadRenderer.test.js` (confirmed to fail
+  on the old code).
 - **`stringerConstructionGeometry.js`**'s new `buildRiserHousings(effective, config)`: the wanga's
   own gniazdo for the riser board, alongside the existing tread housing — both now live in ONE
   combined `housings[]` array, each tagged `kind: 'tread'` or `kind: 'riser'` (`buildHousings()`
@@ -1383,7 +1391,7 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
   structural post (in plan AND in height; balustrade posts excluded) is cut around it — outline minus the post's core
   (post square shrunk by the depth), `polygonClip.js subtractConvex` (Weiler–Atherton for a convex hole, no dependency)
   — and gets a pocket on every face it crosses (`clipToConvex` with the face band; `kind 'tread'|'riser'`). Output:
-  `joints.treadCuts[stepId] = {outline, holes, notchOutline, droppedMm2}`, `joints.riserCuts['riserId:panel'] = polygon`,
+  `joints.treadCuts[stepId] = {outline, holes, undersides, droppedMm2}`, `joints.riserCuts['riserId:panel'] = polygon`,
   pockets in `pocketsByPost`. **Corner post — no "fork"** (user decision 2026-09-28): there the element is cut FLUSH
   with the post faces and keeps ONE tongue, on the face it bears on most, within that face's middle part only
   (`removalAtPost`/`subtractAll`; `polygonClip.js cleanPolygon` drops duplicate/collinear vertices); newels unchanged.

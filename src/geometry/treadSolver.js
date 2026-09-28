@@ -10,6 +10,7 @@
 import { pointsEqual, normalizeVector } from './pathUtils.js';
 import { shiftFrontEdge } from './nosingUtils.js';
 import { computeWinderBlank } from './winderBlank.js';
+import { subtractConvex } from './polygonClip.js';
 import { recessedEdges, housingRecessMm } from './edgeOverrides.js';
 
 /**
@@ -150,7 +151,20 @@ function buildNotch(tread, config) {
     if (pointsEqual(p, outer0)) return newOuter0;
     return p;
   });
-  return { depthMm: riserTopOverlapMm, outline };
+  // `strip`: the groove itself in plan — between the structural front edge and that edge receded by the riser
+  // thickness. ONLY this strip is milled from below; the nosing in front of it keeps the tread's full thickness.
+  return { depthMm: riserTopOverlapMm, outline, strip: [inner0, outer0, newOuter0, newInner0] };
+}
+
+/**
+ * The tread's underside below the groove's height: its real (nosed) outline minus the groove strip — usually two
+ * pieces, the nosing in front of the groove and the tread behind it. Bug fix (reported 2026-09-28): the lower slab was
+ * the whole outline receded to behind the groove, so the NOSING lost the groove's depth too (a 10 mm groove made the
+ * nosing 10 mm thinner).
+ */
+export function notchUndersides(outline, strip) {
+  if (!strip) return [outline];
+  return subtractConvex(outline, strip).map((p) => p.outer);
 }
 
 /**
@@ -191,8 +205,11 @@ export function buildTreadModel(tread, config) {
     winderInfo: tread.winderInfo || null,
     winderBlank: tread.type === 'winder' ? computeWinderBlank(tread, nosing) : null,
     overhang: tread.overhang ?? null,
-    outline: applyNosing(tread, effectiveNosing),
-    notch: buildNotch(tread, config),
+    ...(() => {
+      const outline = applyNosing(tread, effectiveNosing);
+      const notch = buildNotch(tread, config);
+      return { outline, notch: notch ? { ...notch, undersides: notchUndersides(outline, notch.strip) } : null };
+    })(),
   };
 }
 

@@ -268,7 +268,7 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
   const riserCuts = {};
   for (const tread of treadModels || []) {
     let outline = tread.outline;
-    let notchOutline = tread.notch?.outline || null;
+    let undersides = null;
     let holes = [];
     let droppedMm2 = 0;
     let touched = false;
@@ -285,15 +285,13 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
       outline = cut.kept.outer;
       holes = [...holes, ...cut.kept.holes];
       droppedMm2 += cut.droppedMm2;
-      if (notchOutline) {
-        const n = subtractAll(notchOutline, cut.rects).kept;
-        notchOutline = n ? n.outer : null;
-      }
+      // the underside below the riser groove: the CUT outline minus the groove strip (nosing kept whole)
+      if (tread.notch?.strip) undersides = subtractConvex(outline, tread.notch.strip).map((p) => p.outer);
       const jointId = `joint:${post.postId}:${tread.stepId}`;
       const pockets = cut.pockets.map((p) => ({ ...p, jointId, kind: 'tread', label: `stopien ${tread.index + 1}` }));
       joints.push({ id: jointId, type: 'TREAD_POST_HOUSING', postId: post.postId, stepId: tread.stepId, depthMm: depth, pockets });
     }
-    if (touched) treadCuts[tread.stepId] = { outline, holes, notchOutline, droppedMm2 };
+    if (touched) treadCuts[tread.stepId] = { outline, holes, undersides, droppedMm2 };
   }
   for (const riser of riserModels || []) {
     riser.panels.forEach((panel, k) => {
