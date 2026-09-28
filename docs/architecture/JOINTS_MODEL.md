@@ -128,7 +128,11 @@ spotykają) — deska PRZED narożnikiem (A) przechodzi, deska za nim (B) dochod
 - **Kosztorys**: `takeoff/connectorItems.js` — pozycja `CONNECTOR` na złącze, ilość = liczba śrub, „Śruba schodowa
   M10 × L", materiał `joint-connector` **bez ceny** (brak w cenniku — koszt pusty, podsumowanie „Łączniki (bez ceny)"
   liczy je jako niewycenione), bez objętości drewna (ciężar własny ich nie liczy).
-- Ograniczenia: brak otworów w 3D (za małe, niewidoczne); nie sprawdza, czy otwór trafia w gniazdo stopnia/podstopnia
+- **Warstwa 3D „Złącza (gniazda, śruby)”** (HUD widoku 3D, domyślnie wyłączona): gniazda w słupach i wangach,
+  otwory na śruby i gniazda nakrętek — to samo, co zaznaczają DXF-y — rysowane półprzezroczyście przez drewno.
+  Dane: `geometry/jointMarkers.js` (czysty), rysowanie: `scene/jointMarkersOverlay.js` (osobna grupa, poza modelem —
+  nie trafia do eksportu OBJ/DAE).
+- Ograniczenia: otwory nie są wycinane w bryłach 3D (tylko pokazywane warstwą „Złącza”); nie sprawdza, czy otwór trafia w gniazdo stopnia/podstopnia
   w słupie; jeden rodzaj łącznika i wspólne parametry dla wszystkich złączy; bez nośności łącznika.
 
 Testy: `src/geometry/__tests__/jointSolver.test.js`, `jointConnectors.test.js` (etap 4 — test „holes of different

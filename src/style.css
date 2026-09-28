@@ -1659,3 +1659,8 @@ code {
   color: #b3261e;
   font-weight: 600;
 }
+
+/* legend of the 3D "Złącza" layer (viewportHud.js) */
+#viewport-hud .vh-joint-legend { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 18px; font-size: 11px; }
+#viewport-hud .vh-joint-legend[hidden] { display: none; }
+#viewport-hud .vh-joint-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }

@@ -38,7 +38,7 @@ const VIEWS = [
  * @param {() => void} [opts.onLogoRemove]
  * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onJointsChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -46,6 +46,13 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       <div class="vh-title">Warstwy</div>
       ${LAYERS_3D.map(([key, label]) => `<label><input type="checkbox" data-layer="${key}" ${layers[key] ? 'checked' : ''}/> ${label}</label>`).join('')}
       <label><input type="checkbox" data-ceiling ${viewState.showCeiling ? 'checked' : ''}/> Strop</label>
+      <label title="Gniazda w słupach i wangach oraz otwory na śruby — to, co zaznaczają DXF-y; rysowane przez drewno"><input type="checkbox" data-joints ${viewState.showJoints ? 'checked' : ''}/> Złącza (gniazda, śruby)</label>
+      <div class="vh-joint-legend" data-joint-legend ${viewState.showJoints ? '' : 'hidden'}>
+        <span><i style="background:#ff8c00"></i>gniazdo w słupie</span>
+        <span><i style="background:#ffc107"></i>gniazdo w wandze</span>
+        <span><i style="background:#e53935"></i>śruba</span>
+        <span><i style="background:#8e24aa"></i>gniazdo nakrętki</span>
+      </div>
     </div>
     <div class="vh-group">
       <div class="vh-title">Widok</div>
@@ -88,6 +95,10 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     });
   }
   hud.querySelector('[data-ceiling]').addEventListener('change', (e) => onCeilingChange(e.target.checked));
+  hud.querySelector('[data-joints]').addEventListener('change', (e) => {
+    hud.querySelector('[data-joint-legend]').hidden = !e.target.checked;
+    if (onJointsChange) onJointsChange(e.target.checked);
+  });
   for (const btn of hud.querySelectorAll('[data-view]')) btn.addEventListener('click', () => onStandardView(btn.dataset.view));
   hud.querySelector('[data-fit]').addEventListener('click', () => onStandardView('iso'));
   hud.querySelector('[data-camera-mode]').addEventListener('change', (e) => onCameraMode(e.target.value));

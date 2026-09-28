@@ -13,6 +13,8 @@ import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
 import { buildDebugOverlay } from './scene/debugOverlay.js';
+import { buildJointMarkers } from './geometry/jointMarkers.js';
+import { buildJointMarkersOverlay } from './scene/jointMarkersOverlay.js';
 import { resolveTraceability } from './scene/elementInspector.js';
 import { applySelectionHighlight } from './scene/selectionHighlight.js';
 import { createUI, createInfoPanel, updateInfoPanel, createValidatorPanel, updateValidatorPanel, markValidatorSelection, refreshUI } from './ui/ui.js';
@@ -58,6 +60,8 @@ const viewState = {
   // intersections, normals, bearing positions, naruszenia reguł — czysta wizualizacja
   // już-rozwiązanych danych modelu, nigdy drugie liczenie geometrii.
   showDebug: false,
+  // "Złącza" layer (3D HUD): the pockets and bolt holes of the joint model, drawn see-through over the model
+  showJoints: false,
   plan2dShowWinderBlanks: true,
   plan2dEditMode: false,
   // Tryb prezentacji: czysto wizualny (chowa panele i nakładki techniczne) — NIE dotyka `config`.
@@ -117,6 +121,7 @@ let currentDimLabels = null;
 let currentStringerLengthLabels = null;
 let currentWinderBlankLabels = null;
 let currentDebugOverlay = null;
+let currentJointMarkers = null;
 let currentPlanLayout = null;
 let currentDerived = null;
 let currentPlan2DSVG = '';
@@ -212,7 +217,7 @@ let uiRefresh = null;
 let fitWasEnabled = false;
 
 function rebuild() {
-  for (const group of [currentRoot, currentCeiling, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay]) {
+  for (const group of [currentRoot, currentCeiling, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
     if (!group) continue;
     scene.remove(group);
     disposeGroup(group);
@@ -261,6 +266,9 @@ function rebuild() {
 
   currentDebugOverlay = buildDebugOverlay({ planLayout, treadModels, stringerModels, diagnostics: lastDiagnostics });
   scene.add(currentDebugOverlay);
+  // the joints layer: the same pockets and holes the DXF exports mark (geometry/jointMarkers.js), next to the model
+  currentJointMarkers = buildJointMarkersOverlay(buildJointMarkers(built));
+  scene.add(currentJointMarkers);
 
   // Zaznaczenie wskazuje element po ID — jeśli po zmianie parametrów stary element nie istnieje
   // (np. mniej stopni), zaznaczenie znika zamiast wskazywać przypadkowy inny.
@@ -382,6 +390,7 @@ function applyOverlayVisibility() {
   if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical;
   if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical;
   if (currentDebugOverlay) currentDebugOverlay.visible = viewState.showDebug && technical;
+  if (currentJointMarkers) currentJointMarkers.visible = viewState.showJoints && technical;
   sceneApi.helpers.grid.visible = technical;
   sceneApi.helpers.axes.visible = technical;
   sceneApi.helpers.ground.visible = !technical;
@@ -435,6 +444,7 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
     ws.setStatus({ view: `3D: ${mode === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
   },
   onCeilingChange: (visible) => handleViewChange('showCeiling', visible),
+  onJointsChange: (visible) => handleViewChange('showJoints', visible),
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
   onSnapshot: () => savePresentationSnapshot(),
   onLogoFile: (file) => loadLogoFile(file),
@@ -782,7 +792,7 @@ function handleCommitChange() {
 function handleViewChange(key, value) {
   viewState[key] = value;
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
-  if (['showCeiling', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug'].includes(key)) applyOverlayVisibility();
+  if (['showCeiling', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();
 }

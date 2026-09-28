@@ -1429,6 +1429,15 @@ See [docs/architecture/JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md) (user
   and nut bore (or a through circle). Takeoff: `takeoff/connectorItems.js`, element `CONNECTOR` per joint (quantity =
   bolts, "Śruba schodowa M10 × L"), material `joint-connector` UNPRICED, summary line "Łączniki (bez ceny)". Not in 3D.
   Test: `geometry/__tests__/jointConnectors.test.js` (the crossing test fails without the group shift).
+- **3D layer "Złącza (gniazda, śruby)"** (3D HUD checkbox, off by default, `viewState.showJoints`, hidden in client
+  mode): the pockets and holes the DXFs mark, drawn see-through OVER the wood (depthTest off) — they are all inside a
+  post or a board. Pure `geometry/jointMarkers.js` `buildJointMarkers(models)` → `{boxes, cylinders}` in plan coords +
+  elevation, read off `joints.pocketsByPost`/`holesByPost`/`holesBySegment` and the wangi's `housings` (oriented boxes
+  in the board's frame, against its inner face; bolts in the board's mid-plane; a nut bore from the inner face to just
+  past the bolt — a position marker, its depth is not a parameter). `scene/jointMarkersOverlay.js` only draws them, as
+  its own group next to the model (like the debug overlay), so OBJ/DAE exports never contain it. Colours: post pocket
+  orange, wanga housing yellow, bolt red, nut bore purple (legend under the checkbox). Test:
+  `geometry/__tests__/jointMarkers.test.js`.
 Tests: `geometry/__tests__/jointSolver.test.js`, `export/__tests__/dxfExport.test.js`; the "board ends at the post
 face" tests in `postsAndWangi.test.js`/`stringerProfile.test.js` now assert the housing depth; stage 2:
 `geometry/__tests__/polygonClip.test.js`, `treadPostJoints.test.js` (fails on the stage-1 code).
