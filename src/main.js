@@ -34,6 +34,7 @@ import { exportStaircaseToDAE } from './export/daeExporter.js';
 import { downloadTextFile } from './export/downloadTextFile.js';
 import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF } from './export/dxfExport.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
+import { resolveOpening, sanitizeOpeningPolygon, moveOpeningVertex, insertOpeningVertex, removeOpeningVertex, translateOpening, OPENING_SHAPES } from './geometry/ceilingOpening.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
@@ -74,6 +75,7 @@ const viewState = {
     railing: true,
     winderWidth: false,
     stringerSpacing: false,
+    ceilingOpening: true,
   },
 };
 const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: true };
@@ -122,6 +124,11 @@ let lastWaived = [];
 let lastStaleWaivers = [];
 let lastTakeoff = null;
 let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
+// Otwór w stropie na planie 2D: 'off' | 'edit' (uchwyty wierzchołków) | 'draw' (klikanie nowego wielokąta).
+// Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
+let openingMode = 'off';
+let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
+let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
 const PLAN_VIEW_MARGIN_MM = 600;
 
@@ -515,7 +522,7 @@ function handleSelectTakeoffItem(item) {
 // ---------------------------------------------------------------------------------------------
 function fitPlanView() {
   if (!currentPlanLayout) return;
-  const bounds = planSvgBounds(currentPlanLayout);
+  const bounds = planSvgBounds(currentPlanLayout, lastModels?.ceilingFit?.openingOutline || []);
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = fitToBounds(bounds, rect.width || 800, rect.height || 600, PLAN_VIEW_MARGIN_MM);
   regeneratePlan2D();
@@ -547,11 +554,76 @@ function regeneratePlan2D() {
     stringerModels: lastModels?.stringerModels || null,
     stringerConstruction: lastModels?.stringerConstruction || null,
     railingModel: lastModels?.railingModel ?? null,
+    opening: lastModels?.ceilingFit
+      ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }
+      : null,
+    openingEdit: openingMode === 'edit',
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
+    planApi?.redrawDraft();
     updateScaleReadout();
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Otwór w stropie rysowany/edytowany na planie 2D. Każda zmiana pisze WYŁĄCZNIE config.openingShape/
+// openingPolygon (punkty względem lewego-dolnego rogu rzutu, jak offsety prostokąta — geometry/ceilingOpening.js),
+// potem zwykły rebuild(); historia dopiero po puszczeniu przeciągnięcia / zamknięciu rysunku.
+// ---------------------------------------------------------------------------------------------
+function planOrigin() {
+  const b = currentPlanLayout?.bounds;
+  return { x: b?.minX ?? 0, y: b?.minY ?? 0 };
+}
+function toOpeningRelative(p) {
+  const o = planOrigin();
+  return { x: Math.round((p.x - o.x) * 10) / 10, y: Math.round((p.y - o.y) * 10) / 10 };
+}
+// Otwór, jaki jest teraz (prostokąt albo wielokąt), jako wielokąt względny — z niego startuje każda edycja,
+// więc pierwsze przeciągnięcie prostokąta zamienia go w wielokąt o tych samych 4 narożnikach.
+function currentOpeningRelative() {
+  if (!currentPlanLayout) return [];
+  const o = resolveOpening(config, currentPlanLayout.bounds);
+  const origin = planOrigin();
+  return o.outline.map((p) => ({ x: Math.round((p.x - origin.x) * 10) / 10, y: Math.round((p.y - origin.y) * 10) / 10 }));
+}
+function setOpeningPolygon(points, final) {
+  config.openingShape = OPENING_SHAPES.POLYGON;
+  config.openingPolygon = final ? sanitizeOpeningPolygon(points) : points;
+  rebuild();
+  if (final) {
+    uiRefresh?.();
+    commitHistory();
+  }
+}
+function setOpeningMode(mode) {
+  openingMode = mode;
+  planApi?.resetDraft();
+  const hud = document.querySelector('#plan2d-hud');
+  hud?.querySelector('[data-action="opening-edit"]')?.classList.toggle('active', mode === 'edit');
+  hud?.querySelector('[data-action="opening-draw"]')?.classList.toggle('active', mode === 'draw');
+  const hint = hud?.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = mode === 'off';
+    hint.textContent =
+      mode === 'draw'
+        ? 'Rysowanie otworu: klikaj kolejne narożniki (przyciąga do stopni, wang i siatki 5 mm). Zamknij: klik w pierwszy punkt, Enter albo dwuklik. Backspace / prawy klik cofa punkt, Esc anuluje.'
+        : 'Edycja otworu: przeciągnij kółko = narożnik, kropkę na boku = nowy narożnik, wnętrze = cały otwór. Prawy klik na narożniku usuwa go.';
+  }
+  plan2dPanel.classList.toggle('opening-drawing', mode === 'draw');
+  regeneratePlan2D();
+}
+function startOpeningDraw() {
+  if (viewState.view !== '2d') setView('2d');
+  setOpeningMode('draw');
+}
+function getOpeningSnapPoints() {
+  if (!currentPlanLayout) return [];
+  const b = currentPlanLayout.bounds;
+  const pts = [...getSnapPoints(), ...(currentPlanLayout.outerFullPath || []), ...(currentPlanLayout.innerFullPath || [])];
+  pts.push({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY }, { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY });
+  for (const p of lastModels?.ceilingFit?.openingOutline || []) pts.push(p);
+  return pts;
 }
 
 function setView(view) {
@@ -564,6 +636,7 @@ function setView(view) {
   if (show2d) {
     if (!planViewport) fitPlanView();
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
+    planApi?.redrawDraft();
     updateScaleReadout();
   } else if (view === 'profile') {
     ws.setStatus({ view: 'Profil wangi (widok z boku)' });
@@ -914,10 +987,13 @@ plan2dHud.id = 'plan2d-hud';
 plan2dHud.innerHTML = `
   <div id="plan2d-zoom-controls">
     <button type="button" data-action="edit" aria-pressed="false" title="Edycja krawędzi stopni: przeciągaj kółka na granicach stopni (narożniki), a po kliknięciu stopnia — romby przy jego bokach. To samo co „Edytuj krawędzie” w folderze Plan 2D.">✎ Edytuj</button>
+    <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
+    <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
     <button type="button" data-action="fit" title="Dopasuj do widoku">⤢</button>
   </div>
+  <div id="plan2d-opening-hint" hidden></div>
   <div id="plan2d-scale-readout"></div>
   <div id="plan2d-legend">
     <div><span class="swatch" style="border-color:#9aa0a6;border-top-style:dashed"></span>krawędź automatyczna</div>
@@ -938,6 +1014,8 @@ plan2dHud.querySelector('[data-action="edit"]').addEventListener('click', () => 
   uiRefresh?.();
 });
 syncPlanEditButton();
+plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw' ? 'off' : 'draw'));
+plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -952,7 +1030,7 @@ plan2dHud.querySelector('[data-action="zoom-out"]').addEventListener('click', ()
 // Cała interakcja wskaźnikiem/kołem/klawiaturą na planie 2D. Przeciąganie uchwytów modyfikuje
 // WYŁĄCZNIE config (manualEdgeOverrides / manualTreadOverhangs) — nigdy siatki Three.js;
 // main.js dowiaduje się o tym tylko przez te callbacki i za każdym razem woła pełne rebuild().
-attachPlanInteractions({
+planApi = attachPlanInteractions({
   panelEl: plan2dPanel,
   getViewport: () => planViewport,
   setViewport: (vp) => {
@@ -996,6 +1074,41 @@ attachPlanInteractions({
       commitHistory();
     }
   },
+  // Otwór w stropie (tryby „Rysuj otwór" / „▭ Otwór"): punkty przychodzą w układzie planu, config dostaje względne.
+  getOpeningMode: () => openingMode,
+  getOpeningSnapPoints,
+  onOpeningDragStart: () => {
+    openingBase = currentOpeningRelative();
+  },
+  onOpeningVertexMove: (index, point, final) => {
+    if (!openingBase) return;
+    setOpeningPolygon(moveOpeningVertex(openingBase, index, toOpeningRelative(point)), final);
+    if (final) openingBase = null;
+  },
+  onOpeningInsert: (afterIndex, point) => {
+    if (!openingBase) return;
+    openingBase = insertOpeningVertex(openingBase, afterIndex, toOpeningRelative(point));
+    setOpeningPolygon(openingBase, false);
+  },
+  onOpeningVertexRemove: (index) => {
+    const pts = currentOpeningRelative();
+    if (pts.length <= 3) {
+      const hint = document.querySelector('#plan2d-opening-hint');
+      if (hint) hint.textContent = 'Otwór musi mieć co najmniej 3 narożniki — tego nie można usunąć.';
+      return;
+    }
+    setOpeningPolygon(removeOpeningVertex(pts, index), true);
+  },
+  onOpeningTranslate: (dx, dy, final) => {
+    if (!openingBase) return;
+    setOpeningPolygon(translateOpening(openingBase, dx, dy), final);
+    if (final) openingBase = null;
+  },
+  onOpeningDrawFinish: (points) => {
+    setOpeningPolygon(points.map(toOpeningRelative), true);
+    setOpeningMode('edit'); // od razu można poprawiać narysowany otwór
+  },
+  onOpeningDrawCancel: () => setOpeningMode('off'),
   // Kliknięcia ustawiają WYŁĄCZNIE zaznaczenie (nie model, nie historia).
   onStepClick: (stepIndex) => setSelection(stepIndex === null ? null : { elementType: 'tread', stepIndex }),
   onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),
@@ -1011,6 +1124,7 @@ const gui = createUI({
   onViewChange: handleViewChange,
   onFitPlanView: fitPlanView,
   getPlanBounds: () => lastModels?.planLayout?.bounds ?? null,
+  onStartOpeningDraw: () => startOpeningDraw(),
   appearance,
   onAppearanceChange: () => {
     setAppearance(appearance);

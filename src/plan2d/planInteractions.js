@@ -10,6 +10,19 @@
 // module's knowledge going stale).
 
 import { zoomAt, panBy } from './viewport.js';
+import { openingDraftXML } from './plan2dRenderer.js';
+
+// Rysowanie otworu: kliknięcie bliżej pierwszego punktu niż tyle PIKSELI ekranu zamyka wielokąt.
+const CLOSE_PICK_PX = 16;
+
+// Stan rysowania otworu (tryb „Rysuj otwór") jako czyste funkcje — testowalne bez DOM.
+// `points` = punkty już kliknięte (plan, mm); `closeTolMm` = CLOSE_PICK_PX przeliczone na mm przy bieżącym zoomie.
+export function openingDrawClick(points, point, closeTolMm) {
+  if (points.length >= 3 && Math.hypot(point.x - points[0].x, point.y - points[0].y) <= closeTolMm) return { points, closed: true };
+  const last = points[points.length - 1];
+  if (last && Math.hypot(point.x - last.x, point.y - last.y) < 1) return { points, closed: false };
+  return { points: [...points, point], closed: false };
+}
 
 const SNAP_MM = 5;
 function snapMm(v) {
@@ -130,6 +143,15 @@ function midpoint(a, b) {
  * @param {(treadIndex: number, overhang) => void} [opts.onOverhangDragEnd]
  * @param {(treadIndex: number, side: 'inner'|'outer') => void} [opts.onOverhangContextMenu]
  *   Right-click on an overhang handle — caller resets that tread's overhang on that side.
+ * @param {() => 'off'|'edit'|'draw'} [opts.getOpeningMode]  Ceiling-opening editing mode (main.js owns it).
+ * @param {() => {x:number,y:number}[]} [opts.getOpeningSnapPoints]  Points an opening vertex snaps to.
+ * @param {() => void} [opts.onOpeningDragStart]  A vertex/mid/body drag begins (caller snapshots the polygon).
+ * @param {(index:number, point, final:boolean) => void} [opts.onOpeningVertexMove]  Plan coords (mm).
+ * @param {(afterIndex:number, point) => void} [opts.onOpeningInsert]  A mid-edge dot was grabbed: new vertex.
+ * @param {(index:number) => void} [opts.onOpeningVertexRemove]  Right-click on a vertex.
+ * @param {(dx:number, dy:number, final:boolean) => void} [opts.onOpeningTranslate]  Whole-opening drag, total delta.
+ * @param {(points:{x,y}[]) => void} [opts.onOpeningDrawFinish]  Drawing closed (>= 3 points, plan coords).
+ * @param {() => void} [opts.onOpeningDrawCancel]  Esc while drawing.
  */
 export function attachPlanInteractions(opts) {
   const {
@@ -147,7 +169,54 @@ export function attachPlanInteractions(opts) {
     onOverhangDragMove,
     onOverhangDragEnd,
     onOverhangContextMenu,
+    getOpeningMode = () => 'off',
+    getOpeningSnapPoints,
+    onOpeningDragStart,
+    onOpeningVertexMove,
+    onOpeningInsert,
+    onOpeningVertexRemove,
+    onOpeningTranslate,
+    onOpeningDrawFinish,
+    onOpeningDrawCancel,
   } = opts;
+
+  // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
+  let draft = { points: [], cursor: null };
+
+  function mmPerPx() {
+    const vp = getViewport();
+    const { width } = getPanelSize();
+    return vp && width ? vp.width / width : 1;
+  }
+
+  function openingSnap(raw, exclude = null) {
+    const refs = (getOpeningSnapPoints ? getOpeningSnapPoints() : []).filter((r) => !exclude || Math.hypot(r.x - exclude.x, r.y - exclude.y) > 1e-6);
+    return snapPoint(raw, refs);
+  }
+
+  function showDraft(guideX = null, guideY = null) {
+    const svg = getSvg();
+    if (!svg) return;
+    svg.querySelectorAll('.opening-draft').forEach((el) => el.remove());
+    const xml = openingDraftXML(draft.points, draft.cursor);
+    if (xml) svg.insertAdjacentHTML('beforeend', xml);
+    showSnapGuides(svg, guideX, guideY);
+  }
+
+  function finishDraw() {
+    const pts = draft.points;
+    draft = { points: [], cursor: null };
+    if (pts.length >= 3 && onOpeningDrawFinish) onOpeningDrawFinish(pts);
+  }
+
+  // Wywoływane z main.js po każdym przerysowaniu planu, żeby szkic nie znikał (innerHTML nadpisuje <svg>).
+  function redrawDraft() {
+    if (getOpeningMode() === 'draw') showDraft();
+  }
+
+  function resetDraft() {
+    draft = { points: [], cursor: null };
+  }
 
   let spacePressed = false;
   let panState = null; // { pointerId, lastX, lastY }
@@ -165,6 +234,28 @@ export function attachPlanInteractions(opts) {
   }
 
   window.addEventListener('keydown', (e) => {
+    if (getOpeningMode() === 'draw') {
+      const tag = e.target?.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          draft = { points: [], cursor: null };
+          if (onOpeningDrawCancel) onOpeningDrawCancel();
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishDraw();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          draft.points = draft.points.slice(0, -1);
+          showDraft();
+          return;
+        }
+      }
+    }
     if (e.code === 'Space' && !e.repeat) {
       spacePressed = true;
       updatePanCursor();
@@ -211,6 +302,42 @@ export function attachPlanInteractions(opts) {
       const [p1, p2] = [...activePointers.values()];
       pinchState = { initialDistance: distance(p1, p2), initialViewport: getViewport() };
       return;
+    }
+
+    // --- otwór w stropie: rysowanie (klik = punkt) ---
+    const openingMode = getOpeningMode();
+    if (openingMode === 'draw' && e.button === 0 && !spacePressed) {
+      const svg = getSvg();
+      if (!svg) return;
+      const { point } = openingSnap(screenToPlanPoint(svg, e.clientX, e.clientY));
+      const res = openingDrawClick(draft.points, point, CLOSE_PICK_PX * mmPerPx());
+      draft.points = res.points;
+      if (res.closed) finishDraw();
+      else showDraft();
+      e.preventDefault();
+      return;
+    }
+    // --- otwór w stropie: edycja (wierzchołek / nowy wierzchołek na boku / całość) ---
+    if (openingMode === 'edit' && e.button === 0 && !spacePressed) {
+      const svg = getSvg();
+      const vertexEl = e.target.closest('.opening-vertex');
+      const midEl = vertexEl ? null : e.target.closest('.opening-mid');
+      const bodyEl = vertexEl || midEl ? null : e.target.closest('.opening-body');
+      if (svg && (vertexEl || midEl || bodyEl)) {
+        const raw = screenToPlanPoint(svg, e.clientX, e.clientY);
+        if (onOpeningDragStart) onOpeningDragStart();
+        panelEl.setPointerCapture(e.pointerId);
+        if (bodyEl) {
+          dragState = { pointerId: e.pointerId, kind: 'opening-move', start: raw, delta: { x: 0, y: 0 }, svg };
+        } else {
+          let index = vertexEl ? Number(vertexEl.dataset.index) : Number(midEl.dataset.after) + 1;
+          const start = vertexEl ? { x: Number(vertexEl.getAttribute('cx')), y: -Number(vertexEl.getAttribute('cy')) } : openingSnap(raw).point;
+          if (midEl && onOpeningInsert) onOpeningInsert(index - 1, start);
+          dragState = { pointerId: e.pointerId, kind: 'opening-vertex', index, start, currentPoint: start, svg };
+        }
+        e.preventDefault();
+        return;
+      }
     }
 
     const handle = e.target.closest('.edge-handle');
@@ -310,6 +437,32 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (getOpeningMode() === 'draw' && !panState) {
+      const svg = getSvg();
+      if (svg) {
+        const { point, guideX, guideY } = openingSnap(screenToPlanPoint(svg, e.clientX, e.clientY));
+        draft.cursor = point;
+        showDraft(guideX, guideY);
+      }
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-vertex') {
+      const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      const { point, guideX, guideY } = openingSnap(raw, dragState.start);
+      dragState.currentPoint = point;
+      if (onOpeningVertexMove) onOpeningVertexMove(dragState.index, point, false);
+      showSnapGuides(liveSvg(), guideX, guideY);
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-move') {
+      const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      dragState.delta = { x: snapMm(raw.x - dragState.start.x), y: snapMm(raw.y - dragState.start.y) };
+      if (onOpeningTranslate) onOpeningTranslate(dragState.delta.x, dragState.delta.y, false);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       const references = (getSnapPoints ? getSnapPoints() : []).filter((ref) => distance(ref, raw) > 1e-6);
@@ -352,6 +505,20 @@ export function attachPlanInteractions(opts) {
       panelEl.classList.remove('panning');
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-vertex') {
+      const { index, currentPoint } = dragState;
+      dragState = null;
+      if (onOpeningVertexMove) onOpeningVertexMove(index, currentPoint, true);
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-move') {
+      const { delta } = dragState;
+      dragState = null;
+      if (onOpeningTranslate) onOpeningTranslate(delta.x, delta.y, true);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       dragState.handle.classList.remove('dragging');
       const { boundaryIndex, endpoint, currentPoint } = dragState;
@@ -384,7 +551,28 @@ export function attachPlanInteractions(opts) {
   panelEl.addEventListener('pointerup', endPointer);
   panelEl.addEventListener('pointercancel', endPointer);
 
+  // Dwuklik w trybie rysowania zamyka wielokąt (dwa kliknięcia w to samo miejsce dodały jeden punkt — duplikaty są pomijane).
+  panelEl.addEventListener('dblclick', (e) => {
+    if (getOpeningMode() !== 'draw') return;
+    e.preventDefault();
+    finishDraw();
+  });
+
   panelEl.addEventListener('contextmenu', (e) => {
+    const openingMode = getOpeningMode();
+    if (openingMode === 'draw') {
+      // prawy klik w trakcie rysowania: cofnij ostatni punkt
+      e.preventDefault();
+      draft.points = draft.points.slice(0, -1);
+      showDraft();
+      return;
+    }
+    const vertexEl = openingMode === 'edit' ? e.target.closest('.opening-vertex') : null;
+    if (vertexEl) {
+      e.preventDefault();
+      if (onOpeningVertexRemove) onOpeningVertexRemove(Number(vertexEl.dataset.index));
+      return;
+    }
     const handle = e.target.closest('.edge-handle');
     if (handle) {
       e.preventDefault();
@@ -397,4 +585,6 @@ export function attachPlanInteractions(opts) {
       onOverhangContextMenu(Number(overhangHandle.dataset.tread), overhangHandle.dataset.side);
     }
   });
+
+  return { redrawDraft, resetDraft };
 }

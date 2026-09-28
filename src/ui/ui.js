@@ -7,6 +7,7 @@ import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSo
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
 import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
+import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -67,6 +68,7 @@ export function createUI({
   appearance,
   onAppearanceChange,
   getPlanBounds,
+  onStartOpeningDraw,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -294,6 +296,9 @@ export function createUI({
   const ceiling = gui.addFolder('Strop i otwór (ręczny)');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
   lockable(ceiling.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
+  // Kształt: prostokąt z suwaków poniżej albo wielokąt narysowany na planie 2D (geometry/ceilingOpening.js).
+  live(ceiling.add(config, 'openingShape', { 'prostokąt (suwaki)': OPENING_SHAPES.RECT, 'wielokąt (rysowany na planie 2D)': OPENING_SHAPES.POLYGON })).name('Kształt otworu');
+  if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
   lockable(ceiling.add(config, 'openingLength', 800, 6000, 50).name('Otwór: długość (Y) [mm]'), 'openingLength');
   lockable(ceiling.add(config, 'openingWidth', 700, 6000, 50).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
   lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
@@ -305,9 +310,15 @@ export function createUI({
     apply() {
       const bounds = getPlanBounds && getPlanBounds();
       if (!bounds) return;
-      const next = alignedOpeningOffsets(config, bounds, alignProxy.target);
-      const locked = config.lockedFields || [];
-      for (const key of ['openingOffsetX', 'openingOffsetY']) if (!locked.includes(key)) config[key] = next[key];
+      const poly = sanitizeOpeningPolygon(config.openingPolygon);
+      if (config.openingShape === OPENING_SHAPES.POLYGON && !openingPolygonIssue(poly)) {
+        // narysowany wielokąt: przesuwany w całości, tak by bok jego obwiedni leżał na boku rzutu
+        config.openingPolygon = alignedOpeningPolygon(poly, bounds, OPENING_ALIGN_TARGETS.find((t) => t.id === alignProxy.target));
+      } else {
+        const next = alignedOpeningOffsets(config, bounds, alignProxy.target);
+        const locked = config.lockedFields || [];
+        for (const key of ['openingOffsetX', 'openingOffsetY']) if (!locked.includes(key)) config[key] = next[key];
+      }
       refreshUI(gui);
       onChange();
       (onCommit || onChange)();
@@ -368,6 +379,7 @@ export function createUI({
     ['winderWidth', 'Szer. zabiegu na linii pomiaru'],
     ['stringerSpacing', 'Rozstaw wang / min. głębokość'],
     ['railing', 'Balustrada (poręcz, tralki, krańce)'],
+    ['ceilingOpening', 'Otwór w stropie'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));

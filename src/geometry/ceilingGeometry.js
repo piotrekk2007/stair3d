@@ -4,7 +4,7 @@ const SLAB_MARGIN = 1500; // mm, wizualny margines płyty stropu wokół otworu
 
 export function buildCeiling(ceilingFit, config) {
   const { ceilingThickness } = config;
-  const { openMinX, openMaxX, openMinY, openMaxY, soffitZ } = ceilingFit;
+  const { openMinX, openMaxX, openMinY, openMaxY, soffitZ, openingOutline } = ceilingFit;
 
   const slabMinX = openMinX - SLAB_MARGIN;
   const slabMaxX = openMaxX + SLAB_MARGIN;
@@ -18,11 +18,13 @@ export function buildCeiling(ceilingFit, config) {
   shape.lineTo(slabMinX, slabMaxY);
   shape.closePath();
 
+  // Otwór = obrys z deriveCeilingFit (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js).
+  const outline = openingOutline && openingOutline.length >= 3
+    ? openingOutline
+    : [{ x: openMinX, y: openMinY }, { x: openMaxX, y: openMinY }, { x: openMaxX, y: openMaxY }, { x: openMinX, y: openMaxY }];
   const hole = new THREE.Path();
-  hole.moveTo(openMinX, openMinY);
-  hole.lineTo(openMaxX, openMinY);
-  hole.lineTo(openMaxX, openMaxY);
-  hole.lineTo(openMinX, openMaxY);
+  hole.moveTo(outline[0].x, outline[0].y);
+  for (const p of outline.slice(1)) hole.lineTo(p.x, p.y);
   hole.closePath();
   shape.holes.push(hole);
 

@@ -12,6 +12,7 @@ import { pointsEqual, signedPolygonArea } from '../geometry/pathUtils.js';
 import { outwardNormalFromOutline } from '../geometry/nosingUtils.js';
 import { buildWalklineModel } from '../geometry/walklineModel.js';
 import { deriveCeilingFit } from '../config/schema.js';
+import { OPENING_ISSUE_LABELS_PL } from '../geometry/ceilingOpening.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from '../geometry/tolerances.js';
 
@@ -81,14 +82,25 @@ export function checkWalklineConsistency(walklineModel, treadModels) {
 // finding alongside everything else.
 export function checkCollisions(config, planLayout, riserHeight, treadModels) {
   const ceilingFit = deriveCeilingFit(config, planLayout, riserHeight);
-  if (ceilingFit.fits) return [];
+  const diags = [];
+  // A drawn polygon that cannot be an opening is never silently "fixed": the rectangle from the sliders is used and
+  // this says so.
+  if (ceilingFit.openingInvalidReason) {
+    diags.push(
+      finding('WARNING', 'CEILING-OPENING-INVALID', 'staircase', null, 'openingPolygon', `Narysowany otwór w stropie jest niepoprawny (${OPENING_ISSUE_LABELS_PL[ceilingFit.openingInvalidReason] || ceilingFit.openingInvalidReason}) — użyto prostokąta z suwaków. Popraw wielokąt na planie 2D.`)
+    );
+  }
+  if (ceilingFit.fits) return diags;
   const treadByIndex = new Map(treadModels.map((t) => [t.index, t]));
-  return ceilingFit.violatingTreads.map((index) => {
-    const stepId = treadByIndex.get(index)?.stepId ?? `step-${index}`;
-    return finding('ERROR', 'VALIDATOR-CEILING-COLLISION', 'tread', stepId, 'headroom', `Stopień koliduje ze stropem — nie mieści się w otworze i nie ma wymaganej skrajni (minHeadroom) pod stropem.`, {
-      expected: `wewnątrz otworu [${ceilingFit.openMinX.toFixed(0)}..${ceilingFit.openMaxX.toFixed(0)}] x [${ceilingFit.openMinY.toFixed(0)}..${ceilingFit.openMaxY.toFixed(0)}] mm`,
-    });
-  });
+  const where = ceilingFit.openingShape === 'polygon'
+    ? 'wewnątrz narysowanego wielokąta otworu'
+    : `wewnątrz otworu [${ceilingFit.openMinX.toFixed(0)}..${ceilingFit.openMaxX.toFixed(0)}] x [${ceilingFit.openMinY.toFixed(0)}..${ceilingFit.openMaxY.toFixed(0)}] mm`;
+  return diags.concat(
+    ceilingFit.violatingTreads.map((index) => {
+      const stepId = treadByIndex.get(index)?.stepId ?? `step-${index}`;
+      return finding('ERROR', 'VALIDATOR-CEILING-COLLISION', 'tread', stepId, 'headroom', `Stopień koliduje ze stropem — nie mieści się w otworze i nie ma wymaganej skrajni (minHeadroom) pod stropem.`, { expected: where });
+    })
+  );
 }
 
 // --- Invalid points (NaN / Infinity anywhere in the solved geometry) ------------------------

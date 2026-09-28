@@ -1243,6 +1243,28 @@ side sets only the offset across it. UI: "Dosuń otwór do" dropdown + "⇲ Dosu
 `main.js` `getPlanBounds`); it only writes `openingOffsetX/Y` (a locked field is left alone), then the normal rebuild +
 undo entry. Tests: `config/__tests__/openingAlign.test.js`.
 
+## Ceiling opening drawn as a polygon on the plan 2D
+
+`config.openingShape` ('rect' = the sliders, default; 'polygon' = drawn) + `config.openingPolygon` (points in the SAME
+frame as the rectangle's offsets — relative to `planLayout.bounds.minX/minY`; plain config, so undo and the project
+file carry it, no schema bump; an older file lacks the keys and stays a rectangle). Pure `geometry/ceilingOpening.js`:
+`resolveOpening(config, bounds)` -> ONE CCW outline in plan coords (rect or polygon), `sanitizeOpeningPolygon`,
+`openingPolygonIssue` ('too-few' / 'self-intersecting' / 'zero-area'), `polygonContainsPolygon` (vertices + edge
+midpoints + edge crossings — a concave L opening needs more than a vertex test), vertex edits
+(`move/insert/removeOpeningVertex`, never below 3), `translateOpening`, `alignedOpeningPolygon` ("Dosuń otwór" for the
+polygon). `deriveCeilingFit` uses it (rectangle mode gives exactly the old result — regression-tested against the old
+formula) and returns `openingShape`/`openingOutline`/`openingInvalidReason`; `ceilingGeometry.js` cuts the slab hole
+from the outline; an invalid polygon falls back to the rectangle and `checks.js` reports `CEILING-OPENING-INVALID`
+(WARNING) — never silently fixed. Plan 2D: layer "Otwór w stropie" (`plan2dRenderer.js` `openingXML`, not clickable
+unless editing), HUD buttons "✏ Rysuj otwór" (click corners, snapping to treads/wangi/plan corners/5 mm grid; close by
+clicking the first point, Enter or double-click; Backspace/right-click removes the last point, Esc cancels —
+`planInteractions.js` `openingDrawClick`, draft `openingDraftXML`) and "▭ Otwór" (drag a corner, drag an edge dot = new
+corner, drag the inside = move all, right-click a corner = delete); the first edit of a rectangle turns it into the same
+4-corner polygon. Mode is view state in `main.js` (`openingMode`), edits only write the two config fields (live
+rebuild, history on release). Panel: "Kształt otworu" + "✏ Rysuj otwór na planie 2D". "Dopasuj" includes the opening.
+Tests: `geometry/__tests__/ceilingOpening.test.js` (browser-verified: drawing an L, dragging corners until the
+collision disappears, inserting/deleting a corner, undo, moving, Esc, the L-shaped hole in 3D).
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

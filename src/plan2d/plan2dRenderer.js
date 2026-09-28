@@ -202,6 +202,43 @@ function editHandlesXML(planLayout, overrides) {
   return `<g id="edge-edit-layer">${xml}</g>`;
 }
 
+// Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).
+// Poza trybem edycji to tylko rysunek (pointer-events none — nie zasłania kliknięć w stopnie). W trybie edycji:
+// kółka na wierzchołkach (.opening-vertex, przeciągnij; prawy klik usuwa), kropki w połowie boków (.opening-mid,
+// przeciągnij = nowy wierzchołek) i wnętrze (.opening-body, przeciągnij = przesuń cały otwór).
+export function openingXML(opening, editMode = false) {
+  if (!opening?.outline || opening.outline.length < 3) return '';
+  const pts = opening.outline;
+  const invalid = !!opening.invalidReason;
+  const color = invalid ? '#c0392b' : '#1a5fb4';
+  const minX = Math.min(...pts.map((p) => p.x));
+  const maxY = Math.max(...pts.map((p) => p.y));
+  const label = opening.shape === 'polygon' ? 'otwór w stropie (wielokąt)' : invalid ? 'otwór w stropie (prostokąt — wielokąt niepoprawny)' : 'otwór w stropie (prostokąt)';
+  let xml = `<polygon class="opening-body${editMode ? ' editable' : ''}" points="${polygonPoints(pts)}" fill="${color}" fill-opacity="${editMode ? 0.1 : 0.05}" stroke="${color}" stroke-width="14" stroke-dasharray="80 40" pointer-events="${editMode ? 'all' : 'none'}"/>`;
+  xml += `<text x="${fmt(minX + 40)}" y="${fmt(-maxY + 130)}" font-size="100" fill="${color}" pointer-events="none">${label}</text>`;
+  if (editMode) {
+    pts.forEach((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      xml += `<circle class="opening-mid" data-after="${i}" cx="${fmt((a.x + b.x) / 2)}" cy="${fmt(-(a.y + b.y) / 2)}" r="32" fill="${color}" fill-opacity="0.55" stroke="#fff" stroke-width="8"/>`;
+    });
+    pts.forEach((p, i) => {
+      xml += `<circle class="opening-vertex" data-index="${i}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="48" fill="#fff" stroke="${color}" stroke-width="12"/>`;
+    });
+  }
+  return `<g id="ceiling-opening-layer">${xml}</g>`;
+}
+
+// Szkic rysowanego otworu (tryb „Rysuj otwór"): łamana przez kliknięte punkty + gumka do kursora; pierwszy punkt
+// wyróżniony — kliknięcie w niego zamyka wielokąt. Czysty łańcuch SVG (planInteractions.js wstawia go do bieżącego <svg>).
+export function openingDraftXML(points, cursor) {
+  const all = cursor ? [...points, cursor] : points;
+  if (all.length === 0) return '';
+  const line = all.length >= 2 ? `<polyline points="${polygonPoints(all)}" fill="none" stroke="#1a5fb4" stroke-width="16"/>` : '';
+  const closing = points.length >= 3 && cursor ? `<line x1="${fmt(cursor.x)}" y1="${fmt(-cursor.y)}" x2="${fmt(points[0].x)}" y2="${fmt(-points[0].y)}" stroke="#1a5fb4" stroke-width="8" stroke-dasharray="40 30"/>` : '';
+  const dots = points.map((p, i) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${i === 0 ? 60 : 40}" fill="${i === 0 ? '#1a5fb4' : '#fff'}" stroke="#1a5fb4" stroke-width="12"/>`).join('');
+  return `<g class="opening-draft" pointer-events="none">${closing}${line}${dots}</g>`;
+}
+
 // Każdy stopień jako osobny obiekt logiczny (wymaganie 8) — <g data-step-index> pozwala
 // zaznaczyć DOKŁADNIE jeden stopień (wymaganie 9); podświetlenie zaznaczenia to jedyny wyraz
 // selekcji w SVG, panel z parametrami stopnia renderowany jest poza SVG (main.js/ui.js).
@@ -283,7 +320,7 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, opening = null, openingEdit = false } = options;
   const b = planLayout.bounds;
 
   const treadsXML = stepsXML(planLayout, selectedStepIndex);
@@ -392,6 +429,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const stepBoundariesXMLStr = layers.stepBoundaries || editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
+  const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
   const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
@@ -406,6 +444,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${runBoundariesXMLStr}
     ${postsXML}
     ${railingLayerXML}
+    ${openingEdit ? '' : openingXMLStr}
     ${arrowXML}
     ${widthsXML}
     ${winderWidthXMLStr}
@@ -414,13 +453,18 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${stepBoundariesXMLStr}
     ${editXML}
     ${overhangXML}
+    ${openingEdit ? openingXMLStr : ''}
   </svg>`;
 }
 
 // Zwraca prostokąt otaczający CAŁY rzut (w konwencji Y-odwróconej SVG, jak reszta tego
 // modułu) — używane przez main.js do "Dopasuj widok" (wymaganie 3), zawsze niezależnie od
 // tego, co jest akurat narysowane/włączone jako warstwa.
-export function planSvgBounds(planLayout) {
+export function planSvgBounds(planLayout, extraPoints = []) {
   const b = planLayout.bounds;
-  return { minX: b.minX, maxX: b.maxX, minY: -b.maxY, maxY: -b.minY };
+  // extraPoints: e.g. the ceiling opening's outline, which may reach past the stair — so "fit" shows it whole.
+  const extra = Array.isArray(extraPoints) ? extraPoints.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)) : [];
+  const xs = [b.minX, b.maxX, ...extra.map((p) => p.x)];
+  const ys = [b.minY, b.maxY, ...extra.map((p) => p.y)];
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: -Math.max(...ys), maxY: -Math.min(...ys) };
 }

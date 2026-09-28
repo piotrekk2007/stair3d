@@ -1,3 +1,5 @@
+import { resolveOpening, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
+
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
 export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
 
@@ -178,6 +180,10 @@ export function createDefaultConfig() {
     openingWidth: 1000, // mm, wymiar otworu w poprzek biegu (X)
     openingOffsetX: 0, // mm
     openingOffsetY: 0, // mm
+    // Kształt otworu: 'rect' = prostokąt z suwaków powyżej, 'polygon' = wielokąt narysowany na planie 2D
+    // (openingPolygon, punkty w tym samym układzie co offsety — patrz geometry/ceilingOpening.js).
+    openingShape: 'rect',
+    openingPolygon: [],
   };
 }
 
@@ -297,12 +303,10 @@ export function alignedOpeningOffsets(config, bounds, targetId) {
 // nisko nad podłogą nie mają z nim żadnej kolizji niezależnie od pozycji otworu; sprawdzane są
 // tylko te, których szczyt wchodzi w strefę min. skrajni pod spodem stropu.
 export function deriveCeilingFit(config, planLayout, riserHeight) {
-  const { totalRise, ceilingThickness, minHeadroom, openingWidth, openingLength, openingOffsetX, openingOffsetY } = config;
-  const bounds = planLayout.bounds;
-  const openMinX = bounds.minX + openingOffsetX;
-  const openMaxX = openMinX + openingWidth;
-  const openMinY = bounds.minY + openingOffsetY;
-  const openMaxY = openMinY + openingLength;
+  const { totalRise, ceilingThickness, minHeadroom } = config;
+  // Prostokąt albo narysowany wielokąt — jeden obrys (geometry/ceilingOpening.js). open* = jego obwiednia.
+  const opening = resolveOpening(config, planLayout.bounds);
+  const { minX: openMinX, maxX: openMaxX, minY: openMinY, maxY: openMaxY } = opening;
 
   const soffitZ = totalRise - ceilingThickness;
   const dangerThresholdZ = soffitZ - minHeadroom;
@@ -311,8 +315,7 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
   for (const tread of planLayout.treads) {
     const topZ = (tread.index + 1) * riserHeight;
     if (topZ <= dangerThresholdZ) continue;
-    const outside = tread.outline.some((p) => p.x < openMinX || p.x > openMaxX || p.y < openMinY || p.y > openMaxY);
-    if (outside) violatingTreads.push(tread.index);
+    if (!polygonContainsPolygon(opening.outline, tread.outline)) violatingTreads.push(tread.index);
   }
 
   return {
@@ -320,6 +323,9 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
     openMaxX,
     openMinY,
     openMaxY,
+    openingShape: opening.shape,
+    openingOutline: opening.outline,
+    openingInvalidReason: opening.invalidReason,
     soffitZ,
     fits: violatingTreads.length === 0,
     violatingTreads,

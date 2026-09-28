@@ -520,12 +520,43 @@ html, body {
   background: #fff;
 }
 
-#plan2d-zoom-controls button[data-action="edit"] {
+#plan2d-zoom-controls button[data-action="edit"],
+#plan2d-zoom-controls button[data-action="opening-draw"],
+#plan2d-zoom-controls button[data-action="opening-edit"] {
   width: auto;
   padding: 0 10px;
   font-size: 13px;
 }
 
+#plan2d-opening-hint {
+  max-width: 320px;
+  background: rgba(26, 95, 180, 0.95);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+#plan2d-opening-hint[hidden] {
+  display: none;
+}
+
+#plan2d-panel.opening-drawing svg {
+  cursor: crosshair;
+}
+
+#plan2d-panel .opening-vertex,
+#plan2d-panel .opening-mid {
+  cursor: grab;
+}
+
+#plan2d-panel .opening-body.editable {
+  cursor: move;
+}
+
+#plan2d-zoom-controls button[data-action="opening-draw"].active,
+#plan2d-zoom-controls button[data-action="opening-edit"].active,
 #plan2d-zoom-controls button[data-action="edit"].active {
   background: #1a5fb4;
   border-color: #1a5fb4;
