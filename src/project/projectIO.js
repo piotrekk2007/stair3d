@@ -59,6 +59,9 @@ export function buildProjectPayload(config, meta = {}) {
   // Zaakceptowane wyjątki walidacji (diagnostics/waivers.js) — decyzja projektowa, więc żyje w
   // pliku, ale poza `config` (nie jest wejściem solvera i nie wchodzi do historii modelu).
   if (meta.waivers && meta.waivers.length > 0) payload.waivers = meta.waivers;
+  // Ustawienia oferty dla Klienta (offer/offerModel.js: klient, numer, CNC + projekt, montaż, VAT…) — dane projektu
+  // poza `config`; starszy plik ich nie ma i dostaje domyślne.
+  if (meta.offer) payload.offer = meta.offer;
   return payload;
 }
 
@@ -156,6 +159,7 @@ export function parseProjectFile(text) {
       takeoffSettings: data.takeoffSettings && typeof data.takeoffSettings === 'object' ? data.takeoffSettings : null,
       waivers: sanitizeWaivers(data.waivers),
       appearance: sanitizeAppearance(data.appearance),
+      offer: data.offer && typeof data.offer === 'object' ? data.offer : null,
       schemaVersion: version,
       savedAt: typeof data.savedAt === 'string' ? data.savedAt : null,
     },

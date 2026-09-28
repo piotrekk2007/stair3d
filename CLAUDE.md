@@ -1465,6 +1465,21 @@ square to the front. Where the nosed corner reaches into a corner post the tread
 (stage 2) — the line of the front is never bent. Test: `geometry/__tests__/winderNosing.test.js` (the user's stair +
 an L/U x left/right x 3-5 winders x housed/overlay grid; fails on the old code).
 
+## Client offer (PDF) — "Oferta" tab (implemented)
+
+See [docs/architecture/OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md). User decisions 2026-09-28: CNC + projekt is a
+net LUMP SUM hidden from the client — spread over the material lines in proportion to their cost ("materiał wraz z
+przygotowaniem"); the material is one line unless categories are ticked to show separately (each with its share);
+manual extra items (Kosztorys → "Pozycje dodatkowe") and installation (a manual net amount) are their own lines; net +
+VAT (23/8/0 % per project) + gross; the PDF is the browser's print dialog ("Zapisz jako PDF", no PDF library).
+Pure `offer/offerModel.js` (`buildOffer` from `summarizeByCategory` — prices nothing itself; `stairFacts` with the
+comfort section from the catalogue's WT rules), pure `offer/offerDocument.js` (`buildOfferHTML`, A4, escaped, the CNC
+amount never printed; validity in calendar days — a DST change had shifted it by a day), `ui/offerPanel.js` (form +
+live preview), `main.js` (3D image via `sceneSetup.js renderViewImage` — own iso camera, presentation look without
+technical overlays — plan via `renderPlan2DSVG`, print through a hidden `<iframe srcdoc>`). Offer settings are PROJECT
+data (optional top-level `offer` in the project file, outside `config`/history); company data is a COMPANY setting
+(`localStorage` `stair3d.company`, like the presentation logo). Tests: `offer/__tests__/offer.test.js`.
+
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
 The legacy field names `rearRiser`/`frontRiser` (which were backwards relative to their own

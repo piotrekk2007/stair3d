@@ -224,6 +224,28 @@ export function createScene(container) {
       renderer.render(scene, activeCamera);
       return out;
     },
+    // Obraz do oferty (offer/): osobna kamera w standardowym widoku (computeStandardView — ta sama matematyka co
+    // przyciski widoków), render w zadanym rozmiarze niezależnie od tego, czy panel 3D jest widoczny, potem powrót do
+    // rozmiaru ekranu. Kamera użytkownika i jego widok zostają nietknięte.
+    renderViewImage({ width, height, view = 'iso', center, radius }) {
+      const cam = new THREE.PerspectiveCamera(perspectiveCamera.fov, width / height, perspectiveCamera.near, perspectiveCamera.far);
+      const { position, target } = computeStandardView(view, center, radius);
+      cam.position.copy(position);
+      cam.lookAt(target);
+      const prevRatio = renderer.getPixelRatio();
+      const prevSize = renderer.getSize(new THREE.Vector2());
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height, false);
+      renderer.render(scene, cam);
+      const out = document.createElement('canvas');
+      out.width = width;
+      out.height = height;
+      out.getContext('2d').drawImage(renderer.domElement, 0, 0, width, height);
+      renderer.setPixelRatio(prevRatio);
+      renderer.setSize(prevSize.x, prevSize.y, false);
+      renderer.render(scene, activeCamera);
+      return out;
+    },
     setBackground: (hex) => {
       scene.background = new THREE.Color(hex);
     },

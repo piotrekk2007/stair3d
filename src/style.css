@@ -1664,3 +1664,28 @@ code {
 #viewport-hud .vh-joint-legend { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 18px; font-size: 11px; }
 #viewport-hud .vh-joint-legend[hidden] { display: none; }
 #viewport-hud .vh-joint-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+
+/* "Oferta" tab (ui/offerPanel.js) */
+#offer-panel { padding: 8px 10px 16px; font-size: 12px; }
+#offer-panel h4 { margin: 12px 0 6px; font-size: 12px; color: #5a3d24; border-bottom: 1px solid #e3d6c6; padding-bottom: 2px; }
+#offer-panel .of-actions { margin-bottom: 6px; }
+#offer-panel .of-primary { width: 100%; padding: 8px; font-weight: 600; background: #8a5a34; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+#offer-panel .of-primary:hover { background: #6f4526; }
+#offer-panel .of-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
+#offer-panel .of-row input, #offer-panel .of-row select { width: 55%; box-sizing: border-box; }
+#offer-panel .of-col { flex-direction: column; align-items: stretch; }
+#offer-panel .of-col textarea { width: 100%; box-sizing: border-box; }
+#offer-panel .of-inline { display: flex; gap: 4px; width: 55%; }
+#offer-panel .of-inline input { flex: 1; min-width: 0; width: auto; }
+#offer-panel .of-check { display: block; margin: 3px 0; }
+#offer-panel .of-sub { margin-top: 6px; color: #555; }
+#offer-panel .of-cats { padding-left: 4px; }
+#offer-panel .of-hint { color: #777; font-size: 11px; margin: 3px 0 6px; }
+#offer-panel .of-warn { background: #fff4e5; border: 1px solid #f0c27a; color: #8a5300; padding: 5px 7px; border-radius: 4px; margin-bottom: 4px; }
+#offer-panel .of-table { width: 100%; border-collapse: collapse; }
+#offer-panel .of-table td { padding: 3px 2px; border-bottom: 1px solid #f0e8de; vertical-align: top; }
+#offer-panel .of-table .num { text-align: right; white-space: nowrap; }
+#offer-panel .of-detail { color: #888; font-size: 11px; }
+#offer-panel .of-totals { margin-top: 4px; }
+#offer-panel .of-gross td { font-weight: 700; color: #5a3d24; border-top: 2px solid #8a5a34; }
+#offer-panel .of-company summary { cursor: pointer; margin-top: 12px; color: #5a3d24; }

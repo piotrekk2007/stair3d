@@ -24,7 +24,7 @@ import { createTakeoffPanel, updateTakeoffPanel, markTakeoffSelection } from './
 import { createStructuralPanel, updateStructuralPanel } from './ui/structuralPanel.js';
 import { buildStructuralReport } from './structural/index.js';
 import { createViewportHud, LAYERS_3D } from './ui/viewportHud.js';
-import { GROUP_BY } from './ui/takeoffView.js';
+import { GROUP_BY, summarizeByCategory } from './ui/takeoffView.js';
 import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
 import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffToTextReport } from './takeoff/index.js';
 import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
@@ -43,6 +43,9 @@ import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
+import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from './offer/offerModel.js';
+import { buildOfferHTML } from './offer/offerDocument.js';
+import { createOfferPanel, fillOfferForm, updateOfferPanel } from './ui/offerPanel.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
 
 // ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
@@ -95,6 +98,18 @@ const takeoffSettings = {
   manualItems: createDefaultManualItems(), // wpisywane ręcznie: tralki, poręcze…
 };
 const projectMeta = { name: '', notes: '', lastFileNote: '' };
+// Oferta dla Klienta (offer/): ustawienia to dane PROJEKTU (zapisywane w pliku, poza `config` i historią modelu),
+// dane firmy to ustawienie FIRMY — w tej przeglądarce, jak logo prezentacji.
+let offerSettings = createDefaultOfferSettings();
+const COMPANY_STORAGE_KEY = 'stair3d.company';
+let company = (() => {
+  try {
+    return sanitizeCompany(JSON.parse(localStorage.getItem(COMPANY_STORAGE_KEY) || 'null'));
+  } catch {
+    return sanitizeCompany(null);
+  }
+})();
+let offerPanel = null;
 let takeoffGroupBy = GROUP_BY.ELEMENT;
 
 // Wyjątki walidacji ("Dodaj wyjątek"): świadomie zaakceptowane pary (ruleId, elementId), które
@@ -342,6 +357,7 @@ function renderTakeoffPanel() {
     boardPricing: takeoffSettings.boardPricing,
     winderStepIds: winderStepIds(),
   });
+  refreshOffer();
   if (lastTakeoff.status === 'BLOCKED') ws.setTabBadge('takeoff', '!', 'error');
   else ws.setTabBadge('takeoff', `≈${Math.round(lastTakeoff.totalCost).toLocaleString('pl-PL')} zł`, lastTakeoff.status === 'WARNING' ? 'warning' : 'info');
 }
@@ -545,6 +561,94 @@ function loadLogoFile(file) {
 }
 
 // „Zapisz zdjęcie": render 2× + logo w wybranym rogu -> PNG do pobrania.
+// --- Oferta dla Klienta -------------------------------------------------------------------------------------
+// Pozycje i sumy liczy offer/offerModel.js z tego, co kosztorys już wycenił; tu tylko zbieramy dane i obrazy.
+function currentOffer() {
+  if (!lastTakeoff) return null;
+  const summary = summarizeByCategory(lastTakeoff.items, { winderStepIds: winderStepIds() });
+  return {
+    summary,
+    offer: buildOffer({ summary, manualItems: takeoffSettings.manualItems, settings: offerSettings, blocked: lastTakeoff.status === 'BLOCKED' }),
+  };
+}
+
+function refreshOffer() {
+  if (!offerPanel) return;
+  const current = currentOffer();
+  if (!current) return;
+  updateOfferPanel(offerPanel, { offer: current.offer, categories: separableCategories(current.summary), settings: offerSettings });
+}
+
+// Obraz 3D do oferty: wygląd jak w trybie prezentacji (bez siatki, osi, stropu i nakładek technicznych), osobna kamera
+// w widoku izometrycznym; potem przywrócenie tego, co było widać.
+function offerImage3D() {
+  if (!lastModels) return null;
+  const b = lastModels.planLayout.bounds;
+  const rise = lastModels.fullConfig.totalRise;
+  const center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
+  // a little more room than the on-screen "Dopasuj" — the whole stair with its posts must fit the picture
+  const radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
+  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
+  const was = hidden.map((o) => o.visible);
+  hidden.forEach((o) => (o.visible = false));
+  const groundWas = sceneApi.helpers.ground.visible;
+  sceneApi.helpers.ground.visible = true;
+  applySelectionHighlight(currentRoot, null);
+  try {
+    return sceneApi.renderViewImage({ width: 1400, height: 1000, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+  } finally {
+    hidden.forEach((o, i) => (o.visible = was[i]));
+    sceneApi.helpers.ground.visible = groundWas;
+    applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
+  }
+}
+
+// Rzut do oferty: ten sam renderer planu co zakładka Plan 2D, dopasowany do całych schodów, bez warstw edycyjnych.
+function offerPlanSVG() {
+  if (!lastModels) return null;
+  const viewport = fitToBounds(planSvgBounds(lastModels.planLayout), 900, 700, PLAN_VIEW_MARGIN_MM);
+  return renderPlan2DSVG(lastModels.planLayout, config, lastModels.derived, {
+    viewport,
+    showWinderBlanks: false,
+    layers: { widths: true, walkline: true, runBoundaries: true, stepBoundaries: false, stringers: true, railing: true, ceilingOpening: false },
+    posts: lastModels.postModels || [],
+    stringerModels: lastModels.stringerModels,
+    stringerConstruction: lastModels.stringerConstruction,
+    railingModel: lastModels.railingModel ?? null,
+  });
+}
+
+function generateOfferPDF() {
+  const current = currentOffer();
+  if (!current || !lastModels) return;
+  if (current.offer.lines.length === 0) {
+    window.alert(current.offer.warnings[0] || 'Brak pozycji do wyceny.');
+    return;
+  }
+  const bp = takeoffSettings.boardPricing || {};
+  const html = buildOfferHTML({
+    offer: current.offer,
+    facts: stairFacts(lastModels.fullConfig, lastModels.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') }),
+    settings: offerSettings,
+    company,
+    logoDataUrl: logoSettings.dataUrl,
+    image3d: offerImage3D(),
+    planSvg: offerPlanSVG(),
+    projectName: projectMeta.name,
+  });
+  // Druk przez ukrytą ramkę: okno drukowania przeglądarki → „Zapisz jako PDF” (bez biblioteki PDF, polskie znaki
+  // i obrazy działają od razu). Tytuł dokumentu = domyślna nazwa pliku.
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  frame.onload = () => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => frame.remove(), 60000);
+  };
+  frame.srcdoc = html;
+  document.body.appendChild(frame);
+}
+
 function savePresentationSnapshot() {
   const canvas = sceneApi.captureImage(2);
   const ctx = canvas.getContext('2d');
@@ -877,6 +981,8 @@ function handleNewProject() {
   Object.assign(appearance, defaultAppearance());
   setAppearance(appearance);
   waivers = [];
+  offerSettings = createDefaultOfferSettings();
+  if (offerPanel) fillOfferForm(offerPanel, offerSettings, company);
   pricingEditor.render();
   manualItemsEditor.render();
   projectMeta.name = '';
@@ -907,6 +1013,7 @@ function handleSaveProject() {
     takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing, manualItems: takeoffSettings.manualItems },
     waivers,
     appearance: { ...appearance },
+    offer: offerSettings,
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
   ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
@@ -936,6 +1043,8 @@ function handleFileSelected(event) {
         if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
         if (meta.takeoffSettings.manualItems) takeoffSettings.manualItems = sanitizeManualItems(meta.takeoffSettings.manualItems);
       }
+      offerSettings = sanitizeOfferSettings(meta.offer);
+      if (offerPanel) fillOfferForm(offerPanel, offerSettings, company);
       pricingEditor.render();
       manualItemsEditor.render();
       projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
@@ -1047,6 +1156,28 @@ const structuralPanel = createStructuralPanel(ws.tabBody('structural'), {
   onSelectStringer: (side) => setSelection({ elementType: 'stringer', stringerId: side }),
   onSelectPost: (postId) => setSelection({ elementType: 'post', postId }),
 });
+offerPanel = createOfferPanel(ws.tabBody('offer'), {
+  onSettings: (patch) => {
+    offerSettings = sanitizeOfferSettings({ ...offerSettings, ...patch, client: { ...offerSettings.client, ...(patch.client || {}) } });
+    refreshOffer();
+  },
+  onCompany: (patch) => {
+    company = sanitizeCompany({ ...company, ...patch });
+    try {
+      localStorage.setItem(COMPANY_STORAGE_KEY, JSON.stringify(company));
+    } catch {
+      // brak pamięci przeglądarki — dane firmy działają do zamknięcia karty
+    }
+  },
+  onSuggestNumber: () => {
+    offerSettings = { ...offerSettings, offerNumber: suggestOfferNumber() };
+    fillOfferForm(offerPanel, offerSettings, company);
+    refreshOffer();
+  },
+  onGenerate: () => generateOfferPDF(),
+});
+fillOfferForm(offerPanel, offerSettings, company);
+
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,
   onGroupChange: (groupBy) => {
