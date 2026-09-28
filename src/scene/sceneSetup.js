@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+
+// Oświetlenie (tylko wizualizacja, wartości dobrane na oko): odbicia z proceduralnego „pokoju" (RoomEnvironment
+// z pakietu three — bez nowych zależności i plików), słońce z miękkim cieniem dopasowanym do schodów, słabe
+// światło wypełniające i neutralne mapowanie tonów (Khronos PBR Neutral), żeby jasne drewno nie przepalało się i nie szarzało.
+const ENVIRONMENT_INTENSITY = 0.45;
+const SUN_INTENSITY = 1.7;
+const FILL_INTENSITY = 0.45;
+const HEMI_INTENSITY = 0.35;
+const SHADOW_MAP_SIZE = 2048;
 
 const ORTHO_VIEW_HEIGHT_MM = 6000; // wysokość widocznego obszaru kamery ortogonalnej przy zoom = 1
 
@@ -48,7 +58,15 @@ export function createScene(container) {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(initialW, initialH);
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.NeutralToneMapping; // zachowuje odcień i nasycenie (ACES szarzał jasny dąb)
+  renderer.toneMappingExposure = 0.95;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = ENVIRONMENT_INTENSITY;
 
   const labelRenderer = new CSS2DRenderer();
   labelRenderer.setSize(initialW, initialH);
@@ -63,13 +81,43 @@ export function createScene(container) {
   controls.enableDamping = true;
   controls.update();
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1);
+  const hemi = new THREE.HemisphereLight(0xfff6ea, 0x5a5048, HEMI_INTENSITY);
   scene.add(hemi);
 
-  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  // Słońce: ciepłe, z góry-z boku, z cieniem. Kamera cienia jest dopasowywana do schodów (fitShadowToBox).
+  const dir = new THREE.DirectionalLight(0xfff1dd, SUN_INTENSITY);
   dir.position.set(3000, 5000, 2000);
   dir.castShadow = true;
+  dir.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  dir.shadow.bias = -0.0002;
+  dir.shadow.normalBias = 3; // mm
+  dir.shadow.radius = 3;
   scene.add(dir);
+  scene.add(dir.target);
+
+  // Światło wypełniające z przeciwnej strony (bez cienia), żeby strona schodów w cieniu nie była czarna.
+  const fill = new THREE.DirectionalLight(0xdfe8ff, FILL_INTENSITY);
+  fill.position.set(-3000, 2500, -4000);
+  scene.add(fill);
+
+  // Kamera cienia słońca obejmuje schody (środek + promień bryły), światło stoi zawsze w tym samym kierunku.
+  const SUN_DIRECTION = new THREE.Vector3(0.45, 0.8, 0.4).normalize();
+  function fitShadowToBox(box) {
+    if (!box || box.isEmpty()) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
+    dir.target.position.copy(center);
+    dir.position.copy(center).addScaledVector(SUN_DIRECTION, radius * 3);
+    const cam = dir.shadow.camera;
+    cam.left = -radius * 1.2;
+    cam.right = radius * 1.2;
+    cam.top = radius * 1.2;
+    cam.bottom = -radius * 1.2;
+    cam.near = radius * 0.5;
+    cam.far = radius * 6;
+    cam.updateProjectionMatrix();
+    shadowCatcher.position.set(center.x, 0.5, center.z);
+  }
 
   const grid = new THREE.GridHelper(10000, 20, 0xaaaaaa, 0xcccccc);
   scene.add(grid);
@@ -85,6 +133,14 @@ export function createScene(container) {
   ground.receiveShadow = true;
   ground.visible = false;
   scene.add(ground);
+
+  // Łapacz cienia: niewidoczna podłoga, na której widać tylko cień schodów (w zwykłym widoku 3D, gdzie nie ma
+  // podłogi z trybu prezentacji). Nie przeszkadza siatce ani klikaniu (nie jest w currentRoot).
+  const shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), new THREE.ShadowMaterial({ opacity: 0.18 }));
+  shadowCatcher.rotation.x = -Math.PI / 2;
+  shadowCatcher.position.y = 0.5;
+  shadowCatcher.receiveShadow = true;
+  scene.add(shadowCatcher);
 
   function onResize() {
     const w = container.clientWidth || window.innerWidth;
@@ -151,7 +207,8 @@ export function createScene(container) {
     renderer,
     controls,
     labelRenderer,
-    helpers: { grid, axes, ground },
+    helpers: { grid, axes, ground, shadowCatcher },
+    fitShadowToBox,
     setBackground: (hex) => {
       scene.background = new THREE.Color(hex);
     },

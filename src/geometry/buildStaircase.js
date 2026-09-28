@@ -16,6 +16,10 @@ import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { solveStairwellFit, applyStairwellFit } from './stairwellFit.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
+import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
+
+// Wypukłość porów/słojów z tekstury dębu (bumpMap) — wartość dobrana na oko w widoku 3D, tylko wizualna.
+const OAK_BUMP_SCALE = 0.6;
 
 const treadMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
 // Jeden wspólny materiał dla wang wewn.+zewn. — dzięki temu "Zaznacz wg materiału" w SketchUp
@@ -31,7 +35,11 @@ const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, rou
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
 // odtwarza zależne od nich materiały pochodne (np. znacznik gniazda w wandze).
 export function setAppearance(appearance) {
-  applyAppearanceToMaterials({ tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial, baluster: balusterMaterial }, appearance);
+  applyAppearanceToMaterials(
+    { tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial, baluster: balusterMaterial },
+    appearance,
+    typeof document === 'undefined' && typeof window === 'undefined' ? null : { texture: getOakTexture(), meanLuminance: getOakMeanLuminance(), bumpScale: OAK_BUMP_SCALE, photo: { texture: getOakPhotoTexture(), meanHex: OAK_PHOTO_MEAN_HEX } }
+  );
 }
 
 // ORKIESTRATOR — żadna geometria nie jest tu ROZWIĄZYWANA, tylko SKŁADANA. Kolejność:
@@ -94,8 +102,14 @@ export function buildStaircase(inputConfig) {
     root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, balusterMaterial));
   }
 
+  // Prezentacja: współrzędne tekstury z kierunkiem włókien (wzdłuż najdłuższej osi każdego elementu) + cienie.
+  // Nie zmienia żadnego wierzchołka — tylko dokłada `uv` (scene/woodGrain.js).
+  applyWoodGrainToTree(root);
+
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig);
+  // strop przyjmuje cień, ale go nie rzuca — inaczej słońce z góry zostawiłoby schody w cieniu płyty
+  ceilingMesh.receiveShadow = true;
 
   // root = tylko elementy schodów (do eksportu); strop jest osobno, tylko do wizualizacji.
   // treadModels/riserModels/stringerModels/postModels są tu już policzone raz — zwracamy je też

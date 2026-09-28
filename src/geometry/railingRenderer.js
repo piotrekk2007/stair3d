@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { traceability } from '../scene/traceability.js';
+import { withWoodGrainUVs, textureOffsetFor } from '../scene/woodGrain.js';
 
 const ROUND_SEGMENTS = 16;
 
@@ -52,7 +53,10 @@ function balusterGeometry(baluster, shape, size) {
 
 function mergedMesh(geometries, material, name, sourceId, sectionSide) {
   if (geometries.length === 0) return null;
-  const mesh = new THREE.Mesh(mergeGeometries(geometries), material);
+  // Każdy kawałek (tralka, odcinek poręczy) dostaje własny kierunek włókien PRZED scaleniem — po scaleniu
+  // najdłuższa oś całej siatki byłaby wzdłuż biegu, a tralki mają włókna pionowo.
+  const mesh = new THREE.Mesh(mergeGeometries(geometries.map((g, i) => withWoodGrainUVs(g, { offset: textureOffsetFor(`${sourceId}:${i}`) }))), material);
+  mesh.geometry.userData.woodGrainUV = true;
   mesh.name = name;
   mesh.userData = traceability({ elementType: 'railing', stringerId: sectionSide, geometrySourceId: sourceId });
   return mesh;

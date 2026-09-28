@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
 import { stepIndexFromElementId } from './selection.js';
-import { APPEARANCE_ELEMENTS, COLOR_PRESETS } from '../scene/appearance.js';
+import { APPEARANCE_ELEMENTS, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, finishKey } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
@@ -337,9 +337,11 @@ export function createUI({
   // Kolory prezentacji: gotowa próbka albo własny kolor, osobno dla każdego elementu. Zapisywane w pliku
   // projektu, poza historią modelu (zmiana koloru nie zmienia geometrii).
   if (appearance) {
-    const look = gui.addFolder('Kolory (prezentacja)');
+    const look = gui.addFolder('Kolory i drewno (prezentacja)');
     const presetOptions = { '— własny —': '', ...Object.fromEntries(COLOR_PRESETS.map((p) => [p.label, p.hex])) };
+    const finishOptions = Object.fromEntries(Object.values(FINISHES).map((f) => [FINISH_LABELS_PL[f], f]));
     for (const { key, label } of APPEARANCE_ELEMENTS) {
+      look.add(appearance, finishKey(key), finishOptions).name(`${label}: wykończenie`).onChange(() => onAppearanceChange && onAppearanceChange());
       const picker = look.addColor(appearance, key).name(label).onChange(() => onAppearanceChange && onAppearanceChange());
       const proxy = { preset: COLOR_PRESETS.find((p) => p.hex === appearance[key])?.hex ?? '' };
       look

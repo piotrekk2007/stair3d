@@ -233,6 +233,8 @@ function rebuild() {
   scene.add(root);
   scene.add(ceilingMesh);
   currentRoot = root;
+  // cień słońca obejmuje dokładnie te schody (sceneSetup.js fitShadowToBox)
+  sceneApi.fitShadowToBox(new THREE.Box3().setFromObject(root));
   currentCeiling = ceilingMesh;
 
   currentDimLabels = buildDimensionLabels(planLayout, config, derived);
@@ -381,6 +383,7 @@ function applyOverlayVisibility() {
   sceneApi.helpers.grid.visible = technical;
   sceneApi.helpers.axes.visible = technical;
   sceneApi.helpers.ground.visible = !technical;
+  sceneApi.helpers.shadowCatcher.visible = technical; // w prezentacji cień pada na podłogę
 }
 
 function applyLayerVisibility() {
@@ -1140,6 +1143,7 @@ const gui = createUI({
 });
 
 uiRefresh = () => refreshUI(gui);
+setAppearance(appearance); // domyślne wykończenie = dąb (tekstura) — musi być na materiałach od startu
 setView(viewState.view);
 rebuild();
 updateHistoryButtons();

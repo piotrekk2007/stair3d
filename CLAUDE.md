@@ -937,7 +937,7 @@ takeoff. It applies in the normal 3D view too, not only in client mode. Known sm
 file the preset dropdown may still show the previous preset name (the colour picker is right).
 The balustrade has TWO colours: `railing` ("Poręcz") and `baluster` ("Tralki") — separate shared materials in `buildStaircase.js`,
 `renderRailing(model, style, material, balusterMaterial)`; an older project file without the `baluster` key gets the default.
-**Not done (next step, only if wanted):** procedural oak texture / real wood textures and better lighting.
+**Oak texture and lighting: done — see "Oak wood texture + lighting" below.**
 Tests: `scene/__tests__/appearance.test.js`.
 
 ## Balustrade (handrail + balusters) — stages 1 and 2 implemented
@@ -1264,6 +1264,48 @@ corner, drag the inside = move all, right-click a corner = delete); the first ed
 rebuild, history on release). Panel: "Kształt otworu" + "✏ Rysuj otwór na planie 2D". "Dopasuj" includes the opening.
 Tests: `geometry/__tests__/ceilingOpening.test.js` (browser-verified: drawing an L, dragging corners until the
 collision disappears, inserting/deleting a corner, undo, moving, Esc, the L-shaped hole in 3D).
+
+## Oak wood texture + lighting (presentation only)
+
+Nothing here touches geometry, the model, validation or the takeoff — it only adds texture coordinates and material
+maps to meshes that already exist, and changes the lights.
+- **`scene/woodTexture.js`** (pure, no Three.js): a procedural FLAT-SAWN OAK generated in code (no image files, no new
+  dependency). Growth rings from the board cutting the trunk's cylinders (`radius = √(x² + h²)`: tight parallel lines at
+  the edges, arches in the middle; the ring index shifts `CATHEDRAL_RINGS_PER_TILE` per tile so the "cathedrals" open one
+  way, as on a real board), an earlywood pore band as the dark figure line, long pores, fine streaks, short ray flecks,
+  board-scale colour variation. Periodic noise -> tiles without a seam. `generateOakPixels` returns RGBA + the mean
+  LINEAR luminance. All sizes (ring ≈ 4.2 mm, pith distance, tile 1600 × 400 mm) were chosen by eye for the look —
+  visualisation constants, not measurements.
+- **`scene/woodGrain.js`**: `withWoodGrainUVs` adds `uv` along the GRAIN = the element's longest axis (PCA of its
+  vertices: a tread along its width, a stringer along its rake, a post/baluster vertically, a handrail along its piece);
+  each face gets a planar projection (u along the grain projected into the face, v across; end-grain faces get a
+  compressed pair) — no vertex moves, original (smooth) normals kept. `applyWoodGrainToTree` runs once per build in
+  `buildStaircase.js` (+ shadows on); the balustrade maps each piece BEFORE merging (`railingRenderer.js`) so balusters
+  keep a vertical grain. A per-element offset (`textureOffsetFor(geometrySourceId)`) keeps neighbouring treads from
+  looking identical. `getOakTexture()` = one shared `DataTexture` (sRGB, repeat, mipmaps, anisotropy 8), created lazily
+  in the browser only (not in node tests).
+- **Oak PHOTO texture (default finish)**: `src/assets/textures/oak-natural.jpg` (2000 × 1157, grain horizontal; the
+  user supplied it together with the same image rotated 90°, so only one copy is kept), loaded once by
+  `woodGrain.js` `getOakPhotoTexture()` (`new URL(…, import.meta.url)` — Vite bundles it as a hashed asset; node tests
+  never load it). Its physical size `OAK_PHOTO_SPAN_MM` = 2800 × 1620 mm is an ASSUMPTION (typical decor scan), to
+  verify. Its mean colour `#c19f71` was measured from the file; the photo finish tints per channel by chosen/mean
+  (capped ×2), so choosing that colour (preset "Dąb (kolor ze zdjęcia)", now the default of treads, risers, stringers,
+  handrail and balusters; posts stay dark) shows the photo unchanged, another colour stains it.
+- **UVs are in metres of wood**; each texture sets its own `repeat` (1000 / its span), so the same geometry fits both
+  the photo and the generated oak.
+- **Finish per element** (`scene/appearance.js`): `treadFinish`/`riserFinish`/… = `'oakPhoto'` (default), `'oak'`
+  (the generated one) or `'solid'` (e.g. white painted risers), flat keys next to the colours, saved in the project
+  file's `appearance` (older files -> photo). `applyAppearanceToMaterials(materials, appearance, wood)`: generated oak
+  divides the colour by the texture's mean luminance (capped at 1 per channel); without the photo the photo finish
+  falls back to the generated oak. UI folder "Kolory i drewno (prezentacja)" with "<element>: wykończenie".
+- **Lighting** (`scene/sceneSetup.js`): environment reflections from `RoomEnvironment` (ships with `three`) via PMREM,
+  neutral tone mapping (`NeutralToneMapping` — ACES greyed the light oak), a warm sun with soft 2048 px shadows whose shadow camera is fitted to the stairs on every rebuild
+  (`fitShadowToBox`), a cool fill light, a weak hemisphere, and an invisible shadow-catcher floor in the normal 3D view
+  (the presentation floor takes the shadow in client mode). The ceiling slab receives but does not cast shadows.
+- **Limits**: one photo (a big staircase repeats it — per-element offsets hide most of it); the photo's licence is the
+  user's to confirm (it ships inside the build and the repository); OBJ/DAE exports carry the geometry only.
+Tests: `scene/__tests__/woodTexture.test.js` (deterministic, contrast, seamless tiling, grain axis, UVs never move a
+vertex, every built mesh has UVs, finish handling).
 
 ## Terminology: `frontEdge`/`backEdge` (consolidated)
 
