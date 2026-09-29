@@ -34,6 +34,8 @@ export const DEFAULT_PRICE_LIST = Object.freeze([
   { materialId: 'railing-baluster', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę tralki za sztukę.' },
   { materialId: 'railing-handrail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę poręczy za metr bieżący.' },
   { materialId: 'railing-baserail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę podporęczy za metr bieżący.' },
+  { materialId: 'railing-glass', price: 0, currency: 'PLN', unit: PRICE_UNITS.AREA, source: 'Wpisz własną cenę szkła VSG za m² (prostokąt, z którego jest cięta tafla).' },
+  { materialId: 'railing-glass-fixing', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę rotuli / uchwytu szyby za sztukę.' },
 ]);
 
 function indexByMaterialId(priceList) {

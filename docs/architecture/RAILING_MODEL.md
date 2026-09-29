@@ -173,6 +173,36 @@ Przesunięcie poprzeczne balustrady (i grubość wang) szło przy skręcie w lew
 (z `planLayout.handedness`) dla wang, balustrady i słupów. Słupy konstrukcyjne stoją w osi wangi, tak jak słupki
 balustrady — ponowne użycie istniejącego słupa na końcu odcinka działa dzięki temu dokładniej.
 
+## Szkło (etap S1, zrobiony)
+
+Decyzje użytkownika (2026-09-29): parametr **„Wypełnienie”** (`config.railingInfill`) — `balusters` (tralki, jak
+dotąd), `glass-side` (**szkło na rotulach do boku wangi**, poręcz osadzona na szkle) albo `glass-posts` (**szkło
+podwieszone między słupkami** na prostokątnych uchwytach, poręcz tradycyjnie na słupkach); szkło **VSG 4.4.2 lub 5.5.2**
+(`railingGlassType`; grubość = 2 tafle + 2 folie PVB × 0,38 mm = 8,76 / 10,76 mm); tafla **maks. 1800 mm**
+(`railingGlassMaxWidthMm`). Pozostałe wymiary to parametry DO WERYFIKACJI (`CO-MFG-J-GLASS`): szczelina 20 mm,
+odsunięcie rotuli od wangi 30 mm, pas tafli poniżej górnej krawędzi wangi 120 mm, 2 rotule na taflę, 2 uchwyty na
+krawędź, wstawka rotuli 150 mm od końca tafli.
+
+- `src/geometry/railingGlass.js` (czysty): `panesForRun` — szkło jest płaskie, więc każdy prosty odcinek ścieżki (w
+  rzucie) dostaje własne tafle, najwyżej `maxWidth` szerokie, ze szczeliną między nimi; na końcu biegu przy słupku —
+  odstęp pół słupka + szczelina. Tafla = wielokąt we własnym układzie (t wzdłuż tafli, z = wysokość): góra pod poręczą
+  (przy poręczy giętej — pod jej wygładzoną linią), dół: rotule — górna krawędź wangi minus pas mocowania (na wandze
+  nakładanej: linia nosków minus wysokość podstopnia = dno wcięć, przybliżenie); między słupkami — nad wangą
+  wpuszczaną / nad linią nosków (nakładana) + szczelina, a góra szczelinę pod poręczą. Tafla niższa niż 150 mm jest
+  pominięta z ostrzeżeniem `RAILING-GLASS-PANE-LOW`. `blank` = prostokąt do zamówienia, `areaMm2` = tafla.
+- `railingSolver.js`: przy rotulach płaszczyzna szkła (i poręcz na niej) leży **na zewnątrz** wangi (odsunięcie +
+  pół grubości szkła od linii łańcucha) i nie powstają nowe słupki (istniejące słupy konstrukcyjne zostają); między
+  słupkami narożnik rzutu zawsze dostaje słupek (także przy poręczy giętej), a bieg dłuższy niż jedna tafla — słupki
+  pośrednie (`intermediatePostSplits`, `splitPathAt`). Tralek nie ma.
+- 3D: tafla = graniastosłup z obrysu (przezroczysty materiał, bez cienia), rotule/uchwyty jako znaczniki (metal).
+  Rzut 2D: tafle jako niebieskie paski, mocowania jako kwadraciki. DXF balustrady: każda tafla 1:1 — obrys, prostokąt,
+  mocowania od lewego dolnego rogu (rotula = otwór). Kosztorys: `GLASS_PANE` na taflę (cena za m² prostokąta,
+  `railing-glass`, domyślnie 0 = bez ceny), `GLASS_FIXING` na odcinek (sztuki, `railing-glass-fixing`). Oferta: wiersz
+  „Balustrada” opisuje szkło.
+- Walidacja: przy szkle nie ma sprawdzania prześwitu między tralkami; szczelina szkła > dopuszczalny prześwit →
+  `PL-LEGAL-H-01`. Kontrola konstrukcji: poręcz na szkle nie jest liczona jako belka między słupkami (pomijana z
+  opisem); **szkło i mocowania nie są sprawdzane** (wytrzymałość tafli, nośność rotul), ciężar szkła nie obciąża wangi.
+
 ## Identyfikatory słupków w biegach
 
 `runs[].startPostId/endPostId` wskazują słup, który faktycznie stoi na końcu biegu — ponownie użyty słup konstrukcyjny

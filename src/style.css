@@ -242,17 +242,22 @@ html, body {
   border-left: 1px solid var(--c-border);
 }
 
+/* Tabs wrap onto a second row when the sidebar is too narrow for all of them (with the cost badge "≈23 079 zł" the
+   5th tab used to be pushed off-screen) — every tab stays visible, no scrolling. */
 #right-tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--c-border);
   flex: 0 0 auto;
 }
 
 #right-tabs button {
   flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
   font: inherit;
   font-size: 13px;
-  padding: 9px 6px;
+  padding: 8px 5px;
   background: #f3f4f6;
   border: none;
   border-bottom: 3px solid transparent;

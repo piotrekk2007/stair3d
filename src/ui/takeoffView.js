@@ -15,6 +15,8 @@ const ELEMENT_LABEL_PL = {
   BASERAIL: 'Podporęcze',
   BALUSTER: 'Tralki (lista cięcia)',
   CONNECTOR: 'Łączniki (bez ceny)',
+  GLASS_PANE: 'Szkło balustrady',
+  GLASS_FIXING: 'Mocowania szkła',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -110,7 +112,7 @@ export function describeDimensions(d) {
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
 
-const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Łączniki (bez ceny)'];
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Szkło balustrady (z modelu)', 'Mocowania szkła (z modelu)', 'Łączniki (bez ceny)'];
 
 function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
@@ -134,6 +136,10 @@ function categoryOf(item, winderStepIds) {
       return 'Tralki (z modelu)';
     case 'CONNECTOR':
       return 'Łączniki (bez ceny)';
+    case 'GLASS_PANE':
+      return 'Szkło balustrady (z modelu)';
+    case 'GLASS_FIXING':
+      return 'Mocowania szkła (z modelu)';
     default:
       return null; // wpusty — poza kosztorysem
   }

@@ -110,6 +110,11 @@ export function buildOffer({ summary, manualItems = [], settings, blocked = fals
   return { lines, totals: { net, vat, gross: round2(net + vat), vatRatePct: s.vatRatePct }, materialNet, cncProjectNet: cnc, warnings };
 }
 
+const RAILING_INFILL_LABELS = {
+  balusters: () => 'tak (tralki)',
+  'glass-side': (c) => `szkło VSG ${c.railingGlassType || '4.4.2'} na rotulach, poręcz na szkle`,
+  'glass-posts': (c) => `szkło VSG ${c.railingGlassType || '4.4.2'} między słupkami`,
+};
 const TYPE_LABELS = { straight: 'Proste (jednobiegowe)', L: 'Zabiegowe / kątowe L', U: 'Zabiegowe / kątowe U' };
 const CONSTRUCTION = { closed: 'wpuszczana', cut: 'nakładana' };
 
@@ -135,7 +140,7 @@ export function stairFacts(config, derived, extras = {}) {
     ['Grubość stopnia / nosek', `${config.treadThickness} mm / ${config.nosing} mm`],
     ['Podstopnie', config.hasRiserBoards ? `tak (${config.riserBoardThickness} mm)` : 'nie (schody otwarte)'],
     ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
-    ['Balustrada', config.railingEnabled ? 'tak' : 'nie'],
+    ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);
   const comfort = [

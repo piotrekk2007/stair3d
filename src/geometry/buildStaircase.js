@@ -31,6 +31,9 @@ const postMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness
 const railingMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7, metalness: 0.02 });
 // Own material for the balusters, so their colour can differ from the handrail's (scene/appearance.js 'baluster').
 const balusterMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7, metalness: 0.02 });
+// Glass balustrade (railingGlass.js): a slightly green, see-through pane, and brushed steel for its fixings.
+const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xcfe7e2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
+const glassFixingMaterial = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -104,7 +107,13 @@ export function buildStaircase(inputConfig) {
   }
 
   if (railingModel.enabled) {
-    root.add(renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, balusterMaterial));
+    root.add(
+      renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, balusterMaterial, {
+        glassMaterial,
+        metalMaterial: glassFixingMaterial,
+        glassStandoffMm: config.railingGlassStandoffMm || 0,
+      })
+    );
   }
 
   // Prezentacja: współrzędne tekstury z kierunkiem włókien (wzdłuż najdłuższej osi każdego elementu) + cienie.

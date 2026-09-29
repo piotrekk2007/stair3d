@@ -217,6 +217,16 @@ export function createUI({
   live(rail.add(config, 'railingBaseRail')).name('Podporęcz (wanga wpuszczana)');
   live(rail.add(config, 'railingBaseRailWidthMm', 20, 120, 1)).name('Podporęcz: szerokość [mm]');
   live(rail.add(config, 'railingBaseRailHeightMm', 10, 80, 1)).name('Podporęcz: wysokość [mm]');
+  // Wypełnienie: tralki albo szkło (geometry/railingGlass.js) — na rotulach do boku wangi (poręcz na szkle) albo
+  // podwieszone między słupkami na uchwytach (poręcz na słupkach, słupki pośrednie co maks. szerokość tafli).
+  live(rail.add(config, 'railingInfill', { Tralki: 'balusters', 'Szkło na rotulach (bok wangi)': 'glass-side', 'Szkło między słupkami': 'glass-posts' })).name('Wypełnienie');
+  live(rail.add(config, 'railingGlassType', { 'VSG 4.4.2': '4.4.2', 'VSG 5.5.2': '5.5.2' })).name('Szkło: rodzaj');
+  live(rail.add(config, 'railingGlassMaxWidthMm', 600, 2400, 10)).name('Szkło: maks. szerokość tafli [mm]');
+  live(rail.add(config, 'railingGlassGapMm', 5, 60, 1)).name('Szkło: szczelina [mm]');
+  live(rail.add(config, 'railingGlassStandoffMm', 10, 80, 1)).name('Rotule: odsunięcie od wangi [mm]');
+  live(rail.add(config, 'railingGlassOverlapMm', 50, 250, 5)).name('Rotule: tafla poniżej góry wangi [mm]');
+  live(rail.add(config, 'railingGlassFixingsPerPane', 1, 6, 1)).name('Rotule na taflę');
+  live(rail.add(config, 'railingGlassClampsPerSide', 1, 4, 1)).name('Uchwyty na krawędź tafli (słupki)');
 
   const sectionsBox = document.createElement('div');
   sectionsBox.className = 'railing-sections';

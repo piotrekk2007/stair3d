@@ -391,11 +391,22 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
         const dashed = s.path?.length >= 2 ? line(s.path, 'stroke="#b07a3a" stroke-width="14" stroke-dasharray="60 50" opacity="0.7"') : '';
         const runs = s.runs.map((run) => line([run.pieces[0].start, ...run.pieces.map((p) => p.end)], 'stroke="#b07a3a" stroke-width="42" stroke-linecap="round"')).join('');
         const dots = s.balusters.map((b) => `<circle cx="${fmt(b.position.x)}" cy="${fmt(-b.position.y)}" r="${fmt(size / 2)}" fill="#5a3d24"/>`).join('');
+        // glass panes (railingGlass.js): each pane as a thick light-blue bar, its fixings as small dark squares
+        const panes = (s.glassPanes || [])
+          .map((pane) => {
+            const bar = `<line class="glass-pane" x1="${fmt(pane.start.x)}" y1="${fmt(-pane.start.y)}" x2="${fmt(pane.end.x)}" y2="${fmt(-pane.end.y)}" stroke="#4aa3c7" stroke-width="${fmt(Math.max(24, pane.thicknessMm * 2.5))}" opacity="0.8"/>`;
+            const marks = pane.fixings
+              .filter((f, i, all) => all.findIndex((g) => Math.abs(g.t - f.t) < 1) === i)
+              .map((f) => `<rect x="${fmt(pane.start.x + pane.dir.x * f.t - 18)}" y="${fmt(-(pane.start.y + pane.dir.y * f.t) - 18)}" width="36" height="36" fill="#37474f"/>`)
+              .join('');
+            return bar + marks;
+          })
+          .join('');
         const first = s.runs[0]?.pieces[0]?.start;
         const lastRun = s.runs[s.runs.length - 1];
         const last = lastRun?.pieces[lastRun.pieces.length - 1]?.end;
         const ring = (p) => (p ? `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="70" fill="none" stroke="#1a5fb4" stroke-width="18"/>` : '');
-        return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${dots}${ring(first)}${ring(last)}</g>`;
+        return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${panes}${dots}${ring(first)}${ring(last)}</g>`;
       })
       .join('');
   })();

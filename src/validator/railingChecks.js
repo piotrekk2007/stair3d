@@ -103,7 +103,23 @@ export function evaluateRailingChecks(railingModel, config, postModels = []) {
       })
     );
   }
-  if (config.railingMaxClearMm > legalOpening) {
+  const glass = validSections.some((s) => s.infill && s.infill !== 'balusters');
+  if (glass && (config.railingGlassGapMm || 0) > legalOpening) {
+    diagnostics.push(
+      createDiagnostic({
+        ruleId: 'PL-LEGAL-H-01',
+        severity: 'WARNING',
+        elementType: 'railing',
+        elementId: anySection,
+        parameter: 'railingGlassGapMm',
+        value: config.railingGlassGapMm,
+        expected: `<= ${legalOpening}`,
+        unit: 'mm',
+        message: `Szczelina przy taflach szkła (${config.railingGlassGapMm} mm) jest większa niż ${legalOpening} mm dopuszczone w tym typie budynku (§ 298).`,
+      })
+    );
+  }
+  if (!glass && config.railingMaxClearMm > legalOpening) {
     diagnostics.push(
       createDiagnostic({
         ruleId: 'PL-LEGAL-H-01',
@@ -125,7 +141,8 @@ export function evaluateRailingChecks(railingModel, config, postModels = []) {
     const existing = postModels.find((p) => p.postId === id) ?? postModels.find((p) => Math.hypot(p.position.x - position.x, p.position.y - position.y) < config.postSize);
     return existing ? existing.size : config.postSize;
   };
-  for (const section of validSections) {
+  // the clear opening between balusters — a glass section has none (its gaps are checked above)
+  for (const section of validSections.filter((s) => !s.infill || s.infill === 'balusters')) {
     let widest = 0;
     section.runs.forEach((run) => {
       const first = run.pieces[0].start;

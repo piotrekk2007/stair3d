@@ -18,6 +18,8 @@ export const DEFAULT_WASTE_FACTORS = Object.freeze({
   BASERAIL: 0.1, // same as the handrail
   BALUSTER: 0.03, // short identical pieces, little offcut
   CONNECTOR: 0, // hardware counted in pieces — no offcut
+  GLASS_PANE: 0, // glass is ordered cut to size
+  GLASS_FIXING: 0,
 });
 
 /**

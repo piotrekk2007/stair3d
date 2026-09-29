@@ -17,6 +17,66 @@ const MM3_TO_M3 = 1 / 1_000_000_000;
 export const RAILING_HANDRAIL_MATERIAL_ID = 'railing-handrail';
 export const RAILING_BALUSTER_MATERIAL_ID = 'railing-baluster';
 export const RAILING_BASERAIL_MATERIAL_ID = 'railing-baserail';
+export const RAILING_GLASS_MATERIAL_ID = 'railing-glass';
+export const RAILING_GLASS_FIXING_MATERIAL_ID = 'railing-glass-fixing';
+
+// Glass balustrade (railingGlass.js): one item per pane — the blank (the rectangle it is cut from) is what is
+// ordered and priced per m², the net area is the pane itself; plus one item per section for its fixings.
+function glassItems(section, config, wasteFactors) {
+  if (!section.glassPanes?.length) return [];
+  const label = section.glass?.label || 'VSG';
+  const items = section.glassPanes.map((pane, k) =>
+    createTakeoffItem({
+      itemId: `railing-${pane.id}`,
+      elementType: ELEMENT_TYPES.GLASS_PANE,
+      sourceElementId: `railing:${section.id}:glass:${k}`,
+      material: `Szkło ${label}`,
+      materialId: RAILING_GLASS_MATERIAL_ID,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { lengthMm: pane.widthMm, widthMm: pane.blank.heightMm, thicknessMm: pane.thicknessMm, netAreaMm2: pane.areaMm2 },
+      calculatedDimensions: { lengthMm: pane.widthMm, widthMm: pane.blank.heightMm, thicknessMm: pane.thicknessMm },
+      catalogStock: null,
+      netVolume: (pane.areaMm2 * pane.thicknessMm) / 1e9,
+      netArea: pane.areaMm2 / 1e6,
+      stockVolume: null,
+      stockArea: (pane.blank.widthMm * pane.blank.heightMm) / 1e6,
+      wasteFactor: wasteFactorFor(ELEMENT_TYPES.GLASS_PANE, RAILING_GLASS_MATERIAL_ID, wasteFactors),
+      optional: true,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: [
+        `Tafla ${k + 1} (${sideLabel(section.side)}, odcinek ${section.id}): ${label}, prostokąt ${Math.round(pane.blank.widthMm)} × ${Math.round(pane.blank.heightMm)} mm, kształt i otwory w DXF balustrady; ${pane.fixings.length} ${pane.fixings[0]?.kind === 'rotule' ? 'rotul(e)' : 'uchwyt(y)'}.`,
+      ],
+    })
+  );
+  const byKind = new Map();
+  for (const f of section.glassPanes.flatMap((p) => p.fixings)) byKind.set(f.kind, (byKind.get(f.kind) || 0) + 1);
+  for (const [kind, count] of byKind) {
+    items.push(
+      createTakeoffItem({
+        itemId: `railing-${section.id}-glass-${kind}`,
+        elementType: ELEMENT_TYPES.GLASS_FIXING,
+        sourceElementId: `railing:${section.id}:glassFixings:${kind}`,
+        material: kind === 'rotule' ? 'Rotula (mocowanie punktowe szkła)' : 'Uchwyt szyby (do słupka)',
+        materialId: RAILING_GLASS_FIXING_MATERIAL_ID,
+        quantity: count,
+        unit: 'szt',
+        nominalDimensions: {},
+        calculatedDimensions: {},
+        catalogStock: null,
+        netVolume: 0,
+        netArea: 0,
+        stockVolume: 0,
+        stockArea: 0,
+        wasteFactor: wasteFactorFor(ELEMENT_TYPES.GLASS_FIXING, RAILING_GLASS_FIXING_MATERIAL_ID, wasteFactors),
+        optional: true,
+        status: TAKEOFF_ITEM_STATUS.OK,
+        notes: [`Mocowania szkła (${sideLabel(section.side)}, odcinek ${section.id}) — typ i wielkość wg producenta, do weryfikacji.`],
+      })
+    );
+  }
+  return items;
+}
 
 const sideLabel = (side) => (side === 'outer' ? 'zewn.' : 'wewn.');
 
@@ -137,5 +197,5 @@ function balusterItems(section, config, wasteFactors) {
  */
 export function buildRailingItems(railingModel, config, wasteFactors = {}) {
   if (!railingModel || !railingModel.enabled) return [];
-  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors)]);
+  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors), ...glassItems(s, config, wasteFactors)]);
 }

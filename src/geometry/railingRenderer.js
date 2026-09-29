@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { traceability } from '../scene/traceability.js';
 import { withWoodGrainUVs, textureOffsetFor } from '../scene/woodGrain.js';
+import { buildPrism } from './geometryUtils.js';
 
 const ROUND_SEGMENTS = 16;
 
@@ -51,6 +52,38 @@ function balusterGeometry(baluster, shape, size) {
   return g;
 }
 
+// One glass pane (railingGlass.js): its outline (t along the pane, z up) extruded by the glass thickness, centred on
+// the glass plane.
+function glassPaneGeometry(pane) {
+  const n = { x: -pane.dir.y, y: pane.dir.x };
+  const h = pane.thicknessMm / 2;
+  const toW = (u, v) => toWorld({ x: pane.start.x + pane.dir.x * u - n.x * h, y: pane.start.y + pane.dir.y * u - n.y * h, z: v });
+  const extrude = new THREE.Vector3(n.x, 0, -n.y);
+  return buildPrism(pane.outline.map((p) => ({ u: p.t, v: p.z })), toW, extrude, pane.thicknessMm);
+}
+
+// A fixing, only as a visible marker of where it is: a rotule = a short cylinder through the glass towards the wanga
+// (the stand-off), a clamp = a small block at the pane's edge. Sizes are for the picture only.
+const ROTULE_DIAMETER_MM = 50;
+const CLAMP_SIZE_MM = { along: 45, up: 60 };
+function fixingGeometry(pane, f, standoffMm) {
+  const n = { x: -pane.dir.y, y: pane.dir.x };
+  const at = { x: pane.start.x + pane.dir.x * f.t, y: pane.start.y + pane.dir.y * f.t, z: f.z };
+  if (f.kind === 'rotule') {
+    const length = standoffMm + pane.thicknessMm + 10;
+    const g = new THREE.CylinderGeometry(ROTULE_DIAMETER_MM / 2, ROTULE_DIAMETER_MM / 2, length, 20);
+    // axis Y -> the pane normal; from outside the glass to the wanga's face (the normal points into the stair)
+    g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(n.x, 0, -n.y))));
+    const c = { x: at.x + n.x * (length / 2 - pane.thicknessMm / 2 - 5), y: at.y + n.y * (length / 2 - pane.thicknessMm / 2 - 5), z: at.z };
+    g.translate(c.x, c.z, -c.y);
+    return g;
+  }
+  const g = new THREE.BoxGeometry(CLAMP_SIZE_MM.along, CLAMP_SIZE_MM.up, pane.thicknessMm + 16);
+  g.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.atan2(pane.dir.y, pane.dir.x)));
+  g.translate(at.x, at.z, -at.y);
+  return g;
+}
+
 function mergedMesh(geometries, material, name, sourceId, sectionSide) {
   if (geometries.length === 0) return null;
   // Każdy kawałek (tralka, odcinek poręczy) dostaje własny kierunek włókien PRZED scaleniem — po scaleniu
@@ -69,7 +102,7 @@ function mergedMesh(geometries, material, name, sourceId, sectionSide) {
  * @param {THREE.Material} [balusterMaterial]  the balusters (defaults to `material`). The section's end posts are ordinary PostModels
  *   (buildStaircase.js merges them into the post list), so postRenderer.js draws them, not this file.
  */
-export function renderRailing(railingModel, style, material, balusterMaterial = material) {
+export function renderRailing(railingModel, style, material, balusterMaterial = material, { glassMaterial = null, metalMaterial = null, glassStandoffMm = 0 } = {}) {
   const group = new THREE.Group();
   group.name = 'Railing';
   for (const section of railingModel.sections) {
@@ -100,6 +133,23 @@ export function renderRailing(railingModel, style, material, balusterMaterial = 
       section.side
     );
     if (balusters) group.add(balusters);
+    if (section.glassPanes?.length && glassMaterial) {
+      // glass: no wood grain, no shadow (a see-through pane would cast a solid one)
+      const glass = new THREE.Mesh(mergeGeometries(section.glassPanes.map(glassPaneGeometry)), glassMaterial);
+      glass.name = `Railing_${section.id}_glass`;
+      glass.geometry.userData.woodGrainUV = true;
+      glass.userData = traceability({ elementType: 'railing', stringerId: section.side, geometrySourceId: `railing:${section.id}:glass` });
+      glass.renderOrder = 2;
+      group.add(glass);
+      const fixings = section.glassPanes.flatMap((pane) => pane.fixings.map((f) => fixingGeometry(pane, f, glassStandoffMm)));
+      if (fixings.length && metalMaterial) {
+        const metal = new THREE.Mesh(mergeGeometries(fixings), metalMaterial);
+        metal.name = `Railing_${section.id}_glassFixings`;
+        metal.geometry.userData.woodGrainUV = true;
+        metal.userData = traceability({ elementType: 'railing', stringerId: section.side, geometrySourceId: `railing:${section.id}:glassFixings` });
+        group.add(metal);
+      }
+    }
   }
   return group;
 }

@@ -39,6 +39,7 @@ import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js'
 import { valueAtU } from './polylineProfile.js';
 import { curveToPolyline, filletPolyline } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt } from './railingGlass.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
 
@@ -548,7 +549,10 @@ function buildSection(section, ctx) {
   const treadCount = planLayout.treads.length;
   const fromStep = section.fromStep;
   const toStep = section.toStep === null ? treadCount - 1 : section.toStep;
-  const base = { id: section.id, side: section.side, fromStep, toStep, valid: false, handrail: null, runs: [], path: [], uncoveredSteps: [], balusters: [], posts: [], diagnostics: [] };
+  const infill = isGlassInfill(config) ? config.railingInfill : RAILING_INFILL.BALUSTERS;
+  const glass = infill !== RAILING_INFILL.BALUSTERS;
+  const glassSide = infill === RAILING_INFILL.GLASS_SIDE;
+  const base = { id: section.id, side: section.side, fromStep, toStep, valid: false, infill, handrail: null, runs: [], path: [], uncoveredSteps: [], balusters: [], glassPanes: [], glass: glass ? glassType(config) : null, posts: [], diagnostics: [] };
   if (fromStep > toStep || toStep >= treadCount) {
     base.diagnostics.push(diag(section.id, 'RAILING-SECTION-INVALID', `Odcinek balustrady ${section.id}: stopnie ${fromStep + 1}–${toStep + 1} są poza schodami albo w złej kolejności — odcinek pominięty.`));
     return base;
@@ -556,7 +560,8 @@ function buildSection(section, ctx) {
 
   const side = section.side;
   const constructionType = constructionTypeForSide(config, side);
-  const offsetMm = config.railingLateralOffsetMm ?? (config.stringerThickness || 0) / 2;
+  // Glass on the wanga's side: the glass plane (and the handrail on it) lies OUTSIDE the wanga (railingGlass.js).
+  const offsetMm = glassLateralOffsetMm(config) ?? config.railingLateralOffsetMm ?? (config.stringerThickness || 0) / 2;
   // Into the stair from this side's line (planLayout.js inwardNormal: also right for a mirrored left-turn plan).
   const sign = (side === 'outer' ? 1 : -1) * (planLayout.handedness ?? 1);
   const handrailHeight = config.railingHandrailHeightMm;
@@ -587,7 +592,24 @@ function buildSection(section, ctx) {
 
   const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
   const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;
-  const { runs, joins } = splitIntoRuns(nodes, config, (p) => existingNear(p) !== null);
+  // Glass between posts: a pane cannot turn a plan corner, so every corner gets a post (even with a bent handrail),
+  // and a run longer than one pane gets intermediate posts.
+  const split = splitIntoRuns(nodes, infill === RAILING_INFILL.GLASS_POSTS ? { ...config, railingBent: false } : config, (p) => existingNear(p) !== null);
+  let { runs, joins } = split;
+  if (infill === RAILING_INFILL.GLASS_POSTS) {
+    const subRuns = [];
+    const subJoins = [];
+    runs.forEach((run, j) => {
+      if (j > 0) subJoins.push(joins[j - 1]);
+      const pieces = splitPathAt(run, intermediatePostSplits(run, config));
+      pieces.forEach((piece, k) => {
+        if (k > 0) subJoins.push({ kind: 'glass-post' });
+        subRuns.push(piece);
+      });
+    });
+    runs = subRuns;
+    joins = subJoins;
+  }
 
   // Treads that carry no handrail at all: every node of theirs fell into a run that was too short to hold one (the
   // dusza side of a winder, where the treads shrink to a point). Their balusters would stand under nothing.
@@ -628,6 +650,7 @@ function buildSection(section, ctx) {
       continue;
     }
     postIdAt.set(spot.id, spot.id);
+    if (glassSide) continue; // the handrail sits on the glass — no posts of its own
     nominalPosts.push({
       postId: spot.id,
       kind: 'railing',
@@ -680,7 +703,28 @@ function buildSection(section, ctx) {
       baseRail.pieces.push(...railPieces);
     }
 
-    if (constructionType !== CONSTRUCTION_TYPES.CUT) {
+    if (glass) {
+      // The glass of this run (railingGlass.js): the pane top under the handrail (a bent handrail's own line), the
+      // bottom on the wanga's side (rotule) or above the wanga / the nosing line (between posts).
+      const lineZ = (p) => (bent ? (zOnPaths([path], p) ?? p.z) : p.z);
+      const wangaTop = (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
+      const cut = constructionType === CONSTRUCTION_TYPES.CUT;
+      const groundAt = (p) => {
+        if (glassSide) return cut ? p.z - (riserHeight || 0) : (wangaTop(p) ?? p.z);
+        return cut ? p.z : (wangaTop(p) ?? p.z);
+      };
+      const result = panesForRun(run, {
+        config,
+        sectionId: section.id,
+        runIndex: j,
+        startClearMm: halfAt(spots[j]),
+        endClearMm: halfAt(spots[j + 1]),
+        railBottomAt: (p) => railTop(lineZ(p)) - handrailHeight,
+        groundAt,
+      });
+      base.glassPanes.push(...result.panes);
+      for (const message of result.diagnostics) base.diagnostics.push(diag(section.id, 'RAILING-GLASS-PANE-LOW', `Balustrada ${section.id}: ${message}`));
+    } else if (constructionType !== CONSTRUCTION_TYPES.CUT) {
       // Housed wanga: evenly spread along this run, standing on the wanga's top edge (or in the base rail on it).
       const cumulative = cumulativeLengths(path);
       const total = cumulative[cumulative.length - 1];
@@ -699,7 +743,7 @@ function buildSection(section, ctx) {
   });
 
   // --- overlay wanga: the same rhythm on every tread, along that tread's own chain
-  if (constructionType === CONSTRUCTION_TYPES.CUT) {
+  if (!glass && constructionType === CONSTRUCTION_TYPES.CUT) {
     for (const chain of treadChains) {
       if (!railedTreads.has(chain.index)) continue;
       const path = chain.shifted;

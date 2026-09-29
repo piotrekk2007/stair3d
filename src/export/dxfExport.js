@@ -707,6 +707,33 @@ export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
     });
   }
 
+  // glass panes (railingGlass.js): each pane 1:1 in its own frame — its real outline, the rectangle it is cut from,
+  // and its fixings measured from the rectangle's lower-left corner (rotule = a hole, clamp = where the clamp grips)
+  for (const section of (railingModel.sections || []).filter((sec) => sec.valid && sec.glassPanes?.length)) {
+    section.glassPanes.forEach((pane, k) => {
+      const W = pane.blank.widthMm;
+      const H = pane.blank.heightMm;
+      const rel = (f) => `(${Math.round(f.t)}, ${Math.round(f.z - pane.zMin)})`;
+      const kindLabel = pane.fixings[0]?.kind === 'rotule' ? 'rotule (otwory w szkle, srednica wg rotuli)' : 'uchwyty przy slupkach (bez otworow)';
+      const lines = [
+        `Tafla ${k + 1} ${section.id} (${RAIL_SIDE_LABELS[section.side] || section.side}): ${stripDiacritics(section.glass?.label || 'VSG')}, prostokat ${Math.round(W)} x ${Math.round(H)} mm, pow. ${(pane.areaMm2 / 1e6).toFixed(3)} m2`,
+        `Mocowania: ${pane.fixings.length} - ${kindLabel}`,
+        `Od lewego dolnego rogu prostokata [mm]: ${pane.fixings.map(rel).join(' ')}`,
+      ];
+      row(H, lines, (v) => {
+        const base = v - H / 2;
+        const at = (t, z) => ({ u: t, v: base + (z - pane.zMin) });
+        entities.push(...polygonEntities(pane.outline.map((q) => at(q.t, q.z)), 'OUTLINE'));
+        entities.push(...rectLines(0, base, W, base + H, 'BEARINGS'));
+        for (const f of pane.fixings) {
+          const c = at(f.t, f.z);
+          if (f.kind === 'rotule') entities.push(circleEntity(c, 10, 'JOINTS'));
+          else entities.push(...rectLines(Math.max(0, c.u - 22), c.v - 30, Math.min(W, c.u + 22), c.v + 30, 'JOINTS'));
+        }
+      });
+    });
+  }
+
   // baluster cut list: one row per (section, length, top cut, bottom cut), drawn lying down (bottom end at u = 0)
   const size = balusterSizeMm || 30;
   for (const section of sections) {

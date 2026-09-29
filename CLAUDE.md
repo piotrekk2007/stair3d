@@ -992,6 +992,22 @@ own takeoff element BASERAIL / material `railing-baserail`, DXF rows, weight ont
 `geometry/__tests__/railingSolver.test.js`, `railingRenderer.test.js`. Consult it before touching `postSolver.js`, `manualItems.js` or the
 `PL-LEGAL-H-01` rule.
 
+**Glass infill (stage S1, implemented — RAILING_MODEL.md "Szkło")**: `config.railingInfill` 'balusters' | 'glass-side'
+(panes on point fixings (rotule) on the wanga's side, outside it, the handrail sitting on the glass, no new posts) |
+'glass-posts' (panes hung between posts on clamps, the handrail on the posts, a post at every plan corner and
+intermediate posts so no span exceeds one pane); VSG 4.4.2/5.5.2, pane max 1800 mm (user decisions 2026-09-29); other
+dimensions DO WERYFIKACJI (`CO-MFG-J-GLASS`). Pure `geometry/railingGlass.js` (`panesForRun`: flat panes per straight
+stretch, outline under the handrail and over/along the wanga, fixings; `intermediatePostSplits`/`splitPathAt`), wired
+in `railingSolver.js` (`sections[].infill/glassPanes/glass`). Consumers: `railingRenderer.js` (transparent pane prisms,
+fixing markers; `woodGrain.js` no longer lets a transparent material cast a shadow), plan 2D, DXF (every pane 1:1 with
+its blank and fixings), takeoff (`GLASS_PANE` per pane priced per m² of its blank, `GLASS_FIXING` per section — both
+unpriced by default), offer row "Balustrada", validation (no baluster clear-opening check with glass; the glass gap
+against § 298), structural (a handrail on glass is skipped; glass/fixings are not checked). Tests:
+`geometry/__tests__/railingGlass.test.js`.
+
+**Right-sidebar tabs wrap** onto a second row when the sidebar is too narrow (the 5th tab "Oferta" was pushed
+off-screen by the takeoff's cost badge) — `style.css` `#right-tabs { flex-wrap: wrap }`.
+
 ## Walkline in the plan 2D is drawn as a smooth curve
 
 The walkline used to be a polyline through one point per tread boundary, which zig-zags on a winder turn. `plan2d/smoothPath.js`

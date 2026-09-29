@@ -187,6 +187,18 @@ export function createDefaultConfig() {
     // Podporęcz (etap 4): listwa na górnej krawędzi wangi WPUSZCZANEJ, w którą wchodzą tralki (przy wandze nakładanej
     // tralki stoją na stopniach — tam podporęczy nie ma). Wymiary to parametry (wybór programu, nie norma).
     railingBaseRail: false,
+    // Wypełnienie balustrady (geometry/railingGlass.js, decyzje użytkownika 2026-09-29): 'balusters' (tralki),
+    // 'glass-side' (szkło na rotulach do boku wangi, poręcz na szkle), 'glass-posts' (szkło podwieszane między słupkami
+    // na uchwytach, poręcz na słupkach). Szkło VSG 4.4.2 lub 5.5.2, tafla maks. 1800 mm (decyzje użytkownika). Pozostałe
+    // wymiary — DO WERYFIKACJI (CO-MFG-J-GLASS), brak źródła.
+    railingInfill: 'balusters',
+    railingGlassType: '4.4.2',
+    railingGlassMaxWidthMm: 1800,
+    railingGlassGapMm: 20, // mm, szczelina między taflami i między taflą a słupkiem / nad wangą / pod poręczą (między słupkami)
+    railingGlassStandoffMm: 30, // mm, odsunięcie szkła od boku wangi (rotula)
+    railingGlassOverlapMm: 120, // mm, o ile tafla na rotulach schodzi poniżej górnej krawędzi wangi (pas mocowania)
+    railingGlassFixingsPerPane: 2, // rotule na taflę
+    railingGlassClampsPerSide: 2, // uchwyty na każdą krawędź tafli przy słupku
     railingBaseRailWidthMm: 50, // mm, poprzecznie do biegu
     railingBaseRailHeightMm: 30, // mm, w pionie
 

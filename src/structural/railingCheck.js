@@ -65,6 +65,12 @@ export function checkRailing(models) {
   };
 
   for (const section of railing.sections.filter((s) => s.valid && s.handrail)) {
+    // A handrail sitting on glass fixed to the wanga's side is carried by the glass all along — not a beam between
+    // posts. The glass itself (panes, point fixings) is not checked here.
+    if (section.infill === 'glass-side') {
+      out.skipped.push({ id: section.id, reason: 'poręcz na szkle (podparta na całej długości) — szkło i rotule nie są sprawdzane' });
+      continue;
+    }
     const { W, I, label } = railSection(section.handrail);
     section.runs.forEach((run, r) => {
       const L = runLength(run);

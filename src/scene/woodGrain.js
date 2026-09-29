@@ -118,7 +118,8 @@ export function withWoodGrainUVs(geometry, opts = {}) {
 export function applyWoodGrainToTree(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
-    obj.castShadow = true;
+    // a see-through material (the glass balustrade) must not cast a solid shadow
+    obj.castShadow = !obj.material?.transparent;
     obj.receiveShadow = true;
     if (obj.geometry?.userData?.woodGrainUV) return;
     const old = obj.geometry;
