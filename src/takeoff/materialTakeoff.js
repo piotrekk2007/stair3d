@@ -112,7 +112,40 @@ function buildTreadItem(t, config, wasteFactors) {
 }
 
 function buildTreadItems(treadModels, config, wasteFactors) {
-  return treadModels.map((t) => buildTreadItem(t, config, wasteFactors));
+  return treadModels.flatMap((t) => (t.cantilever?.parts?.length ? cantileverTreadItems(t, config, wasteFactors) : [buildTreadItem(t, config, wasteFactors)]));
+}
+
+// A cantilever tread (cantileverModel.js) is bought as its cladding boards — one item per board, with that board's
+// own thickness (40 / 20 mm) and cut size, so the board price list prices each in its thickness class.
+const CANTILEVER_PART_LABELS = { top: 'góra', front: 'front', back: 'tył', bottom: 'spód', side: 'bok' };
+function cantileverTreadItems(t, config, wasteFactors) {
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  const elementType = t.type === 'landing' ? ELEMENT_TYPES.LANDING : ELEMENT_TYPES.TREAD;
+  return t.cantilever.parts.map((part) => {
+    const planAreaMm2 = Math.abs(signedPolygonArea(part.outline));
+    const netVolumeMm3 = planAreaMm2 * (part.zTop - part.zBottom);
+    const { lengthMm, widthMm } = part.blank;
+    const stockAreaMm2 = lengthMm * widthMm;
+    return createTakeoffItem({
+      itemId: `tread-${t.stepId}-${part.kind}`,
+      elementType,
+      sourceElementId: `tread:${t.stepId}:${part.kind}`,
+      material: config.timberGrade,
+      materialId,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { thicknessMm: part.thicknessMm, part: part.kind },
+      calculatedDimensions: { lengthMm, widthMm, thicknessMm: part.thicknessMm },
+      netVolume: netVolumeMm3 * MM3_TO_M3,
+      netArea: (part.kind === 'top' || part.kind === 'bottom' ? planAreaMm2 : stockAreaMm2) * MM2_TO_M2,
+      stockVolume: stockAreaMm2 * part.thicknessMm * MM3_TO_M3,
+      stockArea: stockAreaMm2 * MM2_TO_M2,
+      wasteFactor: wasteFactorFor(elementType, materialId, wasteFactors),
+      optional: false,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: [`Okładzina stopnia wspornikowego — ${CANTILEVER_PART_LABELS[part.kind] || part.kind}, ${part.thicknessMm} mm, formatka ${Math.round(lengthMm)} × ${Math.round(widthMm)} mm.`],
+    });
+  });
 }
 
 // --- Risers (podstopnie) — one item per RiserModel (per stepId), including multi-panel winder fans ---

@@ -102,6 +102,22 @@ export function createDefaultConfig() {
     // 'closed' (wpuszczana/wcinana, schowana) | 'cut' (nakładana/wycinana, otwarta) — patrz
     // stringerModel.js CONSTRUCTION_TYPES i stringerConstructionGeometry.js. Formerly one shared
     // `stringerConstructionType` (migracja pliku projektu v3 -> v4, patrz projectIO.js).
+    // Konstrukcja schodów (geometry/cantileverModel.js): 'stringers' (na wangach) albo 'cantilever' (wspornikowe —
+    // profile stalowe w ścianie po stronie zewnętrznej, okładzina drewniana nasuwana na profile, strona duszy wolna).
+    // Decyzje użytkownika 2026-09-29: profil ok. 40 × 60, min. 2 na stopień, góra i front 40 mm, spód/tył/bok 20 mm,
+    // skrzynka = profil + 40 + 20 + luz, szer. okładziny maks. ok. 1800 mm. Luz, szczelina przy ścianie i wysięg
+    // profila — DO WERYFIKACJI (CO-MFG-J-CANTILEVER).
+    stairConstruction: 'stringers',
+    cantileverProfileWidthMm: 40,
+    cantileverProfileHeightMm: 60,
+    cantileverProfileCount: 2,
+    cantileverProfileProjectionMm: 700, // mm, ile profil wystaje ze ściany
+    cantileverClearanceMm: 2, // mm, luz na nasunięcie okładziny na profil
+    cantileverTopThicknessMm: 40,
+    cantileverFrontThicknessMm: 40,
+    cantileverShellThicknessMm: 20, // spód, tył, bok
+    cantileverWallGapMm: 5, // mm, szczelina między okładziną a ścianą
+    cantileverMaxWidthMm: 1800,
     stringerConstructionTypeOuter: 'closed',
     stringerConstructionTypeInner: 'closed',
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —
@@ -194,7 +210,12 @@ export function createDefaultConfig() {
     railingInfill: 'balusters',
     railingGlassType: '4.4.2',
     railingGlassMaxWidthMm: 1800,
-    railingGlassGapMm: 20, // mm, szczelina między taflami i między taflą a słupkiem / nad wangą / pod poręczą (między słupkami)
+    railingGlassTint: 'clear', // kolor szkła: 'clear' | 'optiwhite' | 'grey' (ciemne) | 'bronze' (brązowe) — decyzja użytkownika 2026-09-29
+    railingGlassGapMm: 20, // mm, szczelina między sąsiednimi taflami na rotulach
+    // Szkło między słupkami (decyzja użytkownika 2026-09-29): ustawia się tylko odstęp tafli od poręczy i od spodu; uchwyty
+    // są zawsze przy słupku (odstęp szkła od lica słupka wynika z uchwytu — railingGlass.js GLASS_TO_POST_MM).
+    railingGlassTopGapMm: 20, // mm, od spodu poręczy do góry tafli — DO WERYFIKACJI
+    railingGlassBottomGapMm: 20, // mm, od góry wangi (albo linii nosków) do dołu tafli — DO WERYFIKACJI
     railingGlassStandoffMm: 30, // mm, odsunięcie szkła od boku wangi (rotula)
     railingGlassOverlapMm: 120, // mm, o ile tafla na rotulach schodzi poniżej górnej krawędzi wangi (pas mocowania)
     railingGlassFixingsPerPane: 2, // rotule na taflę

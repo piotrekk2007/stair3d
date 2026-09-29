@@ -12,6 +12,10 @@ import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
+import { GLASS_TINTS } from './railingGlass.js';
+import { isCantilever, cantileverConfig, buildCantileverBox } from './cantileverModel.js';
+import { renderCantileverProfiles } from './cantileverRenderer.js';
+import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
@@ -34,13 +38,15 @@ const balusterMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a62, rough
 // Glass balustrade (railingGlass.js): a slightly green, see-through pane, and brushed steel for its fixings.
 const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xcfe7e2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
 const glassFixingMaterial = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 });
+// cantilever stair: the steel profiles out of the wall (inside the cladding boxes)
+const steelMaterial = new THREE.MeshStandardMaterial({ color: 0x5f6368, roughness: 0.5, metalness: 0.8 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
 // odtwarza zależne od nich materiały pochodne (np. znacznik gniazda w wandze).
 export function setAppearance(appearance) {
   applyAppearanceToMaterials(
-    { tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial, baluster: balusterMaterial },
+    { tread: treadMaterial, riser: riserBoardMaterial, stringer: stringerMaterial, post: postMaterial, railing: railingMaterial, baluster: balusterMaterial, glassFixing: glassFixingMaterial },
     appearance,
     typeof document === 'undefined' && typeof window === 'undefined' ? null : { texture: getOakTexture(), meanLuminance: getOakMeanLuminance(), bumpScale: OAK_BUMP_SCALE, photo: { texture: getOakPhotoTexture(), meanHex: OAK_PHOTO_MEAN_HEX } }
   );
@@ -63,20 +69,39 @@ export function buildStaircase(inputConfig) {
   const stairwellFit = solveStairwellFit(inputConfig);
   const config = applyStairwellFit(inputConfig, stairwellFit);
   const derived = deriveStairData(config);
-  const fullConfig = { ...config, riserHeight: derived.riserHeight };
+  // Cantilever stair (cantileverModel.js): the tread is the whole cladding box, no risers, no wangi, no structural posts.
+  const cantilever = isCantilever(config);
+  const fullConfig = cantileverConfig({ ...config, riserHeight: derived.riserHeight });
   const planLayout = buildPlanLayout(fullConfig);
 
-  const treadModels = buildTreadModels(planLayout, fullConfig);
+  let treadModels = buildTreadModels(planLayout, fullConfig);
+  const cantileverResult = { diagnostics: [] };
+  if (cantilever) {
+    treadModels = treadModels.map((t, i) => {
+      const box = buildCantileverBox(t, planLayout.treads[i], fullConfig);
+      for (const w of box.warnings) cantileverResult.diagnostics.push(createDiagnostic({ ruleId: 'CANTILEVER-PROFILE', severity: 'WARNING', elementType: 'tread', elementId: t.stepId, message: `Schody wspornikowe, ${w}` }));
+      return { ...t, cantilever: box };
+    });
+    const widthMm = fullConfig.stairWidth - (fullConfig.cantileverWallGapMm || 0);
+    if (widthMm > (fullConfig.cantileverMaxWidthMm || 1800)) {
+      cantileverResult.diagnostics.push(createDiagnostic({ ruleId: 'CANTILEVER-WIDTH', severity: 'WARNING', elementType: 'stair', elementId: 'stair', parameter: 'stairWidth', value: Math.round(widthMm), expected: `<= ${fullConfig.cantileverMaxWidthMm || 1800}`, unit: 'mm', message: `Okładzina stopnia wspornikowego ma ${Math.round(widthMm)} mm szerokości — więcej niż maks. ${fullConfig.cantileverMaxWidthMm || 1800} mm.` }));
+    }
+  }
   const riserModels = buildRiserModels(planLayout, fullConfig);
-  const stringerModels = buildStringerModelsForFlight(planLayout, fullConfig);
+  // A cantilever stair has no wangi and no structural posts: empty models, so nothing downstream (render, joints,
+  // takeoff, validation, the structural check) sees a board or a post that does not exist.
+  const noStringer = (side) => ({ side, segments: [], segmentJoints: [], absent: true });
+  const stringerModels = cantilever ? { outer: noStringer('outer'), inner: noStringer('inner') } : buildStringerModelsForFlight(planLayout, fullConfig);
   // Construction geometry (the real, continuous board contour — see
   // stringerConstructionGeometry.js) is a SEPARATE solver step on top of the analytical
   // StringerModel, never merged into it and never computed inside the renderer.
-  const stringerConstruction = {
-    outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
-    inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
-  };
-  const structuralPostModels = buildPostModels(planLayout, fullConfig);
+  const stringerConstruction = cantilever
+    ? { outer: [], inner: [] }
+    : {
+        outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
+        inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
+      };
+  const structuralPostModels = cantilever ? [] : buildPostModels(planLayout, fullConfig);
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
@@ -85,7 +110,7 @@ export function buildStaircase(inputConfig) {
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
-  const allPostModels = [...buildAllPostModels(planLayout, fullConfig), ...railingModel.posts];
+  const allPostModels = [...(cantilever ? [] : buildAllPostModels(planLayout, fullConfig)), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);
 
   // How the elements are joined (jointSolver.js): stringers into posts (stage 1), treads/risers cut around posts and
@@ -101,12 +126,17 @@ export function buildStaircase(inputConfig) {
 
   const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
+  if (cantilever) root.add(renderCantileverProfiles(treadModels, steelMaterial));
 
   if (config.hasRiserBoards) {
     root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));
   }
 
   if (railingModel.enabled) {
+    // glass colour (railingGlass.js GLASS_TINTS): clear / optiwhite / graphite / bronze
+    const tint = GLASS_TINTS[config.railingGlassTint] || GLASS_TINTS.clear;
+    glassMaterial.color.setHex(tint.color);
+    glassMaterial.opacity = tint.opacity;
     root.add(
       renderRailing(railingModel, { balusterShape: config.railingBalusterShape, balusterSizeMm: config.railingBalusterSizeMm }, railingMaterial, balusterMaterial, {
         glassMaterial,
@@ -131,5 +161,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints, cantilever: cantilever ? cantileverResult : null };
 }

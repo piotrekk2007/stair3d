@@ -187,7 +187,11 @@ function summaryHTML(ctx) {
   rows.push(row('Rzut klatki (dł. × szer.)', `${l.toFixed(0)} × ${w.toFixed(0)} mm`, 'auto'));
   const outerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeOuter] || config.stringerConstructionTypeOuter;
   const innerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeInner] || config.stringerConstructionTypeInner;
-  rows.push(row('Typ wangi', outerType === innerType ? outerType : `zewn.: ${outerType} · wewn.: ${innerType}`, 'user'));
+  if (config.stairConstruction === 'cantilever') {
+    rows.push(row('Konstrukcja', 'wspornikowa (profile w ścianie, okładziny)', 'user'));
+  } else {
+    rows.push(row('Typ wangi', outerType === innerType ? outerType : `zewn.: ${outerType} · wewn.: ${innerType}`, 'user'));
+  }
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);
   return rows.join('');

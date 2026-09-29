@@ -15,6 +15,7 @@
 // the project; the offer settings (client, number, amounts) are PROJECT data, saved in the project file.
 
 import { BLONDEL_RANGE_MM } from '../config/schema.js';
+import { glassType } from '../geometry/railingGlass.js';
 
 export const OFFER_VAT_RATES = Object.freeze([23, 8, 0]);
 const MAIN_LINE_LABEL = 'Schody — materiał wraz z przygotowaniem';
@@ -112,8 +113,8 @@ export function buildOffer({ summary, manualItems = [], settings, blocked = fals
 
 const RAILING_INFILL_LABELS = {
   balusters: () => 'tak (tralki)',
-  'glass-side': (c) => `szkło VSG ${c.railingGlassType || '4.4.2'} na rotulach, poręcz na szkle`,
-  'glass-posts': (c) => `szkło VSG ${c.railingGlassType || '4.4.2'} między słupkami`,
+  'glass-side': (c) => `szkło ${glassType(c).label} na rotulach, poręcz na szkle`,
+  'glass-posts': (c) => `szkło ${glassType(c).label} między słupkami`,
 };
 const TYPE_LABELS = { straight: 'Proste (jednobiegowe)', L: 'Zabiegowe / kątowe L', U: 'Zabiegowe / kątowe U' };
 const CONSTRUCTION = { closed: 'wpuszczana', cut: 'nakładana' };
@@ -139,7 +140,9 @@ export function stairFacts(config, derived, extras = {}) {
     config.stairType !== 'straight' ? ['Stopnie zabiegowe', `${config.windersPerTurn} na zakręcie`] : null,
     ['Grubość stopnia / nosek', `${config.treadThickness} mm / ${config.nosing} mm`],
     ['Podstopnie', config.hasRiserBoards ? `tak (${config.riserBoardThickness} mm)` : 'nie (schody otwarte)'],
-    ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
+    config.stairConstruction === 'cantilever'
+      ? ['Konstrukcja', 'schody wspornikowe — okładziny drewniane na profilach stalowych w ścianie']
+      : ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
     ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);

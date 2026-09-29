@@ -11,6 +11,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { traceability } from '../scene/traceability.js';
 import { withWoodGrainUVs, textureOffsetFor } from '../scene/woodGrain.js';
 import { buildPrism } from './geometryUtils.js';
+import { ROTULE_DIAMETER_MM } from './railingGlass.js';
 
 const ROUND_SEGMENTS = 16;
 
@@ -62,10 +63,10 @@ function glassPaneGeometry(pane) {
   return buildPrism(pane.outline.map((p) => ({ u: p.t, v: p.z })), toW, extrude, pane.thicknessMm);
 }
 
-// A fixing, only as a visible marker of where it is: a rotule = a short cylinder through the glass towards the wanga
-// (the stand-off), a clamp = a small block at the pane's edge. Sizes are for the picture only.
-const ROTULE_DIAMETER_MM = 50;
-const CLAMP_SIZE_MM = { along: 45, up: 60 };
+// A fixing: a rotule = a Ø30 cylinder (user decision) through the glass towards the wanga (the stand-off); a clamp =
+// a block on the post face reaching over the pane's edge (it is always fixed to the post). Clamp sizes are for the
+// picture only.
+const CLAMP_SIZE_MM = { grip: 30, up: 60 };
 function fixingGeometry(pane, f, standoffMm) {
   const n = { x: -pane.dir.y, y: pane.dir.x };
   const at = { x: pane.start.x + pane.dir.x * f.t, y: pane.start.y + pane.dir.y * f.t, z: f.z };
@@ -78,9 +79,15 @@ function fixingGeometry(pane, f, standoffMm) {
     g.translate(c.x, c.z, -c.y);
     return g;
   }
-  const g = new THREE.BoxGeometry(CLAMP_SIZE_MM.along, CLAMP_SIZE_MM.up, pane.thicknessMm + 16);
+  // from the post face over the pane's edge: [postFaceT .. t ± grip]
+  const t0 = f.postFaceT ?? f.t;
+  const t1 = f.t + (f.postFaceT !== undefined && f.postFaceT > f.t ? -CLAMP_SIZE_MM.grip : CLAMP_SIZE_MM.grip);
+  const along = Math.abs(t1 - t0);
+  const mid = (t0 + t1) / 2;
+  const c = { x: pane.start.x + pane.dir.x * mid, y: pane.start.y + pane.dir.y * mid, z: f.z };
+  const g = new THREE.BoxGeometry(along, CLAMP_SIZE_MM.up, pane.thicknessMm + 16);
   g.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.atan2(pane.dir.y, pane.dir.x)));
-  g.translate(at.x, at.z, -at.y);
+  g.translate(c.x, c.z, -c.y);
   return g;
 }
 

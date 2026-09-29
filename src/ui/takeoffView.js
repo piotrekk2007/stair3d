@@ -118,7 +118,7 @@ function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
   switch (item.elementType) {
     case 'TREAD':
-      return winderStepIds?.has(item.sourceElementId.replace(/^tread:/, '')) ? 'Stopnie zabiegowe' : 'Stopnie';
+      return winderStepIds?.has(item.sourceElementId.replace(/^tread:/, '').split(':')[0]) ? 'Stopnie zabiegowe' : 'Stopnie';
     case 'LANDING':
       return 'Podesty';
     case 'RISER':

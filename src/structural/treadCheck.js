@@ -94,6 +94,12 @@ export function checkTreads(treadModels, config) {
       skipped.push({ stepId: t.stepId, reason: 'podest — wymaga własnej konstrukcji (legary), której model nie opisuje' });
       continue;
     }
+    // a cantilever tread is carried by the steel profiles out of the wall (not a beam between two stringers); the
+    // profiles and their anchoring are not ours and are not checked
+    if (t.cantilever) {
+      skipped.push({ stepId: t.stepId, reason: 'stopień wspornikowy — nośność daje profil stalowy w ścianie (nie sprawdzany)' });
+      continue;
+    }
     const { spanMm: L, bMm: b, hMm: h } = treadBeamGeometry(t, config);
     if (!(L > 0 && b > 0 && h > 0)) {
       skipped.push({ stepId: t.stepId, reason: 'brak sensownej rozpiętości lub przekroju' });

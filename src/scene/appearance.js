@@ -13,6 +13,15 @@ export const APPEARANCE_ELEMENTS = Object.freeze([
   { key: 'baluster', label: 'Tralki' },
 ]);
 
+// Metal elements — a colour only, never a wood finish (the glass balustrade's rotules and clamps).
+export const METAL_ELEMENTS = Object.freeze([{ key: 'glassFixing', label: 'Uchwyty i rotule szkła' }]);
+export const METAL_PRESETS = Object.freeze([
+  { id: 'stainless', label: 'Stal nierdzewna', hex: '#b9bdc1' },
+  { id: 'black-matt', label: 'Czarny mat', hex: '#1e1e1e' },
+  { id: 'white', label: 'Biały', hex: '#f2f2f2' },
+  { id: 'anthracite', label: 'Antracyt', hex: '#3a3d42' },
+]);
+
 // Ciepły, miodowy „dąb naturalny" (user decision 2026-09-28: cieplejszy niż sam kolor zdjęcia #c19f71 — więcej
 // czerwieni, mniej niebieskiego; dobrany na oko pod wygląd olejowanego dębu, nie z pomiaru).
 export const OAK_NATURAL_COLOR = '#c89a62';
@@ -26,6 +35,7 @@ export const DEFAULT_APPEARANCE = Object.freeze({
   post: '#5a3d24',
   railing: OAK_NATURAL_COLOR,
   baluster: OAK_NATURAL_COLOR,
+  glassFixing: '#b9bdc1',
 });
 
 // Wykończenie każdego elementu (klucz w obiekcie: `${element}Finish`):
@@ -66,6 +76,7 @@ export function sanitizeAppearance(raw) {
     if (typeof raw[key] === 'string' && HEX.test(raw[key])) out[key] = raw[key].toLowerCase();
     if (Object.values(FINISHES).includes(raw[finishKey(key)])) out[finishKey(key)] = raw[finishKey(key)];
   }
+  for (const { key } of METAL_ELEMENTS) if (typeof raw[key] === 'string' && HEX.test(raw[key])) out[key] = raw[key].toLowerCase();
   return out;
 }
 
@@ -79,6 +90,7 @@ export function sanitizeAppearance(raw) {
  */
 export function applyAppearanceToMaterials(materials, appearance, wood = null) {
   const clean = sanitizeAppearance(appearance);
+  for (const { key } of METAL_ELEMENTS) materials[key]?.color?.set?.(clean[key]);
   for (const { key } of APPEARANCE_ELEMENTS) {
     const m = materials[key];
     if (!m?.color?.set) continue;

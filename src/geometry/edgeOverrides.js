@@ -149,6 +149,12 @@ function shiftEdgeCorner(tread, edgeKey, sideIdx, offsetMm) {
 // wtedy 24 mm w deskę przy gnieździe 16 mm, czyli 8 mm w lite drewno wangi.
 // Wanga NAKŁADANA: stopień leży na wandze aż do jej lica zewnętrznego — cofnięcie 0.
 export function housingRecessMm(config) {
+  // Cantilever stair (cantileverModel.js): no wangi — the box ends a small gap before the wall (the outer line) and
+  // reaches the free (inner) line.
+  if (config?.stairConstruction === 'cantilever') {
+    const gap = Number(config.cantileverWallGapMm);
+    return { inner: 0, outer: Number.isFinite(gap) && gap > 0 ? gap : 0 };
+  }
   const recessFor = (side) =>
     constructionTypeForSide(config, side) === CONSTRUCTION_TYPES.CLOSED ? Math.max(0, config.stringerThickness - housingDepthMm(config)) : 0;
   return { inner: recessFor('inner'), outer: recessFor('outer') };

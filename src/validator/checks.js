@@ -244,6 +244,8 @@ export function checkMissingRiserSurfaces(treadModels, riserModels, config) {
 export function checkMissingStringerSupport(treadModels, stringerModels) {
   const diags = [];
   for (const [label, model] of [['StringerOuter', stringerModels.outer], ['StringerInner', stringerModels.inner]]) {
+    // a side that deliberately has no stringer (cantilever stair — cantileverModel.js) has no gap to report
+    if (model?.absent) continue;
     const covered = new Set();
     for (const seg of model.segments) {
       for (const b of seg.treadBearings) covered.add(b.treadIndex);

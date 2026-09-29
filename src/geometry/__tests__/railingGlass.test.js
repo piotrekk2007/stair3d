@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createDefaultConfig } from '../../config/schema.js';
 import { buildStaircase } from '../buildStaircase.js';
-import { GLASS_TYPES, MIN_PANE_HEIGHT_MM } from '../railingGlass.js';
+import { GLASS_TYPES, MIN_PANE_HEIGHT_MM, GLASS_TO_POST_MM, ROTULE_DIAMETER_MM } from '../railingGlass.js';
 import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
 import { evaluateRailingChecks } from '../../validator/railingChecks.js';
 import { checkRailing } from '../../structural/railingCheck.js';
@@ -73,7 +73,7 @@ test('glass between posts: every span holds one pane width, a post at every corn
     const s = section(m);
     const c = m.fullConfig;
     const label = JSON.stringify(patch);
-    const maxSpan = c.railingGlassMaxWidthMm + c.railingPostSizeMm + 2 * c.railingGlassGapMm;
+    const maxSpan = c.railingGlassMaxWidthMm + Math.max(c.railingPostSizeMm, c.postSize) + 2 * GLASS_TO_POST_MM;
     assert.equal(s.balusters.length, 0);
     for (const run of s.runs) {
       const pts = [run.pieces[0].start, ...run.pieces.map((p) => p.end)];
@@ -101,6 +101,55 @@ test('glass between posts: every span holds one pane width, a post at every corn
   const long = build({ railingInfill: 'glass-posts', stairType: 'straight', treadsLegA: 16 });
   assert.ok(section(long).posts.length >= 4, `${section(long).posts.length} posts`);
   assert.ok(section(long).glassPanes.length >= 3);
+});
+
+// User decision 2026-09-29: between posts the clamps are ALWAYS on a post — a pane hangs post to post (one pane per
+// span, a post at every plan corner, even a small one), and only the gap to the handrail and to the bottom are set.
+test('glass between posts: one pane per span, every clamp on a post face, only the top and bottom gaps are set', () => {
+  for (const patch of [{}, { stairType: 'U' }, { railingBent: true }, { turnDirection: 'left' }]) {
+    const m = build({ railingInfill: 'glass-posts', railingGlassTopGapMm: 35, railingGlassBottomGapMm: 70, ...patch });
+    const s = section(m);
+    const c = m.fullConfig;
+    const label = JSON.stringify(patch);
+    const posts = [...s.posts.filter((p) => !p.removed), ...m.postModels.filter((p) => p.kind !== 'railing')];
+    const byRun = new Map();
+    for (const pane of s.glassPanes) byRun.set(pane.runIndex, (byRun.get(pane.runIndex) || 0) + 1);
+    for (const [run, n] of byRun) assert.equal(n, 1, `${label}: run ${run} holds ${n} panes`);
+    for (const pane of s.glassPanes) {
+      for (const f of pane.fixings) {
+        assert.equal(f.kind, 'clamp');
+        assert.equal(Math.abs(f.postFaceT - f.t), GLASS_TO_POST_MM);
+        // the clamp's post-face point touches a real post: within half a post of its centre, along the pane
+        const q = { x: pane.start.x + pane.dir.x * f.postFaceT, y: pane.start.y + pane.dir.y * f.postFaceT };
+        const near = posts.some((p) => Math.abs(Math.hypot(q.x - p.position.x, q.y - p.position.y) - p.size / 2) < 1);
+        assert.ok(near, `${label} ${pane.id}: a clamp not on a post face`);
+      }
+    }
+    const pane = s.glassPanes[0];
+    const heights = pane.outline.slice(0, pane.outline.length / 2).map((q, i) => q.z - pane.outline[pane.outline.length - 1 - i].z);
+    assert.ok(Math.min(...heights) > 0, label);
+    assert.equal(c.railingGlassTopGapMm, 35);
+  }
+  // the gaps move the pane: a bigger top gap lowers its top by exactly the difference, a bigger bottom gap raises its bottom
+  const a = section(build({ railingInfill: 'glass-posts', railingGlassTopGapMm: 20, railingGlassBottomGapMm: 20 })).glassPanes[0];
+  const b = section(build({ railingInfill: 'glass-posts', railingGlassTopGapMm: 50, railingGlassBottomGapMm: 80 })).glassPanes[0];
+  assert.ok(Math.abs(a.outline[0].z - b.outline[0].z - 30) < 1e-6, 'top gap');
+  assert.ok(Math.abs(b.outline[b.outline.length - 1].z - a.outline[a.outline.length - 1].z - 60) < 1e-6, 'bottom gap');
+});
+
+test('glass colour in every label; rotule Ø30 in the DXF', () => {
+  for (const [tint, word] of [['optiwhite', 'optiwhite'], ['grey', 'grafit'], ['bronze', 'brąz']]) {
+    const m = build({ railingInfill: 'glass-side', railingGlassTint: tint });
+    assert.equal(section(m).glass.label, `VSG 4.4.2 ${word}`);
+    const item = computeMaterialTakeoff(m, m.fullConfig).find((i) => i.elementType === 'GLASS_PANE');
+    assert.equal(item.material, `Szkło VSG 4.4.2 ${word}`);
+    assert.ok(stairFacts(m.fullConfig, m.derived).rows.some(([k, v]) => k === 'Balustrada' && v.includes(`VSG 4.4.2 ${word}`)));
+  }
+  assert.equal(section(build({ railingInfill: 'glass-side' })).glass.label, 'VSG 4.4.2', 'clear glass: no colour word');
+  const m = build({ railingInfill: 'glass-side' });
+  const dxf = buildRailingDXF(m.railingModel, {});
+  assert.match(dxf, /\nCIRCLE\n8\nJOINTS\n10\n[\d.-]+\n20\n[\d.-]+\n30\n0\n40\n15\n/, 'a rotule circle has radius 15 (Ø30)');
+  assert.equal(ROTULE_DIAMETER_MM, 30);
 });
 
 test('takeoff: one glass item per pane (ordered by its rectangle, net = the pane), fixings counted; no false clear-opening warning; glass-side not checked as a beam', () => {

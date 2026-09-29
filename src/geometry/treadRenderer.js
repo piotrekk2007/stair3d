@@ -23,6 +23,10 @@ export function buildTreadMesh(treadModel, cut = null) {
   const holes = cut ? (cut.holes || []).map(toUV) : [];
   const up = new THREE.Vector3(0, 1, 0);
   const slab = (pts, z, depth) => (holes.length ? buildPrismWithHoles(pts, holes, (u, v) => planToWorld(u, v, z), up, depth) : buildPrism(pts, (u, v) => planToWorld(u, v, z), up, depth));
+  // a cantilever tread is its cladding box (cantileverModel.js): every board a prism of its own outline and height
+  if (treadModel.cantilever?.parts?.length) {
+    return mergeGeometries(treadModel.cantilever.parts.map((part) => buildPrism(toUV(part.outline), (u, v) => planToWorld(u, v, part.zBottom), up, part.zTop - part.zBottom)));
+  }
   if (!treadModel.notch) {
     return slab(pts2D, treadModel.elevation.bottom, treadModel.thickness);
   }

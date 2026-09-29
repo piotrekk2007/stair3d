@@ -39,7 +39,7 @@ import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js'
 import { valueAtU } from './polylineProfile.js';
 import { curveToPolyline, filletPolyline } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt } from './railingGlass.js';
+import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt, planCornerSplits } from './railingGlass.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
 
@@ -601,7 +601,8 @@ function buildSection(section, ctx) {
     const subJoins = [];
     runs.forEach((run, j) => {
       if (j > 0) subJoins.push(joins[j - 1]);
-      const pieces = splitPathAt(run, intermediatePostSplits(run, config));
+      // a post at every plan corner of the run (a pane hangs post to post and cannot turn), then intermediate posts
+      const pieces = splitPathAt(run, planCornerSplits(run)).flatMap((straight) => splitPathAt(straight, intermediatePostSplits(straight, config)));
       pieces.forEach((piece, k) => {
         if (k > 0) subJoins.push({ kind: 'glass-post' });
         subRuns.push(piece);

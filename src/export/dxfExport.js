@@ -17,6 +17,7 @@ import { lineSegment, curveStart, curveEnd, reverseCurve, curveToPolyline, polyl
 import { GEOMETRY_EPS } from '../geometry/tolerances.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { POST_FACES, POST_FACE_ORDER, vRangeWithin } from '../geometry/jointSolver.js';
+import { ROTULE_DIAMETER_MM } from '../geometry/railingGlass.js';
 
 // Real gap (mm) left between boards when several are laid out on one sheet — same figure as the
 // on-screen editor's own SEGMENT_GAP_MM (profileEditor/profileEditorRenderer.js): a comfortable
@@ -458,6 +459,38 @@ function treadLocalFrame(tread) {
   };
 }
 
+// A cantilever tread's box (cantileverModel.js): in plan, the boards under the top (front / back / side / bottom,
+// NOTCH layer) and the steel profiles it slides onto (JOINTS layer) — the top outline itself is the OUTLINE.
+const CANTILEVER_PART_LABELS_DXF = { top: 'gora', front: 'front', back: 'tyl', bottom: 'spod', side: 'bok' };
+function cantileverEntities(tread, offsetU) {
+  if (!tread.cantilever) return [];
+  const toLocal = treadLocalFrame(tread);
+  const at = (p) => {
+    const q = toLocal(p);
+    return { u: q.u + offsetU, v: q.v };
+  };
+  const out = [];
+  for (const part of tread.cantilever.parts.filter((x) => x.kind !== 'top')) out.push(...polygonEntities(part.outline.map(at), 'NOTCH'));
+  for (const pr of tread.cantilever.profiles) {
+    const n = { x: -pr.dir.y, y: pr.dir.x };
+    const h = pr.widthMm / 2;
+    const corner = (along, side) => at({ x: pr.start.x + pr.dir.x * along + n.x * side, y: pr.start.y + pr.dir.y * along + n.y * side });
+    out.push(...polygonEntities([corner(0, -h), corner(pr.lengthMm, -h), corner(pr.lengthMm, h), corner(0, h)], 'JOINTS'));
+  }
+  return out;
+}
+
+function cantileverTitleLines(tread) {
+  if (!tread.cantilever) return [];
+  const c = tread.cantilever;
+  const pr = c.profiles[0];
+  return [
+    `Stopien wspornikowy - okladzina (skrzynka) wys. ${Math.round(c.heightMm)} mm:`,
+    ...c.parts.map((p) => `  ${CANTILEVER_PART_LABELS_DXF[p.kind] || p.kind} ${p.thicknessMm} mm: formatka ${Math.round(p.blank.lengthMm)} x ${Math.round(p.blank.widthMm)} mm`),
+    pr ? `Profile: ${c.profiles.length} x ${pr.widthMm}x${pr.heightMm} mm, wysieg ${Math.round(pr.lengthMm)} mm (warstwa JOINTS)` : 'Profile: brak miejsca - sprawdz Walidacje',
+  ];
+}
+
 function localTreadOutline(tread) {
   const toLocal = treadLocalFrame(tread);
   return tread.outline.map(toLocal);
@@ -538,6 +571,7 @@ function treadTitleLines(tread, joint = null) {
   // takeoff/2D-plan/3D labels already use as the raw board to cut this tread from — worth stating
   // alongside the finished outline above, not instead of it.
   if (tread.winderBlank) lines.push(`Formatka surowa: ${Math.round(tread.winderBlank.length)} x ${Math.round(tread.winderBlank.depth)} mm`);
+  lines.push(...cantileverTitleLines(tread));
   for (const p of joint?.posts || []) {
     lines.push(p.depthMm > 0 ? `Wyciecie wokol slupa ${p.postId}, wpust w slup gl. ${Math.round(p.depthMm)} mm` : `Wyciecie wokol slupa ${p.postId} (do lica)`);
   }
@@ -552,7 +586,7 @@ function treadTitleLines(tread, joint = null) {
 export function buildTreadDXF(tread, joint = null) {
   if (!isValidTread(tread)) return null;
   const local = localTreadOutline(tread);
-  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadJointEntities(tread, joint, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
+  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadJointEntities(tread, joint, 0), ...cantileverEntities(tread, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
   return wrapDxf(entities);
 }
 
@@ -569,7 +603,7 @@ export function buildAllTreadsDXF(treads, jointsByStep = {}) {
     cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
     const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
     const joint = jointsByStep[tread.stepId] || null;
-    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadJointEntities(tread, joint, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
+    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadJointEntities(tread, joint, offsetU), ...cantileverEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }
@@ -714,7 +748,7 @@ export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
       const W = pane.blank.widthMm;
       const H = pane.blank.heightMm;
       const rel = (f) => `(${Math.round(f.t)}, ${Math.round(f.z - pane.zMin)})`;
-      const kindLabel = pane.fixings[0]?.kind === 'rotule' ? 'rotule (otwory w szkle, srednica wg rotuli)' : 'uchwyty przy slupkach (bez otworow)';
+      const kindLabel = pane.fixings[0]?.kind === 'rotule' ? `rotule O${ROTULE_DIAMETER_MM} (otwor w szkle wg producenta rotuli)` : 'uchwyty na slupkach (bez otworow)';
       const lines = [
         `Tafla ${k + 1} ${section.id} (${RAIL_SIDE_LABELS[section.side] || section.side}): ${stripDiacritics(section.glass?.label || 'VSG')}, prostokat ${Math.round(W)} x ${Math.round(H)} mm, pow. ${(pane.areaMm2 / 1e6).toFixed(3)} m2`,
         `Mocowania: ${pane.fixings.length} - ${kindLabel}`,
@@ -727,7 +761,7 @@ export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
         entities.push(...rectLines(0, base, W, base + H, 'BEARINGS'));
         for (const f of pane.fixings) {
           const c = at(f.t, f.z);
-          if (f.kind === 'rotule') entities.push(circleEntity(c, 10, 'JOINTS'));
+          if (f.kind === 'rotule') entities.push(circleEntity(c, ROTULE_DIAMETER_MM / 2, 'JOINTS'));
           else entities.push(...rectLines(Math.max(0, c.u - 22), c.v - 30, Math.min(W, c.u + 22), c.v + 30, 'JOINTS'));
         }
       });

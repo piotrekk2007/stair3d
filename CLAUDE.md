@@ -1004,6 +1004,27 @@ its blank and fixings), takeoff (`GLASS_PANE` per pane priced per m² of its bla
 unpriced by default), offer row "Balustrada", validation (no baluster clear-opening check with glass; the glass gap
 against § 298), structural (a handrail on glass is skipped; glass/fixings are not checked). Tests:
 `geometry/__tests__/railingGlass.test.js`.
+**S1b (user decisions 2026-09-29)**: between posts a pane always hangs post to post (one pane per span, a post at every
+plan corner, clamps with `postFaceT` on the post face, glass edge `GLASS_TO_POST_MM` 10 mm from it — from the clamp,
+not a setting); only `railingGlassTopGapMm`/`railingGlassBottomGapMm` are set (`railingGlassGapMm` = between panes on
+rotules only). Glass colour `railingGlassTint` (clear/optiwhite/grey/bronze → `glassType(config).label` everywhere +
+3D tint). Rotule always Ø30 (`ROTULE_DIAMETER_MM`, 3D + DXF). Fixing colour = presentation `appearance.glassFixing`
+(`scene/appearance.js` `METAL_ELEMENTS`/`METAL_PRESETS`, colour only, no wood finish).
+
+**Cantilever stair ("schody wspornikowe", implemented — docs/architecture/CANTILEVER_MODEL.md)**:
+`config.stairConstruction` 'stringers' | 'cantilever'. User decisions 2026-09-29: steel profiles (about 40 × 60, at
+least 2 per tread) out of the wall on the OUTER side, found on site; each tread is a wooden cladding box slid onto them
+(top and front 40 mm, bottom/back/side 20 mm; top full with the nosing, front and back under the top, bottom between
+them, side at the free end; wall end open); box height = profile + clearance + top + bottom; free (dusza) side; max
+width ~1800. Pure `geometry/cantileverModel.js` (`cantileverConfig` — tread thickness = box, no risers, sides 'cut'
+for the balustrade; `buildCantileverBox` — the five boards from the tread outline via `polygonClip.js` + profiles
+square to the wall, warnings `CANTILEVER-PROFILE`/`CANTILEVER-WIDTH`); `edgeOverrides.js housingRecessMm` gives the
+wall gap; `buildStaircase.js` builds no wangi (empty models with `absent: true`, skipped by
+`validator/checks.js checkMissingStringerSupport`), no structural posts/joints, renders the profiles
+(`cantileverRenderer.js`) and returns `cantilever.diagnostics` (validation gate). Tread mesh = the boards; takeoff =
+one TREAD/LANDING item per board (its own thickness → board price list class); tread DXF lists the boards and draws
+them + the profiles; offer row "Konstrukcja"; the structural tread check skips a cantilever tread. Other numbers DO
+WERYFIKACJI (`CO-MFG-J-CANTILEVER`). Tests: `geometry/__tests__/cantilever.test.js`.
 
 **Right-sidebar tabs wrap** onto a second row when the sidebar is too narrow (the 5th tab "Oferta" was pushed
 off-screen by the takeoff's cost badge) — `style.css` `#right-tabs { flex-wrap: wrap }`.

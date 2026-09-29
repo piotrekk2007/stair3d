@@ -203,6 +203,20 @@ krawędź, wstawka rotuli 150 mm od końca tafli.
   `PL-LEGAL-H-01`. Kontrola konstrukcji: poręcz na szkle nie jest liczona jako belka między słupkami (pomijana z
   opisem); **szkło i mocowania nie są sprawdzane** (wytrzymałość tafli, nośność rotul), ciężar szkła nie obciąża wangi.
 
+### Poprawki S1b (decyzje użytkownika 2026-09-29)
+
+- **Między słupkami uchwyty są zawsze na słupku**: tafla wisi od słupka do słupka (jedna tafla na przęsło; słupek
+  na każdym załamaniu rzutu, także poniżej 10°, i słupki pośrednie), jej krawędź `GLASS_TO_POST_MM` (10 mm, wynika z
+  uchwytu — do weryfikacji) od lica słupka; każdy uchwyt ma `postFaceT` (lico słupka) i jest rysowany od lica słupka
+  na krawędź szkła. **Ustawia się tylko odstęp tafli od poręczy** (`railingGlassTopGapMm`) **i od spodu**
+  (`railingGlassBottomGapMm`); `railingGlassGapMm` dotyczy już tylko szczeliny między taflami na rotulach.
+- **Kolor szkła** `railingGlassTint`: bezbarwne / optiwhite / ciemne (grafit) / brązowe — w etykiecie szkła
+  (`glassType(config).label`, np. „VSG 4.4.2 optiwhite”) w kosztorysie, DXF i ofercie, oraz w kolorze tafli w 3D.
+- **Rotula zawsze Ø30** (`ROTULE_DIAMETER_MM`) — w 3D i w DXF (okrąg Ø30, otwór w szkle wg producenta rotuli).
+- **Kolor uchwytów i rotul** — ustawienie prezentacji (`scene/appearance.js` `METAL_ELEMENTS`: `glassFixing`, gotowe:
+  stal nierdzewna / czarny mat / biały / antracyt), w folderze „Kolory i drewno (prezentacja)”, zapisywane w pliku
+  projektu razem z pozostałymi kolorami.
+
 ## Identyfikatory słupków w biegach
 
 `runs[].startPostId/endPostId` wskazują słup, który faktycznie stoi na końcu biegu — ponownie użyty słup konstrukcyjny

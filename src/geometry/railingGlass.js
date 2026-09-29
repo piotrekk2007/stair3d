@@ -20,16 +20,40 @@ export const GLASS_TYPES = Object.freeze({
   '5.5.2': { id: '5.5.2', label: 'VSG 5.5.2', thicknessMm: 5 + 5 + 2 * 0.38 },
 });
 
+// Glass colour (user request 2026-09-29): clear, optiwhite (low-iron), dark (graphite) or brown (bronze). The render
+// colour/opacity is only for the picture.
+export const GLASS_TINTS = Object.freeze({
+  clear: { id: 'clear', label: 'bezbarwne', short: '', color: 0xcfe7e2, opacity: 0.3 },
+  optiwhite: { id: 'optiwhite', label: 'optiwhite', short: 'optiwhite', color: 0xf1f7f6, opacity: 0.22 },
+  grey: { id: 'grey', label: 'ciemne (grafit)', short: 'grafit', color: 0x3b4146, opacity: 0.55 },
+  bronze: { id: 'bronze', label: 'brązowe', short: 'brąz', color: 0x6b4e33, opacity: 0.5 },
+});
+
 export const MIN_PANE_HEIGHT_MM = 150; // a pane lower than this is not made (reported) — a judgement threshold
 const PLAN_CORNER_SIN = Math.sin((0.5 * Math.PI) / 180); // a plan turn above 0.5° splits the glass
 const FIXING_INSET_MM = 150; // a point fixing's distance from the pane's end — DO WERYFIKACJI (fixing manufacturer)
+export const ROTULE_DIAMETER_MM = 30; // user decision 2026-09-29: a rotule is always Ø30
+// Glass between posts: the pane edge's distance from the post face — set by the clamp, not a user setting (user
+// decision 2026-09-29: only the gaps to the handrail and to the bottom are set). DO WERYFIKACJI (clamp manufacturer).
+export const GLASS_TO_POST_MM = 10;
 
 export function isGlassInfill(config) {
   return config?.railingInfill === RAILING_INFILL.GLASS_SIDE || config?.railingInfill === RAILING_INFILL.GLASS_POSTS;
 }
 
+/** The glass: VSG type + colour; `label` is what the takeoff, the DXF and the offer print (e.g. "VSG 4.4.2 optiwhite"). */
 export function glassType(config) {
-  return GLASS_TYPES[config?.railingGlassType] || GLASS_TYPES['4.4.2'];
+  const type = GLASS_TYPES[config?.railingGlassType] || GLASS_TYPES['4.4.2'];
+  const tint = GLASS_TINTS[config?.railingGlassTint] || GLASS_TINTS.clear;
+  return { ...type, tint: tint.id, tintLabel: tint.label, label: tint.short ? `${type.label} ${tint.short}` : type.label };
+}
+
+/** Plan arc lengths of the path's corners (where a pane has to end) — for glass between posts every one gets a post. */
+export function planCornerSplits(path) {
+  const cum = cumulative(path);
+  return straightStretches(path, cum)
+    .slice(1)
+    .map(([s0]) => s0);
 }
 
 /** How far the glass plane lies from the wanga's chain line INTO the stair (negative = outside), and the rail with it. */
@@ -84,7 +108,10 @@ function straightStretches(path, cum) {
 export function intermediatePostSplits(path, config) {
   const cum = cumulative(path);
   const L = cum[cum.length - 1];
-  const span = (config.railingGlassMaxWidthMm || 1800) + (config.railingPostSizeMm || 0) + 2 * (config.railingGlassGapMm || 0);
+  // a span holds one pane + the clamp gaps + a post (the thicker of a balustrade post and a structural one, which may
+  // stand at a run's end) — so a pane never exceeds the maximum width
+  const post = Math.max(config.railingPostSizeMm || 0, config.postSize || 0);
+  const span = (config.railingGlassMaxWidthMm || 1800) + post + 2 * GLASS_TO_POST_MM;
   const n = Math.max(1, Math.ceil(L / span - 1e-9));
   return Array.from({ length: n - 1 }, (_, k) => (L * (k + 1)) / n);
 }
@@ -129,12 +156,18 @@ export function panesForRun(path, ctx) {
   const total = cum[cum.length - 1];
   const panes = [];
   const skipped = [];
+  // Between posts (user decision 2026-09-29): a pane always hangs post to post — the run IS the span between two posts
+  // (railingSolver.js puts a post at every plan corner and between panes), its edges GLASS_TO_POST_MM from the post
+  // faces, set only by the gap to the handrail and the gap to the bottom.
+  const topGap = side ? 0 : config.railingGlassTopGapMm ?? 20;
+  const bottomGap = config.railingGlassBottomGapMm ?? 20;
   straightStretches(path, cum).forEach(([s0, s1]) => {
-    const start = s0 + (s0 < 1e-6 ? ctx.startClearMm + (side ? gap / 2 : gap) : gap / 2);
-    const end = s1 - (s1 > total - 1e-6 ? ctx.endClearMm + (side ? gap / 2 : gap) : gap / 2);
+    const endClear = side ? gap / 2 : GLASS_TO_POST_MM;
+    const start = s0 + (s0 < 1e-6 ? ctx.startClearMm + endClear : gap / 2);
+    const end = s1 - (s1 > total - 1e-6 ? ctx.endClearMm + endClear : gap / 2);
     const len = end - start;
     if (len <= 1) return;
-    const n = Math.max(1, Math.ceil((len + gap) / (maxW + gap) - 1e-9));
+    const n = side ? Math.max(1, Math.ceil((len + gap) / (maxW + gap) - 1e-9)) : 1;
     const w = (len - (n - 1) * gap) / n;
     // the nodes inside the stretch shape the pane's top and bottom (pitch changes)
     const inner = cum.filter((s) => s > s0 + 1e-6 && s < s1 - 1e-6);
@@ -143,8 +176,8 @@ export function panesForRun(path, ctx) {
       const u1 = u0 + w;
       const samples = [u0, ...inner.filter((s) => s > u0 + 1e-6 && s < u1 - 1e-6), u1];
       const pts = samples.map((s) => pointAtS(path, cum, s));
-      const top = pts.map((p) => ctx.railBottomAt(p) - (side ? 0 : gap));
-      const bottom = pts.map((p) => ctx.groundAt(p) - (side ? config.railingGlassOverlapMm || 0 : -gap));
+      const top = pts.map((p) => ctx.railBottomAt(p) - topGap);
+      const bottom = pts.map((p) => ctx.groundAt(p) + (side ? -(config.railingGlassOverlapMm || 0) : bottomGap));
       const heights = top.map((t, i) => t - bottom[i]);
       const id = `${ctx.sectionId}-glass-${ctx.runIndex}-${panes.length + skipped.length}`;
       if (Math.min(...heights) < MIN_PANE_HEIGHT_MM) {
@@ -217,14 +250,19 @@ function rotules(w, bottomAt, config) {
   });
 }
 
-// Clamps on the posts, at both ends of the pane, spread over its height there.
+// Clamps: ALWAYS fixed to the post (user decision 2026-09-29) — at both edges of the pane, each bridging the gap
+// from the post face (`postFaceT`, GLASS_TO_POST_MM beyond the pane edge) to the glass; spread over the pane's
+// height at that edge.
 function clamps(w, topAt, bottomAt, config) {
   const m = Math.max(1, Math.round(config.railingGlassClampsPerSide || 2));
   const out = [];
-  for (const t of [0, w]) {
+  for (const [t, postFaceT] of [
+    [0, -GLASS_TO_POST_MM],
+    [w, w + GLASS_TO_POST_MM],
+  ]) {
     const lo = bottomAt(t);
     const hi = topAt(t);
-    for (let k = 0; k < m; k++) out.push({ kind: 'clamp', t, z: lo + ((hi - lo) * (k + 1)) / (m + 1) });
+    for (let k = 0; k < m; k++) out.push({ kind: 'clamp', t, postFaceT, z: lo + ((hi - lo) * (k + 1)) / (m + 1) });
   }
   return out;
 }

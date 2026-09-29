@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stateBadgeElement, setStateBadge, stateBadgeHTML } from './valueState.js';
 import { stepIndexFromElementId } from './selection.js';
-import { APPEARANCE_ELEMENTS, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, finishKey } from '../scene/appearance.js';
+import { APPEARANCE_ELEMENTS, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, finishKey, METAL_ELEMENTS, METAL_PRESETS } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
@@ -181,6 +181,22 @@ export function createUI({
   // ostatni podstopień (na stropie) stoi pod stopniem fajkowym — jego grubość ustala górę tego podstopnia
   lockable(build.add(config, 'topNosingThicknessMm', 0, 60, 1).name('Stopień fajkowy na stropie: grubość [mm]'), 'topNosingThicknessMm');
 
+  // Schody wspornikowe (geometry/cantileverModel.js): profile stalowe w ścianie po stronie zewnętrznej, stopień =
+  // skrzynka z okładzin (góra/front 40, spód/tył/bok 20) nasuwana na profile; bez wang i słupów, strona duszy wolna.
+  const cant = gui.addFolder('Konstrukcja: wspornikowa');
+  live(cant.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever' })).name('Konstrukcja schodów');
+  live(cant.add(config, 'cantileverProfileWidthMm', 20, 100, 1)).name('Profil: szerokość [mm]');
+  live(cant.add(config, 'cantileverProfileHeightMm', 30, 160, 1)).name('Profil: wysokość [mm]');
+  live(cant.add(config, 'cantileverProfileCount', 2, 4, 1)).name('Profile na stopień (min. 2)');
+  live(cant.add(config, 'cantileverProfileProjectionMm', 200, 1500, 10)).name('Profil: wysięg ze ściany [mm]');
+  live(cant.add(config, 'cantileverClearanceMm', 0, 10, 0.5)).name('Luz na nasunięcie [mm]');
+  live(cant.add(config, 'cantileverTopThicknessMm', 20, 60, 1)).name('Okładzina: góra [mm]');
+  live(cant.add(config, 'cantileverFrontThicknessMm', 20, 60, 1)).name('Okładzina: front [mm]');
+  live(cant.add(config, 'cantileverShellThicknessMm', 10, 40, 1)).name('Okładzina: spód/tył/bok [mm]');
+  live(cant.add(config, 'cantileverWallGapMm', 0, 30, 1)).name('Szczelina przy ścianie [mm]');
+  live(cant.add(config, 'cantileverMaxWidthMm', 600, 2400, 10)).name('Maks. szerokość okładziny [mm]');
+  cant.close();
+
   // Balustrada (geometry/railingSolver.js): parametry poręczy/tralek + lista odcinków. Wszystko to `config`
   // (cofanie i plik projektu działają), więc zmiana idzie normalną drogą live -> rebuild -> commit.
   const rail = gui.addFolder('Balustrada');
@@ -222,7 +238,10 @@ export function createUI({
   live(rail.add(config, 'railingInfill', { Tralki: 'balusters', 'Szkło na rotulach (bok wangi)': 'glass-side', 'Szkło między słupkami': 'glass-posts' })).name('Wypełnienie');
   live(rail.add(config, 'railingGlassType', { 'VSG 4.4.2': '4.4.2', 'VSG 5.5.2': '5.5.2' })).name('Szkło: rodzaj');
   live(rail.add(config, 'railingGlassMaxWidthMm', 600, 2400, 10)).name('Szkło: maks. szerokość tafli [mm]');
-  live(rail.add(config, 'railingGlassGapMm', 5, 60, 1)).name('Szkło: szczelina [mm]');
+  live(rail.add(config, 'railingGlassTint', { bezbarwne: 'clear', optiwhite: 'optiwhite', 'ciemne (grafit)': 'grey', brązowe: 'bronze' })).name('Szkło: kolor');
+  live(rail.add(config, 'railingGlassTopGapMm', 0, 150, 1)).name('Między słupkami: odstęp od poręczy [mm]');
+  live(rail.add(config, 'railingGlassBottomGapMm', 0, 150, 1)).name('Między słupkami: odstęp od spodu [mm]');
+  live(rail.add(config, 'railingGlassGapMm', 5, 60, 1)).name('Rotule: szczelina między taflami [mm]');
   live(rail.add(config, 'railingGlassStandoffMm', 10, 80, 1)).name('Rotule: odsunięcie od wangi [mm]');
   live(rail.add(config, 'railingGlassOverlapMm', 50, 250, 5)).name('Rotule: tafla poniżej góry wangi [mm]');
   live(rail.add(config, 'railingGlassFixingsPerPane', 1, 6, 1)).name('Rotule na taflę');
@@ -367,6 +386,21 @@ export function createUI({
       const proxy = { preset: COLOR_PRESETS.find((p) => p.hex === appearance[key])?.hex ?? '' };
       look
         .add(proxy, 'preset', presetOptions)
+        .name(`${label}: gotowe`)
+        .onChange((hex) => {
+          if (!hex) return;
+          appearance[key] = hex;
+          picker.updateDisplay();
+          onAppearanceChange && onAppearanceChange();
+        });
+    }
+    // metal (rotules / clamps of the glass balustrade): a colour only
+    const metalOptions = { '— własny —': '', ...Object.fromEntries(METAL_PRESETS.map((p) => [p.label, p.hex])) };
+    for (const { key, label } of METAL_ELEMENTS) {
+      const picker = look.addColor(appearance, key).name(label).onChange(() => onAppearanceChange && onAppearanceChange());
+      const proxy = { preset: METAL_PRESETS.find((p) => p.hex === appearance[key])?.hex ?? '' };
+      look
+        .add(proxy, 'preset', metalOptions)
         .name(`${label}: gotowe`)
         .onChange((hex) => {
           if (!hex) return;
