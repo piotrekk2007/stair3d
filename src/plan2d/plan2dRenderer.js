@@ -13,10 +13,22 @@ import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOve
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { smoothPath } from './smoothPath.js';
 import { boardPlanFootprint } from '../geometry/stringerModel.js';
+import { boundaryEditPoints } from './edgeEdit.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
 }
+
+// Screen-constant sizes. A technical plan keeps its lines, handles and labels the same size on screen whatever
+// the zoom (like StairDesigner): strokes use non-scaling-stroke (width in px), and handle/label sizes are given in
+// px and converted to plan mm with the current mm-per-pixel ratio. MM_PER_PX is set at the start of every
+// renderPlan2DSVG call (rendering is synchronous); px() converts.
+let MM_PER_PX = 1;
+const px = (n) => fmt(n * MM_PER_PX);
+const HAIR = 'vector-effect="non-scaling-stroke"';
+const EDGE_HANDLE_PX = 8; // the square on each end of an edge
+const OVERHANG_HANDLE_PX = 9; // the diamond for a tread's own side overhang
+const OVERHANG_INSET_PX = 16; // the diamond sits this far inside the tread, never on top of an edge square
 
 function polygonPoints(outline) {
   return outline.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ');
@@ -62,17 +74,21 @@ function gridXML(viewport) {
   return `<g id="grid-layer" stroke="#dfe3e8" stroke-width="${strokeWidth}">${lines.join('')}</g>`;
 }
 
-function dimensionLine(x1, y1, x2, y2, label, strokeWidth) {
+function dimensionLine(x1, y1, x2, y2, label) {
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
   const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+  // ticks perpendicular to the dimension line, a fixed size on screen
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const tx = (-(y2 - y1) / len) * px(5);
+  const ty = ((x2 - x1) / len) * px(5);
   return `
     <g class="dim">
-      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#1a5fb4" stroke-width="${strokeWidth}"/>
-      <line x1="${x1}" y1="${y1 - 40}" x2="${x1}" y2="${y1 + 40}" stroke="#1a5fb4" stroke-width="${strokeWidth}"/>
-      <line x1="${x2}" y1="${y2 - 40}" x2="${x2}" y2="${y2 + 40}" stroke="#1a5fb4" stroke-width="${strokeWidth}"/>
-      <text x="${midX}" y="${midY}" font-size="130" fill="#1a5fb4" text-anchor="middle"
-            transform="rotate(${angle} ${midX} ${midY})" dy="-20">${label}</text>
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#1a5fb4" stroke-width="1" ${HAIR}/>
+      <line x1="${fmt(x1 - tx)}" y1="${fmt(y1 - ty)}" x2="${fmt(x1 + tx)}" y2="${fmt(y1 + ty)}" stroke="#1a5fb4" stroke-width="1" ${HAIR}/>
+      <line x1="${fmt(x2 - tx)}" y1="${fmt(y2 - ty)}" x2="${fmt(x2 + tx)}" y2="${fmt(y2 + ty)}" stroke="#1a5fb4" stroke-width="1" ${HAIR}/>
+      <text x="${midX}" y="${midY}" font-size="${px(12)}" fill="#1a5fb4" text-anchor="middle"
+            transform="rotate(${angle} ${midX} ${midY})" dy="${px(-4)}">${label}</text>
     </g>`;
 }
 
@@ -82,7 +98,7 @@ function dimensionLine(x1, y1, x2, y2, label, strokeWidth) {
 // tę samą liczbę wierzchołków (budowane łańcuchowo w lockstep w planLayout.js).
 function axisXML(planLayout) {
   const pts = planLayout.outerFullPath.map((o, i) => lerpPoint(o, planLayout.innerFullPath[i], 0.5));
-  return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#8f3fd1" stroke-width="6" stroke-dasharray="30,20,4,20"/>`;
+  return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#8f3fd1" stroke-width="1" stroke-dasharray="12,6,2,6" ${HAIR}/>`;
 }
 
 // Linia biegu (walkline) — wymaganie 7. Liczona ZAWSZE z NOMINALNEJ (nieedytowanej) geometrii
@@ -102,7 +118,7 @@ function walklineXML(planLayout, config) {
   if (pts.length < 2) return '';
   // Only the DRAWING is smoothed (a Catmull-Rom curve through the very same points, so a winder turn reads as an
   // arc and a straight flight stays straight) — the model's exact points are untouched.
-  return `<polyline points="${polygonPoints(smoothPath(pts, WALKLINE_SMOOTH_STEP_MM))}" fill="none" stroke="#c0392b" stroke-width="8" stroke-dasharray="4,18" stroke-linecap="round"/>`;
+  return `<polyline points="${polygonPoints(smoothPath(pts, WALKLINE_SMOOTH_STEP_MM))}" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="5,4" ${HAIR}/>`;
 }
 
 // Granice biegu (wymaganie 7) — miejsca, gdzie zmienia się TYP odcinka (prosty -> zabiegowy
@@ -115,7 +131,7 @@ function runBoundariesXML(planLayout) {
     const { current } = getBoundaryPoints(treads, i);
     if (!current) continue;
     const [inner, outer] = current;
-    lines.push(`<line x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="#0f7a3d" stroke-width="14"/>`);
+    lines.push(`<line x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="#0f7a3d" stroke-width="2" ${HAIR}/>`);
   }
   return `<g id="run-boundaries-layer">${lines.join('')}</g>`;
 }
@@ -133,9 +149,9 @@ function stepBoundariesXML(planLayout, overrides) {
     if (!current) continue;
     const [inner, outer] = current;
     const isManual = !!(overrides && overrides[i]);
-    const color = isManual ? '#e08214' : '#9aa0a6';
-    const dash = isManual ? 'none' : '20,20';
-    xml += `<line class="step-boundary-line" data-boundary="${i}" x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="${color}" stroke-width="6" stroke-dasharray="${dash}"/>`;
+    const color = isManual ? '#e08214' : '#7d8a96';
+    const dash = isManual ? 'none' : '4,3';
+    xml += `<line class="step-boundary-line" data-boundary="${i}" x1="${fmt(inner.x)}" y1="${fmt(-inner.y)}" x2="${fmt(outer.x)}" y2="${fmt(-outer.y)}" stroke="${color}" stroke-width="1" stroke-dasharray="${dash}" ${HAIR}/>`;
   }
   return `<g id="step-boundaries-layer">${xml}</g>`;
 }
@@ -172,32 +188,54 @@ function overhangHandlesXML(planLayout, overhangs, selectedStepIndex) {
 
     const isManual = !!(overhangs && overhangs[tread.index]?.side === side);
     const color = isManual ? '#e08214' : '#2a9d8f';
+    // Drawn a little INSIDE the tread (never on top of an edge square); the anchor written for planInteractions.js
+    // is shifted by the same amount, so grabbing the diamond where it is drawn starts at the current offset.
+    const inset = OVERHANG_INSET_PX * MM_PER_PX;
+    const at = { x: mid.x - dir.x * inset, y: mid.y - dir.y * inset };
+    const anchorAt = { x: anchor.x - dir.x * inset, y: anchor.y - dir.y * inset };
+    const h = (OVERHANG_HANDLE_PX / 2) * MM_PER_PX;
+    const diamond = [
+      [at.x, -at.y - h],
+      [at.x + h, -at.y],
+      [at.x, -at.y + h],
+      [at.x - h, -at.y],
+    ].map(([x, y]) => `${fmt(x)},${fmt(y)}`).join(' ');
     xml += `
-      <rect class="overhang-handle" data-tread="${tread.index}" data-side="${side}"
-            data-anchor-x="${fmt(anchor.x)}" data-anchor-y="${fmt(anchor.y)}"
+      <polygon class="overhang-handle" data-tread="${tread.index}" data-side="${side}"
+            data-anchor-x="${fmt(anchorAt.x)}" data-anchor-y="${fmt(anchorAt.y)}"
             data-dir-x="${dir.x}" data-dir-y="${dir.y}"
-            x="${fmt(mid.x - 45)}" y="${fmt(-mid.y - 45)}" width="90" height="90"
-            fill="#fff" stroke="${color}" stroke-width="10"
-            transform="rotate(45 ${fmt(mid.x)} ${fmt(-mid.y)})" />`;
+            points="${diamond}" fill="${isManual ? color : '#fff'}" stroke="${color}" stroke-width="1.2" ${HAIR}><title>Wysunięcie boku stopnia (prawy klik: usuń)</title></polygon>`;
   }
   return `<g id="overhang-edit-layer">${xml}</g>`;
 }
 
-function editHandlesXML(planLayout, overrides) {
+// Edit mode: every edge as one group — a wide invisible hit line, the visible edge between its two edit points (on
+// the stringer lines, see edgeEdit.js boundaryEditPoints) and a small square on each end, a fixed size on screen.
+// Hovering a group turns the edge red and shows its pivot on the walkline (style.css); dragging an end turns the edge
+// about that pivot (planInteractions.js + edgeEdit.js pivotEdgeDrag), Alt+drag moves that end alone.
+function editHandlesXML(planLayout, overrides, config, activeBoundary) {
   const treads = planLayout.treads;
   const n = treads.length;
+  const h = (EDGE_HANDLE_PX / 2) * MM_PER_PX;
   let xml = '';
   for (let i = 0; i <= n; i++) {
-    const { current } = getBoundaryPoints(treads, i);
-    if (!current) continue;
-    const [inner, outer] = current;
-    const isManual = !!(overrides && overrides[i]);
-    const color = isManual ? '#e08214' : '#9aa0a6';
+    const e = boundaryEditPoints(treads, i, overrides, config);
+    if (!e) continue;
+    const isManual = !!(e.manual.inner || e.manual.outer);
+    const color = isManual ? '#e08214' : '#3d6d99';
+    const square = (endpoint, p) =>
+      `<rect class="edge-handle" data-boundary="${i}" data-endpoint="${endpoint}" x="${fmt(p.x - h)}" y="${fmt(-p.y - h)}" width="${fmt(2 * h)}" height="${fmt(2 * h)}" fill="${isManual ? color : '#fff'}" stroke="${color}" stroke-width="1.2" ${HAIR}/>`;
+    const line = (cls, extra) => `<line class="${cls}" x1="${fmt(e.inner.x)}" y1="${fmt(-e.inner.y)}" x2="${fmt(e.outer.x)}" y2="${fmt(-e.outer.y)}" ${extra}/>`;
+    const pivot = e.pivot ? `<circle class="edge-pivot" cx="${fmt(e.pivot.x)}" cy="${fmt(-e.pivot.y)}" r="${px(3.5)}" fill="#c0392b"/>` : '';
     xml += `
-      <circle class="edge-handle" data-boundary="${i}" data-endpoint="inner"
-              cx="${fmt(inner.x)}" cy="${fmt(-inner.y)}" r="40" fill="#fff" stroke="${color}" stroke-width="10" />
-      <circle class="edge-handle" data-boundary="${i}" data-endpoint="outer"
-              cx="${fmt(outer.x)}" cy="${fmt(-outer.y)}" r="40" fill="#fff" stroke="${color}" stroke-width="10" />`;
+      <g class="edge-edit${i === activeBoundary ? ' active' : ''}${isManual ? ' manual' : ''}" data-boundary="${i}" data-step-index="${Math.min(i, n - 1)}">
+        ${line('edge-hit', `stroke="transparent" stroke-width="10" ${HAIR}`)}
+        ${line('edge-line', `stroke="${color}" stroke-width="1.2" ${HAIR}`)}
+        ${pivot}
+        ${square('inner', e.inner)}
+        ${square('outer', e.outer)}
+        <title>Krawędź ${i}: przeciągnij koniec — obrót wokół punktu na linii biegu; Alt — przesuń tylko ten koniec; prawy klik — przywróć</title>
+      </g>`;
   }
   return `<g id="edge-edit-layer">${xml}</g>`;
 }
@@ -214,15 +252,15 @@ export function openingXML(opening, editMode = false) {
   const minX = Math.min(...pts.map((p) => p.x));
   const maxY = Math.max(...pts.map((p) => p.y));
   const label = opening.shape === 'polygon' ? 'otwór w stropie (wielokąt)' : invalid ? 'otwór w stropie (prostokąt — wielokąt niepoprawny)' : 'otwór w stropie (prostokąt)';
-  let xml = `<polygon class="opening-body${editMode ? ' editable' : ''}" points="${polygonPoints(pts)}" fill="${color}" fill-opacity="${editMode ? 0.1 : 0.05}" stroke="${color}" stroke-width="14" stroke-dasharray="80 40" pointer-events="${editMode ? 'all' : 'none'}"/>`;
-  xml += `<text x="${fmt(minX + 40)}" y="${fmt(-maxY + 130)}" font-size="100" fill="${color}" pointer-events="none">${label}</text>`;
+  let xml = `<polygon class="opening-body${editMode ? ' editable' : ''}" points="${polygonPoints(pts)}" fill="${color}" fill-opacity="${editMode ? 0.1 : 0.05}" stroke="${color}" stroke-width="1.5" stroke-dasharray="10 5" ${HAIR} pointer-events="${editMode ? 'all' : 'none'}"/>`;
+  xml += `<text x="${fmt(minX + px(6))}" y="${fmt(-maxY + px(14))}" font-size="${px(11)}" fill="${color}" pointer-events="none">${label}</text>`;
   if (editMode) {
     pts.forEach((a, i) => {
       const b = pts[(i + 1) % pts.length];
-      xml += `<circle class="opening-mid" data-after="${i}" cx="${fmt((a.x + b.x) / 2)}" cy="${fmt(-(a.y + b.y) / 2)}" r="32" fill="${color}" fill-opacity="0.55" stroke="#fff" stroke-width="8"/>`;
+      xml += `<circle class="opening-mid" data-after="${i}" cx="${fmt((a.x + b.x) / 2)}" cy="${fmt(-(a.y + b.y) / 2)}" r="${px(4)}" fill="${color}" fill-opacity="0.55" stroke="#fff" stroke-width="1" ${HAIR}/>`;
     });
     pts.forEach((p, i) => {
-      xml += `<circle class="opening-vertex" data-index="${i}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="48" fill="#fff" stroke="${color}" stroke-width="12"/>`;
+      xml += `<circle class="opening-vertex" data-index="${i}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(5)}" fill="#fff" stroke="${color}" stroke-width="1.5" ${HAIR}/>`;
     });
   }
   return `<g id="ceiling-opening-layer">${xml}</g>`;
@@ -233,29 +271,33 @@ export function openingXML(opening, editMode = false) {
 export function openingDraftXML(points, cursor) {
   const all = cursor ? [...points, cursor] : points;
   if (all.length === 0) return '';
-  const line = all.length >= 2 ? `<polyline points="${polygonPoints(all)}" fill="none" stroke="#1a5fb4" stroke-width="16"/>` : '';
-  const closing = points.length >= 3 && cursor ? `<line x1="${fmt(cursor.x)}" y1="${fmt(-cursor.y)}" x2="${fmt(points[0].x)}" y2="${fmt(-points[0].y)}" stroke="#1a5fb4" stroke-width="8" stroke-dasharray="40 30"/>` : '';
-  const dots = points.map((p, i) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${i === 0 ? 60 : 40}" fill="${i === 0 ? '#1a5fb4' : '#fff'}" stroke="#1a5fb4" stroke-width="12"/>`).join('');
+  const line = all.length >= 2 ? `<polyline points="${polygonPoints(all)}" fill="none" stroke="#1a5fb4" stroke-width="2" ${HAIR}/>` : '';
+  const closing = points.length >= 3 && cursor ? `<line x1="${fmt(cursor.x)}" y1="${fmt(-cursor.y)}" x2="${fmt(points[0].x)}" y2="${fmt(-points[0].y)}" stroke="#1a5fb4" stroke-width="1" stroke-dasharray="6 4" ${HAIR}/>` : '';
+  const dots = points.map((p, i) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(i === 0 ? 6 : 4)}" fill="${i === 0 ? '#1a5fb4' : '#fff'}" stroke="#1a5fb4" stroke-width="1.5" ${HAIR}/>`).join('');
   return `<g class="opening-draft" pointer-events="none">${closing}${line}${dots}</g>`;
 }
 
 // Każdy stopień jako osobny obiekt logiczny (wymaganie 8) — <g data-step-index> pozwala
 // zaznaczyć DOKŁADNIE jeden stopień (wymaganie 9); podświetlenie zaznaczenia to jedyny wyraz
 // selekcji w SVG, panel z parametrami stopnia renderowany jest poza SVG (main.js/ui.js).
-function stepsXML(planLayout, selectedStepIndex) {
+// Step numbers sit on the walkline, halfway between the tread's front and back walkline points (the edge pivots),
+// like a technical stair plan; a tread without both points (a landing) gets its number at its centroid.
+function stepsXML(planLayout, selectedStepIndex, pivots) {
   return planLayout.treads
     .map((t) => {
       const isSelected = t.index === selectedStepIndex;
       const isLanding = t.type === 'landing';
-      const fill = isLanding ? '#e8d9b5' : t.type === 'winder' ? '#f0e6c8' : '#f5efdc';
-      const stroke = isSelected ? '#1a5fb4' : '#333';
-      const strokeWidth = isSelected ? 26 : 12;
-      const cx = t.outline.reduce((s, p) => s + p.x, 0) / t.outline.length;
-      const cy = t.outline.reduce((s, p) => s - p.y, 0) / t.outline.length;
+      const fill = isSelected ? '#cfe2f6' : isLanding ? '#e4edf5' : t.type === 'winder' ? '#e9f1f8' : '#f1f6fa';
+      const stroke = isSelected ? '#1a5fb4' : '#3d5568';
+      const a = pivots?.[t.index];
+      const b = pivots?.[t.index + 1];
+      const c = a && b
+        ? { x: (a.x + b.x) / 2, y: -(a.y + b.y) / 2 }
+        : { x: t.outline.reduce((s, p) => s + p.x, 0) / t.outline.length, y: t.outline.reduce((s, p) => s - p.y, 0) / t.outline.length };
       return `
       <g class="step-object${isSelected ? ' selected' : ''}" data-step-index="${t.index}">
-        <polygon points="${polygonPoints(t.outline)}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
-        <text x="${fmt(cx)}" y="${fmt(cy)}" font-size="110" fill="#333" text-anchor="middle" dy="35">${t.index + 1}</text>
+        <polygon points="${polygonPoints(t.outline)}" fill="${fill}" stroke="${stroke}" stroke-width="${isSelected ? 2 : 1}" ${HAIR}/>
+        <text x="${fmt(c.x)}" y="${fmt(c.y)}" font-size="${px(12)}" font-weight="600" fill="#1f2d3a" text-anchor="middle" dy="${px(4)}" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR}>${t.index + 1}</text>
       </g>`;
     })
     .join('');
@@ -268,10 +310,10 @@ function measureLineXML(a, b, label, color) {
   const my = -(a.y + b.y) / 2;
   return `
     <g class="dim">
-      <line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="10"/>
-      <circle cx="${fmt(a.x)}" cy="${fmt(-a.y)}" r="24" fill="${color}"/>
-      <circle cx="${fmt(b.x)}" cy="${fmt(-b.y)}" r="24" fill="${color}"/>
-      <text x="${fmt(mx)}" y="${fmt(my)}" font-size="85" fill="${color}" text-anchor="middle" dy="-30" stroke="#fff" stroke-width="14" paint-order="stroke">${label}</text>
+      <line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1" ${HAIR}/>
+      <circle cx="${fmt(a.x)}" cy="${fmt(-a.y)}" r="${px(2.5)}" fill="${color}"/>
+      <circle cx="${fmt(b.x)}" cy="${fmt(-b.y)}" r="${px(2.5)}" fill="${color}"/>
+      <text x="${fmt(mx)}" y="${fmt(my)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dy="${px(-4)}" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR}>${label}</text>
     </g>`;
 }
 
@@ -320,10 +362,16 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, opening = null, openingEdit = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, opening = null, openingEdit = false, activeBoundary = null } = options;
+  // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
+  // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
+  MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
   const b = planLayout.bounds;
 
-  const treadsXML = stepsXML(planLayout, selectedStepIndex);
+  // each boundary's walkline point (the edge pivot) — numbers sit on the walkline between them
+  const pivots = [];
+  for (let i = 0; i <= planLayout.treads.length; i++) pivots.push(boundaryEditPoints(planLayout.treads, i, null, config)?.pivot || null);
+  const treadsXML = stepsXML(planLayout, selectedStepIndex, pivots);
 
   const winderBlanksXML = !showWinderBlanks
     ? ''
@@ -334,8 +382,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
           const cx = blank.corners.reduce((s, p) => s + p.x, 0) / 4;
           const cy = blank.corners.reduce((s, p) => s - p.y, 0) / 4;
           return `
-      <polygon points="${polygonPoints(blank.corners)}" fill="none" stroke="#8f3fd1" stroke-width="14" stroke-dasharray="40,25"/>
-      <text x="${fmt(cx)}" y="${fmt(cy)}" font-size="90" fill="#8f3fd1" text-anchor="middle" dy="-70">${fmt(blank.length)} × ${fmt(blank.depth)} mm</text>`;
+      <polygon points="${polygonPoints(blank.corners)}" fill="none" stroke="#8f3fd1" stroke-width="1" stroke-dasharray="6,4" ${HAIR}/>
+      <text x="${fmt(cx)}" y="${fmt(cy)}" font-size="${px(10)}" fill="#8f3fd1" text-anchor="middle" dy="${px(-14)}">${fmt(blank.length)} × ${fmt(blank.depth)} mm</text>`;
         })
         .join('');
 
@@ -350,7 +398,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     const geos = stringerConstruction?.[side] || [];
     const boards = model
       ? model.segments
-          .map((seg, i) => `<polygon points="${polygonPoints(boardPlanFootprint(seg, geos[i]))}" fill="${selected ? '#1a5fb4' : '#8a5a34'}" stroke="${selected ? '#0d3b73' : '#5a3d24'}" stroke-width="4"/>`)
+          .map((seg, i) => `<polygon points="${polygonPoints(boardPlanFootprint(seg, geos[i]))}" fill="${selected ? '#1a5fb4' : '#c9a57f'}" stroke="${selected ? '#0d3b73' : '#5a3d24'}" stroke-width="1" ${HAIR}/>`)
           .join('')
       : `<polyline points="${polygonPoints(pts)}" fill="none" stroke="${selected ? '#1a5fb4' : '#8a5a34'}" stroke-width="${selected ? 46 : 30}"/>`;
     return `
@@ -415,8 +463,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const footprintX = b.maxX - b.minX;
   const footprintY = b.maxY - b.minY;
   const widthsXML = layers.widths === false ? '' : `
-    ${dimensionLine(fmt(b.minX), fmt(-b.maxY) - 350, fmt(b.maxX), fmt(-b.maxY) - 350, `${fmt(footprintX)} mm`, 12)}
-    ${dimensionLine(fmt(b.minX) - 350, fmt(-b.maxY), fmt(b.minX) - 350, fmt(-b.minY), `${fmt(footprintY)} mm`, 12)}`;
+    ${dimensionLine(fmt(b.minX), fmt(-b.maxY) - 350, fmt(b.maxX), fmt(-b.maxY) - 350, `${fmt(footprintX)} mm`)}
+    ${dimensionLine(fmt(b.minX) - 350, fmt(-b.maxY), fmt(b.minX) - 350, fmt(-b.minY), `${fmt(footprintY)} mm`)}`;
 
   const arrowStart = planLayout.innerFullPath[0];
   const arrowXML = `
@@ -429,7 +477,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     </g>`;
 
   const legendXML = `
-    <g font-size="110" fill="#222">
+    <g font-size="${px(12)}" fill="#222">
       <text x="${fmt(b.minX)}" y="${fmt(-b.maxY - 550)}">Stopni: ${derived.numTreads} | głębokość ${config.treadGoing}mm | podstopień ${derived.riserHeight.toFixed(0)}mm | szer. biegu ${config.stairWidth}mm</text>
     </g>`;
 
@@ -437,11 +485,11 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const axisXMLStr = layers.axes ? axisXML(planLayout) : '';
   const walklineXMLStr = layers.walkline ? walklineXML(planLayout, config) : '';
   const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
-  const stepBoundariesXMLStr = layers.stepBoundaries || editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
+  const stepBoundariesXMLStr = layers.stepBoundaries && !editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
-  const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides) : '';
+  const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">

@@ -179,7 +179,7 @@ rozróżnienia nominalnej krawędzi, ręcznej korekty i finalnej krawędzi.
                                │  + opcjonalna korekta użytkownika
                                ▼
                     EdgeOverride                    (dane wejściowe użytkownika,
-                    { movedEndpoint, point }          PRZECHOWYWANE w projekcie)
+                    { inner?, outer? }                PRZECHOWYWANE w projekcie)
                                │
                                │  walidacja (pole nie może się zdegenerować)
                                ▼
@@ -193,10 +193,12 @@ Reguły:
    nigdy nie zależy od tego, czy istnieje `EdgeOverride`. To jest "geometria wzorcowa" —
    dokładnie to, co dziś w kodzie nazywa się `current` w `edgeOverrides.js`, tu podniesione do
    rangi jawnego, nazwanego stanu.
-2. **`EdgeOverride` to jedyne dane wejściowe użytkownika w całym `TreadEdge`.** Ma dokładnie
-   jedno aktywne pole ruchome (`movedEndpoint: 'inner' | 'outer'`) — drugi koniec krawędzi
-   ("zawias") ZAWSZE bierze aktualną wartość z `NominalEdgeGeometry`, nigdy nie jest
-   zamrożony na wartości sprzed edycji. Dzięki temu edycja przetrwa późniejszą zmianę innych
+2. **`EdgeOverride` to jedyne dane wejściowe użytkownika w całym `TreadEdge`.** Zawiera
+   przesunięte końce krawędzi (`inner` i/lub `outer`; edytor 2D zapisuje oba naraz, obracając
+   krawędź wokół jej punktu na linii biegu — `src/plan2d/edgeEdit.js`). Koniec bez wpisu
+   ZAWSZE bierze aktualną wartość z `NominalEdgeGeometry`, nigdy nie jest zamrożony na wartości
+   sprzed edycji. Starszy kształt `{ movedEndpoint, point }` (jeden koniec) jest nadal czytany
+   (`edgeOverrides.js` `edgeOverrideEndpoints`). Dzięki temu edycja przetrwa późniejszą zmianę innych
    parametrów (np. liczby stopni) bez potrzeby ręcznej korekty przez użytkownika — to
    zachowanie już istnieje w `edgeOverrides.js` i jest tu formalnie utrwalone jako właściwość
    modelu, nie przypadek implementacji.
@@ -330,8 +332,9 @@ geometrii z §3.
 
 - **Identyfikator:** `"edge-{n}"`, `n` = 0..`numTreads` (n=0 to krawędź startowa/`Origin`,
   n=`numTreads` to krawędź końcowa biegu).
-- **Dane wejściowe:** `override: EdgeOverride | null` = `{ movedEndpoint: 'inner' | 'outer',
-  point: {x, y} }` — jedyne pole wpisywane przez użytkownika w całym tym obiekcie.
+- **Dane wejściowe:** `override: EdgeOverride | null` = `{ inner?: {x, y}, outer?: {x, y} }`
+  (starszy kształt `{ movedEndpoint, point }` nadal czytany) — jedyne pole wpisywane przez
+  użytkownika w całym tym obiekcie.
 - **Dane obliczane:** `nominalInnerPoint`, `nominalOuterPoint` (z solvera `Run`/`Walkline`,
   §3 pkt 1); `finalInnerPoint`, `finalOuterPoint` (§3 pkt 3); `isOverridden: boolean`;
   `isValid: boolean` (czy override przeszedł walidację degeneracji).
@@ -572,14 +575,12 @@ Dwa OSOBNE schematy, celowo różnej wielkości:
       "description": "Klucz = TreadEdge id ('edge-{n}' jako string). Odpowiednik dzisiejszego config.manualEdgeOverrides — tu jawnie wydzielony z config, bo koncepcyjnie NIE jest parametrem wejściowym Staircase, tylko osobną warstwą korekt (§3).",
       "additionalProperties": {
         "type": "object",
-        "required": ["movedEndpoint", "point"],
+        "description": "Przesunięte końce krawędzi; starszy kształt { movedEndpoint, point } (jeden koniec) jest nadal czytany.",
         "properties": {
+          "inner": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+          "outer": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
           "movedEndpoint": { "enum": ["inner", "outer"] },
-          "point": {
-            "type": "object",
-            "required": ["x", "y"],
-            "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
-          }
+          "point": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
         }
       }
     }
@@ -685,8 +686,8 @@ pamięci to osobny, większy refaktor, świadomie odłożony).
         "override": {
           "type": ["object", "null"],
           "properties": {
-            "movedEndpoint": { "enum": ["inner", "outer"] },
-            "point": { "$ref": "#/$defs/Point2D" }
+            "inner": { "$ref": "#/$defs/Point2D" },
+            "outer": { "$ref": "#/$defs/Point2D" }
           }
         },
         "finalInnerPoint": { "$ref": "#/$defs/Point2D" },

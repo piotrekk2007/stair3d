@@ -1589,6 +1589,47 @@ browser-verified bug from an earlier pass, fixed in the consolidation pass — s
 Edge dragging still only ever writes to `config.manualEdgeOverrides` (never a Three.js mesh);
 undo history is committed on `pointerup`/`onFinishChange`, not on every live-drag tick.
 
+## Plan 2D: technical look + edges turned about the walkline (StairDesigner-like, implemented)
+
+Reported with StairDesigner 7.18 screenshots: our 2D edit was clumsy (big circles in mm that overlapped when zoomed
+out), an edge end could be dragged anywhere, and only one end of an edge could carry an edit at a time.
+- **Screen-constant drawing** (`plan2dRenderer.js`): strokes are `vector-effect="non-scaling-stroke"` (1-2 px), and
+  handles/labels are sized in px via `MM_PER_PX` (option `mmPerPx`; `main.js` passes the real SVG scale = the larger
+  of the two viewBox/panel ratios — the SVG fits by the tighter axis; a caller without one, e.g. the offer's plan
+  image, gets `viewport.width / 1000`). Light technical fills, step numbers small on the walkline (halfway between
+  the tread's two edge pivots), the ceiling opening and its draft drawn thin too.
+- **Edge edit groups** (edit mode): each edge is `<g class="edge-edit" data-boundary data-step-index>` — an invisible
+  10 px hit line, the edge between its two edit points and an 8 px square on each end. The edit points are on the
+  stringer (chain) lines — the manual end if any, else the nominal chain end (`edgeEdit.js boundaryEditPoints`), not
+  the housing-recessed tread corner (that made the handle jump 24 mm on the first drag). Hover / the dragged edge
+  (`activeBoundary`, view state in `main.js`): red, with its walkline pivot shown (`style.css .edge-edit`). A click on
+  an edge selects its tread. The plain boundary lines are not drawn in edit mode (the groups replace them). Overhang
+  diamonds: 9 px, drawn 16 px inside the tread so they never sit on an edge square (the anchor written for the drag
+  is shifted by the same amount).
+- **Turning an edge about the walkline** (`plan2d/edgeEdit.js`, pure): every edge's pivot is its NOMINAL walkline
+  point (`walklinePivot`, the same fraction as the drawn walkline). Dragging an end (`pivotEdgeDrag`) slides it along
+  its own stringer line (5 mm steps), the other end follows on the opposite line through the pivot — the going on the
+  walkline stays. Limits: an end stays on the straight piece of its line its nominal end is on (an end ON a corner
+  can't be pivot-moved) and at least 10 mm from the neighbouring edges' ends; when the opposite end would pass a
+  corner, the edge turns only up to that corner (`CORNER_MARGIN_MM` 1 mm short). Reason: a tread outline owns the
+  corners of the line between its edges and is never re-cut here, so passing a corner or a neighbour folded two
+  treads (`CONSTRAINT-TREAD-SIMPLE-POLYGON`, seen in the browser). **Alt+drag** = the old free move of that one end
+  (alignment + grid snap, `freeEdgeDrag` keeps the other end's own edit); an edge without a pivot (a landing side)
+  always moves freely. Right-click still resets the edge.
+- **Override shape** `config.manualEdgeOverrides[i] = { inner?, outer? }` — both ends at once
+  (`edgeOverrides.js edgeOverrideEndpoints`; the older `{ movedEndpoint, point }` is still read, so old project files
+  load unchanged; no schema bump). `applyManualEdgeOverrides` moves every given end from the edge as it was before
+  either moved and reverts both together if a tread degenerates.
+- **Not done (stage C, next):** the walkline as a real line-arc-line with equal goings on the arc and winders laid
+  out from it — today the pivots are the proportional layout's walkline points, so the walkline is still only
+  smoothed for display (`smoothPath`). Moving a corner of a stringer line from one tread to the other (an edge passing
+  a corner) is also part of that stage.
+Tests: `plan2d/__tests__/edgeEdit.test.js` (both override shapes; pivot turn on the lines, pivot kept; both ends
+applied; Alt keeps the other end; fixed-size squares on the chain points; no folded tread when turning past a corner
+or a neighbour + an L/U × left/right × 3-5 winders × both ends grid — the two-ended and the folding tests confirmed to
+fail on the old code). Browser-verified: 8 px squares at any zoom, hover red + pivot, a drag turning edge 7 of the
+default L up to the wall corner without new findings, undo.
+
 ## Per-tread edge overhang + drag snapping (implemented)
 
 A second, deliberately separate manual-edit mechanism from the shared-corner

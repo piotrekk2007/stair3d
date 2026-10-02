@@ -60,9 +60,10 @@ export function createDefaultConfig() {
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza
-    // krawędź, przed stopniem 0; N = ostatnia, za stopniem N-1). Wartość: { point: {x,y},
-    // movedEndpoint: 'inner'|'outer' } — zapamiętujemy TYLKO przesunięty koniec, drugi (zawias)
-    // zawsze bierzemy z aktualnej geometrii wzorcowej, więc przetrwa zmianę innych parametrów.
+    // krawędź, przed stopniem 0; N = ostatnia, za stopniem N-1). Wartość: { inner?: {x,y}, outer?: {x,y} } —
+    // przesunięte końce (edytor 2D zapisuje oba naraz, obracając krawędź wokół jej punktu na linii biegu);
+    // koniec bez wpisu bierzemy z aktualnej geometrii wzorcowej. Starszy kształt { point, movedEndpoint }
+    // (jeden koniec) jest nadal czytany — edgeOverrides.js edgeOverrideEndpoints.
     manualEdgeOverrides: {},
 
     // Ręczne "wysunięcie" bocznej krawędzi POJEDYNCZEGO stopnia (np. stopień ma wystawać poza

@@ -510,6 +510,17 @@ html, body {
   fill: #fff3e0;
 }
 
+/* plan 2D edit mode: an edge turns red with its walkline pivot shown while hovered or dragged (StairDesigner-like) */
+.edge-edit .edge-pivot { display: none; pointer-events: none; }
+.edge-edit .edge-line { pointer-events: none; }
+.edge-edit .edge-hit { cursor: pointer; }
+.edge-edit:hover .edge-line,
+.edge-edit.active .edge-line { stroke: #d62828; stroke-width: 2; }
+.edge-edit:hover .edge-handle,
+.edge-edit.active .edge-handle { stroke: #d62828; }
+.edge-edit:hover .edge-pivot,
+.edge-edit.active .edge-pivot { display: inline; }
+
 .edge-handle.dragging,
 .overhang-handle.dragging {
   cursor: grabbing;

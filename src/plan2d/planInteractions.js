@@ -11,6 +11,7 @@
 
 import { zoomAt, panBy } from './viewport.js';
 import { openingDraftXML } from './plan2dRenderer.js';
+import { pivotEdgeDrag, freeEdgeDrag } from './edgeEdit.js';
 
 // Rysowanie otworu: kliknięcie bliżej pierwszego punktu niż tyle PIKSELI ekranu zamyka wielokąt.
 const CLOSE_PICK_PX = 16;
@@ -121,7 +122,11 @@ function midpoint(a, b) {
  * @param {() => {x,y,width,height}} opts.getViewport
  * @param {(vp) => void} opts.setViewport   Called with a NEW viewport — caller re-renders.
  * @param {() => {width:number, height:number}} opts.getPanelSize  Panel's current CSS pixel size.
- * @param {(boundaryIndex: number, override: {movedEndpoint, point}) => void} opts.onEdgeDragMove
+ * @param {(boundaryIndex: number) => {pivot, nominal, manual, innerPath, outerPath}|null} [opts.getEdgeEditContext]
+ *   What an edge drag needs (edgeEdit.js boundaryEditPoints + the stair's inner/outer lines), read once at
+ *   pointerdown. With a pivot, dragging an end turns the edge about its walkline point (pivotEdgeDrag); with Alt held,
+ *   or without a pivot, that end alone moves freely (alignment + grid snap), the other end keeping its own edit.
+ * @param {(boundaryIndex: number, override: {inner?, outer?}) => void} opts.onEdgeDragMove
  *   Called continuously while dragging an edge handle — live preview only (see main.js:
  *   this should update the model AND re-render, but should NOT push undo history on every
  *   pointermove — only onEdgeDragEnd commits to history).
@@ -159,6 +164,7 @@ export function attachPlanInteractions(opts) {
     getViewport,
     setViewport,
     getPanelSize,
+    getEdgeEditContext,
     onEdgeDragMove,
     onEdgeDragEnd,
     onEdgeContextMenu,
@@ -346,7 +352,9 @@ export function attachPlanInteractions(opts) {
       if (!svg) return;
       handle.setPointerCapture(e.pointerId);
       handle.classList.add('dragging');
-      dragState = { pointerId: e.pointerId, kind: 'edge', boundaryIndex: Number(handle.dataset.boundary), endpoint: handle.dataset.endpoint, svg, handle, currentPoint: null };
+      const boundaryIndex = Number(handle.dataset.boundary);
+      const context = getEdgeEditContext ? getEdgeEditContext(boundaryIndex) : null;
+      dragState = { pointerId: e.pointerId, kind: 'edge', boundaryIndex, endpoint: handle.dataset.endpoint, svg, handle, context, currentOverride: null };
       e.preventDefault();
       return;
     }
@@ -391,8 +399,9 @@ export function attachPlanInteractions(opts) {
       // użytkownik widzi na wierzchu, jest tym, co zaznacza. Identyfikatory pochodzą z
       // data-* wystawionych przez renderer (model), nie z geometrii.
       const postEl = e.target.closest('.post-marker');
-      const stringerEl = postEl ? null : e.target.closest('.stringer-path');
-      const stepEl = postEl || stringerEl ? null : e.target.closest('.step-object');
+      const edgeEl = postEl ? null : e.target.closest('.edge-edit');
+      const stringerEl = postEl || edgeEl ? null : e.target.closest('.stringer-path');
+      const stepEl = postEl || stringerEl ? null : edgeEl || e.target.closest('.step-object');
       const stepIndex = stepEl ? Number(stepEl.dataset.stepIndex) : null;
       const hit = postEl
         ? { kind: 'post', postId: postEl.dataset.postId }
@@ -465,12 +474,21 @@ export function attachPlanInteractions(opts) {
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      const ctx = dragState.context;
+      if (ctx?.pivot && !e.altKey) {
+        // turn the edge about its walkline point; where it can't be turned (pointer on the pivot, no opposite line
+        // beyond it) the edge simply stays where the last good position left it
+        const turned = pivotEdgeDrag({ endpoint: dragState.endpoint, raw, pivot: ctx.pivot, innerPath: ctx.innerPath, outerPath: ctx.outerPath, nominal: ctx.nominal, neighbours: ctx.neighbours });
+        if (!turned) return;
+        dragState.currentOverride = turned;
+        onEdgeDragMove(dragState.boundaryIndex, turned);
+        showSnapGuides(liveSvg(), null, null);
+        return;
+      }
       const references = (getSnapPoints ? getSnapPoints() : []).filter((ref) => distance(ref, raw) > 1e-6);
       const { point: p, guideX, guideY } = snapPoint(raw, references);
-      dragState.currentPoint = p;
-      dragState.handle.setAttribute('cx', p.x);
-      dragState.handle.setAttribute('cy', -p.y);
-      onEdgeDragMove(dragState.boundaryIndex, { movedEndpoint: dragState.endpoint, point: p });
+      dragState.currentOverride = freeEdgeDrag(dragState.endpoint, p, ctx?.manual);
+      onEdgeDragMove(dragState.boundaryIndex, dragState.currentOverride);
       showSnapGuides(liveSvg(), guideX, guideY);
       return;
     }
@@ -484,14 +502,7 @@ export function attachPlanInteractions(opts) {
       const rawOffsetMm = (raw.x - dragState.anchor.x) * dragState.dir.x + (raw.y - dragState.anchor.y) * dragState.dir.y;
       const offsetMm = snapMm(rawOffsetMm);
       dragState.currentOffsetMm = offsetMm;
-      // Preserve the handle's own 45° rotation (set once at render time, pivoting on its own
-      // NOMINAL anchor position) and prepend a translate for the live offset — overwriting
-      // `transform` outright would silently drop the rotation and leave the diamond mis-shapen.
-      const dx = dragState.dir.x * offsetMm;
-      const dy = dragState.dir.y * offsetMm;
-      const anchorSvgX = dragState.anchor.x;
-      const anchorSvgY = -dragState.anchor.y;
-      dragState.handle.setAttribute('transform', `translate(${dx}, ${-dy}) rotate(45 ${anchorSvgX} ${anchorSvgY})`);
+      // the live preview redraws the whole plan, handle included, at its new place
       if (onOverhangDragMove) onOverhangDragMove(dragState.treadIndex, { side: dragState.side, offsetMm });
     }
   });
@@ -521,9 +532,9 @@ export function attachPlanInteractions(opts) {
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'edge') {
       dragState.handle.classList.remove('dragging');
-      const { boundaryIndex, endpoint, currentPoint } = dragState;
+      const { boundaryIndex, currentOverride } = dragState;
       dragState = null;
-      if (currentPoint) onEdgeDragEnd(boundaryIndex, { movedEndpoint: endpoint, point: currentPoint });
+      onEdgeDragEnd(boundaryIndex, currentOverride);
       return;
     }
 

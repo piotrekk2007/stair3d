@@ -82,9 +82,24 @@ function cloneTread(tread) {
   };
 }
 
+// One manualEdgeOverrides entry as {inner?, outer?} — the moved end(s) of that boundary. The current shape stores
+// both ends at once ({inner, outer}, written by the 2D editor's walkline-pivot drag); the older shape
+// {movedEndpoint, point} (one end only) is still read, so older project files load unchanged.
+export function edgeOverrideEndpoints(override) {
+  if (!override || typeof override !== 'object') return {};
+  const ok = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y);
+  const out = {};
+  if (ok(override.inner)) out.inner = { x: override.inner.x, y: override.inner.y };
+  if (ok(override.outer)) out.outer = { x: override.outer.x, y: override.outer.y };
+  if (!out.inner && !out.outer && (override.movedEndpoint === 'inner' || override.movedEndpoint === 'outer') && ok(override.point)) {
+    out[override.movedEndpoint] = { x: override.point.x, y: override.point.y };
+  }
+  return out;
+}
+
 // Nakłada ręczne przesunięcia krawędzi (patrz schema.js/config.manualEdgeOverrides) na stopnie
-// wyliczone wzorem. Każdy wpis porusza TYLKO jeden koniec (movedEndpoint) danej granicy — drugi
-// koniec (zawias) zawsze zostaje na aktualnej, wzorcowej pozycji. Jeśli wynikowy kształt
+// wyliczone wzorem. Wpis porusza jeden albo oba końce danej granicy (edgeOverrideEndpoints) — koniec
+// bez edycji zostaje na aktualnej, wzorcowej pozycji. Jeśli wynikowy kształt
 // któregoś z dotkniętych stopni wyszedłby zdegenerowany (zerowe/ujemne pole albo odwrócony
 // zwrot), edycja tej granicy jest pomijana (z ostrzeżeniem w konsoli) — reszta nadal się
 // stosuje. Zwraca nową tablicę stopni; nie mutuje `treads` przekazanego na wejściu.
@@ -102,19 +117,23 @@ export function applyManualEdgeOverrides(treads, overrides) {
     const { before, after, current } = getBoundaryPoints(result, boundaryIndex);
     if (!current) continue; // granica już nie istnieje przy dzisiejszej liczbie stopni
 
-    const oldPoint = override.movedEndpoint === 'inner' ? current[0] : current[1];
-    const newPoint = override.point;
+    const ends = edgeOverrideEndpoints(override);
+    // [old, new] per moved end — both taken from the edge BEFORE either is moved
+    const moves = [];
+    if (ends.inner) moves.push([current[0], ends.inner]);
+    if (ends.outer) moves.push([current[1], ends.outer]);
+    if (moves.length === 0) continue;
     const affected = [before, after].filter(Boolean);
 
     const areasBefore = affected.map(signedArea);
-    for (const tread of affected) retargetPoint(tread, oldPoint, newPoint);
+    for (const [oldPoint, newPoint] of moves) for (const tread of affected) retargetPoint(tread, oldPoint, newPoint);
     const areasAfter = affected.map(signedArea);
 
     const broken = areasAfter.some(
       (a, i) => Math.abs(a) < 1 || Math.sign(a) !== Math.sign(areasBefore[i])
     );
     if (broken) {
-      for (const tread of affected) retargetPoint(tread, newPoint, oldPoint);
+      for (const [oldPoint, newPoint] of [...moves].reverse()) for (const tread of affected) retargetPoint(tread, newPoint, oldPoint);
       console.warn(`Pominięto ręczną edycję krawędzi ${boundaryIndex}: wynikowy kształt stopnia byłby niepoprawny.`);
     }
   }
