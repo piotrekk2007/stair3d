@@ -1,5 +1,6 @@
 // Editing a tread boundary (edge) in the 2D plan, the way StairDesigner does it: every edge is anchored on the
-// walkline — its PIVOT is where its nominal position crosses the walkline — and dragging one end turns the edge about
+// walkline — its PIVOT is its own walkline point (planLayout.walkline.points, the point the winder layout drew the
+// edge through — geometry/winderArc.js) — and dragging one end turns the edge about
 // that pivot. The dragged end slides along its own stringer line (the stair's inner or outer line), the other end
 // follows on the opposite line, so the going measured on the walkline never changes. Pure: plan coordinates (mm), no
 // DOM. The result is a plain `config.manualEdgeOverrides` entry {inner, outer} — both ends at once.
@@ -12,19 +13,6 @@ const SLIDE_SNAP_MM = 5; // the dragged end lands on a 5 mm step along its strin
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const dot = (a, b) => a.x * b.x + a.y * b.y;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-/** Where the walkline crosses an edge, as a fraction from its OUTER end (0) to its INNER end (1). */
-export function walklineFraction(config) {
-  const w = config.stairWidth || 1;
-  return Math.min(1, Math.max(0, (w - (config.walklineOffset ?? w / 2)) / w));
-}
-
-/** The walkline point of a nominal edge [inner, outer]. */
-export function walklinePivot(nominal, config) {
-  const [inner, outer] = nominal;
-  const t = walklineFraction(config);
-  return { x: outer.x + (inner.x - outer.x) * t, y: outer.y + (inner.y - outer.y) * t };
-}
 
 /** Nearest point of a polyline to p, with its distance along the polyline. */
 export function closestOnPolyline(path, p) {
@@ -61,10 +49,13 @@ export function lineCrossings(a, b, path) {
 
 /**
  * The points a boundary is edited by: its manual ends if it has them, otherwise its nominal chain ends (on the
- * stringer lines, before the housing recess), otherwise (a landing side without a chain) its current ends.
+ * stringer lines, before the housing recess), otherwise (a landing side without a chain) its current ends. The pivot
+ * is the layout's own walkline point of that boundary (only where the edge has a nominal position to turn).
+ * @param {{treads, walkline?: {points: Array<{x,y}|null>}}} planLayout
  * @returns {{inner, outer, nominal: [inner, outer]|null, pivot: {x,y}|null, manual: {inner?, outer?}} | null}
  */
-export function boundaryEditPoints(treads, boundaryIndex, overrides, config) {
+export function boundaryEditPoints(planLayout, boundaryIndex, overrides) {
+  const treads = planLayout.treads;
   const { current } = getBoundaryPoints(treads, boundaryIndex);
   if (!current) return null;
   const nominal = getNominalBoundaryPoints(treads, boundaryIndex);
@@ -74,7 +65,7 @@ export function boundaryEditPoints(treads, boundaryIndex, overrides, config) {
     inner: manual.inner || base[0],
     outer: manual.outer || base[1],
     nominal,
-    pivot: nominal ? walklinePivot(nominal, config) : null,
+    pivot: nominal ? planLayout.walkline?.points?.[boundaryIndex] || null : null,
     manual,
   };
 }

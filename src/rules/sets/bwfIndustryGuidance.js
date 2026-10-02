@@ -88,7 +88,7 @@ export const bwfIndustryGuidance = defineRuleSet([
     severity: 'INFO',
     blocksGeneration: false,
     notes:
-      'This is the clearest, most implementation-relevant external description of "how to define a walkline" available from a non-proprietary source. It differs from the project\'s current walklineOffset/walklineSplitOffset model (which is a proportional-interpolation method, not an arc-around-newel method) — worth comparing directly when redesigning the winder solver (see prior geometry audit, problem C.4).',
+      'This is the clearest, most implementation-relevant external description of "how to define a walkline" available from a non-proprietary source. Since stage C (2026-10-02) the project lays winders out from an arc-around-the-inner-corner walkline too (src/geometry/winderArc.js, docs/architecture/WINDER_ARC_LAYOUT.md); the proportional-interpolation method remains only as the fallback when the arc does not fit the winder zone.',
   },
   {
     ruleId: 'US-REF-C-03',

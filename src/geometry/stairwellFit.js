@@ -101,13 +101,19 @@ function solveGoing(config, letter, target) {
   return Math.abs(check - target) <= SIDE_MET_TOLERANCE_MM ? g : null;
 }
 
-// How `letter`'s side grows with its own flight's tread count at the current going: { s0, step } such that
-// side(n) = s0 + (n - minCount) * step. One more straight tread adds one going to its own side and nothing else,
-// so two measurements give it; the chosen variant is always measured on a real layout afterwards.
+// How `letter`'s side grows with its own flight's tread count at the current going. One more straight tread adds one
+// going to its own side and nothing else — except from 0 to 1: a flight that starts or ends with winders has them
+// pinned to the inner corner (geometry/winderArc.js), so the first count is measured on its own and the line is
+// fitted from minCount + 1 on. The chosen variant is always measured on a real layout afterwards.
 function sideVsCount(config, letter, minCount) {
   const field = COUNT_FIELD[letter];
-  const s0 = sideOf({ ...config, [field]: minCount }, letter);
-  return { s0, step: sideOf({ ...config, [field]: minCount + 1 }, letter) - s0 };
+  const at = (n) => sideOf({ ...config, [field]: n }, letter);
+  const s1 = at(minCount + 1);
+  return { minCount, first: at(minCount), s1, step: at(minCount + 2) - s1 };
+}
+
+function sideAtCount(line, n) {
+  return n === line.minCount ? line.first : line.s1 + (n - line.minCount - 1) * line.step;
 }
 
 // Every combination of tread counts for the given flights (each minCount..FIT_MAX_TREADS_PER_LEG).
@@ -184,7 +190,7 @@ export function solveStairwellFit(config) {
       for (const s of others) cand[COUNT_FIELD[s]] = combo[s];
       const derived = deriveStairData(cand);
       if (!derived.riserRangeOk || !derived.turnFeasible) continue;
-      const deviation = others.reduce((sum, s) => sum + Math.abs(lines[s].s0 + (combo[s] - minCountFor(s)) * lines[s].step - targets[s]), 0);
+      const deviation = others.reduce((sum, s) => sum + Math.abs(sideAtCount(lines[s], combo[s]) - targets[s]), 0);
       const score = scoreOf(derived, deviation);
       if (!bestHere || lexicographicallyLess(score, bestHere.score)) bestHere = { cand, score };
     }

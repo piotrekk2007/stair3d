@@ -85,8 +85,9 @@ test('the post gets ONE pocket per tread (none for a riser), at its height, as d
   assert.ok(riserCuts.length > 0, 'risers pass through posts too');
   assert.ok(riserCuts.every((j) => j.pockets.length === 0 && j.depthMm === 0), 'a riser is not housed in the post');
   assert.ok(Object.values(m.joints.pocketsByPost).flat().every((p) => p.kind !== 'riser'));
-  assert.deepEqual(m.joints.diagnostics, [], 'the winder tip behind the corner post is cut off silently (a sliver)');
-  assert.ok(m.joints.treadCuts['step-5'].droppedMm2 > 0, 'the sliver is recorded');
+  assert.deepEqual(m.joints.diagnostics, []);
+  // walkline-arc winders (winderArc.js) meet the corner post with whole treads: no tip is left behind it any more
+  assert.ok(Object.values(m.joints.treadCuts).every((c) => c.droppedMm2 === 0), 'no piece of a tread is cut off');
   // depth 0: the elements are only cut flush, no tread/riser pockets
   const flush = build({ postTreadHousingDepthMm: 0 });
   assert.ok(flush.joints.joints.filter((j) => j.type !== 'STRINGER_POST_HOUSING').every((j) => j.pockets.length === 0));

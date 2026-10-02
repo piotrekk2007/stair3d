@@ -1318,7 +1318,7 @@ planApi = attachPlanInteractions({
   // slide along — the stair's inner/outer chain lines, the same lines the nominal edge ends lie on
   getEdgeEditContext: (boundaryIndex) => {
     if (!currentPlanLayout) return null;
-    const at = (i) => boundaryEditPoints(currentPlanLayout.treads, i, config.manualEdgeOverrides, config);
+    const at = (i) => boundaryEditPoints(currentPlanLayout, i, config.manualEdgeOverrides);
     const e = at(boundaryIndex);
     if (!e) return null;
     return { ...e, innerPath: currentPlanLayout.innerFullPath, outerPath: currentPlanLayout.outerFullPath, neighbours: { before: at(boundaryIndex - 1), after: at(boundaryIndex + 1) } };

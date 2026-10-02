@@ -744,12 +744,17 @@ test('cut wanga: riserRecess equals riserBoardThickness, independent of nosing',
 // A tread whose whole seat lies on the corner post (the narrow dusza treads of a tight winder) is carried by the POST:
 // it neither shapes the board after the post nor gets a housing in it — the board is not stretched toward it.
 test('tight winder: treads standing wholly on the corner post do not shape the next board and get no housing in it', () => {
+  // walkline-arc winders: 3 × 220 mm leave only 660 − π·400/2 ≈ 32 mm of dusza for the whole turn (~11 mm a tread),
+  // and with the zone starting at the corner (split 0, clamped to the arc's half) all of it lies on the exit side —
+  // within the corner post's face
   const { config, planLayout } = build({
     stairType: 'L',
     turn1Type: 'winder',
     treadsLegA: 5,
     treadsLegB: 5,
     windersPerTurn: 3,
+    treadGoing: 220,
+    walklineSplitOffset: 0,
     stringerConstructionTypeOuter: 'closed',
     stringerConstructionTypeInner: 'closed',
   });

@@ -271,3 +271,14 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 - **Strzałki w edytorze** dla dolnego konturu działały odwrotnie (↓ spłycała deskę) — poprawione.
 - Ograniczenie: styk kopii AUTO z kawałkiem spline'u ma ciągłą pozycję i niewielką zmianę kierunku (do ok. 3° między
   próbkami co 15 mm).
+
+## Wanga wpuszczana pogłębiana dla podparcia (etap C — zabiegi od linii biegu)
+
+`stringerProfileSolver.js throatBelowReference`: deska wpuszczana musi sięgać pod tylny dolny narożnik każdego stopnia.
+Ten narożnik leży o jedno wzniesienie (Δv do następnego węzła) poniżej linii odniesienia. Na odcinku Δu × Δv potrzebny
+odstęp w normalnej to Δv·Δu/długość, czyli to samo „gardło” co przy wandze nakładanej.
+
+Zabieg rozłożony od łuku linii biegu ma długi, płaski bok zewnętrzny przy narożniku ściany (np. 17°). Tam
+`minimumStringerDepthMm − (zapas + grubość stopnia)` mogło nie wystarczyć: 1 mm braku przy 300 mm i stromym biegu.
+AUTO pogłębia wtedy całą deskę do gardła + 1 mm i zgłasza `STRINGER-DEPTH-FOR-SUPPORT` (INFO). Minimalna głębokość to
+minimum, a stopień nigdy nie zostaje bez podparcia. Zob. docs/architecture/WINDER_ARC_LAYOUT.md.

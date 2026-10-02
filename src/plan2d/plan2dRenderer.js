@@ -11,7 +11,6 @@
 import { computeWinderBlank } from '../geometry/winderBlank.js';
 import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
-import { smoothPath } from './smoothPath.js';
 import { boardPlanFootprint } from '../geometry/stringerModel.js';
 import { boundaryEditPoints } from './edgeEdit.js';
 
@@ -101,24 +100,17 @@ function axisXML(planLayout) {
   return `<polyline points="${polygonPoints(pts)}" fill="none" stroke="#8f3fd1" stroke-width="1" stroke-dasharray="12,6,2,6" ${HAIR}/>`;
 }
 
-// Linia biegu (walkline) — wymaganie 7. Liczona ZAWSZE z NOMINALNEJ (nieedytowanej) geometrii
-// granic (getNominalBoundaryPoints — patrz edgeOverrides.js), nigdy z finalnej/edytowanej,
-// bo to konstrukcyjna linia odniesienia (patrz docs/model/STAIRCASE_DATA_MODEL.md §3.2:
-// "Walkline.path czyta zawsze Nominal").
-const WALKLINE_SMOOTH_STEP_MM = 40;
-function walklineXML(planLayout, config) {
-  const n = planLayout.treads.length;
-  const t = Math.min(1, Math.max(0, (config.stairWidth - config.walklineOffset) / config.stairWidth));
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const boundary = getNominalBoundaryPoints(planLayout.treads, i);
-    if (!boundary) continue; // np. granica przez pusty innerChain podestu — brak linii biegu tutaj
-    pts.push(lerpPoint(boundary[1], boundary[0], t)); // boundary = [inner, outer]; lerp od outer(t=0) do inner(t=1)
-  }
-  if (pts.length < 2) return '';
-  // Only the DRAWING is smoothed (a Catmull-Rom curve through the very same points, so a winder turn reads as an
-  // arc and a straight flight stays straight) — the model's exact points are untouched.
-  return `<polyline points="${polygonPoints(smoothPath(pts, WALKLINE_SMOOTH_STEP_MM))}" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="5,4" ${HAIR}/>`;
+// Linia biegu (walkline) — wymaganie 7. The layout's own walkline (planLayout.walkline.path: straights and the
+// quarter arc round the inner corner, geometry/winderArc.js), the NOMINAL construction line every winder edge was laid
+// out through — never re-derived from the (possibly edited) edges. A small dot on each edge's walkline point.
+function walklineXML(planLayout) {
+  const path = planLayout.walkline?.path || [];
+  if (path.length < 2) return '';
+  const dots = (planLayout.walkline.points || [])
+    .filter(Boolean)
+    .map((p) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(1.8)}" fill="#c0392b"/>`)
+    .join('');
+  return `<g class="walkline" pointer-events="none"><polyline points="${polygonPoints(path)}" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="5,4" ${HAIR}/>${dots}</g>`;
 }
 
 // Granice biegu (wymaganie 7) — miejsca, gdzie zmienia się TYP odcinka (prosty -> zabiegowy
@@ -219,7 +211,7 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
   const h = (EDGE_HANDLE_PX / 2) * MM_PER_PX;
   let xml = '';
   for (let i = 0; i <= n; i++) {
-    const e = boundaryEditPoints(treads, i, overrides, config);
+    const e = boundaryEditPoints(planLayout, i, overrides);
     if (!e) continue;
     const isManual = !!(e.manual.inner || e.manual.outer);
     const color = isManual ? '#e08214' : '#3d6d99';
@@ -369,8 +361,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const b = planLayout.bounds;
 
   // each boundary's walkline point (the edge pivot) — numbers sit on the walkline between them
-  const pivots = [];
-  for (let i = 0; i <= planLayout.treads.length; i++) pivots.push(boundaryEditPoints(planLayout.treads, i, null, config)?.pivot || null);
+  const pivots = planLayout.walkline?.points || [];
   const treadsXML = stepsXML(planLayout, selectedStepIndex, pivots);
 
   const winderBlanksXML = !showWinderBlanks
@@ -483,7 +474,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
 
   const gridXMLStr = layers.grid ? gridXML(viewport) : '';
   const axisXMLStr = layers.axes ? axisXML(planLayout) : '';
-  const walklineXMLStr = layers.walkline ? walklineXML(planLayout, config) : '';
+  const walklineXMLStr = layers.walkline ? walklineXML(planLayout) : '';
   const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
   const stepBoundariesXMLStr = layers.stepBoundaries && !editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';

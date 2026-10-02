@@ -66,11 +66,12 @@ test('2h+s only breaks a tie: with just the key side given, the variant closest 
 });
 
 test('2h+s is informational: it never makes a given side come out further from its dimension', () => {
-  // L, key B = 2900, A = 2400, floor height 3000. Inside the 600-650 band the best is side A = 2580 (+180); the
-  // closest to the dimension is 6+6 treads at a 254.5 mm going, side A = 2427 (+27) with 2h+s = 588. The dimension wins.
-  const fit = solveStairwellFit(fitConfig({ totalRise: 3000, stairwellSideAMm: 2400, stairwellSideBMm: 2900, stairwellKeySide: 'B' }));
+  // L, key B = 2900, A = 2100, floor height 3000 (walkline-arc winders). Inside the 600-650 band the best variant is
+  // 127 mm short of side A; the closest to the dimension is +17 mm with 2h+s = 560 (checked by brute force over every
+  // tread count, the key side solved for each). The dimension wins.
+  const fit = solveStairwellFit(fitConfig({ totalRise: 3000, stairwellSideAMm: 2100, stairwellSideBMm: 2900, stairwellKeySide: 'B' }));
   const a = fit.sides.find((s) => s.side === 'A');
-  assert.equal(Math.round(a.deviation), 27);
+  assert.equal(Math.round(a.deviation), 17);
   assert.ok(fit.blondel < BLONDEL_RANGE_MM.min, 'the chosen variant is outside the band - reported by the validator, not avoided here');
   assert.ok(!fit.diagnostics.some((d) => d.parameter === 'blondel'));
 });

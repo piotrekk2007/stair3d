@@ -85,6 +85,21 @@ function finding(fields) {
   return { severity: 'INFO', ...fields };
 }
 
+const SUPPORT_MARGIN_MM = 1; // a housed board's lower edge stays at least this far below a tread's back underside corner
+
+// The largest normal offset below the reference needed to stay under a tread's back underside corner: per rising
+// reference segment Δv·Δu/length (see solveStringerProfile).
+function throatBelowReference(reference) {
+  let need = 0;
+  for (let i = 1; i < reference.length; i++) {
+    const du = reference[i].u - reference[i - 1].u;
+    const dv = reference[i].v - reference[i - 1].v;
+    const len = Math.hypot(du, dv);
+    if (du > 1e-9 && dv > 1e-9 && len > 0) need = Math.max(need, (dv * du) / len);
+  }
+  return need;
+}
+
 // --- control polygon (nominal + overrides) -------------------------------------------------------
 
 // Post anchors (see stringerProfileModel.js postAnchorId): a point on the contour exactly at a post face. An anchor
@@ -557,7 +572,26 @@ export function solveStringerProfile({ reference, constructionType, params, over
   // tread, a large top margin) could otherwise push this past nominalDepthMm and flip the lower
   // offset's direction (up instead of down), turning the board inside out.
   const topMarginFromReferenceMm = closed ? Math.min(params.topMarginMm + params.treadThicknessMm, params.nominalDepthMm) : 0;
-  const lowerDistance = closed ? params.nominalDepthMm - topMarginFromReferenceMm : params.nominalDepthMm;
+  // A housed board must also reach below every tread's underside at its BACK corner, which lies one rise (the next
+  // knot's height difference) below the reference there: on a reference segment of rise Δv over Δu that takes a normal
+  // offset of Δv·Δu/length (the same "throat" as a cut board's notch). A flat, long segment — the long outer side of a
+  // winder wrapping the wall corner (walkline-arc layout) — can need more than the minimum depth leaves below the
+  // reference; the minimum is a minimum, so the board is made deeper there instead of leaving a tread unsupported.
+  const supportDistance = closed ? throatBelowReference(reference) : 0;
+  const plainLowerDistance = closed ? params.nominalDepthMm - topMarginFromReferenceMm : params.nominalDepthMm;
+  const lowerDistance = Math.max(plainLowerDistance, supportDistance > 0 ? supportDistance + SUPPORT_MARGIN_MM : 0);
+  if (lowerDistance > plainLowerDistance + 1e-9) {
+    findings.push(
+      finding({
+        ruleId: 'STRINGER-DEPTH-FOR-SUPPORT',
+        parameter: 'minimumStringerDepthMm',
+        contour: PROFILE_CONTOURS.LOWER,
+        value: Math.round(topMarginFromReferenceMm + lowerDistance),
+        expected: params.nominalDepthMm,
+        message: `Wanga pogłębiona do ${Math.round(topMarginFromReferenceMm + lowerDistance)} mm (minimum ${params.nominalDepthMm} mm), żeby obejmowała tylne narożniki wszystkich stopni.`,
+      })
+    );
+  }
   const lowerNominal = offsetPolylineByNormal(reference, lowerDistance, 'down');
   const upperNominal = closed ? offsetPolylineByNormal(reference, topMarginFromReferenceMm, 'up') : null;
 

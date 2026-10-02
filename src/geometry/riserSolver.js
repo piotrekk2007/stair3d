@@ -127,7 +127,8 @@ function buildWinderPanels(tread, finalEdge) {
   const { innerDirection, outerDirection } = tread.winderInfo.frontEdge;
   const [inner, outer] = finalEdge;
   const points = [];
-  for (let i = 0; i <= WINDER_RISER_FAN_PANELS; i++) points.push(lerpPoint(inner, outer, i / WINDER_RISER_FAN_PANELS));
+  // the two ends ARE the edge's own points (no interpolation round-off on a diagonal winder edge)
+  for (let i = 0; i <= WINDER_RISER_FAN_PANELS; i++) points.push(i === 0 ? inner : i === WINDER_RISER_FAN_PANELS ? outer : lerpPoint(inner, outer, i / WINDER_RISER_FAN_PANELS));
 
   const panels = [];
   for (let i = 0; i < WINDER_RISER_FAN_PANELS; i++) {

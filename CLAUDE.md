@@ -1029,7 +1029,7 @@ WERYFIKACJI (`CO-MFG-J-CANTILEVER`). Tests: `geometry/__tests__/cantilever.test.
 **Right-sidebar tabs wrap** onto a second row when the sidebar is too narrow (the 5th tab "Oferta" was pushed
 off-screen by the takeoff's cost badge) — `style.css` `#right-tabs { flex-wrap: wrap }`.
 
-## Walkline in the plan 2D is drawn as a smooth curve
+## Walkline in the plan 2D is drawn as a smooth curve (SUPERSEDED — the layout's own walkline with its arc is drawn; `smoothPath.js` removed)
 
 The walkline used to be a polyline through one point per tread boundary, which zig-zags on a winder turn. `plan2d/smoothPath.js`
 (`smoothPath`, a centripetal Catmull-Rom curve resampled about every 40 mm) now redraws it THROUGH the very same points, so a
@@ -1620,10 +1620,9 @@ out), an edge end could be dragged anywhere, and only one end of an edge could c
   (`edgeOverrides.js edgeOverrideEndpoints`; the older `{ movedEndpoint, point }` is still read, so old project files
   load unchanged; no schema bump). `applyManualEdgeOverrides` moves every given end from the edge as it was before
   either moved and reverts both together if a tread degenerates.
-- **Not done (stage C, next):** the walkline as a real line-arc-line with equal goings on the arc and winders laid
-  out from it — today the pivots are the proportional layout's walkline points, so the walkline is still only
-  smoothed for display (`smoothPath`). Moving a corner of a stringer line from one tread to the other (an edge passing
-  a corner) is also part of that stage.
+- **Stage C done** (see "Winders laid out from the walkline arc" below): the pivots are now the layout's own walkline
+  points (`planLayout.walkline.points`; `boundaryEditPoints(planLayout, i, overrides)`). Still not done: moving a corner
+  of a stringer line from one tread to the other (an edge passing a corner).
 Tests: `plan2d/__tests__/edgeEdit.test.js` (both override shapes; pivot turn on the lines, pivot kept; both ends
 applied; Alt keeps the other end; fixed-size squares on the chain points; no folded tread when turning past a corner
 or a neighbour + an L/U × left/right × 3-5 winders × both ends grid — the two-ended and the folding tests confirmed to
@@ -1802,6 +1801,36 @@ No panel or interaction computes geometry.
   zone debug overlays; client mode has no material presets (realistic wood is not modelled);
   diagnostics without a step/stringer/post ID can't be highlighted; the plan is not auto-refit on
   window resize; SketchUp workflow beyond the existing OBJ/DAE export is not addressed.
+
+## Winders laid out from the walkline arc (stage C, implemented)
+
+See [docs/architecture/WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md). User decision 2026-10-02: EVERY
+project (old files too) lays winders out from the walkline; the proportional method is only the fallback when the arc
+does not fit (`planLayout.js buildTurnLocalProportional`, `turns[].method` 'walkline-arc' | 'proportional').
+- **`geometry/winderArc.js`** (pure, no imports — `config/schema.js` uses it for the feasibility check): the walkline is
+  a straight, a QUARTER ARC of radius `walklineOffset` round the inner corner Ic and a straight; the zone is
+  `windersPerTurn` equal goings ON it, `walklineSplitOffset` of it before the arc's middle (clamped so the arc fits;
+  half the zone = symmetric; UI "Zabieg przed narożnikiem (na linii biegu)", 0-2500). Each winder edge runs through its
+  walkline point and its point on the dusza; the dusza ends are spread evenly over the zone's whole inner line (through
+  the corner), so every winder has the same dusza width g·(Lw − π·off/2)/Lw (144 mm default, was 110) — never a
+  zero-width triangle (a pure fan at the corner, tried first, made them). Symmetric zone: the middle edge runs exactly
+  through Ic and Oc. A flight that STARTS (ENDS) with winders starts (ends) the zone at the corner (`pins`) — one post
+  there, as before.
+- **`planLayout.walkline = {path, points}`** (straight, winder, landing — the same arc —, U, merged landing, mirrored):
+  drawn by the plan 2D (`walklineXML`, with a dot per edge point; step numbers between the points), the 2D edge pivots.
+- **Winder width (PL-LEGAL-C-01) measured 0.4 m FROM the dusza** (`walklineModel.js offsetLineFromInner`: offset
+  straights + an arc round the corner; each edge crossed with it; `treadGoingAtOffsetFromInner(tread, D, planLayout)`).
+  The old "400 mm along the edge" measured slanted winder edges too close to the dusza — false ERRORs on the default L.
+- **Knock-on fixes**: a housed board is deepened where the minimum depth would leave a tread's back underside corner
+  outside it (`stringerProfileSolver.js throatBelowReference`, INFO `STRINGER-DEPTH-FOR-SUPPORT`); `stairwellFit.js`
+  measures a flight's 0 → 1 tread step on its own (pinned zone); glass between posts splits a span with the THINNER
+  post (`railingGlass.js`, a 1806 mm pane before); riser fan ends are the edge's own points; a winder at the corner
+  post loses no tip any more.
+- **Limits**: a ~10 mm dusza with slanted edges can flip the housed recess order on the wanga (no tread outline crosses
+  itself — 624 configs checked); 2 winders per turn fall back to the proportional layout, which crashes the wanga build
+  in some configs (pre-existing: 24 cases on the old code, 14 now); one dusza distribution only (even).
+Tests: `geometry/__tests__/winderArc.test.js` (+ updated scenarios in riser/validator/pipeline/joints/post/fit tests
+whose numbers came from the proportional layout).
 
 ## Winder riser fix (implemented)
 

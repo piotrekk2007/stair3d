@@ -1,4 +1,5 @@
 import { resolveOpening, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
+import { arcWinderGeometry } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
 export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
@@ -40,10 +41,11 @@ export function createDefaultConfig() {
     mergeLandings: true,
 
     walklineOffset: 400, // mm, odsunięcie linii biegu od policzka wewnętrznego (duszy) — zgodnie z wymogiem 40-50cm
-    // mm, gdzie na DŁUGOŚCI zabiegu (wzdłuż kierunku biegu) leży punkt załamania linii biegu —
-    // czyli ile z całkowitej długości zabiegu (windersPerTurn * treadGoing) przypada PRZED
-    // załamaniem. Niezależne od walklineOffset (ten steruje tylko odsunięciem w poprzek, od
-    // duszy) — pozwala na niesymetryczny zabieg (więcej stopni przed narożnikiem niż po nim).
+    // mm: ile z długości zabiegu (windersPerTurn * treadGoing, mierzonej NA LINII BIEGU) przypada przed środkiem
+    // łuku linii biegu (punktem na przekątnej narożnika — geometry/winderArc.js). Ograniczane tak, żeby cały łuk
+    // mieścił się w zabiegu (od π·walklineOffset/4 do długości zabiegu minus tyle). Niezależne od walklineOffset —
+    // pozwala na niesymetryczny zabieg (więcej stopni przed narożnikiem niż po nim); połowa długości zabiegu =
+    // zabieg symetryczny.
     walklineSplitOffset: 400,
     minInnerWidth: 110, // mm, minimalna dopuszczalna szerokość stopnia przy duszy
 
@@ -245,11 +247,19 @@ export function createDefaultConfig() {
   };
 }
 
-function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth) {
+function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth) {
   if (turnType === 'landing') {
     // Podest to płaski kwadrat — brak zwężenia przy duszy, warunek zabiegu nie dotyczy.
     return { type: 'landing', feasible: true, message: '', minInnerSegment: null, minInnerWidthOk: true };
   }
+  // Winders laid out from the walkline arc (geometry/winderArc.js — the layout planLayout.js uses whenever the arc
+  // fits): every winder has the same width at the dusza.
+  const arc = arcWinderGeometry({ stairWidth, treadGoing, walklineOffset, walklineSplitOffset }, 0, windersPerTurn);
+  if (arc) {
+    const minInnerSegment = arc.duszaWidth;
+    return { type: 'winder', method: 'walkline-arc', feasible: true, message: '', minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth };
+  }
+  // The arc does not fit (planLayout.js falls back to the proportional layout) — the old check applies.
   const totalTurnPathLength = windersPerTurn * treadGoing;
   // Policzek wewnętrzny "traci" walklineOffset przed narożnikiem i walklineSplitOffset po nim
   // (patrz planLayout.js/buildTurnLocal: innerTurnLen = distanceFromCorner_B - walklineOffset,
@@ -266,7 +276,7 @@ function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffs
     };
   }
   const minInnerSegment = innerTurnPathLength / windersPerTurn;
-  return { type: 'winder', feasible: true, message: '', minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth };
+  return { type: 'winder', method: 'proportional', feasible: true, message: '', minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth };
 }
 
 export function deriveStairData(config) {
@@ -302,8 +312,8 @@ export function deriveStairData(config) {
   const riserRangeOk = riserHeight >= minRiser && riserHeight <= maxRiser;
 
   const turnChecks = [];
-  if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth));
-  if (numTurns >= 2) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth));
+  if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
+  if (numTurns >= 2) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
 
   const turnFeasible = turnChecks.every((t) => t.feasible);
   const turnFeasibleMessage = turnChecks

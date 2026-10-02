@@ -56,14 +56,14 @@ test('validateStaircase: covers every checklist item across a deliberately provo
   // Tight winders (narrow width + narrow stairWidth) and an undersized ceiling opening are
   // enough to exercise winder width, headroom/collision, and stringer parallelism/spacing
   // together in one config, alongside the always-on structural constraints.
-  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, windersPerTurn: 3, treadsLegB: 3, stairWidth: 700, hasRiserBoards: true }));
+  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 3, windersPerTurn: 3, treadsLegB: 3, stairWidth: 700, hasRiserBoards: true, treadGoing: 240 }));
   const ruleIds = new Set(result.diagnostics.map((d) => d.ruleId));
   assert.ok(ruleIds.has('PL-LEGAL-C-01'), 'winder minimum width must be checked');
   assert.ok(ruleIds.has('VALIDATOR-CEILING-COLLISION'), 'collisions must be checked');
 });
 
 test('formatFinding matches the required LEVEL / step / message display convention', () => {
-  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, windersPerTurn: 3, treadsLegB: 2, stairWidth: 700 }));
+  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, windersPerTurn: 3, treadsLegB: 2, stairWidth: 700, treadGoing: 240 }));
   const finding = result.diagnostics.find((d) => d.ruleId === 'PL-LEGAL-C-01');
   const text = formatFinding(finding);
   const lines = text.split('\n');
@@ -73,7 +73,7 @@ test('formatFinding matches the required LEVEL / step / message display conventi
 });
 
 test('formatReport concatenates every finding, separated by a blank line', () => {
-  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, windersPerTurn: 3, treadsLegB: 2, stairWidth: 700 }));
+  const result = validateStaircase(config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, windersPerTurn: 3, treadsLegB: 2, stairWidth: 700, treadGoing: 240 }));
   const report = formatReport(result.diagnostics);
   assert.equal(report.split('\n\n').length, result.diagnostics.length);
 });

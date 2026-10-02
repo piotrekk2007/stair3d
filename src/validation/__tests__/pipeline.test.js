@@ -56,9 +56,10 @@ test('runValidationPipeline: a legally-compliant residential straight flight has
 // --- Winder-width validation is actually wired end-to-end (PL-LEGAL-C-01) ---
 
 test('runValidationPipeline: WINDER stage flags a winder tread narrower than 250mm at 400mm from the inner edge', () => {
-  // A tight turn (few winders, small offsets) squeezes the inner part of each winder tread.
+  // Winders laid out from the walkline arc have the full going ON the walkline (400 mm from the dusza here), so the
+  // rule is broken by a going under 250 mm, not by a tight turn as such.
   const result = runValidationPipeline(
-    config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 3, walklineOffset: 400, walklineSplitOffset: 400, stairWidth: 700 })
+    config({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 3, walklineOffset: 400, walklineSplitOffset: 400, stairWidth: 700, treadGoing: 240 })
   );
   const winderDiags = result.stages.WINDER;
   const c01 = winderDiags.find((d) => d.ruleId === 'PL-LEGAL-C-01');

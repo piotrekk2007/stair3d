@@ -27,14 +27,14 @@ export function buildFacts(config, derived, planLayout, treadModels) {
     .filter((t) => t.type === 'winder')
     .map((t) => ({
       stepId: t.stepId,
-      goingAt400mm: treadGoingAtOffsetFromInner(planLayout.treads[t.index], WINDER_WIDTH_LEGAL_OFFSET_MM),
+      goingAt400mm: treadGoingAtOffsetFromInner(planLayout.treads[t.index], WINDER_WIDTH_LEGAL_OFFSET_MM, planLayout),
     }));
 
   const straightTreadGoings = treadModels
     .filter((t) => t.type === 'straight')
     .map((t) => ({
       stepId: t.stepId,
-      going: treadGoingAtOffsetFromInner(planLayout.treads[t.index], config.walklineOffset),
+      going: treadGoingAtOffsetFromInner(planLayout.treads[t.index], config.walklineOffset, planLayout),
     }));
 
   // Elevation is always (index+1)*riserHeight (see treadSolver.js) — riser height is therefore

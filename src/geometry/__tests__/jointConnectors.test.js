@@ -73,10 +73,12 @@ test('every stringer joint gets its bolts: holes in the post (through, exit on t
   assert.deepEqual(none.joints.holesBySegment, {});
 });
 
-// With risers the two inner boards enter the corner post's adjacent faces at almost the same height: centred, their
-// through-holes cross inside the post. The solver moves the later group (as little as possible) so they clear.
+// With risers the two inner boards can enter the corner post's adjacent faces at almost the same height (with
+// walkline-arc winders: e.g. 600 mm of the zone before the corner): centred, their through-holes cross inside the
+// post. The solver moves the later group (as little as possible) so they clear.
 test('holes of different joints never cross inside a post; a group is moved only as far as needed', () => {
-  for (const patch of [{}, { hasRiserBoards: true }, { hasRiserBoards: true, turnDirection: 'left' }, { stairType: 'U', hasRiserBoards: true }, { windersPerTurn: 3 }]) {
+  const crossing = { hasRiserBoards: true, walklineSplitOffset: 600 };
+  for (const patch of [{}, { hasRiserBoards: true }, crossing, { ...crossing, turnDirection: 'left' }, { stairType: 'U', ...crossing }, { windersPerTurn: 3 }]) {
     const m = build(patch);
     for (const [postId, holes] of Object.entries(m.joints.holesByPost)) {
       const post = m.postModels.find((x) => x.postId === postId);
@@ -93,7 +95,7 @@ test('holes of different joints never cross inside a post; a group is moved only
     for (const c of m.joints.connectors) assert.ok(Math.abs(c.shiftMm || 0) <= Math.max(connectorParams(m.fullConfig).spacingMm, 20));
     assert.deepEqual(connectorFindings(m), [], JSON.stringify(patch));
   }
-  assert.ok(build({ hasRiserBoards: true }).joints.connectors.some((c) => c.shiftMm), 'the risers case really needed a shift');
+  assert.ok(build(crossing).joints.connectors.some((c) => c.shiftMm), 'the crossing case really needed a shift');
 });
 
 test('findings: too shallow a section, unavoidable crossing, a weakened post, a blind bolt short of the pocket, nut bores overlapping', () => {
@@ -104,7 +106,7 @@ test('findings: too shallow a section, unavoidable crossing, a weakened post, a 
   assert.equal(edge[0].elementId, 'post-start');
   assert.ok(edge[0].message.includes(`${CONNECTOR_EDGE_DISTANCE_FACTOR}d`));
   // many bolts close together on a thin post: crossings cannot be avoided, and the post loses most of its section
-  const bad = build({ jointConnectorSpacingMm: 20, jointConnectorCount: 4, postSize: 70 });
+  const bad = build({ jointConnectorSpacingMm: 20, jointConnectorCount: 4, postSize: 70, hasRiserBoards: true, walklineSplitOffset: 300 });
   const ids = connectorFindings(bad).map((d) => d.ruleId);
   assert.ok(ids.includes('JOINT-CONNECTOR-CLASH'));
   assert.ok(ids.includes('JOINT-POST-WEAKENED'));

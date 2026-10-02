@@ -18,10 +18,10 @@ function build(patch = {}) {
 const WINDER_BOUNDARY = 7;
 
 function dragInner(built, boundary, raw) {
-  const e = boundaryEditPoints(built.planLayout.treads, boundary, built.fullConfig.manualEdgeOverrides, built.fullConfig);
+  const e = boundaryEditPoints(built.planLayout, boundary, built.fullConfig.manualEdgeOverrides);
   const neighbours = {
-    before: boundaryEditPoints(built.planLayout.treads, boundary - 1, built.fullConfig.manualEdgeOverrides, built.fullConfig),
-    after: boundaryEditPoints(built.planLayout.treads, boundary + 1, built.fullConfig.manualEdgeOverrides, built.fullConfig),
+    before: boundaryEditPoints(built.planLayout, boundary - 1, built.fullConfig.manualEdgeOverrides),
+    after: boundaryEditPoints(built.planLayout, boundary + 1, built.fullConfig.manualEdgeOverrides),
   };
   return { e, turned: pivotEdgeDrag({ endpoint: 'inner', raw, pivot: e.pivot, innerPath: built.planLayout.innerFullPath, outerPath: built.planLayout.outerFullPath, nominal: e.nominal, neighbours }) };
 }
@@ -44,14 +44,14 @@ test('dragging the dusza end turns the edge about its walkline point: both ends 
 });
 
 function e0(built) {
-  return boundaryEditPoints(built.planLayout.treads, WINDER_BOUNDARY, {}, built.fullConfig);
+  return boundaryEditPoints(built.planLayout, WINDER_BOUNDARY, {});
 }
 
 test('the turned edge is applied to BOTH treads, and the edge still crosses the walkline at the same point', () => {
   const base = build();
   const { e, turned } = dragInner(base, WINDER_BOUNDARY, { x: e0(base).inner.x + 60, y: e0(base).inner.y + 40 });
   const edited = build({ manualEdgeOverrides: { [WINDER_BOUNDARY]: turned } });
-  const ed = boundaryEditPoints(edited.planLayout.treads, WINDER_BOUNDARY, edited.fullConfig.manualEdgeOverrides, edited.fullConfig);
+  const ed = boundaryEditPoints(edited.planLayout, WINDER_BOUNDARY, edited.fullConfig.manualEdgeOverrides);
   assert.deepEqual(ed.inner, turned.inner);
   assert.deepEqual(ed.outer, turned.outer);
   // the walkline point of the edge is the same (nominal) pivot — the going on the walkline is unchanged
@@ -115,7 +115,7 @@ test('a turned edge never carries an end past a corner of the stringer line (no 
 });
 
 function e0b(built, boundary) {
-  return boundaryEditPoints(built.planLayout.treads, boundary, {}, built.fullConfig);
+  return boundaryEditPoints(built.planLayout, boundary, {});
 }
 
 test('grid: turning any edge from either end never folds a tread (L/U, left/right, 3-5 winders)', async () => {
@@ -127,7 +127,7 @@ test('grid: turning any edge from either end never folds a tread (L/U, left/righ
         const patch = { stairType, turnDirection, windersPerTurn, treadsLegA: 3, treadsLegB: stairType === 'U' ? 2 : 4, treadsLegC: 3 };
         const base = build(patch);
         const n = base.planLayout.treads.length;
-        const at = (i) => boundaryEditPoints(base.planLayout.treads, i, {}, base.fullConfig);
+        const at = (i) => boundaryEditPoints(base.planLayout, i, {});
         for (let i = 0; i <= n; i++) {
           const e = at(i);
           if (!e?.pivot) continue;

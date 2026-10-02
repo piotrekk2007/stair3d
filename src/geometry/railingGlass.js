@@ -108,9 +108,12 @@ function straightStretches(path, cum) {
 export function intermediatePostSplits(path, config) {
   const cum = cumulative(path);
   const L = cum[cum.length - 1];
-  // a span holds one pane + the clamp gaps + a post (the thicker of a balustrade post and a structural one, which may
-  // stand at a run's end) — so a pane never exceeds the maximum width
-  const post = Math.max(config.railingPostSizeMm || 0, config.postSize || 0);
+  // a span holds one pane + the clamp gaps + a post (half at each end). The THINNER of a balustrade post and a
+  // structural one (either may stand at a run's end): a thinner post leaves a wider pane, so counting with it is what
+  // keeps every pane within the maximum width (with the thicker one a 1916 mm span between two thinner posts gave a
+  // 1806 mm pane — the U's middle flight with walkline-arc winders).
+  const sizes = [config.railingPostSizeMm, config.postSize].filter((v) => v > 0);
+  const post = sizes.length ? Math.min(...sizes) : 0;
   const span = (config.railingGlassMaxWidthMm || 1800) + post + 2 * GLASS_TO_POST_MM;
   const n = Math.max(1, Math.ceil(L / span - 1e-9));
   return Array.from({ length: n - 1 }, (_, k) => (L * (k + 1)) / n);

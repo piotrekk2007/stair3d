@@ -145,7 +145,7 @@ export function createUI({
 
   const winder = gui.addFolder('Geometria zabiegu');
   lockable(winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]'), 'walklineOffset');
-  lockable(winder.add(config, 'walklineSplitOffset', 250, 500, 10).name('Przesunięcie punktu podziału [mm]'), 'walklineSplitOffset');
+  lockable(winder.add(config, 'walklineSplitOffset', 0, 2500, 10).name('Zabieg przed narożnikiem (na linii biegu) [mm]'), 'walklineSplitOffset');
   lockable(winder.add(config, 'minInnerWidth', 80, 200, 5).name('Min. szer. przy duszy [mm]'), 'minInnerWidth');
 
   const build = gui.addFolder('Konstrukcja');

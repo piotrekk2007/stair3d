@@ -1,11 +1,13 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs } from './edgeOverrides.js';
+import { arcWinderGeometry, landingArcPoints } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
-// Metoda zabiegu: PROPORCJONALNA (linia podziału) — punkty podziału na linii biegu są
-// rozmieszczone równomiernie (stała głębokość), a odpowiadające im punkty na policzku
-// zewn./wewn. wyznaczane są przez zachowanie tej samej proporcji odległości wzdłuż
-// granicy zewnętrznej / wewnętrznej w strefie zabiegu.
+// Metoda zabiegu: OD LINII BIEGU (winderArc.js) — linia biegu to prosta, ćwiartka łuku wokół narożnika duszy i
+// prosta; zabieg dzieli ją na równe odcinki, a każda krawędź przechodzi przez swój punkt na niej i swój punkt na
+// duszy (rozwinięcie). Gdy łuk nie mieści się w zabiegu, zostaje dawna metoda PROPORCJONALNA
+// (buildTurnLocalProportional). Układ zwraca też linię biegu jako dane: `walkline = { path, points }` — droga do
+// rysowania (łuk jako cięciwy) i punkt linii biegu na każdej granicy stopni (null, gdzie go nie ma).
 //
 // Zakręty (L, U) są budowane w LOKALNYM układzie współrzędnych (buildTurnLocal) w
 // konwencji "skręt w prawo", a następnie łączone łańcuchowo poprzez transformację
@@ -189,6 +191,32 @@ function transformWinderInfo(winderInfo, frame) {
   };
 }
 
+function transformWalkline(walkline, frame) {
+  if (frame === IDENTITY_FRAME) return walkline;
+  return { path: transformPoints(walkline.path, frame), points: walkline.points.map((p) => (p ? toWorld(p, frame) : null)) };
+}
+
+// The walkline point at a fraction of an edge measured from its OUTER end — the old (proportional) definition, kept
+// for the fallback layout and the straight stair, where it is exact.
+function walkPointOnEdge(inner, outer, stairWidth, walklineOffset) {
+  const t = Math.min(1, Math.max(0, (stairWidth - walklineOffset) / stairWidth));
+  return { x: outer.x + (inner.x - outer.x) * t, y: outer.y + (inner.y - outer.y) * t };
+}
+
+// Arc length of `p` along a polyline (p is on it or close to it).
+function alongOnPath(path, cum, p) {
+  let best = null;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const ab = { x: path[i].x - a.x, y: path[i].y - a.y };
+    const len2 = ab.x * ab.x + ab.y * ab.y;
+    const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2)) : 0;
+    const d = Math.hypot(a.x + ab.x * t - p.x, a.y + ab.y * t - p.y);
+    if (!best || d < best.d - 1e-9) best = { d, along: cum[i - 1] + Math.sqrt(len2) * t };
+  }
+  return best ? best.along : 0;
+}
+
 function transformTread(tread, frame) {
   if (frame === IDENTITY_FRAME) return tread;
   return {
@@ -227,20 +255,139 @@ function buildStraightLayout(config) {
     });
   }
 
+  const walkX = walkPointOnEdge({ x: stairWidth, y: 0 }, { x: 0, y: 0 }, stairWidth, config.walklineOffset).x;
+  const points = [];
+  for (let k = 0; k <= numTreads; k++) points.push({ x: walkX, y: k * treadGoing });
+
   return {
     outerFullPath,
     innerFullPath,
     treads,
     turns: [],
+    walkline: { path: [points[0], points[points.length - 1]], points },
     // Outer AND inner line: a straight stair's outer line alone is one segment with zero width.
     bounds: computeBounds([...outerFullPath, ...innerFullPath]),
   };
 }
 
-// Buduje pojedynczy odcinek prosty->zabieg->prosty w lokalnym układzie (local +Y = kierunek
-// wejścia, local +X = kierunek wyjścia po skręcie w prawo o 90°, local x=0 = policzek
-// zewnętrzny, local x=stairWidth = policzek wewnętrzny/dusza).
-function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitOffset }, treadsIn, windersCount, treadsOut, startIndex) {
+// One straight -> winders -> straight piece laid out from the walkline (winderArc.js); the proportional layout when
+// the arc does not fit in the winder zone. Same local frame, same output shape as buildTurnLocalProportional.
+function buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, pins = {}) {
+  const geo = arcWinderGeometry(params, treadsIn, windersCount, pins);
+  if (!geo) return buildTurnLocalProportional(params, treadsIn, windersCount, treadsOut, startIndex);
+  const { stairWidth: W, treadGoing: g, walklineOffset: off } = params;
+  const { s0, Yc, Ic, Oc, xTurnEnd } = geo;
+  const zoneEnd = treadsIn + windersCount;
+  const xEnd = xTurnEnd + treadsOut * g;
+  const outerPath = [{ x: 0, y: 0 }, Oc, { x: xEnd, y: Yc + W }];
+  const innerPath = [{ x: W, y: 0 }, Ic, { x: xEnd, y: Yc }];
+  const outerTurnPath = [{ x: 0, y: s0 }, Oc, { x: xTurnEnd, y: Yc + W }];
+  const innerTurnPath = [{ x: W, y: s0 }, Ic, { x: xTurnEnd, y: Yc }];
+  const outerTurnCum = cumulativeDistances(outerTurnPath);
+  const innerTurnCum = cumulativeDistances(innerTurnPath);
+  const numTreads = treadsIn + windersCount + treadsOut;
+  const ENTRANCE = { x: 0, y: 1 };
+  const EXIT = { x: 1, y: 0 };
+
+  const innerPts = [];
+  const outerPts = [];
+  const walkPts = [];
+  const innerAlong = [];
+  const outerAlong = [];
+  const innerDirAt = [];
+  const outerDirAt = [];
+  for (let k = 0; k <= numTreads; k++) {
+    if (k < treadsIn) {
+      innerPts.push({ x: W, y: k * g });
+      outerPts.push({ x: 0, y: k * g });
+      walkPts.push({ x: W - off, y: k * g });
+      innerDirAt.push(ENTRANCE);
+      outerDirAt.push(ENTRANCE);
+    } else if (k > zoneEnd) {
+      const x = xTurnEnd + (k - zoneEnd) * g;
+      innerPts.push({ x, y: Yc });
+      outerPts.push({ x, y: Yc + W });
+      walkPts.push({ x, y: Yc + off });
+      innerDirAt.push(EXIT);
+      outerDirAt.push(EXIT);
+    } else {
+      const b = geo.boundaries[k - treadsIn];
+      innerPts.push(b.inner);
+      outerPts.push(b.outer);
+      walkPts.push(b.walk);
+      const ia = alongOnPath(innerTurnPath, innerTurnCum, b.inner);
+      const oa = alongOnPath(outerTurnPath, outerTurnCum, b.outer);
+      innerAlong[k] = ia;
+      outerAlong[k] = oa;
+      // the side's own direction where the edge meets it: before or after that side's corner
+      innerDirAt.push(k === treadsIn ? ENTRANCE : k === zoneEnd ? EXIT : ia <= innerTurnCum[1] + 1e-9 ? ENTRANCE : EXIT);
+      outerDirAt.push(k === treadsIn ? ENTRANCE : k === zoneEnd ? EXIT : oa <= outerTurnCum[1] + 1e-9 ? ENTRANCE : EXIT);
+    }
+  }
+
+  const treads = [];
+  for (let i = 0; i < numTreads; i++) {
+    const k0 = i;
+    const k1 = i + 1;
+    const isWinder = k0 >= treadsIn && k0 < zoneEnd;
+    const innerChain = isWinder ? subPathPoints(innerTurnPath, innerTurnCum, innerAlong[k0], innerAlong[k1]) : [innerPts[k0], innerPts[k1]];
+    const outerChain = isWinder ? subPathPoints(outerTurnPath, outerTurnCum, outerAlong[k0], outerAlong[k1]) : [outerPts[k0], outerPts[k1]];
+    const tread = {
+      index: startIndex + i,
+      type: isWinder ? 'winder' : 'straight',
+      outline: [...innerChain, ...[...outerChain].reverse()],
+      frontEdge: [innerPts[k0], outerPts[k0]],
+      backEdge: [innerPts[k1], outerPts[k1]],
+      innerChain,
+      outerChain,
+    };
+    if (isWinder) {
+      const m = i - treadsIn;
+      const inner0 = innerPts[k0];
+      const inner1 = innerPts[k1];
+      const outer0 = outerPts[k0];
+      const outer1 = outerPts[k1];
+      tread.winderInfo = {
+        frontEdge: { inner: inner0, outer: outer0, innerDirection: innerDirAt[k0], outerDirection: outerDirAt[k0] },
+        backEdge: { inner: inner1, outer: outer1, innerDirection: innerDirAt[k1], outerDirection: outerDirAt[k1] },
+        // the walking direction of the tread = the walkline's own direction in its middle
+        direction: normalizeVector(geo.tangentAt(s0 + (m + 0.5) * g)),
+        stationStart: m * g,
+        stationEnd: (m + 1) * g,
+        widths: {
+          atFront: Math.hypot(outer0.x - inner0.x, outer0.y - inner0.y),
+          atBack: Math.hypot(outer1.x - inner1.x, outer1.y - inner1.y),
+        },
+        walklinePosition: { index: m, count: windersCount, fractionStart: m / windersCount, fractionEnd: (m + 1) / windersCount },
+      };
+    }
+    treads.push(tread);
+  }
+
+  const walkPath = [{ x: W - off, y: 0 }, ...geo.arcPoints, { x: xEnd, y: Yc + off }].filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-6);
+  return {
+    outerPath,
+    innerPath,
+    treads,
+    turnInfo: {
+      type: 'winder',
+      innerCorner: Ic,
+      outerCorner: Oc,
+      innerTurnSegmentLength: geo.duszaWidth,
+      outerBendPoint: Oc,
+      innerBendPoint: Ic,
+      method: 'walkline-arc',
+    },
+    walkline: { path: walkPath, points: walkPts },
+    numTreadsUsed: numTreads,
+    exitOuterPoint: outerPath[outerPath.length - 1],
+  };
+}
+
+// FALLBACK (the arc does not fit — see buildTurnLocal): the old PROPORTIONAL layout. Buduje pojedynczy odcinek
+// prosty->zabieg->prosty w lokalnym układzie (local +Y = kierunek wejścia, local +X = kierunek wyjścia po skręcie w
+// prawo o 90°, local x=0 = policzek zewnętrzny, local x=stairWidth = policzek wewnętrzny/dusza).
+function buildTurnLocalProportional({ stairWidth, treadGoing, walklineOffset, walklineSplitOffset }, treadsIn, windersCount, treadsOut, startIndex) {
   const Yc = treadsIn * treadGoing;
   const Ic = { x: stairWidth, y: Yc };
   const Oc = { x: 0, y: Yc + stairWidth };
@@ -401,7 +548,12 @@ function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitO
       // pojedynczego ostrego punktu do domykania przy braku słupa.
       outerBendPoint: Oc,
       innerBendPoint: null,
+      method: 'proportional',
     },
+    walkline: (() => {
+      const points = innerPts.map((inner, k) => walkPointOnEdge(inner, outerPts[k], stairWidth, walklineOffset));
+      return { path: points, points };
+    })(),
     numTreadsUsed: numTreads,
     exitOuterPoint: outerPath[outerPath.length - 1],
   };
@@ -410,7 +562,7 @@ function buildTurnLocal({ stairWidth, treadGoing, walklineOffset, walklineSplitO
 // Podest: płaski kwadrat o boku stairWidth wypełniający zakręt zamiast stopni zabiegowych.
 // Buduje też, tak jak buildTurnLocal, proste stopnie WEJŚCIOWE (treadsIn) i WYJŚCIOWE
 // (treadsOut) w tym samym lokalnym układzie — inaczej ginęłyby (nie są budowane nigdzie indziej).
-function buildLandingLocal({ stairWidth, treadGoing }, treadsIn, treadsOut, startIndex) {
+function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn, treadsOut, startIndex) {
   const Yc = treadsIn * treadGoing;
   const Ic = { x: stairWidth, y: Yc };
   const Oc = { x: 0, y: Yc + stairWidth };
@@ -483,14 +635,25 @@ function buildLandingLocal({ stairWidth, treadGoing }, treadsIn, treadsOut, star
       outerBendPoint: Oc,
       innerBendPoint: Ic,
     },
+    // across the landing the walkline is the same quarter arc round the inner corner as in a winder turn
+    walkline: (() => {
+      const off = walklineOffset;
+      const points = [];
+      for (let k = 0; k <= treadsIn; k++) points.push({ x: stairWidth - off, y: k * treadGoing });
+      for (let m = 0; m <= treadsOut; m++) points.push({ x: stairWidth + m * treadGoing, y: Yc + off });
+      const path = [{ x: stairWidth - off, y: 0 }, ...landingArcPoints(stairWidth, off, Yc), { x: xEnd, y: Yc + off }].filter(
+        (p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-6
+      );
+      return { path, points };
+    })(),
     numTreadsUsed: treadsIn + 1 + treadsOut,
     exitOuterPoint: outerPath[outerPath.length - 1],
   };
 }
 
-function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut, startIndex) {
+function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut, startIndex, pins) {
   if (turnType === 'landing') return buildLandingLocal(params, treadsIn, treadsOut, startIndex);
-  return buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex);
+  return buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, pins);
 }
 
 // numTurns: 1 dla L, 2 dla U. turn1Type/turn2Type: 'winder' | 'landing' niezależnie na każdym zakręcie.
@@ -498,6 +661,7 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
   const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
   const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset };
+  // (buildTurnLocal lays winders out from the walkline; landings draw it as the same quarter arc)
 
   // "1 duży podest" zamiast 2 półpodestów: gdy OBA zakręty w U są typu 'landing' i mergeLandings
   // jest włączone, traktujemy je jako jedną, ciągłą platformę na jednej wysokości — patrz
@@ -506,26 +670,36 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
   // mergeLandings=false zachowanie wraca do 2 osobnych półpodestów na kolejnych wysokościach.
   const isBigLanding = numTurns === 2 && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
 
-  const call1 = buildTurnOrLanding(turn1Type, params, treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0);
+  // a flight that starts (ends) with winders starts (ends) at the inner corner — see winderArc.js pins
+  const call1 = buildTurnOrLanding(turn1Type, params, treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0, {
+    startsFlight: treadsLegA === 0,
+    endsFlight: numTurns === 1 && treadsLegB === 0,
+  });
 
   let outerFullPath = [...call1.outerPath];
   let innerFullPath = [...call1.innerPath];
   let treads = [...call1.treads];
   const turns = [call1.turnInfo];
+  let walkPath = [...call1.walkline.path];
+  let walkPoints = [...call1.walkline.points];
 
   if (numTurns === 2) {
     const frame2 = makeFrame(call1.exitOuterPoint, IDENTITY_FRAME.right);
-    const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed);
+    const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
 
     outerFullPath = outerFullPath.concat(transformPoints(call2.outerPath, frame2).slice(1));
     innerFullPath = innerFullPath.concat(transformPoints(call2.innerPath, frame2).slice(1));
     let call2Treads = call2.treads.map((t) => transformTread(t, frame2));
+    const walk2 = transformWalkline(call2.walkline, frame2);
+    walkPath = walkPath.concat(walk2.path.slice(1));
+    walkPoints = walkPoints.concat(walk2.points.slice(1));
 
     if (isBigLanding) {
       const landingA = treads[treads.length - 1];
       const landingB = call2Treads[0];
       treads[treads.length - 1] = mergeLandingPair(landingA, landingB);
       call2Treads = call2Treads.slice(1).map((t) => ({ ...t, index: t.index - 1 }));
+      walkPoints.splice(call1.numTreadsUsed, 1); // the boundary between the two halves is gone
     }
 
     treads = treads.concat(call2Treads);
@@ -536,6 +710,7 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
       innerTurnSegmentLength: call2.turnInfo.innerTurnSegmentLength,
       outerBendPoint: call2.turnInfo.outerBendPoint ? toWorld(call2.turnInfo.outerBendPoint, frame2) : null,
       innerBendPoint: call2.turnInfo.innerBendPoint ? toWorld(call2.turnInfo.innerBendPoint, frame2) : null,
+      ...(call2.turnInfo.method ? { method: call2.turnInfo.method } : {}),
     });
   }
 
@@ -551,6 +726,8 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
       outerChain: t.outerChain.map(mirrorX),
       ...(t.winderInfo ? { winderInfo: mirrorWinderInfo(t.winderInfo) } : {}),
     }));
+    walkPath = walkPath.map(mirrorX);
+    walkPoints = walkPoints.map((p) => (p ? mirrorX(p) : null));
     for (const t of turns) {
       t.innerCorner = mirrorX(t.innerCorner);
       t.outerCorner = mirrorX(t.outerCorner);
@@ -564,6 +741,7 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
     innerFullPath,
     treads,
     turns,
+    walkline: { path: walkPath, points: walkPoints },
     // Outer AND inner line: a straight stair's outer line alone is one segment with zero width.
     bounds: computeBounds([...outerFullPath, ...innerFullPath]),
   };

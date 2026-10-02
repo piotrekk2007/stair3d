@@ -4,6 +4,7 @@
 // docs/architecture/CONSOLIDATION.md for the history of this exact bug.
 
 import test from 'node:test';
+import { edgesEqual } from '../treadSolver.js';
 import assert from 'node:assert/strict';
 
 import { createDefaultConfig, deriveStairData } from '../../config/schema.js';
@@ -69,7 +70,10 @@ test('THE PROBLEMATIC CASE: at least one winder tread has a genuinely divergent 
   // does NOT assume WHICH tread shows it (that depends on where the outer bend point Oc falls
   // relative to walkline stations — see planLayout.js) — only that the phenomenon is real and
   // model-visible somewhere in a typical turn.
-  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5 });
+  // The divergence belongs to the PROPORTIONAL layout, which since the walkline-arc layout (winderArc.js) is only the
+  // fallback when the arc does not fit the zone: 3 winders × 255 mm = 765 mm < π·500/2 = 785 mm of arc.
+  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 3, treadGoing: 255, walklineOffset: 500, walklineSplitOffset: 250 });
+  assert.equal(planLayout.turns[0].method, 'proportional');
   const winderModels = planLayout.treads.filter((t) => t.type === 'winder').map((t) => buildRiserModel(t, config));
 
   const maxSpread = Math.max(...winderModels.map((m) => m.directionSpreadDeg));
@@ -80,6 +84,14 @@ test('THE PROBLEMATIC CASE: at least one winder tread has a genuinely divergent 
   for (const model of winderModels) {
     assert.ok(model.maxPanelWidth < config.stairWidth * 1.5, `expected fan panels to stay reasonably sized even with a ${model.directionSpreadDeg.toFixed(1)}° direction spread, got maxPanelWidth=${model.maxPanelWidth.toFixed(0)}mm`);
   }
+});
+
+test('walkline-arc layout, zone symmetric about the corner diagonal: both sides of every winder edge turn together, so no riser fans out', () => {
+  // 5 winders × 270 mm = 1350 mm of walkline, half of it (675 mm) before the arc's middle
+  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5, treadGoing: 270, walklineSplitOffset: 675 });
+  assert.equal(planLayout.turns[0].method, 'walkline-arc');
+  const winderModels = planLayout.treads.filter((t) => t.type === 'winder').map((t) => buildRiserModel(t, config));
+  assert.ok(winderModels.length === 5 && winderModels.every((m) => m.directionSpreadDeg < 1e-9));
 });
 
 test('angleBetweenDeg: 0° for identical directions, 90° for perpendicular, near 180° for opposite', () => {
@@ -203,7 +215,9 @@ test('Test C — no override: RiserModel is bit-identical to the pre-fix nominal
   for (const tread of planLayout.treads) {
     const model = buildRiserModel(tread, config);
     assert.equal(model.frontEdge.overridden, false);
-    assert.deepEqual(model.frontEdge.final, model.frontEdge.nominal);
+    // equal within GEOMETRY_EPS (the model's own test, edgesEqual): a diagonal winder edge (walkline-arc layout) is
+    // recessed along two computation paths that agree only to ~1e-13 mm
+    assert.ok(edgesEqual(model.frontEdge.final, model.frontEdge.nominal));
   }
 });
 

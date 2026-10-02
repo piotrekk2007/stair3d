@@ -231,3 +231,10 @@ konstrukcji (A4) i walidacja prześwitu.
 ## Do zweryfikowania w kolejnych etapach
 
 - na którym stopniu leży pierwsza/ostatnia tralka, gdy odcinek kończy się w środku biegu (słupek końcowy)
+
+## Poprawka: podział przęsła szkła liczony z cieńszym słupkiem
+
+`railingGlass.js intermediatePostSplits` odejmował od przęsła grubszy z dwóch możliwych słupków (balustradowy albo
+konstrukcyjny). Między dwoma cieńszymi słupkami tafla wychodziła wtedy szersza od maksimum: 1916 mm przęsła dawało
+taflę 1806 mm. Teraz liczy się z cieńszym, więc tafla nigdy nie przekracza `railingGlassMaxWidthMm`. Błąd istniał
+wcześniej, a ujawnił go środkowy bieg U po zmianie zabiegów na łuk linii biegu.
