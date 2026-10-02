@@ -1,7 +1,7 @@
 // Builds the plain `facts` object src/rules/checks.js expects, from a REAL, already-solved
 // staircase (config + derived + planLayout + treadModels). This is the adapter that wires the
 // previously-standalone technical rules layer (src/rules/) into actual geometry — see
-// CLAUDE.md "Tread / Riser / Post: MODEL/SOLVER split" and docs/rules/PROFILES.md "not yet
+// docs/HISTORY.md "Tread / Riser / Post: MODEL/SOLVER split" and docs/rules/PROFILES.md "not yet
 // wired into buildStaircase.js" (this file is that wiring, kept in its own layer, per
 // .claude/RULES.md rule 10: validation must not live inside the geometry solver).
 //

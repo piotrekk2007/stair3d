@@ -8,7 +8,7 @@
 //
 // This is deliberately a DIFFERENT, richer consumer than the profile editor's view model
 // (geometry/stringerProfileView.js), which no longer exposes housings at all (a flat 2D
-// rectangle was confusing on an interactive screen — see CLAUDE.md). A production drawing is not
+// rectangle was confusing on an interactive screen — see docs/HISTORY.md). A production drawing is not
 // an interactive screen: marking exactly where a housing/tread sits is the whole point of sending
 // this to a workshop, so this file reads the raw StringerSegmentConstructionGeometry directly
 // (lowerCurve/upperCurve/housings) rather than going through that trimmed view model.

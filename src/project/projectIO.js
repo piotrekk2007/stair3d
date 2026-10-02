@@ -18,7 +18,7 @@ import { sanitizePostOverrides } from '../geometry/postSolver.js';
 // wewnątrz aplikacji (main.js, planLayout.js, ...) nadal ma `manualEdgeOverrides` zagnieżdżone
 // — ten moduł konwertuje między dwoma reprezentacjami przy zapisie/odczycie. Rozdzielenie
 // runtime'owego kształtu configu to osobny, większy refaktor modelu danych, świadomie
-// zostawiony na później (poza zakresem etapu konsolidacji — patrz CLAUDE.md).
+// zostawiony na później (poza zakresem etapu konsolidacji — patrz docs/HISTORY.md).
 // Wersja 4: `stringerConstructionType` (jeden typ dla obu wang) rozdzielony na
 // `stringerConstructionTypeOuter`/`stringerConstructionTypeInner` — każda wanga może mieć inny typ
 // konstrukcji. Migracja v3 -> v4 kopiuje starą wartość na obie strony (zachowanie sprzed zmiany).

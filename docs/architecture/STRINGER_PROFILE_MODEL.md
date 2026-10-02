@@ -214,9 +214,9 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
 * **Tier 1 (done):** contour offset, corner radius, top/bottom/both scope, minimum local depth, manual control
   points + radii, side-view data model, edit events, project file v3.
 * **Tier 2:** multi-arc transitions, free-form profiles, templates (not built); **1:1 DXF export**
-  (implemented — see CLAUDE.md "1:1 DXF export", `src/export/dxfExport.js`). The data was already
+  (implemented — see docs/HISTORY.md "1:1 DXF export", `src/export/dxfExport.js`). The data was already
   export-ready (unfolded frame, real arcs), so this was serialization only, no new geometry.
-  **SPLINE transition style** (implemented — see CLAUDE.md "SPLINE transition style",
+  **SPLINE transition style** (implemented — see docs/HISTORY.md "SPLINE transition style",
   `TRANSITION_STYLES.SPLINE`, `profileCurve.js` `splineThroughPoints`): a whole contour as one
   continuous centripetal-Catmull-Rom curve instead of per-corner rounding, exactly the "one more
   entry, one more branch" this doc predicted for it.
@@ -241,7 +241,7 @@ Diagnostics: `STRINGER-MIN-DEPTH` (ERROR), `STRINGER-FILLET-CLAMPED` (INFO), `ST
   steep board). That top clamp can shave ~1 mm off the local depth of a housed board there — `localDepthMm`
   is measured before the end clamps and does not include it.
 * `localDepthMm` is measured before the end clamps, so it does not reflect them.
-* The side-view editor (tab "Profil wangi") exposes the override layer; its limits are listed in CLAUDE.md
+* The side-view editor (tab "Profil wangi") exposes the override layer; its limits are listed in docs/HISTORY.md
   ("Side-view editor"): no handles for control points beyond a board's end faces, and the first edit turns every
   tread into a control point.
 
