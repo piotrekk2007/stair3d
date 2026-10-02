@@ -1826,9 +1826,17 @@ does not fit (`planLayout.js buildTurnLocalProportional`, `turns[].method` 'walk
   measures a flight's 0 → 1 tread step on its own (pinned zone); glass between posts splits a span with the THINNER
   post (`railingGlass.js`, a 1806 mm pane before); riser fan ends are the edge's own points; a winder at the corner
   post loses no tip any more.
+- **Arc does not fit** (e.g. 2 winders × 270 mm on a 400 mm walkline — the quarter arc alone is 628 mm): the turn is
+  laid out on the walkline moved toward the dusza (`winderArc.js fittingWalklineOffset`: the largest offset leaving
+  `minInnerWidth` per winder; `turns[].walklineOffsetMm`), reported as `WINDER-WALKLINE-MOVED` (WARNING,
+  `validator/checks.js checkWalklineMovedInTurn`) and `checkTurnFeasibility` → not feasible. Before, the proportional
+  fallback ran the dusza ends backwards and the wanga build threw (a pre-existing crash) — `buildTurnLocalProportional`
+  now only serves invalid input (0 winders / no going). Overlapping posts: a start/end newel that OVERLAPS a corner post
+  is not placed (`postSolver.js`), and a board wholly between post faces is not made (`stringerSolver.js
+  MIN_BOARD_SPAN_MM`). 5832 configs scanned: 0 crashes, 0 folded treads.
 - **Limits**: a ~10 mm dusza with slanted edges can flip the housed recess order on the wanga (no tread outline crosses
-  itself — 624 configs checked); 2 winders per turn fall back to the proportional layout, which crashes the wanga build
-  in some configs (pre-existing: 24 cases on the old code, 14 now); one dusza distribution only (even).
+  itself — 624 configs checked); in a U with a 0-tread middle flight and a barely fitting arc the two corner posts may
+  overlap (not merged); one dusza distribution only (even).
 Tests: `geometry/__tests__/winderArc.test.js` (+ updated scenarios in riser/validator/pipeline/joints/post/fit tests
 whose numbers came from the proportional layout).
 

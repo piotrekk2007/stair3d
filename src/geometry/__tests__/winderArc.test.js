@@ -59,10 +59,45 @@ test('a flight that starts / ends with winders starts / ends at the inner corner
   assert.ok(!m.postModels.some((p) => p.postId === 'post-start'), 'the start post is the corner post');
 });
 
-test('when the arc does not fit in the zone the old proportional layout is used', () => {
-  assert.equal(arcWinderGeometry({ stairWidth: 900, treadGoing: 255, walklineOffset: 500, walklineSplitOffset: 250 }, 2, 3), null);
-  assert.equal(layout({ stairType: 'L', windersPerTurn: 3, treadGoing: 255, walklineOffset: 500, walklineSplitOffset: 250 }).turns[0].method, 'proportional');
-  assert.equal(layout({ stairType: 'L' }).turns[0].method, 'walkline-arc');
+test('when the arc does not fit, the turn is laid out on a walkline moved toward the dusza — never folded back, and reported', async () => {
+  const { fittingWalklineOffset } = await import('../winderArc.js');
+  const { validateStaircase } = await import('../../validator/StaircaseValidator.js');
+  // 2 winders × 270 mm = 540 mm, less than the quarter arc at 400 mm (628 mm): dusza = 2 × minInnerWidth (110)
+  assert.equal(arcWinderGeometry({ stairWidth: 900, treadGoing: 270, walklineOffset: 400, walklineSplitOffset: 400 }, 3, 2), null);
+  const fitted = fittingWalklineOffset({ stairWidth: 900, treadGoing: 270, walklineOffset: 400, minInnerWidth: 110 }, 2);
+  assert.ok(Math.abs(fitted - (2 * (540 - 220)) / Math.PI) < 1e-9);
+  const patch = { stairType: 'L', windersPerTurn: 2, treadsLegA: 3, treadsLegB: 3 };
+  const pl = layout(patch);
+  assert.equal(pl.turns[0].method, 'walkline-arc');
+  assert.ok(Math.abs(pl.turns[0].walklineOffsetMm - fitted) < 1e-9);
+  for (const t of pl.treads) assert.ok(simple(t.outline), `tread ${t.index + 1}`);
+  // every winder keeps a real width at the dusza (the old fallback ran the inner ends backwards: 900 -> 770 -> 640)
+  assert.ok(pl.treads.filter((t) => t.type === 'winder').every((t) => dist(t.innerChain[0], t.innerChain[t.innerChain.length - 1]) > 1));
+  const findings = validateStaircase({ ...createDefaultConfig(), ...patch }).diagnostics.filter((d) => d.ruleId === 'WINDER-WALKLINE-MOVED');
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'WARNING');
+  assert.equal(findings[0].value, Math.round(fitted));
+  // the configured walkline is used whenever its arc fits
+  assert.equal(layout({ stairType: 'L' }).turns[0].walklineOffsetMm, createDefaultConfig().walklineOffset);
+});
+
+test('2 winders per turn never crash the stair (overlapping newels merge, a board inside a post is not made)', () => {
+  for (const stairType of ['L', 'U']) {
+    for (const inner of ['closed', 'cut']) {
+      for (const [legA, legB, legC] of [[0, 0, 0], [3, 1, 2], [1, 0, 2], [0, 3, 0]]) {
+        for (const treadGoing of [180, 270, 320]) {
+          const cfg = { ...createDefaultConfig(), stairType, windersPerTurn: 2, treadsLegA: legA, treadsLegB: legB, treadsLegC: legC, stringerConstructionTypeInner: inner, hasRiserBoards: true, treadGoing };
+          const m = buildStaircase(cfg);
+          for (const t of m.planLayout.treads) assert.ok(simple(t.outline), `${JSON.stringify(cfg).slice(0, 80)} tread ${t.index + 1}`);
+          for (const seg of m.stringerModels.inner.segments) {
+            const from = seg.startPost ? seg.startPost.faceU : 0;
+            const to = seg.endPost ? seg.endPost.faceU : seg.referenceLine.length;
+            assert.ok(to - from > 1, `${seg.id}: a board between post faces`);
+          }
+        }
+      }
+    }
+  }
 });
 
 test('the layout carries its walkline: one point per tread edge, on every edge, and a path with the arc', () => {

@@ -20,6 +20,28 @@ function finding(severity, ruleId, elementType, elementId, parameter, message, e
   return createDiagnostic({ ruleId, severity, elementType, elementId, parameter, message, ...extra });
 }
 
+// --- A turn laid out on a walkline closer to the dusza than configured ------------------------
+
+// When the winder zone is shorter than the quarter arc of the configured walkline (e.g. 2 winders × 270 mm at 400 mm
+// from the dusza), planLayout.js lays that turn out on the walkline nearest the dusza that fits
+// (geometry/winderArc.js fittingWalklineOffset) — a valid stair, but not the one asked for: reported, never silent.
+export function checkWalklineMovedInTurn(config, planLayout) {
+  return (planLayout.turns || [])
+    .map((turn, i) => ({ turn, i }))
+    .filter(({ turn }) => turn.walklineOffsetMm !== undefined && turn.walklineOffsetMm < config.walklineOffset - 1e-6)
+    .map(({ turn, i }) =>
+      finding(
+        'WARNING',
+        'WINDER-WALKLINE-MOVED',
+        'stair',
+        `turn-${i}`,
+        'walklineOffset',
+        `Zakręt ${i + 1}: ${config.windersPerTurn} stopni zabiegowych × ${config.treadGoing} mm nie mieści się na linii biegu ${config.walklineOffset} mm od duszy — zabieg rozłożono na linii biegu ${Math.round(turn.walklineOffsetMm)} mm od duszy. Zwiększ liczbę stopni zabiegowych lub głębokość stopnia, albo zmniejsz odsunięcie linii biegu.`,
+        { value: Math.round(turn.walklineOffsetMm), expected: config.walklineOffset, unit: 'mm' }
+      )
+    );
+}
+
 // --- Walkline consistency ------------------------------------------------------------------
 
 // The walkline (src/geometry/walklineModel.js) is built independently per tread (each point is
@@ -297,5 +319,6 @@ export function evaluateAdditionalChecks({ config, derived, planLayout, treadMod
     ...checkMissingRiserSurfaces(treadModels, riserModels, config),
     ...checkMissingStringerSupport(treadModels, stringerModels),
     ...checkManualOverridesApplied(treadModels),
+    ...checkWalklineMovedInTurn(config, planLayout),
   ];
 }

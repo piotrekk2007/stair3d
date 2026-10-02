@@ -30,8 +30,15 @@ Układ lokalny jest taki sam jak w `planLayout.js`:
 - **Kotwice biegu.** Bieg zaczynający się zabiegiem (0 prostych przed nim) zaczyna strefę w narożniku (before =
   π·off/4). Bieg kończący się zabiegiem kończy ją w narożniku. Słup startowy lub końcowy jest wtedy tym samym słupem
   co narożny (`postSolver.js`), jak w starej metodzie.
-- **Gdy łuk się nie mieści** (Lw − π·off/2 < 1 mm, off ≥ W): `planLayout.js buildTurnLocalProportional`, czyli
-  dawny kod. Rodzaj metody zapisuje `turns[].method`: `'walkline-arc'` albo `'proportional'`.
+- **Gdy łuk się nie mieści** przy ustawionym odsunięciu (Lw − π·off/2 < 1 mm, np. 2 zabiegi × 270 mm przy 400 mm,
+  gdzie sama ćwiartka łuku ma 628 mm), zabieg jest rozkładany na linii biegu przysuniętej do duszy
+  (`winderArc.js fittingWalklineOffset`). Jest to największe odsunięcie, przy którym łuk się mieści i zostaje
+  `minInnerWidth` przy duszy na każdy zabieg (albo pół strefy, jeśli i to się nie mieści). Odsunięcie użyte
+  naprawdę zapisuje `turns[].walklineOffsetMm`. Walidacja zgłasza to jako ostrzeżenie `WINDER-WALKLINE-MOVED`
+  (`validator/checks.js checkWalklineMovedInTurn`), a `checkTurnFeasibility` uznaje skręt za niewykonalny i podaje
+  komunikat z tą wartością. Wcześniej działała tu metoda proporcjonalna: z niewykonalnymi parametrami zawracała
+  końce przy duszy (900 → 770 → 640 mm), a budowa wangi się wywracała. Teraz `buildTurnLocalProportional` zostaje
+  tylko dla niepoprawnych danych (0 zabiegów, zerowa głębokość). Rodzaj metody zapisuje `turns[].method`.
 - **Pierwsza próba (odrzucona):** wszystkie końce przy duszy przed środkiem łuku zbiegały się w Ic, czyli czysty
   wachlarz w narożniku. Przy małej wartości `before` dawało to stopnie-trójkąty o zerowej szerokości przy duszy (np.
   w projekcie U użytkownika: 0 prostych na starcie, 3 zabiegi). To psuło nosek, wpust i złącza przy słupie.
@@ -85,13 +92,23 @@ dochodzi do linii.
   przesuwa sąsiednie narożniki tak, że kolejność oparcia na wandze się odwraca (1155 → 1152 mm). Żaden kontur stopnia
   się nie przecina: sprawdzono 624 konfiguracje. Taką konfigurację i tak zgłasza kontrola minimalnej szerokości przy
   duszy.
-- 2 zabiegi na skręt nie mieszczą łuku. Wtedy działa metoda awaryjna, która przy domyślnym przesunięciu jest
-  geometrycznie niewykonalna i w części konfiguracji wywraca budowę wangi. To błąd z wcześniejszego kodu (24 takie
-  przypadki na starym kodzie, 14 teraz), poza zakresem tego etapu.
+- **Naprawione (2 zabiegi na skręt):** skręt, w którym łuk ledwo się mieści, a biegu nie ma przed lub za zabiegiem,
+  zostawiał kilkanaście milimetrów linii duszy między słupem narożnym a startowym lub końcowym. Słupy na siebie
+  nachodziły, a deska wangi między nimi miała ujemną długość, przez co budowa się wywracała. Teraz:
+  - słup startowy lub końcowy, który *nachodzi* na narożny (a nie tylko stoi w tym samym punkcie), nie jest stawiany
+    (`postSolver.js`);
+  - deska mieszcząca się w całości między licami słupów nie powstaje (`stringerSolver.js MIN_BOARD_SPAN_MM`), bo
+    stopnie nad nią niesie słup.
+
+  Przeskanowano 5832 konfiguracje: L/U, lewo/prawo, 2–4 zabiegi, długości biegów 0/1/3, głębokości 180/270/320,
+  odsunięcia 250/400/500, ze słupem narożnym i bez. Wynik: 0 wywrotek, 0 przecinających się konturów.
+- W U, w którym środkowy bieg ma 0 stopni, a łuk ledwo się mieści, dwa słupy narożne mogą częściowo na siebie
+  nachodzić. Nie są scalane. Taka dusza i tak nie spełnia minimalnej szerokości.
 - Rozkład końców przy duszy jest równy (każdy zabieg ma tę samą szerokość przy duszy). Inne metody wyrównania, np.
   stopniowe poszerzanie od narożnika, nie są zrobione.
 
-Testy: `geometry/__tests__/winderArc.test.js`. Obejmują:
+Testy: `geometry/__tests__/winderArc.test.js`. Obejmują m.in. przysunięcie linii biegu i ostrzeżenie oraz brak
+wywrotki przy 2 zabiegach (sprawdzone, że na starym kodzie nie przechodzi). Pozostałe przypadki:
 - łuk;
 - równe biegi;
 - równe szerokości przy duszy;

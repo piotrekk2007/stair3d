@@ -160,6 +160,8 @@ function buildBearingsForWalk(walk, runs, treads, sideIdx) {
 // `anchor` — the SAME posts that are rendered and priced) and where that post's face lies along the board's own
 // reference line (local u). null when no post stands there (a postless lap joint, a removed post, the outer side).
 const POST_ANCHOR_TOLERANCE_MM = 1;
+const MIN_BOARD_SPAN_MM = 1;
+
 function boardEndPosts(segment, posts) {
   const { start, end, direction } = segment.referenceLine;
   const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < POST_ANCHOR_TOLERANCE_MM;
@@ -237,6 +239,11 @@ export function buildStringerModel(planLayout, config, side) {
         treadBearings,
       };
       Object.assign(segment, boardEndPosts(segment, posts));
+      // A board wholly between the faces of the posts at its ends (a few-mm piece of the inner line next to a corner
+      // post — a turn whose walkline arc barely fits) does not exist: the post carries the treads standing on it.
+      const fromFace = segment.startPost ? segment.startPost.faceU : 0;
+      const toFace = segment.endPost ? segment.endPost.faceU : length;
+      if ((segment.startPost || segment.endPost) && toFace - fromFace <= MIN_BOARD_SPAN_MM) return;
       assertReferenceLineIsStraight(segment);
       segments.push(segment);
       walkSegmentIds.push(segment.id);

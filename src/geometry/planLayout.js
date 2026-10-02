@@ -1,12 +1,14 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs } from './edgeOverrides.js';
-import { arcWinderGeometry, landingArcPoints } from './winderArc.js';
+import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
 // Metoda zabiegu: OD LINII BIEGU (winderArc.js) — linia biegu to prosta, ćwiartka łuku wokół narożnika duszy i
 // prosta; zabieg dzieli ją na równe odcinki, a każda krawędź przechodzi przez swój punkt na niej i swój punkt na
-// duszy (rozwinięcie). Gdy łuk nie mieści się w zabiegu, zostaje dawna metoda PROPORCJONALNA
-// (buildTurnLocalProportional). Układ zwraca też linię biegu jako dane: `walkline = { path, points }` — droga do
+// duszy (rozwinięcie). Gdy łuk nie mieści się w zabiegu przy ustawionym odsunięciu linii biegu, zabieg jest rozkładany
+// na linii biegu przysuniętej do duszy (winderArc.js fittingWalklineOffset, turns[].walklineOffsetMm, zgłaszane w
+// Walidacji). Dawna metoda PROPORCJONALNA (buildTurnLocalProportional) została tylko dla niepoprawnych danych
+// (0 zabiegów, zerowa głębokość). Układ zwraca też linię biegu jako dane: `walkline = { path, points }` — droga do
 // rysowania (łuk jako cięciwy) i punkt linii biegu na każdej granicy stopni (null, gdzie go nie ma).
 //
 // Zakręty (L, U) są budowane w LOKALNYM układzie współrzędnych (buildTurnLocal) w
@@ -273,9 +275,12 @@ function buildStraightLayout(config) {
 // One straight -> winders -> straight piece laid out from the walkline (winderArc.js); the proportional layout when
 // the arc does not fit in the winder zone. Same local frame, same output shape as buildTurnLocalProportional.
 function buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, pins = {}) {
-  const geo = arcWinderGeometry(params, treadsIn, windersCount, pins);
+  // the arc at the configured walkline offset, or — when it does not fit the zone — at the largest offset that does
+  // (a shorter zone than the quarter arc itself, e.g. 2 winders × 270 mm at 400 mm, used to fold the old layout back)
+  const off = fittingWalklineOffset(params, windersCount);
+  const geo = off === null ? null : arcWinderGeometry({ ...params, walklineOffset: off }, treadsIn, windersCount, pins);
   if (!geo) return buildTurnLocalProportional(params, treadsIn, windersCount, treadsOut, startIndex);
-  const { stairWidth: W, treadGoing: g, walklineOffset: off } = params;
+  const { stairWidth: W, treadGoing: g } = params;
   const { s0, Yc, Ic, Oc, xTurnEnd } = geo;
   const zoneEnd = treadsIn + windersCount;
   const xEnd = xTurnEnd + treadsOut * g;
@@ -377,6 +382,8 @@ function buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, p
       outerBendPoint: Oc,
       innerBendPoint: Ic,
       method: 'walkline-arc',
+      // the walkline offset this turn was really laid out with (< config.walklineOffset when the arc did not fit)
+      walklineOffsetMm: off,
     },
     walkline: { path: walkPath, points: walkPts },
     numTreadsUsed: numTreads,
@@ -658,9 +665,9 @@ function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut,
 
 // numTurns: 1 dla L, 2 dla U. turn1Type/turn2Type: 'winder' | 'landing' niezależnie na każdym zakręcie.
 function buildMultiTurnLayout(config, numTurnsOverride) {
-  const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
+  const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
-  const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset };
+  const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth };
   // (buildTurnLocal lays winders out from the walkline; landings draw it as the same quarter arc)
 
   // "1 duży podest" zamiast 2 półpodestów: gdy OBA zakręty w U są typu 'landing' i mergeLandings
@@ -711,6 +718,7 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
       outerBendPoint: call2.turnInfo.outerBendPoint ? toWorld(call2.turnInfo.outerBendPoint, frame2) : null,
       innerBendPoint: call2.turnInfo.innerBendPoint ? toWorld(call2.turnInfo.innerBendPoint, frame2) : null,
       ...(call2.turnInfo.method ? { method: call2.turnInfo.method } : {}),
+      ...(call2.turnInfo.walklineOffsetMm !== undefined ? { walklineOffsetMm: call2.turnInfo.walklineOffsetMm } : {}),
     });
   }
 

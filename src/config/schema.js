@@ -1,5 +1,5 @@
 import { resolveOpening, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
-import { arcWinderGeometry } from '../geometry/winderArc.js';
+import { arcWinderGeometry, fittingWalklineOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
 export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
@@ -252,14 +252,21 @@ function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffs
     // Podest to płaski kwadrat — brak zwężenia przy duszy, warunek zabiegu nie dotyczy.
     return { type: 'landing', feasible: true, message: '', minInnerSegment: null, minInnerWidthOk: true };
   }
-  // Winders laid out from the walkline arc (geometry/winderArc.js — the layout planLayout.js uses whenever the arc
-  // fits): every winder has the same width at the dusza.
-  const arc = arcWinderGeometry({ stairWidth, treadGoing, walklineOffset, walklineSplitOffset }, 0, windersPerTurn);
+  // Winders laid out from the walkline arc (geometry/winderArc.js, the layout planLayout.js uses): every winder has the
+  // same width at the dusza. When the arc does not fit at the configured walkline offset, the turn is laid out on a
+  // walkline moved toward the dusza (fittingWalklineOffset) — buildable, but not the configured walkline: not feasible.
+  const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth };
+  const fitted = fittingWalklineOffset(params, windersPerTurn);
+  const arc = fitted === null ? null : arcWinderGeometry({ ...params, walklineOffset: fitted }, 0, windersPerTurn);
   if (arc) {
     const minInnerSegment = arc.duszaWidth;
-    return { type: 'winder', method: 'walkline-arc', feasible: true, message: '', minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth };
+    const reduced = fitted < walklineOffset - 1e-6;
+    const message = reduced
+      ? `Skręt nie mieści się na linii biegu ${walklineOffset} mm od duszy: ${windersPerTurn} stopni × ${treadGoing} mm to mniej niż ćwiartka łuku (${Math.round((Math.PI * walklineOffset) / 2)} mm). Zabieg rozłożono na linii biegu ${Math.round(fitted)} mm od duszy — zwiększ liczbę stopni zabiegowych lub głębokość stopnia, albo zmniejsz odsunięcie linii biegu.`
+      : '';
+    return { type: 'winder', method: 'walkline-arc', feasible: !reduced, message, minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth, walklineOffsetMm: fitted };
   }
-  // The arc does not fit (planLayout.js falls back to the proportional layout) — the old check applies.
+  // No layout at all (no winders / no going): the old check applies.
   const totalTurnPathLength = windersPerTurn * treadGoing;
   // Policzek wewnętrzny "traci" walklineOffset przed narożnikiem i walklineSplitOffset po nim
   // (patrz planLayout.js/buildTurnLocal: innerTurnLen = distanceFromCorner_B - walklineOffset,

@@ -70,10 +70,10 @@ test('THE PROBLEMATIC CASE: at least one winder tread has a genuinely divergent 
   // does NOT assume WHICH tread shows it (that depends on where the outer bend point Oc falls
   // relative to walkline stations — see planLayout.js) — only that the phenomenon is real and
   // model-visible somewhere in a typical turn.
-  // The divergence belongs to the PROPORTIONAL layout, which since the walkline-arc layout (winderArc.js) is only the
-  // fallback when the arc does not fit the zone: 3 winders × 255 mm = 765 mm < π·500/2 = 785 mm of arc.
-  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 3, treadGoing: 255, walklineOffset: 500, walklineSplitOffset: 250 });
-  assert.equal(planLayout.turns[0].method, 'proportional');
+  // With the walkline-arc layout (winderArc.js) an ASYMMETRIC zone (400 mm before the corner of 1350) has an edge whose
+  // inner end has already passed the inner corner while its outer end has not reached the outer one.
+  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'winder', treadsLegA: 2, treadsLegB: 2, windersPerTurn: 5 });
+  assert.equal(planLayout.turns[0].method, 'walkline-arc');
   const winderModels = planLayout.treads.filter((t) => t.type === 'winder').map((t) => buildRiserModel(t, config));
 
   const maxSpread = Math.max(...winderModels.map((m) => m.directionSpreadDeg));

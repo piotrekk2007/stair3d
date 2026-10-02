@@ -213,16 +213,15 @@ export function buildAllPostModels(planLayout, config) {
   }
 
   // A flight can start (treadsLegA = 0) or end (last straight leg = 0) directly with winders: the inner
-  // path then begins/ends AT the turn's inner corner, so the start/end newel would stand exactly where the
-  // corner post already stands (two posts in one place). The full-height corner post takes that role; the
-  // start/end post is only kept when the user removed that corner post, so the spot is never left empty.
+  // path then begins/ends AT (or, when a turn's arc barely fits, a few mm from) the turn's inner corner, so the
+  // start/end newel would stand where the corner post already stands — two posts in one place, or overlapping. The
+  // full-height corner post takes that role; the start/end post is only kept when the user removed that corner post,
+  // so the spot is never left empty.
   const overrides = sanitizePostOverrides(config.manualPostOverrides);
-  const coveredByCornerPost = (point) =>
-    models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && Math.hypot(m.anchor.x - point.x, m.anchor.y - point.y) < POST_COINCIDENCE_MM);
+  const overlaps = (a, b) => Math.abs(a.position.x - b.position.x) < (a.size + b.size) / 2 && Math.abs(a.position.y - b.position.y) < (a.size + b.size) / 2;
+  const coveredByCornerPost = (post) => models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && (Math.hypot(m.anchor.x - post.anchor.x, m.anchor.y - post.anchor.y) < POST_COINCIDENCE_MM || overlaps(m, post)));
 
-  const kept = models.filter(
-    (m) => !(m.postId === 'post-start' && coveredByCornerPost(startPoint)) && !(m.postId === 'post-end' && coveredByCornerPost(endPoint)),
-  );
+  const kept = models.filter((m) => !((m.postId === 'post-start' || m.postId === 'post-end') && coveredByCornerPost(m)));
 
   return applyPostOverrides(kept, config.manualPostOverrides);
 }

@@ -93,6 +93,22 @@ export function arcWinderGeometry(params, treadsIn, windersCount, pins = {}) {
   };
 }
 
+/**
+ * The walkline offset a turn is laid out with: the configured one when its arc fits the zone; otherwise the largest
+ * one at which it fits with a usable dusza — `minInnerWidth` per winder, or half the zone if even that does not fit
+ * (e.g. 2 winders × 270 mm cannot turn 90° on a walkline 400 mm from the dusza: the quarter arc alone is 628 mm).
+ * Never more than the configured offset, always inside the stair. null for an impossible zone (no winders, no going).
+ */
+export function fittingWalklineOffset(params, windersCount) {
+  const Lw = windersCount * params.treadGoing;
+  if (!(windersCount >= 1) || !(params.treadGoing > 0) || !(params.stairWidth > 0)) return null;
+  const configured = Math.min(params.walklineOffset, params.stairWidth - 1);
+  if (configured > 0 && Lw - (Math.PI * configured) / 2 >= MIN_DUSZA_ZONE_MM) return configured;
+  const dusza = Math.min(windersCount * (params.minInnerWidth > 0 ? params.minInnerWidth : 0), Lw / 2);
+  const fitted = Math.min(configured, (2 * (Lw - Math.max(dusza, MIN_DUSZA_ZONE_MM))) / Math.PI);
+  return fitted > 0 ? fitted : null;
+}
+
 // The quarter arc of a landing's walkline (same radius and centre convention), for drawing.
 export function landingArcPoints(stairWidth, walklineOffset, Yc) {
   const pts = [];
