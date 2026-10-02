@@ -77,7 +77,7 @@ function pointInConvex(p, convexCcw) {
   return true;
 }
 
-function pointInPolygon(p, poly) {
+export function pointInPolygon(p, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i];

@@ -5,8 +5,8 @@
 
 import { OFFER_VAT_RATES } from '../offer/offerModel.js';
 import { money } from '../offer/offerDocument.js';
+import { escapeHtml as esc } from '../util/format.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 /**
  * @param {HTMLElement} container

@@ -28,7 +28,7 @@ import { GEOMETRY_EPS } from './tolerances.js';
 
 export const CONSTRUCTION_TYPES = Object.freeze({
   CLOSED: 'closed', // housed string — treads let into stopped/through housings, hidden end grain
-  CUT: 'cut', // open/notched (overlay/open-cleated) string — tread ends sit on top of a notch, visible end grain
+  CUT: 'cut', // open/notched (overlay) string — tread ends sit on top of a notch, visible end grain
 });
 
 // User-facing Polish terminology for the two construction types — kept alongside the

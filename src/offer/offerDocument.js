@@ -4,7 +4,8 @@
 // the caller (a 3D view as a data URL, the plan as SVG markup). Never shows the CNC + projekt amount: it is already
 // inside the material lines.
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+import { escapeHtml as esc } from '../util/format.js';
+
 const moneyFmt = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const money = (v) => `${moneyFmt.format(v || 0).replace(/ /g, ' ')} zł`;
 const qtyFmt = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 });

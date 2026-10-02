@@ -4,13 +4,11 @@
 // oznaczony jako orientacyjny (ceny domyślne to placeholdery, patrz src/takeoff/pricing.js).
 import { GROUP_BY, groupTakeoffItems, summarizeTakeoff, summarizeByCategory, describeDimensions, elementLabelPl } from './takeoffView.js';
 import { stateBadgeHTML } from './valueState.js';
+import { escapeHtml as esc } from '../util/format.js';
 
 const UNIT_LABEL = { m3: 'm³', m2: 'm²' };
 const MEASURE_DIGITS = { m3: 4, m2: 3 };
 
-function esc(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 function measure(value, unit) {
   if (value === null || value === undefined || !unit) return '—';

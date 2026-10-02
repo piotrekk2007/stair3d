@@ -27,11 +27,6 @@ export function cumulativeDistances(vertices) {
   return cum;
 }
 
-export function pathLength(vertices) {
-  const cum = cumulativeDistances(vertices);
-  return cum[cum.length - 1];
-}
-
 export function pointAtDistance(vertices, cum, d) {
   const total = cum[cum.length - 1];
   const clamped = Math.max(0, Math.min(total, d));

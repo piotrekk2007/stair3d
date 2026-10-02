@@ -9,6 +9,7 @@
 
 import { curveToPolyline } from '../geometry/profileCurve.js';
 import { niceGridStepMm, tickPositions } from './profileEditorSnapping.js';
+import { escapeHtml } from '../util/format.js';
 
 // Chord tolerance used when the contours are drawn (mm in profile space) — drawing only.
 export const EDITOR_CHORD_TOLERANCE_MM = 0.5;
@@ -95,7 +96,6 @@ function polylinePoints(seg, points) {
   }).join(' ');
 }
 
-const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // Ruler ticks along the top (u, "distance along the wanga") and left (v, "elevation") edges of the
 // current viewport, at a grid spacing that stays readable at any zoom (see niceGridStepMm). Pure

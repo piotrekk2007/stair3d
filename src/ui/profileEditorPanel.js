@@ -34,6 +34,7 @@ import { snapDragTarget, roundToGrid } from '../profileEditor/profileEditorSnapp
 import { fitToBounds, zoomAt, panBy, screenToViewportPoint } from '../plan2d/viewport.js';
 import { buildStringerBoardDXF, buildStringerAllBoardsDXF } from '../export/dxfExport.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
+import { escapeHtml } from '../util/format.js';
 
 const SIDE_LABELS = { outer: 'Wanga zewnętrzna', inner: 'Wanga wewnętrzna (dusza)' };
 const OTHER_SIDE = { outer: 'inner', inner: 'outer' };
@@ -48,9 +49,6 @@ const PAN_START_THRESHOLD_PX = 3;
 const NUDGE_STEP_MM = 1;
 const NUDGE_STEP_FAST_MM = 10;
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 /**
  * @param {HTMLElement} container

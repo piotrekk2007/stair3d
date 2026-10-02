@@ -2,10 +2,8 @@
 // jednostka | cena | koszt". Czysto interakcyjny — edytuje `settings.manualItems` i woła
 // onChange(); koszt wiersza liczy manualItems.js, doliczenie do sumy robi main.js.
 import { MANUAL_UNITS, manualRowCost } from '../takeoff/manualItems.js';
+import { escapeHtml as esc } from '../util/format.js';
 
-function esc(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 const fmt = (v) => v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

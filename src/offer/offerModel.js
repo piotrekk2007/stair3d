@@ -16,10 +16,10 @@
 
 import { BLONDEL_RANGE_MM } from '../config/schema.js';
 import { glassType } from '../geometry/railingGlass.js';
+import { round2 } from '../util/format.js';
 
 export const OFFER_VAT_RATES = Object.freeze([23, 8, 0]);
 const MAIN_LINE_LABEL = 'Schody — materiał wraz z przygotowaniem';
-const round2 = (v) => Math.round(v * 100) / 100;
 
 export function createDefaultOfferSettings() {
   return {

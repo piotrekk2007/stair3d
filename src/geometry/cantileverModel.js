@@ -14,7 +14,7 @@
 // The wall is the stair's OUTER side (the outer chain line); the box ends `cantileverWallGapMm` from it
 // (edgeOverrides.js housingRecessMm). Everything here is read off the solved tread (TreadModel + its plan tread).
 
-import { clipToConvex, subtractConvex, polygonArea } from './polygonClip.js';
+import { clipToConvex, subtractConvex, polygonArea, pointInPolygon } from './polygonClip.js';
 
 export const STAIR_CONSTRUCTIONS = Object.freeze({ STRINGERS: 'stringers', CANTILEVER: 'cantilever' });
 const BAND_EXTEND_MM = 20000; // a band is extended far along its edge so it covers the whole tread
@@ -94,15 +94,6 @@ function minus(poly, ...quads) {
   return cur;
 }
 
-function pointInPolygon(p, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i];
-    const b = poly[j];
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
 
 // Extent of a polygon along direction d (and across it): the rectangle it is cut from.
 function extentAlong(poly, d) {

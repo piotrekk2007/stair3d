@@ -31,6 +31,7 @@
 //     cenniku desek.
 
 import { ELEMENT_TYPES } from './takeoffTypes.js';
+import { round2 } from '../util/format.js';
 
 export const BOARD_THICKNESS_CLASSES_MM = Object.freeze([20, 40, 60]);
 export const BOARD_PRICING_SOURCE = 'board-table';
@@ -107,7 +108,6 @@ function multiplierPct(table, species, cls) {
 }
 
 const round4 = (v) => Math.round(v * 10000) / 10000;
-const round2 = (v) => Math.round(v * 100) / 100;
 
 /**
  * Cena za metr bieżący deski o zadanej głębokości i długości.

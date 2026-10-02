@@ -13,10 +13,8 @@ import { DEFAULT_WASTE_FACTORS } from '../takeoff/wasteFactors.js';
 import { DEFAULT_MATERIAL_CATALOG } from '../takeoff/materialCatalog.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { elementLabelPl } from './takeoffView.js';
+import { escapeHtml as esc } from '../util/format.js';
 
-function esc(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 const numInput = (attrs, value, extra = '') => `<input type="number" step="any" min="0" value="${value}" ${attrs} ${extra} />`;
 

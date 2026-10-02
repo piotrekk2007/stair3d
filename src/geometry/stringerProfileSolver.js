@@ -35,7 +35,6 @@ import {
   turnSignAt,
   polylineToCurve,
   curveDistance,
-  pointToCurveDistance,
   splinePointsThrough,
   curveToPolyline,
 } from './profileCurve.js';
@@ -621,9 +620,4 @@ export function solveStringerProfile({ reference, constructionType, params, over
  */
 export function measureLocalDepth(lowerCurve, depthReferenceCurve) {
   return curveDistance(lowerCurve, depthReferenceCurve);
-}
-
-/** Distance from one point to the depth reference — for probing a single tread support. */
-export function depthAtPoint(point, depthReferenceCurve) {
-  return pointToCurveDistance(point, depthReferenceCurve);
 }

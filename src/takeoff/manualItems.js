@@ -3,11 +3,11 @@
 // inne. To dane WEJŚCIOWE użytkownika (zapisywane w pliku projektu razem z ustawieniami wyceny),
 // nie wynik obliczeń: nic tu nie jest wyliczane z geometrii ani zgadywane.
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
+import { round2 } from '../util/format.js';
 
 export const MANUAL_UNITS = Object.freeze(['szt', 'mb']);
 export const MANUAL_PRICING_SOURCE = 'manual';
 
-const round2 = (v) => Math.round(v * 100) / 100;
 
 /** Świeża, mutowalna lista domyślnych pozycji: tralki i poręcze (puste, więc bez wpływu na sumę). */
 export function createDefaultManualItems() {

@@ -1553,6 +1553,11 @@ is unaffected by this rename.
   "kierunek poprzeczny" definition (right = `rotate90CW(forward)`, always pointing outer →
   inner/dusza) — `stringerRenderer.js` imports it rather than re-deriving which way a board's
   thickness should extrude.
+- **Polygon helpers**: `polygonClip.js` owns `pointInPolygon` (also used by `cantileverModel.js`).
+- **Formatting helpers** (`src/util/format.js`): `escapeHtml` (null/undefined → '') and `round2` (to
+  grosze) — the ONE copy; UI panels, the offer and the takeoff import it instead of keeping local
+  `esc`/`round2` functions. Tests: `util/__tests__/format.test.js`.
+- `npm test` runs with `--test-concurrency=2` (a full-concurrency run runs out of memory on the dev machine).
 
 ## Project file format v2 (implemented; now v3 — see "Stringer profile model")
 

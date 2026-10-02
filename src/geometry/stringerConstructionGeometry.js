@@ -39,13 +39,12 @@
 //
 // --- Two construction types, two different contours ------------------------------------------
 //
-//   CUT (overlay/open-cleated, "wanga nakładana"): the TOP edge steps to match each tread's own
+//   CUT (overlay, "wanga nakładana"): the TOP edge steps to match each tread's own
 //   bearing region (the classic notched/sawtooth top of an open string — a REAL, correct
 //   feature of this construction type, not a defect) — this part is UNCHANGED by this
 //   refactor, since it already used every bearing's own position. The BOTTOM edge is the
-//   knot-profile offset down by `boardWidth`. A separate `cleats[]` array — small support
-//   blocks under each tread's seat — is reported alongside, never merged into the board's own
-//   outer contour.
+//   knot-profile offset down by `boardWidth`. (The separate support blocks "cleats" were removed
+//   at the user's request — the notched board is the whole construction.)
 //
 //   CLOSED (housed/recessed, "wanga wpuszczana"): the outer contour's top and bottom are BOTH
 //   the knot-profile, offset up by `stringerTopMarginMm` and down by
@@ -283,7 +282,7 @@ function computePitchLineFromKnots(knots) {
   return { start, end, slope };
 }
 
-// --- CUT (overlay/open-cleated) --------------------------------------------------------------
+// --- CUT (overlay) --------------------------------------------------------------------------
 
 // Top edge unchanged from before this refactor — it already used every bearing's own position.
 // A tread's own bearing is flat (its front and back corner share one elevation) — the RISE to

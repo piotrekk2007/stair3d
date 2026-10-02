@@ -2,10 +2,8 @@
 // computed here beyond formatting. The disclaimer and the UK-load warning are always shown.
 
 import { GRAVITY_M_S2 as GRAVITY } from '../structural/timberClasses.js';
+import { escapeHtml as esc } from '../util/format.js';
 
-function esc(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 const num = (v, digits) => v.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 

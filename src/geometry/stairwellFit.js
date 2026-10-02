@@ -25,7 +25,6 @@ import { buildPlanLayout } from './planLayout.js';
 import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
-export const STAIRWELL_SIDES = ['A', 'B', 'C'];
 const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
 // The going the fit may choose: the same range the "Głębokość stopnia" slider offers (a fitted value outside it

@@ -8,6 +8,7 @@ import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
 import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
+import { escapeHtml } from '../util/format.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -554,9 +555,6 @@ const SEVERITY_BADGE_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
 const SEVERITY_ORDER = ['ERROR', 'WARNING', 'INFO'];
 const ELEMENT_TYPE_LABEL_PL = { tread: 'Stopień', riser: 'Podstopień', stringer: 'Wanga', post: 'Słup', stair: 'Schody', config: 'Parametry' };
 
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-}
 
 // Czytelna nazwa elementu: 'step-6' -> 'Stopień 7' (numer jak na planie 2D, 1-based).
 export function describeDiagnosticElement(d) {
