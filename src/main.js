@@ -3,8 +3,6 @@ import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
 import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
-import { defaultLogoSettings, sanitizeLogoSettings, logoRect, presentationFileName } from './scene/presentationImage.js';
-import { treadJointsByStep } from './geometry/jointSolver.js';
 import { editRailingSections } from './geometry/railingSolver.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
@@ -24,19 +22,15 @@ import { createTakeoffPanel, updateTakeoffPanel, markTakeoffSelection } from './
 import { createStructuralPanel, updateStructuralPanel } from './ui/structuralPanel.js';
 import { buildStructuralReport } from './structural/index.js';
 import { createViewportHud, LAYERS_3D } from './ui/viewportHud.js';
-import { GROUP_BY, summarizeByCategory } from './ui/takeoffView.js';
+import { GROUP_BY } from './ui/takeoffView.js';
 import { stepIndexFromElementId, selectionFromTakeoffSourceId } from './ui/selection.js';
-import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST, takeoffToCSV, takeoffToTextReport } from './takeoff/index.js';
+import { buildPricedMaterialTakeoff, DEFAULT_PRICE_LIST } from './takeoff/index.js';
 import { DEFAULT_WASTE_FACTORS } from './takeoff/wasteFactors.js';
 import { createDefaultBoardPricing, sanitizeBoardPricing } from './takeoff/boardPricing.js';
 import { createPricingEditor } from './ui/pricingEditor.js';
 import { createManualItemsEditor } from './ui/manualItemsEditor.js';
 import { createDefaultManualItems, sanitizeManualItems, applyManualItems } from './takeoff/manualItems.js';
 import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
-import { exportStaircaseToOBJ } from './export/objExporter.js';
-import { exportStaircaseToDAE } from './export/daeExporter.js';
-import { downloadTextFile } from './export/downloadTextFile.js';
-import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF } from './export/dxfExport.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { resolveOpening, sanitizeOpeningPolygon, moveOpeningVertex, insertOpeningVertex, removeOpeningVertex, translateOpening, OPENING_SHAPES } from './geometry/ceilingOpening.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
@@ -44,9 +38,9 @@ import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d
 import { boundaryEditPoints } from './plan2d/edgeEdit.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
-import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from './offer/offerModel.js';
-import { buildOfferHTML } from './offer/offerDocument.js';
-import { createOfferPanel, fillOfferForm, updateOfferPanel } from './ui/offerPanel.js';
+import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
+import { createOfferController } from './app/offerController.js';
+import { createExports, projectFileBaseName } from './app/exports.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
 
 // ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
@@ -99,18 +93,9 @@ const takeoffSettings = {
   manualItems: createDefaultManualItems(), // wpisywane ręcznie: tralki, poręcze…
 };
 const projectMeta = { name: '', notes: '', lastFileNote: '' };
-// Oferta dla Klienta (offer/): ustawienia to dane PROJEKTU (zapisywane w pliku, poza `config` i historią modelu),
-// dane firmy to ustawienie FIRMY — w tej przeglądarce, jak logo prezentacji.
-let offerSettings = createDefaultOfferSettings();
-const COMPANY_STORAGE_KEY = 'stair3d.company';
-let company = (() => {
-  try {
-    return sanitizeCompany(JSON.parse(localStorage.getItem(COMPANY_STORAGE_KEY) || 'null'));
-  } catch {
-    return sanitizeCompany(null);
-  }
-})();
-let offerPanel = null;
+// The "Oferta" tab (app/offerController.js — offer settings are project data, company data a browser setting);
+// created with the other panels below.
+let offer = null;
 let takeoffGroupBy = GROUP_BY.ELEMENT;
 
 // Wyjątki walidacji ("Dodaj wyjątek"): świadomie zaakceptowane pary (ruleId, elementId), które
@@ -358,7 +343,7 @@ function renderTakeoffPanel() {
     boardPricing: takeoffSettings.boardPricing,
     winderStepIds: winderStepIds(),
   });
-  refreshOffer();
+  offer?.refresh();
   if (lastTakeoff.status === 'BLOCKED') ws.setTabBadge('takeoff', '!', 'error');
   else ws.setTabBadge('takeoff', `≈${Math.round(lastTakeoff.totalCost).toLocaleString('pl-PL')} zł`, lastTakeoff.status === 'WARNING' ? 'warning' : 'info');
 }
@@ -463,122 +448,16 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   onCeilingChange: (visible) => handleViewChange('showCeiling', visible),
   onJointsChange: (visible) => handleViewChange('showJoints', visible),
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
-  onSnapshot: () => savePresentationSnapshot(),
-  onLogoFile: (file) => loadLogoFile(file),
-  onLogoRemove: () => {
-    logoSettings = { ...logoSettings, dataUrl: null };
-    storeLogoSettings();
-    applyLogo('Logo usunięte.');
-  },
-  onLogoSettings: (patch) => {
-    logoSettings = sanitizeLogoSettings({ ...logoSettings, ...patch });
-    storeLogoSettings();
-    placeLogoOverlay();
-  },
+  onSnapshot: () => savePresentationSnapshot({ sceneApi, logo, projectName: projectMeta.name }),
+  onLogoFile: (file) => logo.loadFile(file),
+  onLogoRemove: () => logo.remove(),
+  onLogoSettings: (patch) => logo.update(patch),
 });
 
 // ---------------------------------------------------------------------------------------------
-// Tryb prezentacji: logo firmy (na ekranie i na zdjęciach) + „Zapisz zdjęcie". Logo to ustawienie FIRMY, nie
-// projektu: pamiętane w tej przeglądarce (localStorage), nie w pliku projektu i nie w historii modelu.
+// Tryb prezentacji: logo firmy na ekranie i na zdjęciach, „Zapisz zdjęcie" — app/presentation.js
 // ---------------------------------------------------------------------------------------------
-const LOGO_STORAGE_KEY = 'stair3d.presentationLogo';
-const LOGO_MAX_PX = 1200; // większe logo jest zmniejszane przed zapamiętaniem (ostre na zdjęciu 2×, mieści się w pamięci)
-let logoSettings = (() => {
-  try {
-    return sanitizeLogoSettings(JSON.parse(localStorage.getItem(LOGO_STORAGE_KEY) || 'null'));
-  } catch {
-    return defaultLogoSettings();
-  }
-})();
-let logoStoreFailed = false;
-function storeLogoSettings() {
-  try {
-    localStorage.setItem(LOGO_STORAGE_KEY, JSON.stringify(logoSettings));
-    logoStoreFailed = false;
-  } catch {
-    logoStoreFailed = true; // np. tryb prywatny / brak miejsca — logo działa do zamknięcia karty
-  }
-}
-
-const logoOverlay = document.createElement('img');
-logoOverlay.id = 'presentation-logo';
-logoOverlay.className = 'client-only';
-logoOverlay.alt = 'Logo';
-logoOverlay.hidden = true;
-ws.mainEl.appendChild(logoOverlay);
-
-// Logo na ekranie w tym samym miejscu i tej samej wielkości (względnie) co na zdjęciu — logoRect, jedna formuła.
-function placeLogoOverlay() {
-  const has = !!logoSettings.dataUrl && logoOverlay.complete && logoOverlay.naturalWidth >= 0;
-  logoOverlay.hidden = !logoSettings.dataUrl;
-  if (!has) return;
-  const box = viewport.getBoundingClientRect();
-  const hostBox = ws.mainEl.getBoundingClientRect();
-  const r = logoRect({ imageWidth: box.width, imageHeight: box.height, logoWidth: logoOverlay.naturalWidth || 1, logoHeight: logoOverlay.naturalHeight || 1, corner: logoSettings.corner, sizePct: logoSettings.sizePct });
-  Object.assign(logoOverlay.style, { left: `${box.left - hostBox.left + r.x}px`, top: `${box.top - hostBox.top + r.y}px`, width: `${r.width}px`, height: `${r.height}px` });
-}
-function applyLogo(message = '') {
-  if (logoSettings.dataUrl) {
-    logoOverlay.onload = () => placeLogoOverlay();
-    logoOverlay.src = logoSettings.dataUrl;
-  } else {
-    logoOverlay.removeAttribute('src');
-  }
-  placeLogoOverlay();
-  viewportHudApi.syncLogo(logoSettings, logoStoreFailed ? `${message} Uwaga: przeglądarka nie pozwoliła zapamiętać logo — będzie dostępne do zamknięcia karty.`.trim() : message);
-}
-window.addEventListener('resize', placeLogoOverlay);
-new ResizeObserver(placeLogoOverlay).observe(viewport);
-
-// Wczytanie pliku logo: SVG bez zmian, obraz rastrowy zmniejszony do LOGO_MAX_PX (PNG — przezroczystość zostaje).
-function loadLogoFile(file) {
-  if (!/^image\//.test(file.type)) {
-    viewportHudApi.syncLogo(logoSettings, 'To nie jest plik obrazu.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = String(reader.result);
-    const done = (url) => {
-      logoSettings = sanitizeLogoSettings({ ...logoSettings, dataUrl: url });
-      storeLogoSettings();
-      applyLogo(`Wczytano: ${file.name}`);
-    };
-    if (file.type === 'image/svg+xml') return done(dataUrl);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, LOGO_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
-      if (scale >= 1) return done(dataUrl);
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.naturalWidth * scale);
-      c.height = Math.round(img.naturalHeight * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      done(c.toDataURL('image/png'));
-    };
-    img.onerror = () => viewportHudApi.syncLogo(logoSettings, 'Nie udało się odczytać obrazu.');
-    img.src = dataUrl;
-  };
-  reader.readAsDataURL(file);
-}
-
-// „Zapisz zdjęcie": render 2× + logo w wybranym rogu -> PNG do pobrania.
-// --- Oferta dla Klienta -------------------------------------------------------------------------------------
-// Pozycje i sumy liczy offer/offerModel.js z tego, co kosztorys już wycenił; tu tylko zbieramy dane i obrazy.
-function currentOffer() {
-  if (!lastTakeoff) return null;
-  const summary = summarizeByCategory(lastTakeoff.items, { winderStepIds: winderStepIds() });
-  return {
-    summary,
-    offer: buildOffer({ summary, manualItems: takeoffSettings.manualItems, settings: offerSettings, blocked: lastTakeoff.status === 'BLOCKED' }),
-  };
-}
-
-function refreshOffer() {
-  if (!offerPanel) return;
-  const current = currentOffer();
-  if (!current) return;
-  updateOfferPanel(offerPanel, { offer: current.offer, categories: separableCategories(current.summary), settings: offerSettings });
-}
+const logo = createPresentationLogo({ hostEl: ws.mainEl, viewportEl: viewport, onStatus: (settings, message) => viewportHudApi.syncLogo(settings, message) });
 
 // Obraz 3D do oferty: wygląd jak w trybie prezentacji (bez siatki, osi, stropu i nakładek technicznych), osobna kamera
 // w widoku izometrycznym; potem przywrócenie tego, co było widać.
@@ -619,56 +498,7 @@ function offerPlanSVG() {
   });
 }
 
-function generateOfferPDF() {
-  const current = currentOffer();
-  if (!current || !lastModels) return;
-  if (current.offer.lines.length === 0) {
-    window.alert(current.offer.warnings[0] || 'Brak pozycji do wyceny.');
-    return;
-  }
-  const bp = takeoffSettings.boardPricing || {};
-  const html = buildOfferHTML({
-    offer: current.offer,
-    facts: stairFacts(lastModels.fullConfig, lastModels.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') }),
-    settings: offerSettings,
-    company,
-    logoDataUrl: logoSettings.dataUrl,
-    image3d: offerImage3D(),
-    planSvg: offerPlanSVG(),
-    projectName: projectMeta.name,
-  });
-  // Druk przez ukrytą ramkę: okno drukowania przeglądarki → „Zapisz jako PDF” (bez biblioteki PDF, polskie znaki
-  // i obrazy działają od razu). Tytuł dokumentu = domyślna nazwa pliku.
-  const frame = document.createElement('iframe');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  frame.onload = () => {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    setTimeout(() => frame.remove(), 60000);
-  };
-  frame.srcdoc = html;
-  document.body.appendChild(frame);
-}
-
-function savePresentationSnapshot() {
-  const canvas = sceneApi.captureImage(2);
-  const ctx = canvas.getContext('2d');
-  if (logoSettings.dataUrl && logoOverlay.complete && logoOverlay.naturalWidth > 0) {
-    const r = logoRect({ imageWidth: canvas.width, imageHeight: canvas.height, logoWidth: logoOverlay.naturalWidth, logoHeight: logoOverlay.naturalHeight, corner: logoSettings.corner, sizePct: logoSettings.sizePct });
-    ctx.drawImage(logoOverlay, r.x, r.y, r.width, r.height);
-  }
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = presentationFileName(projectMeta.name);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }, 'image/png');
-}
-applyLogo();
+logo.apply();
 
 // ---------------------------------------------------------------------------------------------
 // Zaznaczenie: jedno źródło prawdy, wiele widoków (2D, 3D, Inspektor, Walidacja, Kosztorys)
@@ -989,8 +819,7 @@ function handleNewProject() {
   Object.assign(appearance, defaultAppearance());
   setAppearance(appearance);
   waivers = [];
-  offerSettings = createDefaultOfferSettings();
-  if (offerPanel) fillOfferForm(offerPanel, offerSettings, company);
+  offer.load(undefined);
   pricingEditor.render();
   manualItemsEditor.render();
   projectMeta.name = '';
@@ -1006,11 +835,7 @@ function handleNewProject() {
 }
 
 function fileBaseName() {
-  const slug = projectMeta.name
-    .trim()
-    .replace(/[^\p{L}\p{N}_-]+/gu, '_')
-    .replace(/^_+|_+$/g, '');
-  return slug || 'schody';
+  return projectFileBaseName(projectMeta.name);
 }
 
 function handleSaveProject() {
@@ -1021,7 +846,7 @@ function handleSaveProject() {
     takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing, manualItems: takeoffSettings.manualItems },
     waivers,
     appearance: { ...appearance },
-    offer: offerSettings,
+    offer: offer.settings(),
   });
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
   ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
@@ -1051,8 +876,7 @@ function handleFileSelected(event) {
         if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
         if (meta.takeoffSettings.manualItems) takeoffSettings.manualItems = sanitizeManualItems(meta.takeoffSettings.manualItems);
       }
-      offerSettings = sanitizeOfferSettings(meta.offer);
-      if (offerPanel) fillOfferForm(offerPanel, offerSettings, company);
+      offer.load(meta.offer);
       pricingEditor.render();
       manualItemsEditor.render();
       projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
@@ -1077,59 +901,23 @@ fileInput.style.display = 'none';
 fileInput.addEventListener('change', handleFileSelected);
 document.body.appendChild(fileInput);
 
-// Eksport OBJ/DAE zawsze z czystych materiałów (bez podświetlenia zaznaczenia) — widok i eksport
-// nie mogą na siebie wpływać.
-function withoutHighlight(fn) {
-  applySelectionHighlight(currentRoot, null);
-  try {
-    fn();
-  } finally {
-    applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
-  }
-}
-
-function exportPostDXF(postId) {
-  const post = lastModels?.allPostModels?.find((p) => p.postId === postId);
-  const j = lastModels?.joints;
-  const dxf = post ? buildPostDXF(post, j?.pocketsByPost?.[post.postId] || [], { holes: j?.holesByPost?.[post.postId] || [], weakening: j?.postWeakening?.[post.postId] || null }) : null;
-  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slup_${postId}.dxf`, 'application/dxf');
-}
-
-function exportAllPostsDXF() {
-  const j = lastModels?.joints;
-  const dxf = lastModels?.postModels ? buildAllPostsDXF(lastModels.postModels, j?.pocketsByPost || {}, { holesByPost: j?.holesByPost || {}, postWeakening: j?.postWeakening || {} }) : null;
-  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_slupy.dxf`, 'application/dxf');
-}
-
-function exportTreadDXF(stepId) {
-  const tread = lastModels?.treadModels?.find((t) => t.stepId === stepId);
-  const dxf = tread ? buildTreadDXF(tread, treadJointsByStep(lastModels?.joints, lastModels?.postModels)[tread.stepId] || null) : null;
-  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_${stepId}.dxf`, 'application/dxf');
-}
-
-function exportAllTreadsDXF() {
-  const dxf = lastModels?.treadModels ? buildAllTreadsDXF(lastModels.treadModels, treadJointsByStep(lastModels?.joints, lastModels?.postModels)) : null;
-  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_stopnie.dxf`, 'application/dxf');
-}
-
-// The whole balustrade (handrail pieces with their cuts + the baluster cut list) on one 1:1 sheet. Nothing to draw
-// (no balustrade / no valid section) -> a message instead of an empty file.
-function exportRailingDXF() {
-  const dxf = lastModels?.railingModel ? buildRailingDXF(lastModels.railingModel, { balusterSizeMm: lastModels.fullConfig.railingBalusterSizeMm }) : null;
-  if (dxf) downloadTextFile(dxf, `${fileBaseName()}_balustrada.dxf`, 'application/dxf');
-  else window.alert('Brak balustrady do narysowania — włącz balustradę i dodaj odcinek.');
-}
-
-function exportTakeoff(kind) {
-  if (!lastTakeoff || lastTakeoff.status === 'BLOCKED') return;
-  const base = fileBaseName();
-  if (kind === 'csv') downloadTextFile(takeoffToCSV(lastTakeoff.items), `${base}_zestawienie.csv`, 'text/csv');
-  else {
-    // Raport wychodzący poza aplikację musi nieść zastrzeżenie, że powstał mimo zaakceptowanych wyjątków.
-    const caveat = lastWaived.length > 0 ? ` (UWAGA: policzono mimo ${lastWaived.length} zaakceptowanych wyjątków walidacji)` : '';
-    downloadTextFile(takeoffToTextReport(lastTakeoff.items, { title: `Zestawienie materiałowe — ${projectMeta.name || 'schody'}${caveat}` }), `${base}_zestawienie.txt`, 'text/plain');
-  }
-}
+// Exports (DXF, takeoff CSV/TXT, OBJ/DAE) — app/exports.js; OBJ/DAE always from clean materials.
+const exporter = createExports({
+  getModels: () => lastModels,
+  getTakeoff: () => lastTakeoff,
+  getWaivedCount: () => lastWaived.length,
+  getProjectName: () => projectMeta.name,
+  getRoot: () => currentRoot,
+  exportSelection,
+  withCleanMaterials: (fn) => {
+    applySelectionHighlight(currentRoot, null);
+    try {
+      fn();
+    } finally {
+      applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
+    }
+  },
+});
 
 // ---------------------------------------------------------------------------------------------
 // Panele
@@ -1144,9 +932,9 @@ inspectorPanel.addEventListener('click', (e) => {
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
   if (action && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { action });
   const dxfPostId = e.target?.closest?.('[data-post-dxf]')?.dataset.postDxf;
-  if (dxfPostId) exportPostDXF(dxfPostId);
+  if (dxfPostId) exporter.postDXF(dxfPostId);
   const dxfStepId = e.target?.closest?.('[data-tread-dxf]')?.dataset.treadDxf;
-  if (dxfStepId) exportTreadDXF(dxfStepId);
+  if (dxfStepId) exporter.treadDXF(dxfStepId);
   const railingBtn = e.target?.closest?.('[data-railing-action]');
   if (railingBtn && selection?.elementType === 'tread') applyRailingEdit(railingBtn.dataset.railingAction, railingBtn.dataset.sectionId, selection.stepIndex, railingBtn.dataset.side);
 });
@@ -1164,27 +952,17 @@ const structuralPanel = createStructuralPanel(ws.tabBody('structural'), {
   onSelectStringer: (side) => setSelection({ elementType: 'stringer', stringerId: side }),
   onSelectPost: (postId) => setSelection({ elementType: 'post', postId }),
 });
-offerPanel = createOfferPanel(ws.tabBody('offer'), {
-  onSettings: (patch) => {
-    offerSettings = sanitizeOfferSettings({ ...offerSettings, ...patch, client: { ...offerSettings.client, ...(patch.client || {}) } });
-    refreshOffer();
-  },
-  onCompany: (patch) => {
-    company = sanitizeCompany({ ...company, ...patch });
-    try {
-      localStorage.setItem(COMPANY_STORAGE_KEY, JSON.stringify(company));
-    } catch {
-      // brak pamięci przeglądarki — dane firmy działają do zamknięcia karty
-    }
-  },
-  onSuggestNumber: () => {
-    offerSettings = { ...offerSettings, offerNumber: suggestOfferNumber() };
-    fillOfferForm(offerPanel, offerSettings, company);
-    refreshOffer();
-  },
-  onGenerate: () => generateOfferPDF(),
+offer = createOfferController({
+  container: ws.tabBody('offer'),
+  getTakeoff: () => lastTakeoff,
+  getModels: () => lastModels,
+  getTakeoffSettings: () => takeoffSettings,
+  getWinderStepIds: winderStepIds,
+  getLogoDataUrl: () => logo.dataUrl(),
+  getProjectName: () => projectMeta.name,
+  renderImage3D: offerImage3D,
+  renderPlanSVG: offerPlanSVG,
 });
-fillOfferForm(offerPanel, offerSettings, company);
 
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onSelectItem: handleSelectTakeoffItem,
@@ -1192,11 +970,11 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
     takeoffGroupBy = groupBy;
     refreshTakeoff();
   },
-  onExportCSV: () => exportTakeoff('csv'),
-  onExportTXT: () => exportTakeoff('txt'),
-  onExportPostsDXF: () => exportAllPostsDXF(),
-  onExportRailingDXF: () => exportRailingDXF(),
-  onExportTreadsDXF: () => exportAllTreadsDXF(),
+  onExportCSV: () => exporter.takeoff('csv'),
+  onExportTXT: () => exporter.takeoff('txt'),
+  onExportPostsDXF: () => exporter.allPostsDXF(),
+  onExportRailingDXF: () => exporter.railingDXF(),
+  onExportTreadsDXF: () => exporter.allTreadsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.
@@ -1421,8 +1199,8 @@ const gui = createUI({
   onResetEdgeOverrides: handleResetEdgeOverrides,
   exportSelection,
   exportHandlers: {
-    onExportOBJ: () => withoutHighlight(() => exportStaircaseToOBJ(currentRoot, 'schody.obj', exportSelection)),
-    onExportDAE: () => withoutHighlight(() => exportStaircaseToDAE(currentRoot, 'schody.dae', exportSelection)),
+    onExportOBJ: () => exporter.obj(),
+    onExportDAE: () => exporter.dae(),
   },
   onExportPlan2D: () => exportPlan2DSVG(currentPlan2DSVG),
 });

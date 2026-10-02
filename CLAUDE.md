@@ -48,7 +48,11 @@ structural check / takeoff / DXF / offer.
 - No `*Solver.js`/`*Model.js` imports `three`; no renderer calls `buildPlanLayout` or decides geometry (enforced by
   `geometry/__tests__/consolidationInvariants.test.js`).
 - `main.js` `rebuild()`: config → `buildStaircase` → validation + structural report + takeoff (one gate) → panels.
-  UI writes only `config` (or the separate presentation/takeoff/offer state), then calls `rebuild()`.
+  UI writes only `config` (or the separate presentation/takeoff/offer state), then calls `rebuild()`. `main.js` holds
+  the app state and wires the panels; self-contained page features live in `src/app/` and get the current state
+  through getters: `presentation.js` (company logo + "Zapisz zdjęcie"), `offerController.js` (the "Oferta" tab: offer
+  settings, company data, print to PDF), `exports.js` (DXF / takeoff CSV-TXT / OBJ-DAE downloads,
+  `projectFileBaseName`).
 
 ## Conventions
 
@@ -240,7 +244,6 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 ## Open items / known limitations
 
 - Default L stair still has ceiling collisions and `STRINGER-MIN-SECTION` warnings (cleanup step 5: tune defaults).
-- `main.js` (~1400 lines) still holds offer, presentation/logo and export wiring (cleanup step 4: split).
 - Moving a stringer-line corner from one tread to another by an edge edit is not supported (edges stop at corners).
 - Winders: one dusza distribution (even); a ~10 mm dusza can flip the housed recess order on the wanga; in a U with a
   0-tread middle flight and a barely fitting arc the two corner posts may overlap.
