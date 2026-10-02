@@ -25,10 +25,15 @@ Parametry spoza opisu — DO WERYFIKACJI (`CO-MFG-J-CANTILEVER`): luz 2 mm, szcz
   stopniach), `buildCantileverBox(treadModel, planTread, config)` → `{heightMm, parts[], profiles[], warnings}`.
   Elementy liczone z obrysu stopnia: pasy wzdłuż krawędzi czoła (40) i tyłu (20), bok wzdłuż wolnej krawędzi (20),
   spód = obrys minus pasy frontu i tyłu (`polygonClip.js`); każdy element ma obrys w rzucie, zakres wysokości,
-  grubość i formatkę (prostokąt do wycięcia). Profile: prostopadle do ściany, równo rozłożone wzdłuż ściany w części,
-  gdzie cała szerokość profila mieści się we wnętrzu skrzynki; profil wychodzący poza wnętrze (np. zabieg przy
-  narożniku) → ostrzeżenie `CANTILEVER-PROFILE` z długością, która się tam mieści; za szeroka skrzynka →
-  `CANTILEVER-WIDTH`.
+  grubość i formatkę (prostokąt do wycięcia). **Profile biegną jak okładzina** (decyzja użytkownika 2026-10-02):
+  pierwszy równolegle do przedniej deski, tuż za nią (front + luz + pół profila), ostatni równolegle do tylnej (tył +
+  luz + pół profila), pozostałe pomiędzy (kierunek i miejsce przy ścianie interpolowane); każdy zaczyna się na linii
+  ściany. W stopniu prostym deski są równoległe → profile prostopadłe do ściany, jak wcześniej. W zabiegu deski zbiegają
+  się ku duszy, więc profile też: każdy kończy się na wysięgu albo tam, gdzie dotknąłby sąsiada (odstęp osi = szerokość
+  profila + luz), co nastąpi wcześniej (`touchDistance`, `profiles[].shortenedToNeighbour`). Profil wychodzący poza
+  wnętrze skrzynki → ostrzeżenie `CANTILEVER-PROFILE` z długością, która się tam mieści; za mało miejsca przy ścianie na
+  wszystkie profile → ostrzeżenie; za szeroka skrzynka → `CANTILEVER-WIDTH`. DXF stopnia podaje długość każdego
+  profila. (Wcześniej profile zabiegów szły prostopadle do ściany i nie miały związku z okładziną.)
 - `edgeOverrides.js housingRecessMm`: przy wspornikowych stopień kończy się szczeliną przed ścianą, a po stronie duszy
   sięga linii łańcucha.
 - `buildStaircase.js`: brak wang (puste modele z `absent: true` — walidator nie zgłasza „luki w wandze”), brak słupów

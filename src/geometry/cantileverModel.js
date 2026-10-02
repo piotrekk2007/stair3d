@@ -103,6 +103,68 @@ function extentAlong(poly, d) {
   return { lengthMm: Math.max(...us) - Math.min(...us), widthMm: Math.max(...vs) - Math.min(...vs) };
 }
 
+// A point `off` into the tread (toward its centroid `c`) from the line through `a` along `d`.
+function intoTread(a, d, off, c) {
+  let n = { x: -d.y, y: d.x };
+  if ((c.x - a.x) * n.x + (c.y - a.y) * n.y < 0) n = { x: -n.x, y: -n.y };
+  return { x: a.x + n.x * off, y: a.y + n.y * off };
+}
+
+// The wall line (a tread's outer chain) as arc length: where a line crosses it, a point at a given arc length, and the
+// arc length of a point on it. A crossing may lie a little past the chain's ends (the line is extended there).
+function wallLine(wall) {
+  const cum = [0];
+  for (let i = 1; i < wall.length; i++) cum.push(cum[i - 1] + len(sub(wall[i], wall[i - 1])));
+  const pointAt = (s) => {
+    let i = 0;
+    while (i < wall.length - 2 && s > cum[i + 1]) i++;
+    const segLen = cum[i + 1] - cum[i] || 1;
+    const t = (s - cum[i]) / segLen;
+    return { x: wall[i].x + (wall[i + 1].x - wall[i].x) * t, y: wall[i].y + (wall[i + 1].y - wall[i].y) * t };
+  };
+  const along = (q) => {
+    let best = null;
+    for (let i = 1; i < wall.length; i++) {
+      const ab = sub(wall[i], wall[i - 1]);
+      const l2 = ab.x * ab.x + ab.y * ab.y || 1;
+      const t = Math.min(1, Math.max(0, ((q.x - wall[i - 1].x) * ab.x + (q.y - wall[i - 1].y) * ab.y) / l2));
+      const d = Math.hypot(wall[i - 1].x + ab.x * t - q.x, wall[i - 1].y + ab.y * t - q.y);
+      if (!best || d < best.d) best = { d, s: cum[i - 1] + Math.sqrt(l2) * t };
+    }
+    return best.s;
+  };
+  const crossing = (through, dir) => {
+    let best = null;
+    for (let i = 1; i < wall.length; i++) {
+      const a = wall[i - 1];
+      const e = sub(wall[i], a);
+      const den = dir.x * e.y - dir.y * e.x;
+      if (Math.abs(den) < 1e-12) continue;
+      const ap = sub(a, through);
+      const r = (ap.x * e.y - ap.y * e.x) / den; // along the line
+      const u = (ap.x * dir.y - ap.y * dir.x) / den; // along the wall segment
+      const lo = i === 1 ? -WALL_EXTEND : 0;
+      const hi = i === wall.length - 1 ? 1 + WALL_EXTEND : 1;
+      if (u < lo - 1e-9 || u > hi + 1e-9) continue;
+      if (!best || Math.abs(r) < Math.abs(best.r)) best = { r, s: cum[i - 1] + len(e) * u };
+    }
+    return best ? best.s : null;
+  };
+  return { pointAt, along, crossing };
+}
+const WALL_EXTEND = 0.5; // a profile's line may meet the wall up to half a segment past the tread's own wall stretch
+
+// How far along `a` (from its start) it comes within `gap` (centre line to centre line) of profile line `b`; Infinity
+// when the two do not converge.
+function touchDistance(a, b, gap) {
+  const cross = (u, v) => u.x * v.y - u.y * v.x;
+  const f0 = cross(b.dir, sub(a.start, b.start));
+  const slope = cross(b.dir, a.dir);
+  const side = Math.sign(f0) || 1;
+  if (side * slope >= -1e-12) return Infinity;
+  return Math.max(0, (gap - side * f0) / (side * slope));
+}
+
 /**
  * @param {Object} tread   TreadModel (outline = nosed top, frontEdge/backEdge.final, elevation, direction)
  * @param {Object} planTread  the same tread in planLayout (outline = structural, un-nosed; outerChain = the wall line)
@@ -151,61 +213,48 @@ export function buildCantileverBox(tread, planTread, config) {
   const sideQuad = freeLen > p.shellMm ? band(fInner, bInner, p.shellMm, c) : null;
   const inner = minus(P, frontBand, backBand, ...(sideQuad ? [sideQuad] : []));
 
-  // profiles: square to the wall, spread along the wall line between the front and the back boards
+  // profiles: they run the way the cladding does — the first one parallel to the front board (just inside it), the
+  // last one parallel to the back board, any others in between — from the wall line into the box. On a straight tread
+  // both boards are parallel, so the profiles come square out of the wall; on a winder the boards converge toward the
+  // free end and so do the profiles: each ends at its projection or where it would touch its neighbour, whichever
+  // comes first (user decision 2026-10-02).
   const profiles = [];
   const wall = planTread.outerChain || [];
-  const cum = [0];
-  for (let i = 1; i < wall.length; i++) cum.push(cum[i - 1] + len(sub(wall[i], wall[i - 1])));
-  const L = cum[cum.length - 1] || 0;
-  const at = (s) => {
-    for (let i = 0; i < wall.length - 1; i++) {
-      if (s <= cum[i + 1] + 1e-9 || i === wall.length - 2) {
-        const segLen = cum[i + 1] - cum[i] || 1;
-        const t = Math.min(1, Math.max(0, (s - cum[i]) / segLen));
-        const d = unit(sub(wall[i + 1], wall[i]));
-        let n = { x: -d.y, y: d.x };
-        const pt = { x: wall[i].x + (wall[i + 1].x - wall[i].x) * t, y: wall[i].y + (wall[i + 1].y - wall[i].y) * t };
-        if ((c.x - pt.x) * n.x + (c.y - pt.y) * n.y < 0) n = { x: -n.x, y: -n.y };
-        return { pt, dir: n, along: d };
-      }
-    }
-    return null;
-  };
-  if (L > 0 && inner) {
-    // the usable stretch of the wall: where a profile's whole width lies inside the box (trimmed at the boards)
-    const half = p.profileWidthMm / 2 + p.clearanceMm;
-    const inside = (s) => {
-      const g = at(s);
-      if (!g) return false;
-      const probe = (k) => ({ x: g.pt.x + g.dir.x * (p.wallGapMm + 1) + g.along.x * k, y: g.pt.y + g.dir.y * (p.wallGapMm + 1) + g.along.y * k });
-      return pointInPolygon(probe(-half), inner) && pointInPolygon(probe(half), inner);
-    };
-    const steps = Math.max(40, Math.ceil(L / 5));
-    const ok = [];
-    for (let k = 0; k <= steps; k++) if (inside((L * k) / steps)) ok.push((L * k) / steps);
-    if (ok.length === 0) {
-      warnings.push(`stopień ${tread.index + 1}: przy ścianie nie ma miejsca na profil ${p.profileWidthMm} mm między frontem a tyłem okładziny.`);
+  if (wall.length >= 2 && inner) {
+    const w = p.profileWidthMm;
+    const dF = unit(sub(fInner, fOuter)); // along the front board, from the wall toward the free end
+    const dB = unit(sub(bInner, bOuter));
+    const first = { through: intoTread(fOuter, dF, p.frontMm + p.clearanceMm + w / 2, c), dir: dF };
+    const last = { through: intoTread(bOuter, dB, p.shellMm + p.clearanceMm + w / 2, c), dir: dB };
+    const wallPath = wallLine(wall);
+    const s0 = wallPath.crossing(first.through, first.dir);
+    const s1 = wallPath.crossing(last.through, last.dir);
+    if (s0 === null || s1 === null || (s1 - s0) * Math.sign(wallPath.along(bOuter) - wallPath.along(fOuter)) <= 0) {
+      warnings.push(`stopień ${tread.index + 1}: przy ścianie nie ma miejsca na profil ${w} mm między frontem a tyłem okładziny.`);
     } else {
-      const s0 = ok[0];
-      const s1 = ok[ok.length - 1];
-      if (s1 - s0 < (p.profileCount - 1) * (p.profileWidthMm + 2 * p.clearanceMm)) {
-        warnings.push(`stopień ${tread.index + 1}: przy ścianie mieści się mniej niż ${p.profileCount} profile ${p.profileWidthMm} mm — za wąski stopień (np. zabiegowy przy narożniku).`);
+      if (Math.abs(s1 - s0) < (p.profileCount - 1) * (w + 2 * p.clearanceMm)) {
+        warnings.push(`stopień ${tread.index + 1}: przy ścianie mieści się mniej niż ${p.profileCount} profile ${w} mm — za wąski stopień (np. zabiegowy przy narożniku).`);
       }
+      const lines = [];
       for (let k = 0; k < p.profileCount; k++) {
-        const s = p.profileCount === 1 ? (s0 + s1) / 2 : s0 + ((s1 - s0) * k) / (p.profileCount - 1);
-        const g = at(s);
-        const end = { x: g.pt.x + g.dir.x * p.profileProjectionMm, y: g.pt.y + g.dir.y * p.profileProjectionMm };
+        const t = p.profileCount === 1 ? 0.5 : k / (p.profileCount - 1);
+        lines.push({ start: wallPath.pointAt(s0 + (s1 - s0) * t), dir: unit({ x: dF.x + (dB.x - dF.x) * t, y: dF.y + (dB.y - dF.y) * t }) });
+      }
+      lines.forEach((line, k) => {
+        const touches = [lines[k - 1], lines[k + 1]].filter(Boolean).map((other) => touchDistance(line, other, w + p.clearanceMm));
+        const lengthMm = Math.min(p.profileProjectionMm, ...touches);
+        const end = { x: line.start.x + line.dir.x * lengthMm, y: line.start.y + line.dir.y * lengthMm };
         if (!pointInPolygon(end, inner)) {
           // how long a profile may be here: along its line, until it would leave the box's inside
           let fit = 0;
-          for (let r = p.wallGapMm + 1; r <= p.profileProjectionMm; r += 5) {
-            if (!pointInPolygon({ x: g.pt.x + g.dir.x * r, y: g.pt.y + g.dir.y * r }, inner)) break;
+          for (let r = p.wallGapMm + 1; r <= lengthMm; r += 5) {
+            if (!pointInPolygon({ x: line.start.x + line.dir.x * r, y: line.start.y + line.dir.y * r }, inner)) break;
             fit = r;
           }
-          warnings.push(`stopień ${tread.index + 1}: profil ${k + 1} (wysięg ${p.profileProjectionMm} mm) wychodzi poza wnętrze okładziny — w tym miejscu mieści się profil do ok. ${Math.floor(fit / 5) * 5} mm.`);
+          warnings.push(`stopień ${tread.index + 1}: profil ${k + 1} (wysięg ${Math.round(lengthMm)} mm) wychodzi poza wnętrze okładziny — w tym miejscu mieści się profil do ok. ${Math.floor(fit / 5) * 5} mm.`);
         }
-        profiles.push({ start: g.pt, dir: g.dir, lengthMm: p.profileProjectionMm, widthMm: p.profileWidthMm, heightMm: p.profileHeightMm, zBottom: bottom + p.shellMm + p.clearanceMm / 2 });
-      }
+        profiles.push({ start: line.start, dir: line.dir, lengthMm, shortenedToNeighbour: lengthMm < p.profileProjectionMm - 1e-6, widthMm: w, heightMm: p.profileHeightMm, zBottom: bottom + p.shellMm + p.clearanceMm / 2 });
+      });
     }
   }
   return { heightMm: top - bottom, parts, profiles, warnings };

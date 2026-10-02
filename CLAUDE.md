@@ -172,7 +172,9 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));
   VSG 4.4.2/5.5.2, pane ≤ 1800 mm, tint clear/optiwhite/grey/bronze; other numbers DO WERYFIKACJI.
 - Cantilever (`stairConstruction: 'cantilever'`, `cantileverModel.js`): steel profiles from the wall (≥ 2 per tread)
-  with a wooden cladding box per tread; no wangi (empty models `absent: true`), no structural posts/joints.
+  with a wooden cladding box per tread; no wangi (empty models `absent: true`), no structural posts/joints. Profiles run
+  like the cladding — the first parallel to the front board, the last to the back board, others interpolated — so a
+  winder's profiles converge and stop where they would touch (or at their projection).
 
 ## Validation
 

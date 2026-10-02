@@ -487,7 +487,8 @@ function cantileverTitleLines(tread) {
   return [
     `Stopien wspornikowy - okladzina (skrzynka) wys. ${Math.round(c.heightMm)} mm:`,
     ...c.parts.map((p) => `  ${CANTILEVER_PART_LABELS_DXF[p.kind] || p.kind} ${p.thicknessMm} mm: formatka ${Math.round(p.blank.lengthMm)} x ${Math.round(p.blank.widthMm)} mm`),
-    pr ? `Profile: ${c.profiles.length} x ${pr.widthMm}x${pr.heightMm} mm, wysieg ${Math.round(pr.lengthMm)} mm (warstwa JOINTS)` : 'Profile: brak miejsca - sprawdz Walidacje',
+    // winder profiles follow the cladding and may stop where they touch: every profile's own length
+    pr ? `Profile: ${c.profiles.length} x ${pr.widthMm}x${pr.heightMm} mm, wysieg ${c.profiles.map((q) => Math.round(q.lengthMm)).join(' / ')} mm (warstwa JOINTS)` : 'Profile: brak miejsca - sprawdz Walidacje',
   ];
 }
 

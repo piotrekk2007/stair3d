@@ -72,11 +72,12 @@ test('no wangi, no structural posts, no risers — and no false "gap in the stri
   assert.equal(m.riserModels.length, 0);
   const gate = runTakeoffValidationGate(m);
   assert.ok(!gate.diagnostics.some((d) => d.ruleId === 'VALIDATOR-MISSING-SURFACE'), 'the absent stringer is not a gap');
-  // winder boxes near the corner cannot hold a 700 mm profile: reported with how long one may be there
-  assert.ok(m.cantilever.diagnostics.length > 0);
-  assert.ok(m.cantilever.diagnostics.every((d) => d.ruleId === 'CANTILEVER-PROFILE' && d.severity === 'WARNING'));
-  assert.ok(m.cantilever.diagnostics.some((d) => /mieści się profil do ok\. \d+ mm/.test(d.message)));
-  assert.ok(gate.diagnostics.some((d) => d.ruleId === 'CANTILEVER-PROFILE'), 'through the validation gate');
+  // a box too short for the profile is reported with how long one may be there (a narrow stair, 700 mm profiles)
+  const narrow = build({ stairType: 'straight', treadsLegA: 10, stairWidth: 600 });
+  assert.ok(narrow.cantilever.diagnostics.length > 0);
+  assert.ok(narrow.cantilever.diagnostics.every((d) => d.ruleId === 'CANTILEVER-PROFILE' && d.severity === 'WARNING'));
+  assert.ok(narrow.cantilever.diagnostics.some((d) => /mieści się profil do ok\. \d+ mm/.test(d.message)));
+  assert.ok(runTakeoffValidationGate(narrow).diagnostics.some((d) => d.ruleId === 'CANTILEVER-PROFILE'), 'through the validation gate');
   // the same stair on stringers has no such findings and keeps its wangi
   const plain = buildStaircase({ ...createDefaultConfig(), stairType: 'L' });
   assert.ok(plain.stringerModels.outer.segments.length > 0);
@@ -100,4 +101,35 @@ test('takeoff: one board item per cladding part, in its thickness; DXF lists the
   assert.match(dxf, /Profile: 2 x 40x60 mm/);
   const facts = stairFacts(m.fullConfig, m.derived);
   assert.ok(facts.rows.some(([k, v]) => k === 'Konstrukcja' && /wspornikowe/.test(v)));
+});
+
+test('winder profiles run like the cladding: the first along the front board, the last along the back board; converging ones stop where they touch', () => {
+  const unitOf = (a, b) => {
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    return { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
+  };
+  const parallel = (u, v) => Math.abs(u.x * v.y - u.y * v.x) < 1e-9 && u.x * v.x + u.y * v.y > 0;
+  for (const turnDirection of ['right', 'left']) {
+    const m = build({ stairType: 'L', turnDirection, cantileverProfileProjectionMm: 1200 });
+    const p = cantileverParams(m.fullConfig);
+    let touching = 0;
+    for (const t of m.treadModels.filter((x) => x.type === 'winder')) {
+      const [first, last] = [t.cantilever.profiles[0], t.cantilever.profiles[t.cantilever.profiles.length - 1]];
+      assert.ok(parallel(first.dir, unitOf(t.frontEdge.final[1], t.frontEdge.final[0])), `${t.stepId}: first profile along the front board`);
+      assert.ok(parallel(last.dir, unitOf(t.backEdge.final[1], t.backEdge.final[0])), `${t.stepId}: last profile along the back board`);
+      // never closer than one profile width (+ clearance) centre to centre — they may touch, never overlap
+      const end = (q) => ({ x: q.start.x + q.dir.x * q.lengthMm, y: q.start.y + q.dir.y * q.lengthMm });
+      const distToLine = (pt, q) => Math.abs((pt.x - q.start.x) * q.dir.y - (pt.y - q.start.y) * q.dir.x);
+      assert.ok(distToLine(end(first), last) >= p.profileWidthMm + p.clearanceMm - 1e-6, `${t.stepId}: profiles overlap`);
+      if (first.shortenedToNeighbour) {
+        touching++;
+        assert.ok(Math.abs(distToLine(end(first), last) - (p.profileWidthMm + p.clearanceMm)) < 1e-6, `${t.stepId}: ends exactly where it touches`);
+        assert.ok(first.lengthMm < p.profileProjectionMm);
+      }
+    }
+    assert.ok(touching > 0, `${turnDirection}: some winder profiles converge enough to touch within 1200 mm`);
+  }
+  // a straight tread keeps its profiles square to the wall and full length
+  const straight = build({ stairType: 'straight', treadsLegA: 6 });
+  for (const t of straight.treadModels) for (const pr of t.cantilever.profiles) assert.equal(pr.lengthMm, cantileverParams(straight.fullConfig).profileProjectionMm);
 });
