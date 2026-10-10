@@ -776,8 +776,20 @@ function buildSection(section, ctx) {
   let skippedPoints = 0;
   let edited = false;
   const heights = []; // the handrail's top above the nosing line at every nosing node it covers
-  // the post standing at a spot (a reused structural one, or this section's own, unless removed)
-  const postAtSpot = (spot) => existingNear(spot.at) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? null;
+  // The post standing at a spot: a reused structural one, or this section's own. When the user REMOVED the section's
+  // own post, the handrail goes on to the nearest post still standing within reach (typically the corner post just
+  // past the section's end) — a handrail end is never left in the air next to a post. No post in reach: a free end.
+  const standingNear = (spot) => {
+    let best = null;
+    for (const post of [...(postModels || []), ...base.posts.filter((p) => !p.removed)]) {
+      const d = Math.hypot(post.position.x - spot.at.x, post.position.y - spot.at.y);
+      if (d <= MAX_END_FIT_FACTOR * post.size && (!best || d < best.d)) best = { post, d };
+    }
+    return best?.post ?? null;
+  };
+  const ownRemoved = (spot) => base.posts.some((p) => p.postId === spot.id && p.removed);
+  const postAtSpot = (spot) => existingNear(spot.at) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? (ownRemoved(spot) ? standingNear(spot) : null);
+  const runPostId = (spot) => (ownRemoved(spot) ? (standingNear(spot)?.postId ?? postIdAt.get(spot.id)) : postIdAt.get(spot.id));
   const runPaths = []; // every run's final path — what a baluster / pane under an adjusted handrail reads its height from
   // Base rail (podporęcz): only on a housed wanga — there the balusters stand on the wanga's top edge, and the base
   // rail lies on that edge along each handrail run, the balusters standing in it (on an overlay wanga they stand on
@@ -789,8 +801,8 @@ function buildSection(section, ctx) {
     base.diagnostics.push(diag(section.id, 'RAILING-BASERAIL-NOT-APPLICABLE', `Balustrada ${section.id}: podporęcz jest tylko przy wandze wpuszczanej — przy nakładanej tralki stoją na stopniach, podporęcz pominięta.`, 'INFO'));
   }
   runs.forEach((run, j) => {
-    const startPostId = postIdAt.get(spots[j].id);
-    const endPostId = postIdAt.get(spots[j + 1].id);
+    const startPostId = runPostId(spots[j]);
+    const endPostId = runPostId(spots[j + 1]);
     const startOffsetMm = endOffsets[railingEndKey(section.id, startPostId, 'start')] || 0;
     const endOffsetMm = endOffsets[railingEndKey(section.id, endPostId, 'end')] || 0;
     const startPost = postAtSpot(spots[j]);

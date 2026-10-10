@@ -171,7 +171,8 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   (`annotateCuts`). Findings `RAILING-*`, `PL-LEGAL-H-01`. Every run is a piece BETWEEN two posts: simplified nosing
   line → short stub next to a post dropped (`RAIL_END_STUB_MM` 250, the straight piece carried on to the post) → cut
   or extended to the post FACES (`fitPathToPosts`; a post standing beside the run's line gets the run's end moved to
-  its nearest point, so a handrail always reaches its post) → optional manual height of an end at its post
+  its nearest point; a section whose own end post was removed goes on to the nearest standing post within reach —
+  a handrail always reaches a post) → optional manual height of an end at its post
   (`config.railingEndOffsets`, `railingEndKey`, edited in the Inspektor's post view) → smoothing for a bent handrail.
   Balusters and glass read their height under the handrail's own line (`zOnPaths`). A post a handrail ends at reaches
   at least the handrail's top there (`postTopNeeds` → own posts in the solver, structural posts via `postSolver.js

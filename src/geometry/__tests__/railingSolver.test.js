@@ -613,3 +613,32 @@ test('a handrail reaches its post also when the post stands BESIDE the run\'s li
     assert.ok(ends >= 2, label);
   }
 });
+
+test('a section whose own end post was REMOVED carries its handrail on to the post standing just past it (the corner post)', () => {
+  // the user's project: a short section over the first treads ends 83 mm before the corner post, so it got its own
+  // end post; with that post removed the handrail stopped in the air 43 mm short of the corner post
+  const patch = { ...cut, stairType: 'L', totalRise: 2810, stairWidth: 890, treadGoing: 180, treadsLegA: 2, windersPerTurn: 4, treadsLegB: 4, postSize: 80, railingPostSizeMm: 70, railingSections: [{ id: 's', side: 'inner', fromStep: 0, toStep: 2 }] };
+  const before = stair(patch);
+  const own = before.model.sections[0].runs[0].endPostId;
+  assert.equal(own, 'railing-post-s-end', 'precondition: the section ends at its own post');
+  const corner = buildPostModels(before.planLayout, before.config).find((q) => q.postId === 'post-corner-0');
+  const ownPost = before.model.posts.find((q) => q.postId === own);
+  const apart = Math.hypot(ownPost.position.x - corner.position.x, ownPost.position.y - corner.position.y);
+  assert.ok(apart > 80 && apart < 240, `precondition: the corner post stands just past the section's end (${apart.toFixed(1)} mm)`);
+
+  const { model } = stair({ ...patch, manualPostOverrides: { [own]: { removed: true } } });
+  const run = model.sections[0].runs[0];
+  assert.equal(run.endPostId, 'post-corner-0');
+  assert.ok(run.endAtPostFace);
+  const end = run.pieces[run.pieces.length - 1].end;
+  const dx = Math.abs(end.x - corner.position.x);
+  const dy = Math.abs(end.y - corner.position.y);
+  assert.ok(Math.abs(Math.max(dx, dy) - corner.size / 2) < 1e-6 && Math.min(dx, dy) <= corner.size / 2, `the handrail ends on the corner post's face (${dx.toFixed(1)}, ${dy.toFixed(1)})`);
+  // the corner post is told how high the handrail meets it
+  assert.ok(Number.isFinite(model.postTopNeeds['post-corner-0']));
+
+  // with no post in reach a removed end post leaves a free end, as before
+  const far = stair({ ...closed, railingSections: [{ id: 's', side: 'inner', fromStep: 2, toStep: 6 }], manualPostOverrides: { 'railing-post-s-end': { removed: true } } });
+  assert.equal(far.model.sections[0].runs[0].endPostId, 'railing-post-s-end');
+  assert.equal(far.model.sections[0].runs[0].endAtPostFace, false);
+});

@@ -256,7 +256,9 @@ Teraz każdy bieg (`railingSolver.js`, jedna kolejność dla wszystkich):
    Gdy linia mija słup bokiem (słup narożny między podestem a zabiegami, bieg z 0 stopni, odcinek zaczęty w
    środku zabiegów), koniec biegu jest przesuwany do **najbliższego punktu słupa** z zachowaniem spadku pierwszego
    elementu (`fitStartAlongLine` → zapasowo najbliższy punkt; najwyżej o 3 grubości słupa) — poręcz zawsze dochodzi do
-   swojego słupa. Koniec leżący już wewnątrz słupa zostaje. `runs[].startAtPostFace` / `endAtPostFace`.
+   swojego słupa. Koniec leżący już wewnątrz słupa zostaje. Gdy użytkownik **usunął własny słupek odcinka**, bieg
+   idzie dalej do najbliższego stojącego słupa w zasięgu 3 grubości (`standingNear`, zwykle słup narożny tuż za
+   końcem odcinka) i nosi jego id (`runs[].endPostId`); bez słupa w zasięgu koniec zostaje wolny. `runs[].startAtPostFace` / `endAtPostFace`.
 4. **Ręczna korekta wysokości końca** (`config.railingEndOffsets`, klucz `railingEndKey(odcinek, słup, 'start'|'end')`,
    ±`MAX_RAILING_END_OFFSET_MM` = 400): przesuwa w pionie dokładnie ten punkt, w którym poręcz dotyka lica słupa.
    Prosty odcinek przy słupie zmienia pochylenie. Edycja: Inspektor → słup → „Poręcz przy słupie”, osobno poręcz
