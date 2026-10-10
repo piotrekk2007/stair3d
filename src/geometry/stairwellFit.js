@@ -9,13 +9,20 @@
 // The user gives any subset of sides plus a KEY side. The key side must come out exactly: for every possible
 // number of treads on the key flight, the going is solved so that side is met to the millimetre; the other
 // flights' tread counts are then chosen to bring their sides as close as possible (one going per stair — the
-// going must stay constant, so a non-key side generally cannot be exact). Candidates whose riser height is out
-// of [minRiser, maxRiser], whose going is outside FIT_GOING_RANGE_MM or whose turn is infeasible are dropped.
-// Among the rest the best is the one with the smallest total deviation of the non-key sides. The 2h+s rule
-// (PL-LEGAL-A-01) is INFORMATIONAL only (user decision): it never overrides a dimension — it is used solely to
-// break a tie between variants that meet the given sides equally well (e.g. only the key side is given, so every
-// key-flight count meets it exactly), where the one with 2h+s closest to BLONDEL_TARGET_MM is taken. Whether the
-// result complies is reported by the validator, not decided here.
+// going must stay constant, so a non-key side generally cannot be exact). Candidates whose going is outside
+// FIT_GOING_RANGE_MM or whose turn is infeasible are dropped. THE GIVEN DIMENSIONS COME FIRST (user decision
+// 2026-10-10 — the stairwell is what it is: a stair that fits it with too high a riser is reported, a stair with a
+// comfortable riser that is a metre longer than the room is useless). The order of preference (`scoreOf`):
+//   1. every non-key side within ONE GOING of its dimension (the nearest tread count or the one next to it);
+//   2. the riser height inside [minRiser, maxRiser];
+//   3. riser in range: the smallest total deviation of the non-key sides, then 2h+s closest to BLONDEL_TARGET_MM;
+//      riser out of range (the room is too short for a regular stair): 2h+s first — it balances the going against
+//      the riser, so the result is neither a ladder nor a row of slivers — then the deviation.
+// Variants failing (1) come last, by deviation. A riser outside the range is reported as a WARNING here and judged
+// by the validator as always.
+//
+// Manual counts (`stairwellManualCounts`): the user sets every flight's tread count by hand; the fit then only
+// solves the going that makes the key side exact, and reports how far the other sides are off.
 //
 // Nothing here is a new geometric rule: every side length is MEASURED on a real buildPlanLayout() result
 // (RULES.md #8) — this file only searches over parameters. It is pure (no Three.js, no config mutation). The
@@ -29,7 +36,8 @@ const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
 // The going the fit may choose: the same range the "Głębokość stopnia" slider offers (a fitted value outside it
 // could not be shown or edited there). Not a legal limit — PL-LEGAL-A-01 (2h+s) is what bounds it in practice.
-export const FIT_GOING_RANGE_MM = { min: 180, max: 320 };
+// (150: a very tight stairwell — the user's own project needed 178.6 mm, below the former 180 minimum.)
+export const FIT_GOING_RANGE_MM = { min: 150, max: 320 };
 // Straight treads per flight the fit may choose — the "Proste (odc. …)" slider range.
 export const FIT_MAX_TREADS_PER_LEG = 15;
 // Tie-break only (see above): the middle of the PL-LEGAL-A-01 band, 600–650 mm. SOFTWARE_DESIGN_CHOICE (see
@@ -77,9 +85,11 @@ export function stairwellTargets(config) {
   return out;
 }
 
+// (a side is a stretch of the RAW outer line, which no manual edge edit moves — the edits are left out, so the
+// search neither pays for them nor trips over an edit that does not fit a trial layout)
 function measure(config) {
   const derived = deriveStairData(config);
-  const planLayout = buildPlanLayout({ ...config, riserHeight: derived.riserHeight });
+  const planLayout = buildPlanLayout({ ...config, riserHeight: derived.riserHeight, manualEdgeOverrides: {}, manualTreadOverhangs: {} });
   return { derived, sides: outerSideLengths(planLayout) };
 }
 
@@ -87,18 +97,37 @@ function sideOf(config, letter) {
   return measure(config).sides[sideLetters(config.stairType).indexOf(letter)];
 }
 
-// Going that makes `letter` come out at `target`, all counts fixed. A side is affine in the going (every tread
-// and winder scales with it), so two measurements give it; a third checks that assumption.
+// Going that makes `letter` come out at `target`, all counts fixed. A side grows with the going, but not along one
+// straight line: with a small going the winder zone is laid out differently (the walkline split is clamped, or the
+// walkline itself is moved — geometry/winderArc.js), so the side is sampled over the range, the stretch that crosses
+// the target is found (the one with the largest going when there are several) and the crossing is narrowed down on
+// real layouts.
+const GOING_SAMPLE_STEP_MM = 10;
+const GOING_SOLVE_ITERATIONS = 40;
 function solveGoing(config, letter, target) {
-  const g1 = FIT_GOING_RANGE_MM.min;
-  const g2 = FIT_GOING_RANGE_MM.max;
-  const s1 = sideOf({ ...config, treadGoing: g1 }, letter);
-  const s2 = sideOf({ ...config, treadGoing: g2 }, letter);
-  if (!Number.isFinite(s1) || !Number.isFinite(s2) || s2 - s1 < 1e-6) return null; // this side does not grow with the going
-  const g = g1 + ((target - s1) * (g2 - g1)) / (s2 - s1);
-  if (!(g >= g1 && g <= g2)) return null;
-  const check = sideOf({ ...config, treadGoing: g }, letter);
-  return Math.abs(check - target) <= SIDE_MET_TOLERANCE_MM ? g : null;
+  const at = (g) => sideOf({ ...config, treadGoing: g }, letter);
+  const samples = [];
+  for (let g = FIT_GOING_RANGE_MM.min; g < FIT_GOING_RANGE_MM.max; g += GOING_SAMPLE_STEP_MM) samples.push(g);
+  samples.push(FIT_GOING_RANGE_MM.max);
+  const values = samples.map(at);
+  for (let i = samples.length - 1; i > 0; i--) {
+    let lo = samples[i - 1];
+    let hi = samples[i];
+    let sLo = values[i - 1];
+    let sHi = values[i];
+    if (!Number.isFinite(sLo) || !Number.isFinite(sHi) || !(sLo <= target + SIDE_MET_TOLERANCE_MM && sHi >= target - SIDE_MET_TOLERANCE_MM)) continue;
+    for (let k = 0; k < GOING_SOLVE_ITERATIONS; k++) {
+      // the straight line through the two ends first (exact when the stretch is one regime), halving as a fallback
+      const guess = sHi - sLo > 1e-9 ? lo + ((target - sLo) * (hi - lo)) / (sHi - sLo) : (lo + hi) / 2;
+      const g = k % 2 === 0 ? Math.min(hi, Math.max(lo, guess)) : (lo + hi) / 2;
+      const v = at(g);
+      if (!Number.isFinite(v)) break;
+      if (Math.abs(v - target) <= SIDE_MET_TOLERANCE_MM / 10) return g;
+      if (v < target) [lo, sLo] = [g, v];
+      else [hi, sHi] = [g, v];
+    }
+  }
+  return null;
 }
 
 // How `letter`'s side grows with its own flight's tread count at the current going. One more straight tread adds one
@@ -169,12 +198,21 @@ export function solveStairwellFit(config) {
   const others = letters.filter((s) => s !== key && targets[s] !== null);
   const minCountFor = (s) => (s === 'A' && config.stairType === 'straight' ? 1 : 0);
 
-  // Dimensions first; 2h+s only breaks a tie (it is informational, never a reason to miss a given side).
-  const scoreOf = (derived, deviation) => [Math.round(deviation), Math.abs(derived.blondel - BLONDEL_TARGET_MM)];
-  const combos = countCombos(others, minCountFor);
+  // The order of preference described in the header. `deviations` = |achieved − target| of every non-key side.
+  const riserOff = (derived) => Math.max(0, config.minRiser - derived.riserHeight, derived.riserHeight - config.maxRiser);
+  const scoreOf = (derived, deviations, going) => {
+    const total = Math.round(deviations.reduce((sum, d) => sum + d, 0));
+    const blondel = Math.abs(derived.blondel - BLONDEL_TARGET_MM);
+    if (deviations.some((d) => d > going + SIDE_MET_TOLERANCE_MM)) return [1, 0, total, blondel, 0];
+    return riserOff(derived) > 0 ? [0, 1, blondel, total, 0] : [0, 0, total, blondel, 0];
+  };
+  const manual = !!config.stairwellManualCounts;
+  // manual counts: every flight keeps the user's count — one candidate, only the going is solved
+  const combos = manual ? [Object.fromEntries(others.map((s) => [s, config[COUNT_FIELD[s]]]))] : countCombos(others, minCountFor);
+  const keyCounts = manual ? [config[COUNT_FIELD[key]]] : Array.from({ length: FIT_MAX_TREADS_PER_LEG - minCountFor(key) + 1 }, (_, i) => minCountFor(key) + i);
 
   let best = null;
-  for (let nKey = minCountFor(key); nKey <= FIT_MAX_TREADS_PER_LEG; nKey++) {
+  for (const nKey of keyCounts) {
     const base = { ...config, [COUNT_FIELD[key]]: nKey };
     const going = solveGoing(base, key, targets[key]);
     if (going === null) continue;
@@ -182,16 +220,14 @@ export function solveStairwellFit(config) {
     const lines = Object.fromEntries(others.map((s) => [s, sideVsCount(atGoing, s, minCountFor(s))]));
 
     // Every combination of the other flights' counts is scored from the linear side model and deriveStairData
-    // (riser height, 2h+s, turn feasibility — no layout needed), so a count that is not the nearest one for its own
-    // side can still win when the nearest one would make too many treads (riser height below minRiser).
+    // (riser height, 2h+s, turn feasibility — no layout needed).
     let bestHere = null;
     for (const combo of combos) {
       const cand = { ...atGoing };
       for (const s of others) cand[COUNT_FIELD[s]] = combo[s];
       const derived = deriveStairData(cand);
-      if (!derived.riserRangeOk || !derived.turnFeasible) continue;
-      const deviation = others.reduce((sum, s) => sum + Math.abs(sideAtCount(lines[s], combo[s]) - targets[s]), 0);
-      const score = scoreOf(derived, deviation);
+      if (!derived.turnFeasible && !manual) continue;
+      const score = scoreOf(derived, others.map((s) => Math.abs(sideAtCount(lines[s], combo[s]) - targets[s])), going);
       if (!bestHere || lexicographicallyLess(score, bestHere.score)) bestHere = { cand, score };
     }
     if (!bestHere) continue;
@@ -201,16 +237,16 @@ export function solveStairwellFit(config) {
     if (finalGoing === null) continue;
     const cand = { ...bestHere.cand, treadGoing: finalGoing };
     const { derived, sides } = measure(cand);
-    if (!derived.riserRangeOk || !derived.turnFeasible) continue;
-    const deviation = others.reduce((sum, s) => sum + Math.abs(sides[letters.indexOf(s)] - targets[s]), 0);
-    const score = scoreOf(derived, deviation);
+    if (!derived.turnFeasible && !manual) continue;
+    const score = scoreOf(derived, others.map((s) => Math.abs(sides[letters.indexOf(s)] - targets[s])), finalGoing);
     if (!best || lexicographicallyLess(score, best.score)) best = { cand, derived, sides, score };
   }
 
   if (!best) {
-    const message =
-      `Dopasowanie do klatki: nie da się zmieścić schodów w boku ${key} = ${targets[key]} mm przy obecnej wysokości kondygnacji, ` +
-      `liczbie stopni zabiegowych i zakresie wysokości podstopnia (${config.minRiser}–${config.maxRiser} mm, głębokość ${FIT_GOING_RANGE_MM.min}–${FIT_GOING_RANGE_MM.max} mm). Parametry schodów zostają bez zmian.`;
+    const message = manual
+      ? `Dopasowanie do klatki: przy ręcznie ustawionych liczbach stopni bok ${key} = ${targets[key]} mm wymagałby głębokości stopnia spoza zakresu ${FIT_GOING_RANGE_MM.min}–${FIT_GOING_RANGE_MM.max} mm — zmień liczbę stopni albo wymiar. Parametry schodów zostają bez zmian.`
+      : `Dopasowanie do klatki: nie da się zmieścić schodów w boku ${key} = ${targets[key]} mm przy obecnej liczbie stopni zabiegowych ` +
+        `i głębokości stopnia ${FIT_GOING_RANGE_MM.min}–${FIT_GOING_RANGE_MM.max} mm. Parametry schodów zostają bez zmian.`;
     return { ...off, enabled: true, status: 'NO_SOLUTION', message, diagnostics: [fitDiag('ERROR', 'stairwellFit', message, { value: targets[key], unit: 'mm' })] };
   }
 
@@ -234,24 +270,37 @@ export function solveStairwellFit(config) {
       { value: Math.round(s.achieved), expected: s.target, unit: 'mm' },
     ),
   );
+  const h = best.derived.riserHeight;
+  if (riserOff(best.derived) > 0) {
+    diagnostics.push(
+      fitDiag(
+        'WARNING',
+        'stairwellFit',
+        `Dopasowanie do klatki: w podanych wymiarach mieści się ${best.derived.numTreads} stopni, co daje wysokość podstopnia ${h.toFixed(1).replace('.', ',')} mm — poza zakresem ${config.minRiser}–${config.maxRiser} mm. Wymiary klatki mają pierwszeństwo; ocenę zgodności podaje walidacja.`,
+        { value: Math.round(h * 10) / 10, expected: `${config.minRiser}–${config.maxRiser}`, unit: 'mm' },
+      ),
+    );
+  }
   return {
     enabled: true,
+    manualCounts: manual,
     status: missed.length ? 'APPROX' : 'OK',
     values,
     sides,
     blondel: best.derived.blondel,
     riserHeight: best.derived.riserHeight,
-    message: missed.length ? 'Bok kluczowy dokładny, pozostałe najbliżej jak się da.' : 'Wszystkie podane boki dokładnie.',
+    message: missed.length ? (manual ? 'Bok kluczowy dokładny; liczby stopni ustawione ręcznie.' : 'Bok kluczowy dokładny, pozostałe najbliżej jak się da.') : 'Wszystkie podane boki dokładnie.',
     diagnostics,
   };
 }
 
 /**
  * The config fields the fit is currently deriving (AUTO in the UI, not editable while it is on): the going, and the
- * tread count of every flight whose side has a target. [] when the fit is off.
+ * tread count of every flight whose side has a target — only the going with manual counts. [] when the fit is off.
  */
 export function stairwellDrivenFields(config) {
   if (!config.stairwellFitEnabled) return [];
+  if (config.stairwellManualCounts) return ['treadGoing'];
   const targets = stairwellTargets(config);
   return ['treadGoing', ...Object.keys(targets).filter((s) => targets[s] !== null).map((s) => COUNT_FIELD[s])];
 }

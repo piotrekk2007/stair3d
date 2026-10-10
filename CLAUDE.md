@@ -93,8 +93,11 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   (`applyHousingRecess`: a tread ends t − d from a housed wanga's chain line, on a line parallel to it —
   `recessTreadToWangi`), `manualTreadOverhangs` (one tread's own side, `{side, offsetMm}`).
 - **Stairwell fit** (`stairwellFit.js`, "Dopasuj do klatki"): derives going + straight counts from side lengths of the
-  outer line (key side exact, others as close as counts allow; 2h+s only breaks ties — `STAIR3D-FIT-01`); `rebuild()`
-  copies the result back into config; driven fields show AUTO.
+  outer line (key side exact; the given dimensions come first: other sides within one going, then riser in range,
+  then deviation / 2h+s — a riser forced out of range is a WARNING, never a reason to outgrow the room;
+  `STAIR3D-FIT-01`). Going 150–320, found by sampling + narrowing (a side is not one straight line of the going).
+  `stairwellManualCounts`: counts stay the user's and editable, only the going is fitted. `rebuild()` copies the
+  result back into config; driven fields show AUTO.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`
   relative to `planLayout.bounds` min corner); `deriveCeilingFit` → collisions/headroom; "Dosuń otwór" alignment.
 

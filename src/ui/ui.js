@@ -110,7 +110,7 @@ export function createUI({
   const dims = gui.addFolder('Wymiary ogólne');
   lockable(dims.add(config, 'totalRise', 2000, 3600, 10).name('Wys. kondygnacji [mm]'), 'totalRise');
   lockable(dims.add(config, 'stairWidth', 700, 1400, 10).name('Szerokość biegu [mm]'), 'stairWidth');
-  lockable(dims.add(config, 'treadGoing', 180, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
+  lockable(dims.add(config, 'treadGoing', 150, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
 
   // Dopasowanie do klatki (geometry/stairwellFit.js): the going and the straight-tread counts are derived from the
   // stairwell's sides, like the riser height from the floor height. 0 = no dimension for that side.
@@ -120,6 +120,8 @@ export function createUI({
   live(well.add(config, 'stairwellSideBMm', 0, 12000, 10)).name('Bok B (L, U) [mm]');
   live(well.add(config, 'stairwellSideCMm', 0, 12000, 10)).name('Bok C (tylko U) [mm]');
   live(well.add(config, 'stairwellKeySide', ['A', 'B', 'C'])).name('Bok kluczowy (dokładny)');
+  // manual counts: the fit only solves the going for the key side; the tread counts stay editable
+  live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie');
 
   const steps = gui.addFolder('Liczba stopni');
   // L/U can start straight away with winders (0 straight treads before the first turn); a straight stair

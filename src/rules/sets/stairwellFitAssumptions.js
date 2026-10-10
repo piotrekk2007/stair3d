@@ -11,8 +11,8 @@ export const stairwellFitAssumptions = defineRuleSet([
     category: 'A',
     description:
       'Stairwell fit: the KEY side of the stair\'s outer line is met exactly by solving the (single) tread going; the other given sides are met as closely as the straight-tread counts allow. Among feasible variants the one with the smallest total deviation of the non-key sides is taken; 2h+s (PL-LEGAL-A-01) is informational only and merely breaks a tie between equally good variants (closest to 625 mm, the middle of the band).',
-    condition: 'side(key) == target(key) ; minimise [sum|side_i - target_i|, |2h+s - 625| (tie-break only)] ; minRiser <= h <= maxRiser ; 180 <= s <= 320',
-    configRefs: ['stairwellFitEnabled', 'stairwellSideAMm', 'stairwellSideBMm', 'stairwellSideCMm', 'stairwellKeySide', 'minRiser', 'maxRiser'],
+    condition: 'side(key) == target(key) ; 150 <= s <= 320 ; prefer in this order: every other side within one going of its target ; minRiser <= h <= maxRiser ; (riser in range) min sum|side_i - target_i| then |2h+s - 625| ; (riser out of range: reported as WARNING) |2h+s - 625| then the deviation ; stairwellManualCounts: counts are set by the user, only s is solved',
+    configRefs: ['stairwellFitEnabled', 'stairwellSideAMm', 'stairwellSideBMm', 'stairwellSideCMm', 'stairwellKeySide', 'stairwellManualCounts', 'minRiser', 'maxRiser'],
     ruleType: 'SOFTWARE_DESIGN_CHOICE',
     jurisdiction: 'COMPANY',
     source:

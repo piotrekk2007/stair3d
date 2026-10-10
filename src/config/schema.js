@@ -59,6 +59,7 @@ export function createDefaultConfig() {
     stairwellSideBMm: 0, // mm, bok wzdłuż biegu B (L, U)
     stairwellSideCMm: 0, // mm, bok wzdłuż biegu C (tylko U)
     stairwellKeySide: 'A', // 'A' | 'B' | 'C' — bok, który musi wyjść dokładnie
+    stairwellManualCounts: false, // true = liczby stopni w biegach ustawia użytkownik, dopasowanie liczy tylko głębokość
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza

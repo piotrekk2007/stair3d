@@ -146,3 +146,52 @@ test('regression: a straight stair\'s plan bounds include its width (the outer l
   const layout = buildPlanLayout({ ...config, riserHeight: deriveStairData(config).riserHeight });
   assert.equal(Math.round(layout.bounds.maxX - layout.bounds.minX), d.stairWidth);
 });
+
+// The user's project (2026-10-10): a tight stairwell, 2810 mm to climb. Side B (key) 1610, side A 1320.
+const tight = { stairType: 'L', totalRise: 2810, stairWidth: 890, windersPerTurn: 4, stairwellSideAMm: 1320, stairwellSideBMm: 1610, stairwellKeySide: 'B', treadsLegA: 2, treadsLegB: 4, treadGoing: 180 };
+
+test('the given dimensions come first: a stairwell too short for a regular riser still gets a stair that fits it', () => {
+  const config = fitConfig(tight);
+  const fit = solveStairwellFit(config);
+  assert.ok(fit.values, fit.message);
+  const [a, b] = fit.sides;
+  assert.ok(Math.abs(b.achieved - 1610) < SIDE_TOLERANCE_MM, 'the key side is exact');
+  // (the old fit kept the riser in range at any price: 7 treads on side A, 2410 mm in a 1320 mm room)
+  assert.ok(Math.abs(a.deviation) <= fit.values.treadGoing + SIDE_TOLERANCE_MM, `side A is within one going of its dimension (${Math.round(a.achieved)} mm)`);
+  assert.ok(fit.values.treadsLegA <= 3);
+  // the riser this forces is out of range — said so, as a WARNING, and the sides are reproduced by a real layout
+  const riser = fit.diagnostics.find((d) => d.parameter === 'stairwellFit');
+  assert.ok(riser && riser.severity === 'WARNING' && riser.value > config.maxRiser, 'the out-of-range riser is reported');
+  assert.ok(fit.diagnostics.every((d) => d.severity !== 'ERROR'));
+  const sides = sidesOf(applyStairwellFit(config, fit));
+  assert.ok(Math.abs(sides[1] - 1610) < SIDE_TOLERANCE_MM && Math.abs(sides[0] - a.achieved) < SIDE_TOLERANCE_MM);
+  // a going below the former 180 mm minimum is found (the winder zone is laid out differently there, so the side is
+  // not one straight line of the going)
+  assert.ok(fit.values.treadGoing < 180 && fit.values.treadGoing >= FIT_GOING_RANGE_MM.min);
+
+  // with room for a regular stair nothing changes: the riser stays in range and no riser warning appears
+  const roomy = solveStairwellFit(fitConfig({ stairType: 'L', stairwellSideAMm: 2400, stairwellSideBMm: 2900, stairwellKeySide: 'B' }));
+  assert.ok(roomy.values && roomy.riserHeight >= 150 && roomy.riserHeight <= 200);
+  assert.ok(!roomy.diagnostics.some((d) => d.parameter === 'stairwellFit'));
+});
+
+test('manual counts: the tread counts stay the user\'s (and editable), only the going is fitted to the key side', () => {
+  const config = fitConfig({ ...tight, stairwellManualCounts: true });
+  assert.deepEqual(stairwellDrivenFields(config), ['treadGoing']);
+  assert.deepEqual(stairwellDrivenFields({ ...config, stairwellManualCounts: false }), ['treadGoing', 'treadsLegA', 'treadsLegB']);
+  const fit = solveStairwellFit(config);
+  assert.equal(fit.manualCounts, true);
+  assert.deepEqual([fit.values.treadsLegA, fit.values.treadsLegB], [2, 4]);
+  assert.ok(Math.abs(fit.sides[1].achieved - 1610) < SIDE_TOLERANCE_MM);
+  // one more tread on A: the same going (B decides it), side A one going longer, reported
+  const more = solveStairwellFit({ ...config, treadsLegA: 3 });
+  assert.equal(more.values.treadsLegA, 3);
+  assert.ok(Math.abs(more.values.treadGoing - fit.values.treadGoing) < 1e-6);
+  assert.ok(Math.abs(more.sides[0].achieved - fit.sides[0].achieved - fit.values.treadGoing) < SIDE_TOLERANCE_MM);
+  assert.ok(more.diagnostics.some((d) => d.parameter === 'stairwellSideAMm' && d.severity === 'WARNING'));
+  // counts that cannot give the key side at any allowed going: ERROR, the user's values stay
+  const none = solveStairwellFit({ ...config, treadsLegB: 15 });
+  assert.equal(none.status, 'NO_SOLUTION');
+  assert.equal(none.values, null);
+  assert.match(none.message, /ręcznie ustawionych liczbach stopni/);
+});
