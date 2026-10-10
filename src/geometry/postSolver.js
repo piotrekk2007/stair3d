@@ -114,6 +114,22 @@ export function applyPostOverrides(models, rawOverrides) {
 }
 
 /**
+ * Posts a handrail ends at reach at least the handrail's top there (railingSolver.js `postTopNeeds`): the NOMINAL top
+ * of such a post is raised to that height; a manual length correction (topDeltaMm) keeps applying on top of it.
+ * @param {PostModel[]} posts
+ * @param {Object<string, number>} needs  post id -> the lowest allowed nominal top (mm)
+ */
+export function raisePostsToHandrail(posts, needs = {}) {
+  return posts.map((p) => {
+    const need = needs[p.postId];
+    const nominalTop = p.nominalElevation?.top ?? p.elevation.top;
+    if (!(need > nominalTop)) return p;
+    const delta = p.elevation.top - nominalTop; // the user's own correction, if any
+    return { ...p, nominalElevation: { ...(p.nominalElevation || p.elevation), top: need }, elevation: { ...p.elevation, top: need + delta }, raisedForHandrail: true };
+  });
+}
+
+/**
  * The posts that actually exist (removed ones left out) — what is rendered, priced and validated.
  *
  * @param {import('./planLayout.js').PlanLayout} planLayout

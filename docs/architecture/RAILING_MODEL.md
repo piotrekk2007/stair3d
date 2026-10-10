@@ -329,3 +329,26 @@ Widok z boku jednego biegu poręczy, wzorem „Profilu wangi”. Zakładka widok
     pomijane i zgłaszane.
 
 Testy: `geometry/__tests__/railingProfile.test.js` (model edycji, solver, widok, rysunek, poręcz gięta w L).
+
+## Poręcz zawsze dochodzi do słupa (2026-10-10)
+
+Zgłoszone: po przesunięciu końca poręczy w edytorze poręcz w 3D nie dochodziła do słupa. Przyczyny były dwie i obie
+istniały też bez edycji:
+
+- **Słup niższy niż poręcz.** Słupek startowy miał stałe 1000 mm, a góra poręczy przy nim wypadała na ok. 1180 mm.
+  Słup końcowy kończył się na poziomie stropu, a poręcz wyżej. Teraz słup, przy którym kończy się poręcz, sięga co
+  najmniej do jej góry w tym miejscu (+ `railingPostTopAboveHandrailMm`):
+  - `railingSolver.js` liczy `postTopNeeds` (id słupa → minimalny wierzch) i od razu nadaje tę wysokość własnym
+    słupkom balustrady;
+  - słupy konstrukcyjne podnosi `postSolver.js raisePostsToHandrail` (wołane w `buildStaircase.js`, flaga
+    `raisedForHandrail`).
+
+  Podnoszona jest wysokość **nominalna**. Ręczna korekta długości słupa (`topDeltaMm`) działa nadal od niej.
+- **Koniec poręczy cięty prostopadle do jej osi** zostawiał przy pionowym licu słupa klin szczeliny.
+  `railingRenderer.js handrailPieceGeometry` buduje teraz kawałek poręczy z końcami ciętymi **pionowo**: profil
+  ułożony na długości w rzucie i pochylony ścinaniem (shear), o wysokości w pionie h/cos(pochylenia). Wysokość
+  profilu prostopadle do osi zostaje ta sama. Kawałki stromsze niż tan = 5 (prawie pionowy odcinek duszy) zostają
+  prostopadłościanem jak dawniej.
+
+Testy: `railingRenderer.test.js` (słup sięga do poręczy dla obu stron i korekt ±150 mm; siatka poręczy kończy się
+dokładnie na licach). Oba potwierdzone, że bez poprawki nie przechodzą.

@@ -171,7 +171,10 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   line → short stub next to a post dropped (`RAIL_END_STUB_MM` 250, the straight piece carried on to the post) → cut
   or extended to the post FACES (`fitPathToPosts`) → optional manual height of an end at its post
   (`config.railingEndOffsets`, `railingEndKey`, edited in the Inspektor's post view) → smoothing for a bent handrail.
-  Balusters and glass read their height under the handrail's own line (`zOnPaths`).
+  Balusters and glass read their height under the handrail's own line (`zOnPaths`). A post a handrail ends at reaches
+  at least the handrail's top there (`postTopNeeds` → own posts in the solver, structural posts via `postSolver.js
+  raisePostsToHandrail`; nominal height, manual `topDeltaMm` on top). The renderer cuts handrail ends PLUMB (sheared
+  profile), flush with the post face.
 - **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
   `config.railingProfileOverrides = {[section]: {[railingRunKey 'postA>postB']: [{s, dz}]}}`, `applyRunPoints`,
   `RAILING_PROFILE_EDITS` / `applyRailingProfileEdit`), applied in the solver after the end corrections and before

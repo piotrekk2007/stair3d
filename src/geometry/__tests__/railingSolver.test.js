@@ -148,9 +148,15 @@ test('new end posts take the configured thickness and rise railingPostTopAboveHa
   const { config, model } = stair({ ...cut, railingSections: whole('outer'), railingPostSizeMm: 100, railingPostTopAboveHandrailMm: 60 });
   const [start, end] = model.sections[0].posts;
   assert.equal(start.size, 100);
-  const startZ = config.riserHeight; // nosing line at the front of tread 0
-  assert.ok(Math.abs(start.elevation.top - (startZ + config.railingHeightMm + 60)) < 1e-6);
+  // a post reaches 60 mm above the handrail's top where the handrail meets it (on the post's face), and never less
+  // than 60 mm above the handrail height over its own nosing-line node
+  const half = config.railingHandrailHeightMm / 2;
+  const run = model.sections[0].runs[0];
+  const railStartTop = run.pieces[0].start.z + half;
+  assert.ok(Math.abs(start.elevation.top - (railStartTop + 60)) < 1e-6, 'start: 60 mm above the handrail on its face');
+  assert.ok(start.elevation.top >= config.riserHeight + config.railingHeightMm + 60 - 1e-6);
   assert.ok(Math.abs(end.elevation.top - (11 * config.riserHeight + config.railingHeightMm + 60)) < 1e-6);
+  assert.ok(end.elevation.top >= run.pieces[run.pieces.length - 1].end.z + half + 60 - 1e-6, 'end: at least 60 mm above the handrail');
 });
 
 test('per-post edits: thickness and length of a railing post, and removing it; the balusters follow the real post width', () => {
@@ -161,7 +167,9 @@ test('per-post edits: thickness and length of a railing post, and removing it; t
   const e = edited.posts.find((p) => p.postId === id);
   assert.equal(e.size, 140);
   assert.equal(e.nominalSize, b.size);
-  assert.ok(Math.abs(e.elevation.top - (b.elevation.top + 50)) < 1e-6);
+  // +50 on top of ITS nominal height (a fatter post meets the rising handrail further along, so its nominal top is higher)
+  assert.ok(Math.abs(e.elevation.top - (e.nominalElevation.top + 50)) < 1e-6);
+  assert.ok(e.nominalElevation.top >= b.elevation.top - 1e-6);
   assert.ok(Math.abs(e.elevation.bottom - (b.elevation.bottom + 20)) < 1e-6);
   assert.equal(e.overridden, true);
   // measured from the post's own centre (the handrail itself now starts on the post's face)

@@ -7,7 +7,7 @@ import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
 import { buildStringerConstructionGeometry } from './stringerConstructionGeometry.js';
 import { renderStringers } from './stringerRenderer.js';
-import { buildPostModels, buildAllPostModels } from './postSolver.js';
+import { buildPostModels, buildAllPostModels, raisePostsToHandrail } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel } from './railingSolver.js';
@@ -110,7 +110,8 @@ export function buildStaircase(inputConfig) {
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
-  const allPostModels = [...(cantilever ? [] : buildAllPostModels(planLayout, fullConfig)), ...railingModel.posts];
+  // (a structural post a handrail ends at is raised to the handrail's top — postSolver.js raisePostsToHandrail)
+  const allPostModels = [...(cantilever ? [] : raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds)), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);
 
   // How the elements are joined (jointSolver.js): stringers into posts (stage 1), treads/risers cut around posts and

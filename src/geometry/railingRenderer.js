@@ -28,11 +28,31 @@ function profileGeometry(shape, width, height, length) {
   return new THREE.BoxGeometry(length, height, width);
 }
 
-// One handrail piece: a straight prism from start to end, its profile's "up" kept as vertical as the slope
-// allows (never rolled), positioned at the piece's midpoint.
+// One handrail piece from start to end, its profile never rolled. Its two END FACES ARE PLUMB (vertical, square to the
+// piece's plan direction): a handrail meets a post on the post's vertical face, and two pieces of one run meet on a
+// plumb cut too (railingSolver.js annotateCuts gives the same cuts to the workshop). So the piece is a profile laid
+// along its PLAN length and sheared up by its slope — its vertical size 1/cos(pitch) of the profile's, so that it is
+// the profile's own height square to its axis. (A box cut square to its own axis left a wedge-shaped gap at a post.)
+// A piece too steep to shear (the near-vertical stub of a winder's dusza) keeps the plain square-ended prism.
+const PLUMB_CUT_MAX_SLOPE = 5; // tan(~79°)
 function handrailPieceGeometry(piece, handrail) {
   const a = toWorld(piece.start);
   const b = toWorld(piece.end);
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const planLength = Math.hypot(b.x - a.x, b.z - a.z);
+  const rise = b.y - a.y;
+  if (planLength > 1e-6 && Math.abs(rise) / planLength <= PLUMB_CUT_MAX_SLOPE) {
+    const slope = rise / planLength;
+    const along = new THREE.Vector3((b.x - a.x) / planLength, 0, (b.z - a.z) / planLength);
+    const up = new THREE.Vector3(0, 1, 0);
+    const across = new THREE.Vector3().crossVectors(along, up);
+    const geometry = profileGeometry(handrail.shape, handrail.widthMm, handrail.heightMm * Math.hypot(1, slope), planLength);
+    // shear: local y += slope · local x (keeps every x = const face vertical), then into the piece's plan frame
+    const shear = new THREE.Matrix4().set(1, 0, 0, 0, slope, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    geometry.applyMatrix4(new THREE.Matrix4().makeBasis(along, up, across).setPosition(mid).multiply(shear));
+    geometry.computeVertexNormals();
+    return geometry;
+  }
   const dir = b.clone().sub(a);
   const length = dir.length();
   dir.normalize();
@@ -42,7 +62,7 @@ function handrailPieceGeometry(piece, handrail) {
   yAxis.normalize();
   const zAxis = new THREE.Vector3().crossVectors(dir, yAxis);
   const geometry = profileGeometry(handrail.shape, handrail.widthMm, handrail.heightMm, length);
-  geometry.applyMatrix4(new THREE.Matrix4().makeBasis(dir, yAxis, zAxis).setPosition(a.clone().add(b).multiplyScalar(0.5)));
+  geometry.applyMatrix4(new THREE.Matrix4().makeBasis(dir, yAxis, zAxis).setPosition(mid));
   return geometry;
 }
 

@@ -888,6 +888,25 @@ function buildSection(section, ctx) {
     }
   }
 
+  // A post a handrail ends at must reach at least the handrail's top there (+ the configured rise above it): the
+  // handrail is a piece between two posts, so a shorter post would leave it hanging beside nothing. This section's own
+  // posts are made that tall here; for the structural posts the need is handed to buildStaircase.js (postSolver.js
+  // raisePostsToHandrail). A manual length correction of a post still applies on top of this nominal height.
+  const postTopNeeds = {};
+  for (const run of base.runs) {
+    const ends = [[run.startPostId, run.pieces[0]?.start], [run.endPostId, run.pieces[run.pieces.length - 1]?.end]];
+    for (const [postId, pt] of ends) {
+      if (!pt) continue;
+      const need = pt.z + handrailHeight / 2 + (config.railingPostTopAboveHandrailMm || 0);
+      postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);
+    }
+  }
+  base.postTopNeeds = postTopNeeds;
+  base.posts = applyPostOverrides(
+    nominalPosts.map((p) => (postTopNeeds[p.postId] > p.elevation.top ? { ...p, elevation: { ...p.elevation, top: postTopNeeds[p.postId] } } : p)),
+    config.manualPostOverrides
+  );
+
   base.handrail = {
     pieces,
     totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0),
@@ -953,9 +972,12 @@ export function buildRailingModel({ planLayout, treadModels, stringerModels, str
   if (!config.railingEnabled) return empty;
   const ctx = { config, planLayout, treadModels, stringerModels, stringerConstruction, postModels, riserHeight: config.riserHeight };
   const sections = sanitizeRailingSections(config.railingSections).map((s) => buildSection(s, ctx));
+  const postTopNeeds = {};
+  for (const s of sections) for (const [postId, need] of Object.entries(s.postTopNeeds || {})) postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);
   return {
     enabled: true,
     sections,
+    postTopNeeds,
     posts: sections.flatMap((s) => s.posts),
     diagnostics: sections.flatMap((s) => s.diagnostics),
   };
