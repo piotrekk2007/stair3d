@@ -172,6 +172,12 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   or extended to the post FACES (`fitPathToPosts`) → optional manual height of an end at its post
   (`config.railingEndOffsets`, `railingEndKey`, edited in the Inspektor's post view) → smoothing for a bent handrail.
   Balusters and glass read their height under the handrail's own line (`zOnPaths`).
+- **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
+  `config.railingProfileOverrides = {[section]: {[railingRunKey 'postA>postB']: [{s, dz}]}}`, `applyRunPoints`,
+  `RAILING_PROFILE_EDITS` / `applyRailingProfileEdit`), applied in the solver after the end corrections and before
+  smoothing (`runs[].key`, `runs[].profile`); `railingProfileView.js` (unfolded view model),
+  `railingEditor/railingEditorRenderer.js` (pure SVG), `ui/railingEditorPanel.js` (drag vertically, double-click adds,
+  right-click/Delete removes, arrows, numeric field). INFO `RAILING-PROFILE-EDITED` / `-POINT-SKIPPED`.
 - Glass (`railingGlass.js`, `railingInfill` balusters | glass-side (rotule Ø30, handrail on the glass) | glass-posts
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));
   VSG 4.4.2/5.5.2, pane ≤ 1800 mm, tint clear/optiwhite/grey/bronze; other numbers DO WERYFIKACJI.
@@ -224,7 +230,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   neighbouring edges; Alt = free move of one end). Layers: grid, axes, widths, walkline, run/step boundaries, wangi as
   board footprints, posts, balustrade, opening, winder widths, stringer spacing, winder blanks.
 - Workspace (`ui/workspace.js`, `style.css` grid): toolbar, left info + lil-gui parameters (`ui/ui.js`), main view
-  (Plan 2D | Widok 3D | Profil wangi), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
+  (Plan 2D | Widok 3D | Profil wangi | Profil poręczy), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
   selection (`ui/selection.js`, model ids only). Value states AUTO/USER/RĘCZNA (`ui/valueState.js`). Undo/redo of
   config snapshots (`history/modelHistory.js`), committed on drag end.
 

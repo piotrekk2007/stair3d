@@ -7,6 +7,8 @@ import { editRailingSections, sanitizeRailingEndOffsets } from './geometry/raili
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
 import { createProfileEditor } from './ui/profileEditorPanel.js';
+import { createRailingEditor } from './ui/railingEditorPanel.js';
+import { applyRailingProfileEdit } from './geometry/railingProfileModel.js';
 import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
@@ -291,6 +293,7 @@ function rebuild() {
   // Edytor profilu rysuje się z TYCH SAMYCH modeli — po każdym przeliczeniu (także w trakcie przeciągania
   // punktu) odświeżamy go, jeśli jest widoczny.
   if (viewState.view === 'profile' && typeof profileEditor !== 'undefined') profileEditor.refresh();
+  if (viewState.view === 'railing' && typeof railingEditor !== 'undefined') railingEditor.refresh();
 }
 
 function selectionStillExists(sel, built) {
@@ -708,6 +711,7 @@ function setView(view) {
   const show2d = view === '2d';
   plan2dPanel.classList.toggle('visible', show2d);
   profilePanel.classList.toggle('visible', view === 'profile');
+  railingPanel.classList.toggle('visible', view === 'railing');
   if (show2d) {
     if (!planViewport) fitPlanView();
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -716,6 +720,9 @@ function setView(view) {
   } else if (view === 'profile') {
     ws.setStatus({ view: 'Profil wangi (widok z boku)' });
     profileEditor.refresh();
+  } else if (view === 'railing') {
+    ws.setStatus({ view: 'Profil poręczy (widok z boku)' });
+    railingEditor.refresh();
   } else {
     ws.setStatus({ view: `3D: ${sceneApi.getCameraMode() === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
   }
@@ -1032,6 +1039,20 @@ const profileEditor = createProfileEditor(profilePanel, {
   getContext: () => (lastModels ? { config, models: lastModels } : null),
   applyEdit: (edit) => {
     config.manualStringerProfileOverrides = applyProfileEdit(config.manualStringerProfileOverrides, edit);
+    rebuild();
+  },
+  commit: () => commitHistory(),
+});
+
+// Edytor linii poręczy (widok z boku jednego biegu): gesty -> RAILING_PROFILE_EDITS -> config.railingProfileOverrides /
+// config.railingEndOffsets -> zwykłe rebuild(). Panel niczego nie liczy — patrz ui/railingEditorPanel.js.
+const railingPanel = document.createElement('div');
+railingPanel.id = 'railing-panel';
+ws.mainEl.appendChild(railingPanel);
+const railingEditor = createRailingEditor(railingPanel, {
+  getContext: () => (lastModels ? { models: lastModels } : null),
+  applyEdit: (edit) => {
+    Object.assign(config, applyRailingProfileEdit({ railingProfileOverrides: config.railingProfileOverrides, railingEndOffsets: config.railingEndOffsets }, edit));
     rebuild();
   },
   commit: () => commitHistory(),

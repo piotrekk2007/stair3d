@@ -26,7 +26,7 @@ const TABS = [
  * @param {() => void} handlers.onLoad
  * @param {() => void} handlers.onUndo
  * @param {() => void} handlers.onRedo
- * @param {(view: '2d'|'3d'|'profile') => void} handlers.onViewChange
+ * @param {(view: '2d'|'3d'|'profile'|'railing') => void} handlers.onViewChange
  * @param {() => void} handlers.onToggleClientMode
  * @param {(name: string) => void} handlers.onProjectNameChange
  * @param {(notes: string) => void} handlers.onProjectNotesChange
@@ -51,6 +51,7 @@ export function createWorkspace(app, handlers) {
         <button type="button" role="tab" data-view="2d">Plan 2D</button>
         <button type="button" role="tab" data-view="3d" class="active">Widok 3D</button>
         <button type="button" role="tab" data-view="profile" title="Edytor profilu wangi (widok z boku)">Profil wangi</button>
+        <button type="button" role="tab" data-view="railing" title="Edytor linii poręczy (widok z boku)">Profil poręczy</button>
       </div>
       <button type="button" data-action="client-mode" title="Tryb prezentacji: czysty widok 3D dla klienta">🎬 Prezentacja</button>
     </header>

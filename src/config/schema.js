@@ -200,6 +200,9 @@ export function createDefaultConfig() {
     // Ręczna korekta wysokości końca poręczy przy słupie (railingSolver.js railingEndKey/sanitizeRailingEndOffsets):
     // { 'odcinek|słup|start' albo '…|end': mm } — + w górę, − w dół. Edytowane w Inspektorze słupa.
     railingEndOffsets: {},
+    // Ręczne punkty na linii poręczy (geometry/railingProfileModel.js, edytor „Profil poręczy”):
+    // { [odcinek]: { [bieg 'słupA>słupB']: [{ s: mm wzdłuż biegu od lica słupa, dz: mm w górę (+) / w dół (−) }] } }
+    railingProfileOverrides: {},
     // Poręcz gięta (etap 4, railingSolver.js smoothRun): załamania pochylenia w biegu zastąpione łukami w pionie,
     // a narożnik w rzucie, przy którym NIE stoi słup, łukiem w rzucie zamiast słupka. Promienie to parametry
     // (wybór programu, do ustalenia z warsztatem — nie wartości z normy).

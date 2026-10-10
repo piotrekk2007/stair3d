@@ -268,5 +268,64 @@ Naprawiony przy okazji błąd w `smoothRun`: stacje są zaokrąglane do 0,001 mm
 miał tolerancję 1e-6. Przy „nieokrągłej” długości biegu ostatnia stacja wypadała i poręcz gięta traciła ostatni
 odcinek.
 
-Nie zrobione: edytor linii poręczy w widoku z boku (wzorem „Profil wangi”): dodatkowe punkty na poręczy, promienie
-łuków dla każdego miejsca osobno.
+Edytor linii poręczy: zob. następna sekcja.
+
+## Edytor „Profil poręczy” (2026-10-10)
+
+Widok z boku jednego biegu poręczy, wzorem „Profilu wangi”. Zakładka widoku „Profil poręczy” obok „Profil wangi”.
+
+- **Warstwa edycji** (`geometry/railingProfileModel.js`, czysta):
+  - `config.railingProfileOverrides = { [odcinek]: { [bieg]: [{ s, dz }] } }`;
+  - bieg = `railingRunKey(słupStart, słupKoniec)`, czyli `'słupA>słupB'`;
+  - `s` to mm w rzucie wzdłuż biegu, liczone od lica słupa startowego;
+  - `dz` to mm w górę (+) lub w dół (−) od linii biegu w tym miejscu, czyli od linii przez końce już skorygowane
+    przy słupach;
+  - punkt trafiający w istniejące załamanie linii (bliżej niż 1 mm) przesuwa to załamanie, a w innym miejscu dodaje
+    nowe;
+  - `applyRunPoints(path, points)` nakłada punkty; wysokość bazową czyta z oryginalnej linii, więc kolejność punktów
+    nie ma znaczenia;
+  - punkt bliżej niż 20 mm od końca albo poza biegiem jest pomijany i zliczany.
+
+  Końce biegu zostają w `config.railingEndOffsets`. Gesty to zdarzenia `RAILING_PROFILE_EDITS` (`SET_POINT`,
+  `REMOVE_POINT`, `SET_END`, `RESET_RUN`) → `applyRailingProfileEdit` → nowe wartości obu pól config → zwykłe
+  `rebuild()`. Cofanie i plik projektu działają jak dla każdego pola config.
+- **Solver** (`railingSolver.js`), kolejność w biegu:
+  1. uproszczona linia nosków;
+  2. bez krótkiego kawałka przy słupie;
+  3. docięcie do lic słupów;
+  4. korekta końców;
+  5. **punkty użytkownika**;
+  6. wygładzenie poręczy giętej i ponowne docięcie.
+
+  Bieg dostaje `key` i `profile = { final, auto, base, nosing, control }` (dane dla edytora, na poziomie linii
+  nosków). Odcinek dostaje `heightAboveNosing { minMm, maxMm }`.
+- **Diagnostyki** (INFO):
+  - `RAILING-PROFILE-EDITED`: linia zmieniona ręcznie, z rzeczywistym zakresem wysokości góry poręczy nad linią
+    nosków;
+  - `RAILING-PROFILE-POINT-SKIPPED`: punkty poza swoim biegiem.
+
+  Zgodnie z zasadą projektu ręczna zmiana jest zachowana i zgłoszona, nigdy po cichu poprawiana.
+- **Widok** (`geometry/railingProfileView.js`, czysty): bieg rozwinięty (u = droga w rzucie, v = wysokość): pas
+  poręczy (góra/dół), linia AUTO do porównania, linia bazowa punktów, linia nosków, słupy na obu końcach (poręcz od
+  lica do lica), tralki, uchwyty (`end:start`, `end:end`, `pt:<s>`).
+- **Rysunek** (`railingEditor/railingEditorRenderer.js`, czysty SVG): uchwyty o stałym rozmiarze na ekranie (9 px):
+  kwadrat = koniec na licu słupa, kółko = punkt. Linia AUTO jest przerywana i widoczna tylko po zmianie. Pod biegiem
+  jest podziałka.
+- **Panel** (`ui/railingEditorPanel.js`):
+  - wybór biegu i „Resetuj bieg”;
+  - przeciąganie uchwytu w pionie co 5 mm, z Shift co 1 mm;
+  - dwuklik na poręczy dodaje punkt leżący na bieżącej linii;
+  - prawy klik albo Delete usuwa punkt, a koniec lub załamanie wraca na 0;
+  - strzałki ↑↓ przesuwają o 1 mm, z Shift o 10 mm;
+  - pole liczbowe pod rysunkiem.
+
+  Przeciąganie liczy się z ruchu myszy na ekranie przy bieżącej skali rysunku, a kadr jest zamrożony na czas
+  przeciągania. Przy pierwszej wersji kadr i układ strony zmieniały się w trakcie, przez co 24 px dawało −400 mm.
+- **Ograniczenia**:
+  - punkt przesuwa się tylko w pionie, a zmiana położenia wzdłuż biegu wymaga usunięcia i dodania punktu;
+  - promienie łuków poręczy giętej są nadal globalne (`railingBendRadiusMm`);
+  - brak powiększania i przesuwania widoku, bo bieg zawsze mieści się w oknie;
+  - klucz biegu zależy od słupów na jego końcach, więc po zmianie odcinka lub słupów punkty starego biegu są
+    pomijane i zgłaszane.
+
+Testy: `geometry/__tests__/railingProfile.test.js` (model edycji, solver, widok, rysunek, poręcz gięta w L).

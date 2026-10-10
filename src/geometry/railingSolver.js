@@ -39,6 +39,10 @@ import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js'
 import { valueAtU } from './polylineProfile.js';
 import { curveToPolyline, filletPolyline } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { railingEndKey, railingRunKey, sanitizeRailingEndOffsets, sanitizeRailingProfileOverrides, applyRunPoints } from './railingProfileModel.js';
+
+// (the manual-edit layer of a handrail lives in railingProfileModel.js; re-exported for existing importers)
+export { railingEndKey, sanitizeRailingEndOffsets, MAX_RAILING_END_OFFSET_MM } from './railingProfileModel.js';
 import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt, planCornerSplits } from './railingGlass.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
@@ -540,24 +544,6 @@ function fitPathToPosts(path, startPost, endPost) {
   return { path: [...e.path].reverse(), startFitted: s.fitted, endFitted: e.fitted };
 }
 
-// Manual height corrections of handrail ends at posts: config.railingEndOffsets = { [key]: mm } (+ up, − down), key =
-// railingEndKey(sectionId, postId, 'start' | 'end') — 'end' = the run that ARRIVES at the post, 'start' = the one that
-// leaves it. A manual edit of the model, like a post's own length: kept as given (within ±MAX_RAILING_END_OFFSET_MM).
-export const MAX_RAILING_END_OFFSET_MM = 400;
-export function railingEndKey(sectionId, postId, end) {
-  return `${sectionId}|${postId}|${end}`;
-}
-export function sanitizeRailingEndOffsets(raw) {
-  const out = {};
-  if (!raw || typeof raw !== 'object') return out;
-  for (const [key, value] of Object.entries(raw)) {
-    const v = Number(value);
-    if (!/\|(start|end)$/.test(key) || !Number.isFinite(v) || v === 0) continue;
-    out[key] = Math.max(-MAX_RAILING_END_OFFSET_MM, Math.min(MAX_RAILING_END_OFFSET_MM, v));
-  }
-  return out;
-}
-
 function diag(sectionId, ruleId, message, severity = 'WARNING') {
   return createDiagnostic({ ruleId, severity, elementType: 'railing', elementId: sectionId, message });
 }
@@ -766,6 +752,10 @@ function buildSection(section, ctx) {
   const balusters = [];
   const bent = !!config.railingBent;
   const endOffsets = sanitizeRailingEndOffsets(config.railingEndOffsets);
+  const profilePoints = sanitizeRailingProfileOverrides(config.railingProfileOverrides)[section.id] || {};
+  let skippedPoints = 0;
+  let edited = false;
+  const heights = []; // the handrail's top above the nosing line at every nosing node it covers
   // the post standing at a spot (a reused structural one, or this section's own, unless removed)
   const postAtSpot = (spot) => existingNear(spot.at) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? null;
   const runPaths = []; // every run's final path — what a baluster / pane under an adjusted handrail reads its height from
@@ -791,8 +781,13 @@ function buildSection(section, ctx) {
     // is smoothed, through those ends.
     const cut = fitPathToPosts(simplifyPath(run), startPost, endPost);
     const moved = cut.path.map((node, i) => (i === 0 ? { ...node, z: node.z + startOffsetMm } : i === cut.path.length - 1 ? { ...node, z: node.z + endOffsetMm } : node));
+    // the user's points on this run (railingProfileModel.js): each moves the line up/down at its place along the run
+    const runKey = railingRunKey(startPostId, endPostId);
+    const shaped = applyRunPoints(moved, profilePoints[runKey] || []);
+    skippedPoints += shaped.skipped;
+    if (startOffsetMm || endOffsetMm || shaped.control.some((c) => c.dz !== 0 || c.kind === 'added')) edited = true;
     // (smoothing may shift a path's ends a little, so a bent run is cut to the faces once more)
-    const fit = bent ? fitPathToPosts(smoothRun(moved, config), startPost, endPost) : cut.path === moved ? cut : { ...cut, path: moved };
+    const fit = bent ? fitPathToPosts(smoothRun(shaped.path, config), startPost, endPost) : { ...cut, path: shaped.path };
     if (bent) {
       fit.startFitted = fit.startFitted || cut.startFitted;
       fit.endFitted = fit.endFitted || cut.endFitted;
@@ -807,7 +802,23 @@ function buildSection(section, ctx) {
     }
     annotateCuts(runPieces, handrailHeight);
     pieces.push(...runPieces);
-    base.runs.push({ startPostId, endPostId, pieces: runPieces, bent, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm, endOffsetMm });
+    for (const node of run) {
+      const lineZ = zOnPaths([path], node);
+      if (lineZ !== null) heights.push(config.railingHeightMm + lineZ - node.z);
+    }
+    base.runs.push({
+      key: runKey,
+      startPostId,
+      endPostId,
+      pieces: runPieces,
+      bent,
+      startAtPostFace: fit.startFitted,
+      endAtPostFace: fit.endFitted,
+      startOffsetMm,
+      endOffsetMm,
+      // for the side-view editor (railingProfileView.js): all at nosing level, plan x/y + z
+      profile: { final: path, auto: cut.path, base: moved, nosing: run, control: shaped.control },
+    });
 
     if (baseRail) {
       const railPieces = baseRailAlong(path, (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]), baseRail.heightMm);
@@ -906,6 +917,20 @@ function buildSection(section, ctx) {
       )
     );
   }
+  if (edited && heights.length > 0) {
+    base.diagnostics.push(
+      diag(
+        section.id,
+        'RAILING-PROFILE-EDITED',
+        `Balustrada ${section.id}: linia poręczy zmieniona ręcznie — góra poręczy jest ${Math.round(Math.min(...heights))}–${Math.round(Math.max(...heights))} mm nad linią nosków (ustawiona wysokość: ${config.railingHeightMm} mm).`,
+        'INFO'
+      )
+    );
+  }
+  if (skippedPoints > 0) {
+    base.diagnostics.push(diag(section.id, 'RAILING-PROFILE-POINT-SKIPPED', `Balustrada ${section.id}: ${skippedPoints} ręcznych punktów poręczy leży poza swoim biegiem (bieg się skrócił albo zmienił) — pominięte. Usuń je w edytorze „Profil poręczy” (Resetuj bieg).`, 'INFO'));
+  }
+  base.heightAboveNosing = heights.length ? { minMm: Math.min(...heights), maxMm: Math.max(...heights) } : null;
   const steps = joins.filter((j) => j.kind === 'step').length;
   if (steps > 0) {
     base.diagnostics.push(diag(section.id, 'RAILING-RAIL-STEP', `Balustrada ${section.id}: poręcz kończy się przy słupku i zaczyna na innej wysokości w ${steps} miejscu(ach) (podest / dusza zakrętu) — połączenie ze słupkiem do dopracowania w warsztacie.`, 'INFO'));

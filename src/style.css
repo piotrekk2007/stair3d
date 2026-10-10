@@ -318,6 +318,7 @@ html, body {
 #app.client-mode > #statusbar,
 #app.client-mode #plan2d-panel,
 #app.client-mode #profile-panel,
+#app.client-mode #railing-panel,
 #app.client-mode #project-notes-popover {
   display: none !important;
 }
@@ -355,6 +356,7 @@ html, body {
 }
 
 #app[data-view='2d'] #viewport-hud,
+#app[data-view='railing'] #viewport-hud,
 #app[data-view='profile'] #viewport-hud {
   display: none;
 }
@@ -1461,6 +1463,27 @@ code {
 .insp-btn.danger { color: #a32020; border-color: #d9a6a6; }
 
 /* Edytor profilu wangi (widok z boku) */
+/* "Profil poręczy" — side-view editor of a handrail run (ui/railingEditorPanel.js) */
+#railing-panel { position: absolute; inset: 0; background: #fff; z-index: 20; display: none; flex-direction: column; }
+#railing-panel.visible { display: flex; }
+#railing-panel .re-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--c-border, #d4d9df); background: #f6f8fa; font-size: 12px; }
+#railing-panel .re-toolbar button { padding: 4px 10px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#railing-panel .re-toolbar select { padding: 3px 6px; max-width: 420px; }
+#railing-panel .re-status { margin-left: auto; padding: 1px 8px; border-radius: 9px; background: #eef4fc; font-weight: 600; }
+#railing-panel .re-status.manual { background: #fff3e0; color: #8a5a00; }
+#railing-panel .re-canvas { position: relative; flex: 1; min-height: 0; outline: none; touch-action: none; }
+#railing-panel .re-svg { width: 100%; height: 100%; display: block; }
+#railing-panel .re-cp { cursor: ns-resize; }
+#railing-panel .re-cp:hover { fill: #fff3e0; }
+#railing-panel .re-rail { cursor: copy; }
+#railing-panel .re-empty { padding: 24px; color: #6b7684; font-size: 13px; }
+#railing-panel .re-info { padding: 6px 12px; border-top: 1px solid #d4d9df; font-size: 12px; background: #fafbfc; }
+#railing-panel .re-point { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 2px 0; }
+#railing-panel .re-point.muted { color: #6b7684; }
+#railing-panel .re-point input { width: 72px; padding: 2px 5px; }
+#railing-panel .re-point button { padding: 3px 9px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#railing-panel .re-hint { padding: 4px 12px 8px; font-size: 11px; color: #6b7684; }
+
 #profile-panel { position: absolute; inset: 0; background: #fff; z-index: 20; display: none; flex-direction: column; }
 #profile-panel.visible { display: flex; }
 #profile-panel .pe-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--c-border, #d4d9df); background: #f6f8fa; font-size: 12px; }
