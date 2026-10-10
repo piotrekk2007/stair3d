@@ -253,7 +253,10 @@ Teraz każdy bieg (`railingSolver.js`, jedna kolejność dla wszystkich):
    leży w rzucie w linii z poprzednim, poręcz biegnie prosto do lica słupa zamiast robić krótki stromy odcinek.
 3. **Docięcie do lic słupów** (`fitPathToPosts` / `fitPathStartToPost`): koniec jest cofany do lica, gdy bieg
    przechodzi przez słup, a przedłużany po własnej linii, gdy do słupa nie dochodzi (najwyżej o 3 grubości słupa).
-   Gdy linia mija słup bokiem, koniec zostaje. `runs[].startAtPostFace` / `endAtPostFace`.
+   Gdy linia mija słup bokiem (słup narożny między podestem a zabiegami, bieg z 0 stopni, odcinek zaczęty w
+   środku zabiegów), koniec biegu jest przesuwany do **najbliższego punktu słupa** z zachowaniem spadku pierwszego
+   elementu (`fitStartAlongLine` → zapasowo najbliższy punkt; najwyżej o 3 grubości słupa) — poręcz zawsze dochodzi do
+   swojego słupa. Koniec leżący już wewnątrz słupa zostaje. `runs[].startAtPostFace` / `endAtPostFace`.
 4. **Ręczna korekta wysokości końca** (`config.railingEndOffsets`, klucz `railingEndKey(odcinek, słup, 'start'|'end')`,
    ±`MAX_RAILING_END_OFFSET_MM` = 400): przesuwa w pionie dokładnie ten punkt, w którym poręcz dotyka lica słupa.
    Prosty odcinek przy słupie zmienia pochylenie. Edycja: Inspektor → słup → „Poręcz przy słupie”, osobno poręcz

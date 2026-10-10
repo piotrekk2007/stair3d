@@ -587,3 +587,29 @@ test('no short stub next to a post: where the nosing line kinks just before the 
   const s = model.sections[0];
   for (const b of s.balusters) assert.ok(b.heightMm > 300 && b.heightMm < 1300, `baluster ${b.heightMm.toFixed(0)} mm`);
 });
+
+test('a handrail reaches its post also when the post stands BESIDE the run\'s line (landing + winders, 0-tread flight, partial section)', () => {
+  // each of these left the handrail ending in the air, 5-70 mm short of the post (the run's own line missed the post)
+  const cases = [
+    { stairType: 'U', treadsLegA: 1, treadsLegB: 0, treadsLegC: 2, windersPerTurn: 3, turn1Type: 'landing', turn2Type: 'winder', railingSections: whole('inner') },
+    { stairType: 'U', treadsLegA: 1, treadsLegB: 0, treadsLegC: 2, windersPerTurn: 3, turn1Type: 'winder', turn2Type: 'landing', railingSections: whole('inner') },
+    { stairType: 'L', treadsLegA: 0, treadsLegB: 0, windersPerTurn: 3, railingSections: [{ id: 's', side: 'inner', fromStep: 2, toStep: null }] },
+  ];
+  for (const patch of cases) {
+    const { config, model, planLayout } = stair({ ...closed, totalRise: 2810, ...patch });
+    const posts = allPosts(planLayout, config, model);
+    const label = JSON.stringify(patch).slice(0, 110);
+    let ends = 0;
+    for (const run of model.sections[0].runs) {
+      for (const [pt, postId] of [[run.pieces[0].start, run.startPostId], [run.pieces[run.pieces.length - 1].end, run.endPostId]]) {
+        const post = posts.find((q) => q.postId === postId);
+        assert.ok(post, `${label}: ${postId}`);
+        // how far outside the post's plan square the handrail's end is (0 = on a face or inside the post)
+        const gap = Math.hypot(Math.max(0, Math.abs(pt.x - post.position.x) - post.size / 2), Math.max(0, Math.abs(pt.y - post.position.y) - post.size / 2));
+        assert.ok(gap < 1e-6, `${label}: the handrail ends ${gap.toFixed(1)} mm short of ${postId}`);
+        ends++;
+      }
+    }
+    assert.ok(ends >= 2, label);
+  }
+});

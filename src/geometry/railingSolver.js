@@ -487,9 +487,9 @@ function wangaTopAt(point, stringerModel, geometries) {
 // post and continued along its own end line where it stops short of one.
 const MAX_END_FIT_FACTOR = 3; // a run end is never moved further than this many post sizes
 
-// Fits the START of a {x,y,z} path to `post` (plan square, axis-aligned like every post). Returns the same path when
-// the run's line misses the post or the post is too far.
-function fitPathStartToPost(path, post) {
+// Fits the START of a {x,y,z} path to `post` (plan square, axis-aligned like every post) ALONG the run's own line.
+// Returns the same path when that line misses the post or the post is too far.
+function fitStartAlongLine(path, post) {
   if (!post || path.length < 2) return { path, fitted: false };
   const half = post.size / 2;
   const c = post.position;
@@ -520,6 +520,26 @@ function fitPathStartToPost(path, post) {
   return { path: [start, ...pts.slice(1)], fitted: true };
 }
 
+// The start of a path on its post, whatever the layout: along the run's own line when that line meets the post
+// (fitStartAlongLine); otherwise — the post stands beside the line, as at a corner post between a landing and winders
+// or with a 0-tread flight — the run's first point is moved to the NEAREST point of the post, keeping the first
+// piece's slope over the extra distance. A handrail always reaches the post it belongs to; a start already inside the
+// post is left alone (hidden in the post).
+function fitPathStartToPost(path, post) {
+  const along = fitStartAlongLine(path, post);
+  if (along.fitted || !post || path.length < 2) return along;
+  const half = post.size / 2;
+  const c = post.position;
+  const a = path[0];
+  const q = { x: Math.max(c.x - half, Math.min(c.x + half, a.x)), y: Math.max(c.y - half, Math.min(c.y + half, a.y)) };
+  const gap = Math.hypot(q.x - a.x, q.y - a.y);
+  if (gap < SAME_POINT_MM || gap > MAX_END_FIT_FACTOR * post.size) return along;
+  const b = path[1];
+  const L = Math.hypot(b.x - a.x, b.y - a.y);
+  const slope = L > SAME_POINT_MM ? (b.z - a.z) / L : 0;
+  return { path: [{ ...a, x: q.x, y: q.y, z: a.z - slope * gap }, ...path.slice(1)], fitted: true };
+}
+
 // A handrail is not made with a short stub next to a post: where the nosing line kinks just before a post (the first
 // winder at a corner post, a landing edge), the last straight piece is carried on to the post's face instead of
 // following that kink — the handrail simply meets the post a little lower or higher. A stub is a piece at a post
@@ -535,7 +555,7 @@ function dropStartStub(path, post) {
   const sameWay = l1 < SAME_POINT_MM || ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y)) / (l1 * l2) > Math.cos((RAILING_CORNER_ANGLE_DEG * Math.PI) / 180);
   if (!sameWay) return path;
   const without = path.slice(1);
-  return fitPathStartToPost(without, post).fitted ? without : path;
+  return fitStartAlongLine(without, post).fitted ? without : path;
 }
 
 function fitPathToPosts(path, startPost, endPost) {
