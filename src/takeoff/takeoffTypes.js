@@ -27,6 +27,7 @@ export const ELEMENT_TYPES = Object.freeze({
   CONNECTOR: 'CONNECTOR', // the stair bolts of one joint (quantity = bolts) — connectorItems.js, unpriced
   GLASS_PANE: 'GLASS_PANE', // one glass pane of a glass balustrade (railingItems.js), priced per m² of its blank
   GLASS_FIXING: 'GLASS_FIXING', // the rotules / clamps of one glass section (quantity = pieces)
+  STEEL: 'STEEL', // a steel member of a metal stair (beam, toothed flat bar, a row's tread supports) — metalItems.js, unpriced
   SUPPORT: 'SUPPORT', // reserved — no solved model produces this yet; never fabricated
   OTHER: 'OTHER', // reserved — catch-all for a future element type, never fabricated today
 });

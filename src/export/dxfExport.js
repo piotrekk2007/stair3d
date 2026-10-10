@@ -793,3 +793,63 @@ export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
   }
   return wrapDxf(entities);
 }
+
+// --- metal structure (geometry/metalStructureModel.js) ----------------------------------------------------------
+
+const METAL_ROW_GAP_MM = 250;
+const METAL_ROW_LABELS = Object.freeze({ outer: 'strona zewn.', inner: 'strona wewn.', centre: 'srodek biegu' });
+
+/**
+ * The steel of a metal stair on one 1:1 sheet, every plan piece in its own side view (u along the piece, v up):
+ * a toothed flat bar = its cutting outline, the rectangle it is cut from and the stretches the treads lie on; a beam
+ * = its outline with every tread support standing on it (web + plate) and the supports' sizes listed.
+ * `null` when the stair has no metal structure.
+ */
+export function buildMetalDXF(metalStructure) {
+  const main = (metalStructure?.members || []).filter((m) => m.kind === 'plate' || m.kind === 'beam');
+  if (main.length === 0) return null;
+  const p = metalStructure.params;
+  const entities = [];
+  let cursor = 0; // v of the next row's top; rows go downward
+  const text = (lines) => {
+    lines.forEach((line, i) => entities.push(textEntity(line, { u: 0, v: cursor - (i + 1) * TITLE_LINE_HEIGHT_MM }, TITLE_TEXT_HEIGHT_MM, 'TEXT')));
+    cursor -= lines.length * TITLE_LINE_HEIGHT_MM + TITLE_MARGIN_MM;
+  };
+  text(['Konstrukcja stalowa - skala 1:1, wszystkie wymiary w mm', 'Przekroje i wymiary stali ORIENTACYJNE - do weryfikacji przez konstruktora']);
+  cursor -= METAL_ROW_GAP_MM / 2;
+  for (const m of main) {
+    const where = `${METAL_ROW_LABELS[m.side] || m.side}, odcinek ${m.pieceIndex + 1}`;
+    const b = m.bounds;
+    const parts = m.kind === 'beam' ? metalStructure.members.filter((x) => x.rowId === m.rowId && x.pieceIndex === m.pieceIndex && (x.kind === 'support-web' || x.kind === 'support-plate')) : [];
+    const all = [m, ...parts];
+    const uMin = Math.min(...all.map((x) => x.bounds.uMin));
+    const vMin = Math.min(...all.map((x) => x.bounds.vMin));
+    const vMax = Math.max(...all.map((x) => x.bounds.vMax));
+    if (m.kind === 'plate') {
+      text([
+        `Plaskownik w zeby ${m.id} (${where}): blacha ${m.thicknessMm} mm, arkusz ${Math.round(m.blank.lengthMm)} x ${Math.round(m.blank.heightMm)} mm`,
+        `Najwezsze miejsce pasa ${Math.round(m.neckMm)} mm, masa ok. ${m.massKg.toFixed(1)} kg; warstwa BEARINGS: arkusz i oparcia stopni`,
+      ]);
+    } else {
+      const plates = parts.filter((x) => x.kind === 'support-plate');
+      const webs = parts.filter((x) => x.kind === 'support-web');
+      const heightOf = (pl) => Math.round(webs.find((w) => w.treadIndex === pl.treadIndex)?.heightMm || 0);
+      text([
+        `Belka ${m.id} (${where}): profil ${m.section.heightMm} x ${m.section.widthMm} x ${m.section.wallMm}, dlugosc ${Math.round(m.lengthMm)} mm, nachylenie ${m.slopeDeg.toFixed(1)} st., masa ok. ${m.massKg.toFixed(1)} kg`,
+        `Podpory: ${plates.length} szt, blacha ${p.supportPlateThicknessMm} x ${p.supportPlateWidthMm} mm; [stopien: dl. blachy / wys. wspornika] ${plates.map((pl) => `${pl.treadIndex + 1}: ${Math.round(pl.lengthMm)}/${heightOf(pl)}`).join(', ')}`,
+      ]);
+    }
+    const at = (q) => ({ u: q.u - uMin, v: q.v - vMax + cursor });
+    entities.push(...polygonEntities(m.outline.map(at), 'OUTLINE'));
+    for (const part of parts) entities.push(...polygonEntities(part.outline.map(at), part.kind === 'support-plate' ? 'JOINTS' : 'NOTCH'));
+    if (m.kind === 'plate') {
+      entities.push(...rectLines(b.uMin - uMin, b.vMin - vMax + cursor, b.uMax - uMin, b.vMax - vMax + cursor, 'BEARINGS'));
+      for (const s of m.bearings) {
+        entities.push(lineEntity(at({ u: s.a, v: s.v + 6 }), at({ u: s.b, v: s.v + 6 }), 'BEARINGS'));
+        entities.push(textEntity(String(s.treadIndex + 1), at({ u: (s.a + s.b) / 2, v: s.v + 14 }), 12, 'BEARINGS'));
+      }
+    }
+    cursor -= vMax - vMin + METAL_ROW_GAP_MM;
+  }
+  return wrapDxf(entities);
+}

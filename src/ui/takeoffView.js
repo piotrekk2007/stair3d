@@ -17,6 +17,7 @@ const ELEMENT_LABEL_PL = {
   CONNECTOR: 'Łączniki (bez ceny)',
   GLASS_PANE: 'Szkło balustrady',
   GLASS_FIXING: 'Mocowania szkła',
+  STEEL: 'Konstrukcja stalowa (bez ceny)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -140,6 +141,8 @@ function categoryOf(item, winderStepIds) {
       return 'Szkło balustrady (z modelu)';
     case 'GLASS_FIXING':
       return 'Mocowania szkła (z modelu)';
+    case 'STEEL':
+      return 'Konstrukcja stalowa (bez ceny)';
     default:
       return null; // wpusty — poza kosztorysem
   }

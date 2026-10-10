@@ -20,6 +20,7 @@
 //  * landings are not checked: a landing needs its own framing, which the model does not describe.
 
 import { housingRecessMm } from '../geometry/edgeOverrides.js';
+import { metalParams } from '../geometry/metalStructureModel.js';
 import { signedPolygonArea } from '../geometry/pathUtils.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { EC5_FACTORS, GRAVITY_M_S2, LOAD_COMBINATION, designValue, timberClass } from './timberClasses.js';
@@ -36,6 +37,8 @@ const stepNumberOf = (t) => Number(String(t.stepId).replace('step-', '')) + 1;
 
 /** How far in from the tread's end its bearing centre on that side's wanga lies (see header). */
 export function bearingInsetMm(config, side) {
+  // on toothed flat bars (metalStructureModel.js) the tread bears on the bar's middle line
+  if (config.stairConstruction === 'metal-flat') return metalParams(config).flatSetbackMm + metalParams(config).flatThicknessMm / 2;
   return Math.max(0, config.stringerThickness - housingRecessMm(config)[side]) / 2;
 }
 
@@ -98,6 +101,11 @@ export function checkTreads(treadModels, config) {
     // profiles and their anchoring are not ours and are not checked
     if (t.cantilever) {
       skipped.push({ stepId: t.stepId, reason: 'stopień wspornikowy — nośność daje profil stalowy w ścianie (nie sprawdzany)' });
+      continue;
+    }
+    // a tread on a steel beam's support plate(s) is not a beam between two stringers either (metalStructureModel.js)
+    if (config.stairConstruction === 'metal-profile') {
+      skipped.push({ stepId: t.stepId, reason: 'stopień na podporach belki stalowej — nie jest belką między wangami (nie sprawdzany)' });
       continue;
     }
     const { spanMm: L, bMm: b, hMm: h } = treadBeamGeometry(t, config);

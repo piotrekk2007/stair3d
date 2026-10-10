@@ -38,12 +38,12 @@ part of it before changing an area with a long history (stringer profile, winder
 
 `config` (+ override layers) → `geometry/planLayout.js` (2D plan) → solvers (`treadSolver`, `riserSolver`,
 `stringerSolver` → `stringerConstructionGeometry` → `stringerProfileSolver`, `postSolver`, `railingSolver`,
-`jointSolver`, `cantileverModel`) → plain-data models → renderers (`*Renderer.js`, Three.js) / plan 2D SVG / validation /
+`jointSolver`, `cantileverModel`, `metalStructureModel`) → plain-data models → renderers (`*Renderer.js`, Three.js) / plan 2D SVG / validation /
 structural check / takeoff / DXF / offer.
 
 - `geometry/buildStaircase.js` is the only orchestrator: it applies the stairwell fit, builds every model once and
   returns them all (`fullConfig`, `derived`, `planLayout`, `treadModels`, `riserModels`, `stringerModels`,
-  `stringerConstruction`, `postModels`/`allPostModels`, `railingModel`, `joints`, `cantilever`, `ceilingFit`,
+  `stringerConstruction`, `postModels`/`allPostModels`, `railingModel`, `joints`, `cantilever`, `metalStructure`, `ceilingFit`,
   `stairwellFit`, …). Every consumer reads those — no second geometry solve anywhere.
 - No `*Solver.js`/`*Model.js` imports `three`; no renderer calls `buildPlanLayout` or decides geometry (enforced by
   `geometry/__tests__/consolidationInvariants.test.js`).
@@ -161,9 +161,10 @@ Docs: [JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md).
   diagnostics}` read by renderers, DXF, takeoff (`connectorItems.js`, unpriced) and the 3D layer "Złącza"
   (`jointMarkers.js` + `scene/jointMarkersOverlay.js`, never exported).
 
-## Balustrade, glass, cantilever
+## Balustrade, glass, cantilever, metal structure
 
-Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.md](docs/architecture/CANTILEVER_MODEL.md).
+Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.md](docs/architecture/CANTILEVER_MODEL.md),
+[METAL_STRUCTURE_MODEL.md](docs/architecture/METAL_STRUCTURE_MODEL.md).
 - `railingSolver.js`: sections `{id, side, fromStep, toStep}` (0-based); path along the tread chain cut into handrail
   runs ending at posts (existing structural posts reused, `postIdAt`); two baluster modes (housed: along the pitch line;
   overlay: rhythm per tread); bent handrail (`railingBent`), base rail (`railingBaseRail`); cut angles in the model
@@ -188,6 +189,14 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   with a wooden cladding box per tread; no wangi (empty models `absent: true`), no structural posts/joints. Profiles run
   like the cladding — the first parallel to the front board, the last to the back board, others interpolated — so a
   winder's profiles converge and stop where they would touch (or at their projection).
+- Metal structure (`stairConstruction: 'metal-profile' | 'metal-flat'`, `metalStructureModel.js`): wooden treads on
+  steel; no wangi (`absent: true`), no structural posts/joints, no risers. Profile: 1 central beam or 2 beams
+  (`metalBeamCount`, `metalBeamSetbackMm`), each straight per plan run — the highest straight line under every tread's
+  support plate, continuous at plan corners (small LP, `maximizeLinear`) — with a plate + web support per tread. Flat:
+  two bars at the sides cut in teeth (top under the treads, the same zig-zag below leaving `metalFlatNeckMm`).
+  Members are side outlines extruded across their plan piece; read by `metalStructureRenderer.js` (inside the
+  `StringerOuter/Inner` layers), plan 2D footprints, the gate (`METAL-*`), takeoff (`metalItems.js`, `STEEL`,
+  unpriced) and `buildMetalDXF`. All sizes DO WERYFIKACJI (`CO-MFG-J-METAL`); the steel is never checked.
 
 ## Validation
 
@@ -198,7 +207,7 @@ Docs: [CONSTRAINTS_AND_VALIDATION.md](docs/architecture/CONSTRAINTS_AND_VALIDATI
   moved walkline), `validator/railingChecks.js`.
 - Winder width (`PL-LEGAL-C-01`) is measured 0.4 m FROM the dusza: `walklineModel.js offsetLineFromInner` (offset
   straights + arc round the corner) crossed with each edge. Blondel (`PL-LEGAL-A-01`) is WARNING, never blocks.
-- **Takeoff validation gate** (`takeoff/validationGate.js`): validator + stringer construction + joints + cantilever +
+- **Takeoff validation gate** (`takeoff/validationGate.js`): validator + stringer construction + joints + cantilever + metal structure +
   railing + structural + stairwell-fit diagnostics; any active ERROR → takeoff BLOCKED. Walidacja tab and Kosztorys show
   the same list. Waivers (`diagnostics/waivers.js`, `(ruleId, elementId)`, saved in the project) un-block without
   hiding or changing any number.
@@ -262,5 +271,6 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 - Moving a stringer-line corner from one tread to another by an edge edit is not supported (edges stop at corners).
 - Winders: one dusza distribution (even); a ~10 mm dusza can flip the housed recess order on the wanga; in a U with a
   0-tread middle flight and a barely fitting arc the two corner posts may overlap.
-- Not done: multi-arc profile transitions, curved plan paths, CNC output, metal stringers (user's later list),
+- Metal structure: sizes are placeholders, the steel is not checked, no fixings / welds / corner details.
+- Not done: multi-arc profile transitions, curved plan paths, CNC output,
   shaped transition piece at a newel, PL load values for the structural check.

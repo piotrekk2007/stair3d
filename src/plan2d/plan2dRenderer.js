@@ -354,7 +354,7 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, opening = null, openingEdit = false, activeBoundary = null } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, openingEdit = false, activeBoundary = null } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -398,7 +398,16 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
       <polyline points="${polygonPoints(pts)}" fill="none" stroke="transparent" stroke-width="110" pointer-events="stroke"/>
     </g>`;
   };
-  const stringersXML = layers.stringers === false ? '' : stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath);
+  // Metal stair (metalStructureModel.js): the plan footprint of every beam / flat bar, under the treads (dashed).
+  const metalXML = (metalStructure?.members || [])
+    .filter((m) => m.kind === 'beam' || m.kind === 'plate')
+    .map((m) => {
+      const at = (u, n) => ({ x: m.origin.x + m.dir.x * u + m.normal.x * n, y: m.origin.y + m.dir.y * u + m.normal.y * n });
+      const corners = [at(m.bounds.uMin, m.nFrom), at(m.bounds.uMax, m.nFrom), at(m.bounds.uMax, m.nTo), at(m.bounds.uMin, m.nTo)];
+      return `<polygon class="metal-footprint" data-metal-id="${m.id}" points="${polygonPoints(corners)}" fill="#5f6368" fill-opacity="0.35" stroke="#33373b" stroke-width="1" stroke-dasharray="6,3" pointer-events="none" ${HAIR}/>`;
+    })
+    .join('');
+  const stringersXML = layers.stringers === false ? '' : stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath) + metalXML;
 
   // ID słupa = ten sam co w postSolver.js (post-start / post-end / post-corner-<indeks zakrętu>;
   // przy "1 dużym podeście" drugi zakręt ma ten sam róg, więc dostaje ID pierwszego).

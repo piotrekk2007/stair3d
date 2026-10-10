@@ -4,7 +4,7 @@
 // the files.
 
 import { treadJointsByStep } from '../geometry/jointSolver.js';
-import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF } from '../export/dxfExport.js';
+import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF, buildMetalDXF } from '../export/dxfExport.js';
 import { exportStaircaseToOBJ } from '../export/objExporter.js';
 import { exportStaircaseToDAE } from '../export/daeExporter.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
@@ -65,6 +65,12 @@ export function createExports(opts) {
       const text = m?.railingModel ? buildRailingDXF(m.railingModel, { balusterSizeMm: m.fullConfig.railingBalusterSizeMm }) : null;
       if (text) dxf(text, 'balustrada');
       else window.alert('Brak balustrady do narysowania — włącz balustradę i dodaj odcinek.');
+    },
+    // The steel of a metal stair (beams with their supports / toothed flat bars) on one 1:1 sheet.
+    metalDXF() {
+      const text = buildMetalDXF(opts.getModels()?.metalStructure);
+      if (text) dxf(text, 'konstrukcja_stalowa');
+      else window.alert('Brak konstrukcji stalowej do narysowania — wybierz konstrukcję metalową (wanga na profilu albo płaskowniki).');
     },
     takeoff(kind) {
       const takeoff = opts.getTakeoff();

@@ -184,8 +184,8 @@ export function createUI({
 
   // Schody wspornikowe (geometry/cantileverModel.js): profile stalowe w ścianie po stronie zewnętrznej, stopień =
   // skrzynka z okładzin (góra/front 40, spód/tył/bok 20) nasuwana na profile; bez wang i słupów, strona duszy wolna.
-  const cant = gui.addFolder('Konstrukcja: wspornikowa');
-  live(cant.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever' })).name('Konstrukcja schodów');
+  const cant = gui.addFolder('Konstrukcja: wspornikowa / metalowa');
+  live(cant.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever', 'Metalowa: wanga na profilu': 'metal-profile', 'Metalowa: płaskowniki w zęby': 'metal-flat' })).name('Konstrukcja schodów');
   live(cant.add(config, 'cantileverProfileWidthMm', 20, 100, 1)).name('Profil: szerokość [mm]');
   live(cant.add(config, 'cantileverProfileHeightMm', 30, 160, 1)).name('Profil: wysokość [mm]');
   live(cant.add(config, 'cantileverProfileCount', 2, 4, 1)).name('Profile na stopień (min. 2)');
@@ -196,6 +196,20 @@ export function createUI({
   live(cant.add(config, 'cantileverShellThicknessMm', 10, 40, 1)).name('Okładzina: spód/tył/bok [mm]');
   live(cant.add(config, 'cantileverWallGapMm', 0, 30, 1)).name('Szczelina przy ścianie [mm]');
   live(cant.add(config, 'cantileverMaxWidthMm', 600, 2400, 10)).name('Maks. szerokość okładziny [mm]');
+  // Konstrukcja metalowa (geometry/metalStructureModel.js): prosta belka + podpory albo dwa płaskowniki w zęby;
+  // bez wang drewnianych, słupów konstrukcyjnych i podstopni. Wymiary stali — DO WERYFIKACJI.
+  live(cant.add(config, 'metalBeamCount', { '1 belka centralna': 1, '2 belki': 2 })).name('Profil: liczba belek');
+  live(cant.add(config, 'metalBeamSetbackMm', 50, 500, 5)).name('Profil: oś belki od boku stopnia [mm]');
+  live(cant.add(config, 'metalBeamWidthMm', 40, 300, 5)).name('Profil: szerokość belki [mm]');
+  live(cant.add(config, 'metalBeamHeightMm', 60, 400, 5)).name('Profil: wysokość belki [mm]');
+  live(cant.add(config, 'metalBeamWallMm', 2, 16, 0.5)).name('Profil: ścianka [mm]');
+  live(cant.add(config, 'metalSupportPlateThicknessMm', 3, 20, 1)).name('Podpora: blacha pod stopniem [mm]');
+  live(cant.add(config, 'metalSupportPlateWidthMm', 80, 1000, 10)).name('Podpora: szerokość blachy [mm]');
+  live(cant.add(config, 'metalSupportClearanceMm', 0, 200, 5)).name('Podpora: min. wysokość [mm]');
+  live(cant.add(config, 'metalSupportMaxHeightMm', 100, 800, 10)).name('Podpora: ostrzegaj powyżej [mm]');
+  live(cant.add(config, 'metalFlatThicknessMm', 6, 30, 1)).name('Płaskownik: grubość [mm]');
+  live(cant.add(config, 'metalFlatNeckMm', 40, 300, 5)).name('Płaskownik: najwęższe miejsce pasa [mm]');
+  live(cant.add(config, 'metalFlatSetbackMm', 0, 300, 5)).name('Płaskownik: cofnięcie od boku [mm]');
   cant.close();
 
   // Balustrada (geometry/railingSolver.js): parametry poręczy/tralek + lista odcinków. Wszystko to `config`

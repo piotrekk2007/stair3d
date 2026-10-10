@@ -216,6 +216,10 @@ function summaryHTML(ctx) {
   const innerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeInner] || config.stringerConstructionTypeInner;
   if (config.stairConstruction === 'cantilever') {
     rows.push(row('Konstrukcja', 'wspornikowa (profile w ścianie, okładziny)', 'user'));
+  } else if (config.stairConstruction === 'metal-profile') {
+    rows.push(row('Konstrukcja', `metalowa — wanga na profilu (${Number(config.metalBeamCount) >= 2 ? '2 belki' : '1 belka centralna'}, podpory pod stopniami)`, 'user'));
+  } else if (config.stairConstruction === 'metal-flat') {
+    rows.push(row('Konstrukcja', 'metalowa — dwa płaskowniki wycinane w zęby', 'user'));
   } else {
     rows.push(row('Typ wangi', outerType === innerType ? outerType : `zewn.: ${outerType} · wewn.: ${innerType}`, 'user'));
   }

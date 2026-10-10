@@ -121,6 +121,22 @@ export function createDefaultConfig() {
     cantileverShellThicknessMm: 20, // spód, tył, bok
     cantileverWallGapMm: 5, // mm, szczelina między okładziną a ścianą
     cantileverMaxWidthMm: 1800,
+    // Konstrukcja metalowa (geometry/metalStructureModel.js), decyzje użytkownika 2026-10-10:
+    // stairConstruction 'metal-profile' = wanga na profilu (1 belka centralna albo 2 belki pod stopniami, prosta belka
+    // + podpora pod każdym stopniem), 'metal-flat' = dwa płaskowniki po bokach wycinane w zęby. Wszystkie przekroje i
+    // wymiary poniżej to wartości robocze — DO WERYFIKACJI (CO-MFG-J-METAL); stal nie jest przez program obliczana.
+    metalBeamCount: 1, // 1 = belka centralna, 2 = dwie belki
+    metalBeamSetbackMm: 150, // mm, oś belki od boku stopnia (tylko przy 2 belkach)
+    metalBeamWidthMm: 100,
+    metalBeamHeightMm: 200,
+    metalBeamWallMm: 5, // mm, ścianka profilu zamkniętego (tylko do masy)
+    metalSupportPlateThicknessMm: 8, // mm, blacha pod stopniem
+    metalSupportPlateWidthMm: 300, // mm, w poprzek belki
+    metalSupportClearanceMm: 0, // mm, min. odstęp belki od blachy podpory
+    metalSupportMaxHeightMm: 400, // mm, wyższa podpora -> ostrzeżenie
+    metalFlatThicknessMm: 12, // mm, grubość płaskownika
+    metalFlatNeckMm: 120, // mm, najwęższe miejsce pasa między zębami góry i dołu
+    metalFlatSetbackMm: 30, // mm, płaskownik cofnięty od boku stopnia
     stringerConstructionTypeOuter: 'closed',
     stringerConstructionTypeInner: 'closed',
     // Poniższe 2 pola sterują KONSTRUKCYJNYM konturem wangi (stringerConstructionGeometry.js) —

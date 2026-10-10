@@ -15,6 +15,8 @@ import { renderRailing } from './railingRenderer.js';
 import { GLASS_TINTS } from './railingGlass.js';
 import { isCantilever, cantileverConfig, buildCantileverBox } from './cantileverModel.js';
 import { renderCantileverProfiles } from './cantileverRenderer.js';
+import { isMetal, metalConfig, buildMetalStructure } from './metalStructureModel.js';
+import { renderMetalStructure } from './metalStructureRenderer.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
@@ -40,6 +42,8 @@ const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xcfe7e2, roughnes
 const glassFixingMaterial = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 });
 // cantilever stair: the steel profiles out of the wall (inside the cladding boxes)
 const steelMaterial = new THREE.MeshStandardMaterial({ color: 0x5f6368, roughness: 0.5, metalness: 0.8 });
+// metal stair (metalStructureModel.js): the beams with their supports / the toothed flat bars — painted steel
+const metalStructureMaterial = new THREE.MeshStandardMaterial({ color: 0x565b61, roughness: 0.6, metalness: 0.25 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -71,7 +75,11 @@ export function buildStaircase(inputConfig) {
   const derived = deriveStairData(config);
   // Cantilever stair (cantileverModel.js): the tread is the whole cladding box, no risers, no wangi, no structural posts.
   const cantilever = isCantilever(config);
-  const fullConfig = cantileverConfig({ ...config, riserHeight: derived.riserHeight });
+  // Metal stair (metalStructureModel.js): steel beams with supports or toothed flat bars instead of the wangi; open
+  // (no risers), no structural posts either.
+  const metal = isMetal(config);
+  const noWangi = cantilever || metal;
+  const fullConfig = metalConfig(cantileverConfig({ ...config, riserHeight: derived.riserHeight }));
   const planLayout = buildPlanLayout(fullConfig);
 
   let treadModels = buildTreadModels(planLayout, fullConfig);
@@ -88,20 +96,21 @@ export function buildStaircase(inputConfig) {
     }
   }
   const riserModels = buildRiserModels(planLayout, fullConfig);
-  // A cantilever stair has no wangi and no structural posts: empty models, so nothing downstream (render, joints,
-  // takeoff, validation, the structural check) sees a board or a post that does not exist.
+  const metalStructure = metal ? buildMetalStructure({ planLayout, treadModels }, fullConfig) : null;
+  // A cantilever or metal stair has no wangi and no structural posts: empty models, so nothing downstream (render,
+  // joints, takeoff, validation, the structural check) sees a board or a post that does not exist.
   const noStringer = (side) => ({ side, segments: [], segmentJoints: [], absent: true });
-  const stringerModels = cantilever ? { outer: noStringer('outer'), inner: noStringer('inner') } : buildStringerModelsForFlight(planLayout, fullConfig);
+  const stringerModels = noWangi ? { outer: noStringer('outer'), inner: noStringer('inner') } : buildStringerModelsForFlight(planLayout, fullConfig);
   // Construction geometry (the real, continuous board contour — see
   // stringerConstructionGeometry.js) is a SEPARATE solver step on top of the analytical
   // StringerModel, never merged into it and never computed inside the renderer.
-  const stringerConstruction = cantilever
+  const stringerConstruction = noWangi
     ? { outer: [], inner: [] }
     : {
         outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
         inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
       };
-  const structuralPostModels = cantilever ? [] : buildPostModels(planLayout, fullConfig);
+  const structuralPostModels = noWangi ? [] : buildPostModels(planLayout, fullConfig);
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
@@ -111,7 +120,7 @@ export function buildStaircase(inputConfig) {
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
   // (a structural post a handrail ends at is raised to the handrail's top — postSolver.js raisePostsToHandrail)
-  const allPostModels = [...(cantilever ? [] : raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds)), ...railingModel.posts];
+  const allPostModels = [...(noWangi ? [] : raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds)), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);
 
   // How the elements are joined (jointSolver.js): stringers into posts (stage 1), treads/risers cut around posts and
@@ -122,8 +131,15 @@ export function buildStaircase(inputConfig) {
   root.name = 'Staircase';
 
   root.add(renderTreads(treadModels, treadMaterial, joints.treadCuts));
-  root.add(renderStringers(stringerModels.outer, stringerConstruction.outer, stringerMaterial, 'StringerOuter'));
-  root.add(renderStringers(stringerModels.inner, stringerConstruction.inner, stringerMaterial, 'StringerInner'));
+  const outerGroup = renderStringers(stringerModels.outer, stringerConstruction.outer, stringerMaterial, 'StringerOuter');
+  const innerGroup = renderStringers(stringerModels.inner, stringerConstruction.inner, stringerMaterial, 'StringerInner');
+  if (metalStructure) {
+    // the steel takes the wangi's place in the 3D layers: outer + central rows with "Wanga zewn.", inner with "Wanga wewn."
+    outerGroup.add(renderMetalStructure(metalStructure, ['outer', 'centre'], metalStructureMaterial, 'MetalOuter'));
+    innerGroup.add(renderMetalStructure(metalStructure, ['inner'], metalStructureMaterial, 'MetalInner'));
+  }
+  root.add(outerGroup);
+  root.add(innerGroup);
 
   const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
@@ -162,5 +178,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints, cantilever: cantilever ? cantileverResult : null };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

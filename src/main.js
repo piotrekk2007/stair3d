@@ -497,6 +497,7 @@ function offerPlanSVG() {
     posts: lastModels.postModels || [],
     stringerModels: lastModels.stringerModels,
     stringerConstruction: lastModels.stringerConstruction,
+    metalStructure: lastModels.metalStructure || null,
     railingModel: lastModels.railingModel ?? null,
   });
 }
@@ -631,6 +632,7 @@ function regeneratePlan2D() {
     posts: lastModels?.allPostModels || [],
     stringerModels: lastModels?.stringerModels || null,
     stringerConstruction: lastModels?.stringerConstruction || null,
+    metalStructure: lastModels?.metalStructure || null,
     railingModel: lastModels?.railingModel ?? null,
     opening: lastModels?.ceilingFit
       ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }
@@ -992,6 +994,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportTXT: () => exporter.takeoff('txt'),
   onExportPostsDXF: () => exporter.allPostsDXF(),
   onExportRailingDXF: () => exporter.railingDXF(),
+  onExportMetalDXF: () => exporter.metalDXF(),
   onExportTreadsDXF: () => exporter.allTreadsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia

@@ -142,7 +142,11 @@ export function stairFacts(config, derived, extras = {}) {
     ['Podstopnie', config.hasRiserBoards ? `tak (${config.riserBoardThickness} mm)` : 'nie (schody otwarte)'],
     config.stairConstruction === 'cantilever'
       ? ['Konstrukcja', 'schody wspornikowe — okładziny drewniane na profilach stalowych w ścianie']
-      : ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
+      : config.stairConstruction === 'metal-profile'
+        ? ['Konstrukcja', `metalowa — stopnie drewniane na ${Number(config.metalBeamCount) >= 2 ? 'dwóch belkach stalowych' : 'centralnej belce stalowej'}`]
+        : config.stairConstruction === 'metal-flat'
+          ? ['Konstrukcja', 'metalowa — stopnie drewniane na dwóch płaskownikach stalowych wycinanych w zęby']
+          : ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
     ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);

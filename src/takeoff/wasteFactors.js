@@ -20,6 +20,7 @@ export const DEFAULT_WASTE_FACTORS = Object.freeze({
   CONNECTOR: 0, // hardware counted in pieces — no offcut
   GLASS_PANE: 0, // glass is ordered cut to size
   GLASS_FIXING: 0,
+  STEEL: 0, // steel is ordered cut to size; listed unpriced
 });
 
 /**
