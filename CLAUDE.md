@@ -167,7 +167,11 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
 - `railingSolver.js`: sections `{id, side, fromStep, toStep}` (0-based); path along the tread chain cut into handrail
   runs ending at posts (existing structural posts reused, `postIdAt`); two baluster modes (housed: along the pitch line;
   overlay: rhythm per tread); bent handrail (`railingBent`), base rail (`railingBaseRail`); cut angles in the model
-  (`annotateCuts`). Findings `RAILING-*`, `PL-LEGAL-H-01`.
+  (`annotateCuts`). Findings `RAILING-*`, `PL-LEGAL-H-01`. Every run is a piece BETWEEN two posts: simplified nosing
+  line → short stub next to a post dropped (`RAIL_END_STUB_MM` 250, the straight piece carried on to the post) → cut
+  or extended to the post FACES (`fitPathToPosts`) → optional manual height of an end at its post
+  (`config.railingEndOffsets`, `railingEndKey`, edited in the Inspektor's post view) → smoothing for a bent handrail.
+  Balusters and glass read their height under the handrail's own line (`zOnPaths`).
 - Glass (`railingGlass.js`, `railingInfill` balusters | glass-side (rotule Ø30, handrail on the glass) | glass-posts
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));
   VSG 4.4.2/5.5.2, pane ≤ 1800 mm, tint clear/optiwhite/grey/bronze; other numbers DO WERYFIKACJI.

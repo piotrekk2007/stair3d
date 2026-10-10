@@ -6,6 +6,7 @@ import { stateBadgeHTML } from './valueState.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stepIndexFromElementId } from './selection.js';
 import { MIN_POST_HEIGHT_MM } from '../geometry/postSolver.js';
+import { railingEndKey, MAX_RAILING_END_OFFSET_MM } from '../geometry/railingSolver.js';
 
 const TYPE_LABEL_PL = { straight: 'prosty', winder: 'zabiegowy', landing: 'podest' };
 const SEVERITY_LABEL_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
@@ -148,6 +149,31 @@ function postEditFormHTML(post, o) {
   );
 }
 
+// The handrail ends at this post (geometry/railingSolver.js): each one's height can be corrected by hand —
+// config.railingEndOffsets, keyed by railingEndKey. The handrail always ends on the post's face; this only moves that
+// point up or down (e.g. to shorten an arc that rises too high before the post).
+function railingEndsHTML(railingModel, postId) {
+  const fields = [];
+  for (const s of railingModel?.sections || []) {
+    if (!s.valid) continue;
+    s.runs.forEach((run) => {
+      if (run.endPostId === postId) fields.push(['Poręcz dochodząca do słupa', railingEndKey(s.id, postId, 'end'), run.endOffsetMm || 0, s.id]);
+      if (run.startPostId === postId) fields.push(['Poręcz odchodząca od słupa', railingEndKey(s.id, postId, 'start'), run.startOffsetMm || 0, s.id]);
+    });
+  }
+  if (fields.length === 0) return '';
+  return (
+    section('Poręcz przy słupie') +
+    fields
+      .map(
+        ([label, key, value, sectionId]) =>
+          `<label class="insp-field" title="Wysokość końca poręczy na licu tego słupa: + w górę, − w dół (odcinek ${sectionId})"><span class="insp-label">${label}: wyżej (+) / niżej (−)</span><input type="number" step="10" min="${-MAX_RAILING_END_OFFSET_MM}" max="${MAX_RAILING_END_OFFSET_MM}" value="${value}" data-railing-end="${key}"> mm</label>`
+      )
+      .join('') +
+    `<div class="insp-hint">Poręcz zawsze kończy się na licu słupa. Tu przesuwasz ten punkt w pionie — prosty odcinek poręczy przy słupie zmienia pochylenie, tralki się dopasowują.</div>`
+  );
+}
+
 function postHTML(ctx) {
   const { selection, config, postModels, diagnostics } = ctx;
   const post = postModels?.find((p) => p.postId === selection.postId) ?? null;
@@ -166,6 +192,7 @@ function postHTML(ctx) {
       rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-post-dxf="${post.postId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego słupa — prosty prostokąt przekrój × długość, do wycięcia w warsztacie">Eksportuj słup (DXF 1:1)</button></div>`);
     }
     rows.push(postEditFormHTML(post, config.manualPostOverrides?.[post.postId] || {}));
+    if (!post.removed) rows.push(railingEndsHTML(ctx.railingModel, post.postId));
   }
   rows.push(section('Walidacja'));
   rows.push(diagnosticsHTML(diagnostics));

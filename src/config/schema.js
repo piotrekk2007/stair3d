@@ -197,6 +197,9 @@ export function createDefaultConfig() {
     railingPostSizeMm: 90, // mm, przekrój (kwadrat) nowych słupków balustrady na końcach odcinków; per słupek edytowalny w Inspektorze
     railingPostTopAboveHandrailMm: 0, // mm, o ile słupek balustrady wystaje ponad górę poręczy
     railingLateralOffsetMm: null, // mm od osi odniesienia wangi w głąb schodów; null = środek grubości wangi
+    // Ręczna korekta wysokości końca poręczy przy słupie (railingSolver.js railingEndKey/sanitizeRailingEndOffsets):
+    // { 'odcinek|słup|start' albo '…|end': mm } — + w górę, − w dół. Edytowane w Inspektorze słupa.
+    railingEndOffsets: {},
     // Poręcz gięta (etap 4, railingSolver.js smoothRun): załamania pochylenia w biegu zastąpione łukami w pionie,
     // a narożnik w rzucie, przy którym NIE stoi słup, łukiem w rzucie zamiast słupka. Promienie to parametry
     // (wybór programu, do ustalenia z warsztatem — nie wartości z normy).

@@ -238,3 +238,35 @@ konstrukcji (A4) i walidacja prześwitu.
 konstrukcyjny). Między dwoma cieńszymi słupkami tafla wychodziła wtedy szersza od maksimum: 1916 mm przęsła dawało
 taflę 1806 mm. Teraz liczy się z cieńszym, więc tafla nigdy nie przekracza `railingGlassMaxWidthMm`. Błąd istniał
 wcześniej, a ujawnił go środkowy bieg U po zmianie zabiegów na łuk linii biegu.
+
+## Końce poręczy przy słupach (2026-10-10)
+
+Zgłoszone ze zrzutem: poręcz przechodziła przez słup startowy na wylot i kończyła się przed słupem końcowym. Przyczyna:
+bieg poręczy szedł od węzła do węzła linii nosków, a słupy nie stoją w tych węzłach. Słup startowy jest odsunięty
+od pierwszego noska, końcowy stoi za ostatnim stopniem, a słup konstrukcyjny użyty ponownie stoi tylko w pobliżu
+złącza.
+
+Teraz każdy bieg (`railingSolver.js`, jedna kolejność dla wszystkich):
+1. **Uproszczona linia nosków** (`simplifyPath`).
+2. **Bez krótkiego kawałka przy słupie** (`dropStartStub`, `RAIL_END_STUB_MM` = 250, wartość z praktyki, ZAŁOŻENIE):
+   gdy linia nosków łamie się tuż przed słupem (pierwszy zabieg przy słupie narożnym, krawędź podestu) i ten kawałek
+   leży w rzucie w linii z poprzednim, poręcz biegnie prosto do lica słupa zamiast robić krótki stromy odcinek.
+3. **Docięcie do lic słupów** (`fitPathToPosts` / `fitPathStartToPost`): koniec jest cofany do lica, gdy bieg
+   przechodzi przez słup, a przedłużany po własnej linii, gdy do słupa nie dochodzi (najwyżej o 3 grubości słupa).
+   Gdy linia mija słup bokiem, koniec zostaje. `runs[].startAtPostFace` / `endAtPostFace`.
+4. **Ręczna korekta wysokości końca** (`config.railingEndOffsets`, klucz `railingEndKey(odcinek, słup, 'start'|'end')`,
+   ±`MAX_RAILING_END_OFFSET_MM` = 400): przesuwa w pionie dokładnie ten punkt, w którym poręcz dotyka lica słupa.
+   Prosty odcinek przy słupie zmienia pochylenie. Edycja: Inspektor → słup → „Poręcz przy słupie”, osobno poręcz
+   dochodząca i odchodząca. To zwykłe pole config, więc działa cofanie i zapis w pliku projektu.
+5. **Poręcz gięta**: wygładzenie (`smoothRun`) dopiero po krokach 1–4, potem ponowne docięcie do lic.
+
+Tralki i tafle szkła biorą wysokość spod **własnej linii poręczy** (`zOnPaths`), a nie z surowej linii nosków, więc
+nadążają za korektą i za poręczą doprowadzoną prosto do słupa. Tralki na wandze wpuszczanej rozkładają się od lica
+do lica.
+
+Naprawiony przy okazji błąd w `smoothRun`: stacje są zaokrąglane do 0,001 mm (`STATION_ROUND_MM`), a filtr końca
+miał tolerancję 1e-6. Przy „nieokrągłej” długości biegu ostatnia stacja wypadała i poręcz gięta traciła ostatni
+odcinek.
+
+Nie zrobione: edytor linii poręczy w widoku z boku (wzorem „Profil wangi”): dodatkowe punkty na poręczy, promienie
+łuków dla każdego miejsca osobno.

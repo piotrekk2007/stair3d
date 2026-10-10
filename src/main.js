@@ -3,7 +3,7 @@ import './style.css';
 import { createDefaultConfig } from './config/schema.js';
 import { buildStaircase, setAppearance } from './geometry/buildStaircase.js';
 import { defaultAppearance, sanitizeAppearance } from './scene/appearance.js';
-import { editRailingSections } from './geometry/railingSolver.js';
+import { editRailingSections, sanitizeRailingEndOffsets } from './geometry/railingSolver.js';
 import { sanitizePostOverrides } from './geometry/postSolver.js';
 import { applyProfileEdit } from './geometry/stringerProfileModel.js';
 import { createProfileEditor } from './ui/profileEditorPanel.js';
@@ -531,6 +531,7 @@ function refreshSelectionViews() {
       planLayout: lastModels.planLayout,
       treadModels: lastModels.treadModels,
       stringerModels: lastModels.stringerModels,
+      railingModel: lastModels.railingModel ?? null,
       postModels: lastModels.allPostModels, // także usunięte (oznaczone) — Inspektor pokazuje "Przywróć"
       manualCount: manualEditCount(),
     });
@@ -770,6 +771,14 @@ function applyPostEdit(postId, change) {
   commitHistory();
 }
 
+// Height of a handrail end at its post (Inspektor → słup → "Poręcz przy słupie"): changes ONLY
+// config.railingEndOffsets, then the normal rebuild() + a history entry.
+function applyRailingEndOffset(key, valueMm) {
+  config.railingEndOffsets = sanitizeRailingEndOffsets({ ...(config.railingEndOffsets || {}), [key]: Number.isFinite(valueMm) ? valueMm : 0 });
+  rebuild();
+  commitHistory();
+}
+
 // Krańce odcinka balustrady ustawiane ze stopnia zaznaczonego w planie: zmienia WYŁĄCZNIE config.railingSections
 // (dane modelu), potem zwykły rebuild() + wpis do historii, jak każda inna edycja.
 function applyRailingEdit(action, sectionId, stepIndex, side) {
@@ -927,6 +936,8 @@ const inspectorPanel = createInspectorPanel(ws.tabBody('inspector'));
 inspectorPanel.addEventListener('change', (e) => {
   const key = e.target?.dataset?.postEdit;
   if (key && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: key, value: Number(e.target.value) });
+  const railingEnd = e.target?.dataset?.railingEnd;
+  if (railingEnd) applyRailingEndOffset(railingEnd, Number(e.target.value));
 });
 inspectorPanel.addEventListener('click', (e) => {
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;

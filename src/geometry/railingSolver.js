@@ -226,6 +226,7 @@ const BENT_ELEVATION_CHORD_MM = 1; // chord tolerance of the elevation arcs
 // Nodes of the nosing line closer than this (along the plan) are merged before the elevation is filleted — the tread
 // boundaries around a corner sit a few mm apart and would otherwise clamp every fillet to almost nothing.
 const BENT_MIN_NODE_SPACING_MM = 20;
+const STATION_ROUND_MM = 1e-3; // stations of a bent run are merged when closer than this
 const PLAN_COLLINEAR_SIN = 1e-3; // a plan vertex turning less than this (sin) is not a corner
 
 // Plan corners only: collinear vertices dropped (a fillet sized by the legs of the REAL corner, not by a node a few
@@ -274,7 +275,7 @@ function smoothRun(run, config) {
   const bendRadius = Math.max(0, config.railingBendRadiusMm || 0);
   const zPoly = curveToPolyline(filletPolyline(profile, profile.map((_, i) => (i > 0 && i < profile.length - 1 ? bendRadius : 0))).curve, BENT_ELEVATION_CHORD_MM);
 
-  const stations = [...new Set([...cumPlanNew, ...zPoly.map((q) => q.u)].map((s) => Math.round(s * 1000) / 1000))].sort((a, b) => a - b);
+  const stations = [...new Set([...cumPlanNew, ...zPoly.map((q) => q.u)].map((s) => Math.round(s / STATION_ROUND_MM) * STATION_ROUND_MM))].sort((a, b) => a - b);
   const total = cumPlanNew[cumPlanNew.length - 1];
   const planAt = (s) => {
     const k = Math.max(1, cumPlanNew.findIndex((c) => c >= s));
@@ -284,7 +285,13 @@ function smoothRun(run, config) {
     const t = span > 0 ? (s - cumPlanNew[k - 1]) / span : 0;
     return { x: a.u + (b.u - a.u) * t, y: a.v + (b.v - a.v) * t };
   };
-  return stations.filter((s) => s >= -SAME_POINT_MM && s <= total + SAME_POINT_MM).map((s) => ({ ...planAt(Math.min(Math.max(s, 0), total)), z: valueAtU(zPoly, s) }));
+  // Stations are rounded to STATION_ROUND_MM, so the last one may land that much past the path's real length (any
+  // length that is not a round number — e.g. a run cut to a post face): the end tolerance is the rounding step, and
+  // each station is evaluated inside the path. (With a 1e-6 tolerance the last station — the run's end — was dropped.)
+  return stations
+    .filter((s) => s >= -STATION_ROUND_MM && s <= total + STATION_ROUND_MM)
+    .map((s) => Math.min(Math.max(s, 0), total))
+    .map((s) => ({ ...planAt(s), z: valueAtU(zPoly, s) }));
 }
 
 // The base rail of one run: the run's plan path sampled every BASERAIL_SAMPLE_MM (plus its own vertices), each point
@@ -466,6 +473,89 @@ function wangaTopAt(point, stringerModel, geometries) {
   if (!best) return null;
   const polyline = curveToPolyline(best.geo.upperCurve);
   return polyline.length >= 2 ? valueAtU(polyline, best.u) : null;
+}
+
+// --- handrail ends at posts ---------------------------------------------------------------------------------------
+// A handrail run is laid along the nosing-line nodes, but it is a piece of timber BETWEEN two posts: it starts on the
+// face of the post at its start and ends on the face of the post at its end. The posts do not stand on the run's
+// first/last node (a start newel is moved clear of the first nosing, an end newel stands past the last tread, a
+// reused structural post is only near the join), so the run is trimmed back to the face where it passes through a
+// post and continued along its own end line where it stops short of one.
+const MAX_END_FIT_FACTOR = 3; // a run end is never moved further than this many post sizes
+
+// Fits the START of a {x,y,z} path to `post` (plan square, axis-aligned like every post). Returns the same path when
+// the run's line misses the post or the post is too far.
+function fitPathStartToPost(path, post) {
+  if (!post || path.length < 2) return { path, fitted: false };
+  const half = post.size / 2;
+  const c = post.position;
+  const inside = (p) => Math.abs(p.x - c.x) < half - 1e-6 && Math.abs(p.y - c.y) < half - 1e-6;
+  let pts = path;
+  while (pts.length > 2 && inside(pts[1])) pts = pts.slice(1);
+  const a = pts[0];
+  const b = pts[1];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const L = Math.hypot(dx, dy);
+  if (L < SAME_POINT_MM) return { path, fitted: false };
+  // the line a + t·(b − a) against the square (slab test); t1 = where it leaves the post toward b
+  let t0 = -Infinity;
+  let t1 = Infinity;
+  for (const [o, d, centre] of [[a.x, dx, c.x], [a.y, dy, c.y]]) {
+    if (Math.abs(d) < 1e-12) {
+      if (Math.abs(o - centre) >= half) return { path, fitted: false };
+      continue;
+    }
+    const u = (centre - half - o) / d;
+    const v = (centre + half - o) / d;
+    t0 = Math.max(t0, Math.min(u, v));
+    t1 = Math.min(t1, Math.max(u, v));
+  }
+  if (t0 > t1 || t1 >= 1 - 1e-6 || Math.abs(t1) * L > MAX_END_FIT_FACTOR * post.size) return { path, fitted: false };
+  const start = { ...a, x: a.x + dx * t1, y: a.y + dy * t1, z: a.z + (b.z - a.z) * t1 };
+  return { path: [start, ...pts.slice(1)], fitted: true };
+}
+
+// A handrail is not made with a short stub next to a post: where the nosing line kinks just before a post (the first
+// winder at a corner post, a landing edge), the last straight piece is carried on to the post's face instead of
+// following that kink — the handrail simply meets the post a little lower or higher. A stub is a piece at a post
+// shorter (in plan) than RAIL_END_STUB_MM that continues the previous piece's plan direction; it is dropped only when
+// the longer piece's own line does reach that post.
+export const RAIL_END_STUB_MM = 250; // judgement value (workshop practice, not a norm) — ASSUMPTION
+function dropStartStub(path, post) {
+  if (!post || path.length < 3) return path;
+  const [a, b, c] = path;
+  const l1 = Math.hypot(b.x - a.x, b.y - a.y);
+  const l2 = Math.hypot(c.x - b.x, c.y - b.y);
+  if (l1 >= RAIL_END_STUB_MM || l2 < SAME_POINT_MM) return path;
+  const sameWay = l1 < SAME_POINT_MM || ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y)) / (l1 * l2) > Math.cos((RAILING_CORNER_ANGLE_DEG * Math.PI) / 180);
+  if (!sameWay) return path;
+  const without = path.slice(1);
+  return fitPathStartToPost(without, post).fitted ? without : path;
+}
+
+function fitPathToPosts(path, startPost, endPost) {
+  const s = fitPathStartToPost(dropStartStub(path, startPost), startPost);
+  const e = fitPathStartToPost(dropStartStub([...s.path].reverse(), endPost), endPost);
+  return { path: [...e.path].reverse(), startFitted: s.fitted, endFitted: e.fitted };
+}
+
+// Manual height corrections of handrail ends at posts: config.railingEndOffsets = { [key]: mm } (+ up, − down), key =
+// railingEndKey(sectionId, postId, 'start' | 'end') — 'end' = the run that ARRIVES at the post, 'start' = the one that
+// leaves it. A manual edit of the model, like a post's own length: kept as given (within ±MAX_RAILING_END_OFFSET_MM).
+export const MAX_RAILING_END_OFFSET_MM = 400;
+export function railingEndKey(sectionId, postId, end) {
+  return `${sectionId}|${postId}|${end}`;
+}
+export function sanitizeRailingEndOffsets(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [key, value] of Object.entries(raw)) {
+    const v = Number(value);
+    if (!/\|(start|end)$/.test(key) || !Number.isFinite(v) || v === 0) continue;
+    out[key] = Math.max(-MAX_RAILING_END_OFFSET_MM, Math.min(MAX_RAILING_END_OFFSET_MM, v));
+  }
+  return out;
 }
 
 function diag(sectionId, ruleId, message, severity = 'WARNING') {
@@ -675,7 +765,10 @@ function buildSection(section, ctx) {
   const pieces = [];
   const balusters = [];
   const bent = !!config.railingBent;
-  const smoothedPaths = [];
+  const endOffsets = sanitizeRailingEndOffsets(config.railingEndOffsets);
+  // the post standing at a spot (a reused structural one, or this section's own, unless removed)
+  const postAtSpot = (spot) => existingNear(spot.at) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? null;
+  const runPaths = []; // every run's final path — what a baluster / pane under an adjusted handrail reads its height from
   // Base rail (podporęcz): only on a housed wanga — there the balusters stand on the wanga's top edge, and the base
   // rail lies on that edge along each handrail run, the balusters standing in it (on an overlay wanga they stand on
   // the treads: nothing to put a base rail on).
@@ -686,8 +779,26 @@ function buildSection(section, ctx) {
     base.diagnostics.push(diag(section.id, 'RAILING-BASERAIL-NOT-APPLICABLE', `Balustrada ${section.id}: podporęcz jest tylko przy wandze wpuszczanej — przy nakładanej tralki stoją na stopniach, podporęcz pominięta.`, 'INFO'));
   }
   runs.forEach((run, j) => {
-    const path = bent ? smoothRun(run, config) : simplifyPath(run);
-    if (bent) smoothedPaths.push(path);
+    const startPostId = postIdAt.get(spots[j].id);
+    const endPostId = postIdAt.get(spots[j + 1].id);
+    const startOffsetMm = endOffsets[railingEndKey(section.id, startPostId, 'start')] || 0;
+    const endOffsetMm = endOffsets[railingEndKey(section.id, endPostId, 'end')] || 0;
+    const startPost = postAtSpot(spots[j]);
+    const endPost = postAtSpot(spots[j + 1]);
+    // One order for every run: the simplified nosing line is cut to the post faces, then (if the user corrected an
+    // end) its end points are moved — so the point where the handrail MEETS the post moves by exactly the given amount,
+    // the straight stretch next to the post following without a kink at the last tread — and only then a bent handrail
+    // is smoothed, through those ends.
+    const cut = fitPathToPosts(simplifyPath(run), startPost, endPost);
+    const moved = cut.path.map((node, i) => (i === 0 ? { ...node, z: node.z + startOffsetMm } : i === cut.path.length - 1 ? { ...node, z: node.z + endOffsetMm } : node));
+    // (smoothing may shift a path's ends a little, so a bent run is cut to the faces once more)
+    const fit = bent ? fitPathToPosts(smoothRun(moved, config), startPost, endPost) : cut.path === moved ? cut : { ...cut, path: moved };
+    if (bent) {
+      fit.startFitted = fit.startFitted || cut.startFitted;
+      fit.endFitted = fit.endFitted || cut.endFitted;
+    }
+    const path = fit.path;
+    runPaths.push(path);
     const runPieces = [];
     for (let i = 0; i < path.length - 1; i++) {
       const start = centre(path[i]);
@@ -696,7 +807,7 @@ function buildSection(section, ctx) {
     }
     annotateCuts(runPieces, handrailHeight);
     pieces.push(...runPieces);
-    base.runs.push({ startPostId: postIdAt.get(spots[j].id), endPostId: postIdAt.get(spots[j + 1].id), pieces: runPieces, bent });
+    base.runs.push({ startPostId, endPostId, pieces: runPieces, bent, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm, endOffsetMm });
 
     if (baseRail) {
       const railPieces = baseRailAlong(path, (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]), baseRail.heightMm);
@@ -707,7 +818,8 @@ function buildSection(section, ctx) {
     if (glass) {
       // The glass of this run (railingGlass.js): the pane top under the handrail (a bent handrail's own line), the
       // bottom on the wanga's side (rotule) or above the wanga / the nosing line (between posts).
-      const lineZ = (p) => (bent ? (zOnPaths([path], p) ?? p.z) : p.z);
+      // the handrail's own line (it may leave the raw nosing line: bent, corrected at a post, a stub dropped)
+      const lineZ = (p) => zOnPaths([path], p) ?? p.z;
       const wangaTop = (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
       const cut = constructionType === CONSTRUCTION_TYPES.CUT;
       const groundAt = (p) => {
@@ -729,8 +841,9 @@ function buildSection(section, ctx) {
       // Housed wanga: evenly spread along this run, standing on the wanga's top edge (or in the base rail on it).
       const cumulative = cumulativeLengths(path);
       const total = cumulative[cumulative.length - 1];
-      const startHalf = halfAt(spots[j]);
-      const endHalf = halfAt(spots[j + 1]);
+      // a run fitted to a post already starts/ends on that post's face
+      const startHalf = fit.startFitted ? 0 : halfAt(spots[j]);
+      const endHalf = fit.endFitted ? 0 : halfAt(spots[j + 1]);
       const usable = total - startHalf - endHalf;
       const n = usable > maxClear ? Math.ceil((usable - maxClear) / pitch) : 0;
       const gap = (usable - n * balusterSize) / (n + 1);
@@ -756,8 +869,9 @@ function buildSection(section, ctx) {
         const p = pointAt(path, cumulative, (length * (b + 0.5)) / k);
         const onPost = postClearances.some((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < post.half + balusterSize / 2 + 5);
         if (onPost) continue;
-        // a bent handrail runs above its own smoothed line, not the raw nosing line
-        const lineZ = bent ? (zOnPaths(smoothedPaths, p) ?? p.z) : p.z;
+        // under the handrail's OWN line (bent, corrected at a post, or carried straight to a post) — not the raw nosing
+        // line
+        const lineZ = zOnPaths(runPaths, p) ?? p.z;
         balusters.push({ treadIndex: chain.index, position: { x: p.x, y: p.y }, zBottom: chain.zFront, zTop: railTop(lineZ) - handrailHeight });
       }
     }

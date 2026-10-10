@@ -59,8 +59,16 @@ test('straight flight: the handrail is ONE straight piece rising with the nosing
   assert.equal(section.handrail.pieces.length, 1);
   const { start, end } = section.handrail.pieces[0];
   const half = config.railingHandrailHeightMm / 2;
-  assert.ok(Math.abs(start.z + half - (config.riserHeight + config.railingHeightMm)) < 1e-6);
-  assert.ok(Math.abs(end.z + half - (11 * config.riserHeight + config.railingHeightMm)) < 1e-6);
+  // the nosing line above plan position y (the flight runs along +y from the first front edge): one riser at the
+  // first nosing, one more per going
+  const nosingZ = (pt) => config.riserHeight * (1 + pt.y / config.treadGoing);
+  assert.ok(Math.abs(start.z + half - (nosingZ(start) + config.railingHeightMm)) < 1e-6);
+  assert.ok(Math.abs(end.z + half - (nosingZ(end) + config.railingHeightMm)) < 1e-6);
+  // ...and it is a piece BETWEEN the two posts: each end on the face of its post, never through it or short of it
+  const [first, last] = [section.posts[0], section.posts[section.posts.length - 1]];
+  assert.ok(Math.abs(start.y - (first.position.y + first.size / 2)) < 1e-6, 'starts on the face of the start post');
+  assert.ok(Math.abs(end.y - (last.position.y - last.size / 2)) < 1e-6, 'ends on the face of the end post');
+  assert.ok(section.runs[0].startAtPostFace && section.runs[0].endAtPostFace);
 });
 
 test('a section can start at a later step and end early: only that stretch is covered', () => {
@@ -68,7 +76,9 @@ test('a section can start at a later step and end early: only that stretch is co
   const [section] = model.sections;
   assert.equal(section.fromStep, 2);
   const half = config.railingHandrailHeightMm / 2;
-  assert.ok(Math.abs(section.handrail.pieces[0].start.z + half - (3 * config.riserHeight + config.railingHeightMm)) < 1e-6);
+  const first = section.handrail.pieces[0].start;
+  assert.ok(Math.abs(first.z + half - (config.riserHeight * (1 + first.y / config.treadGoing) + config.railingHeightMm)) < 1e-6);
+  assert.ok(first.y >= 2 * config.treadGoing && first.y < 3 * config.treadGoing, 'starts at tread 3, on the face of its post');
   assert.ok(section.balusters.length > 0);
   assert.ok(section.balusters.every((b) => b.treadIndex >= 2 && b.treadIndex <= 5));
 });
@@ -110,10 +120,10 @@ test('housed wanga: evenly spread along the handrail, every clear opening within
   const steps = along.slice(1).map((v, i) => v - along[i]);
   for (const d of steps) assert.ok(Math.abs(d - steps[0]) < 1e-6, 'even spacing');
   assert.ok(steps[0] - config.railingBalusterSizeMm <= config.railingMaxClearMm + 1e-6);
-  const postHalf = section.posts[0].size / 2;
-  assert.ok(Math.abs(along[0] - config.railingBalusterSizeMm / 2 - postHalf - (steps[0] - config.railingBalusterSizeMm)) < 1e-6, 'the gap to the start post equals the gap between balusters');
-  assert.ok(along[0] - config.railingBalusterSizeMm / 2 - postHalf <= config.railingMaxClearMm + 1e-6, 'gap to the start post');
-  assert.ok(dist(start, end) - along[along.length - 1] - config.railingBalusterSizeMm / 2 - postHalf <= config.railingMaxClearMm + 1e-6, 'gap to the end post');
+  // the handrail runs from post face to post face, so its own ends are the faces the gaps are measured from
+  assert.ok(Math.abs(along[0] - config.railingBalusterSizeMm / 2 - (steps[0] - config.railingBalusterSizeMm)) < 1e-6, 'the gap to the start post equals the gap between balusters');
+  assert.ok(along[0] - config.railingBalusterSizeMm / 2 <= config.railingMaxClearMm + 1e-6, 'gap to the start post');
+  assert.ok(dist(start, end) - along[along.length - 1] - config.railingBalusterSizeMm / 2 <= config.railingMaxClearMm + 1e-6, 'gap to the end post');
   for (const b of bs) assert.ok(b.heightMm > 0 && b.zBottom > 0);
   const heights = bs.map((b) => b.heightMm);
   assert.ok(Math.max(...heights) - Math.min(...heights) < 5, 'parallel to the pitch line');
@@ -154,7 +164,8 @@ test('per-post edits: thickness and length of a railing post, and removing it; t
   assert.ok(Math.abs(e.elevation.top - (b.elevation.top + 50)) < 1e-6);
   assert.ok(Math.abs(e.elevation.bottom - (b.elevation.bottom + 20)) < 1e-6);
   assert.equal(e.overridden, true);
-  const firstGap = (section) => Math.hypot(section.balusters[0].position.x - section.handrail.pieces[0].start.x, section.balusters[0].position.y - section.handrail.pieces[0].start.y);
+  // measured from the post's own centre (the handrail itself now starts on the post's face)
+  const firstGap = (section) => Math.hypot(section.balusters[0].position.x - b.position.x, section.balusters[0].position.y - b.position.y);
   assert.ok(firstGap(edited) > firstGap(base), 'a fatter post pushes the first baluster away from the end');
 
   const removed = stair({ ...closed, railingSections: whole('outer'), manualPostOverrides: { [id]: { removed: true } } }).model.sections[0];
@@ -252,7 +263,9 @@ test('L stair with winders (inner / dusza): the handrail follows the winders as 
     assert.deepEqual(section.uncoveredSteps, [], `${windersPerTurn} winders`);
     const planLength = (pts) => pts.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - pts[i].x, p.y - pts[i].y), 0);
     const railed = section.handrail.pieces.reduce((sum, p) => sum + Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y), 0);
-    assert.ok(railed >= 0.95 * planLength(section.path), `${windersPerTurn} winders: the rail covers the whole path`);
+    // the whole path but the posts it stops at (a run ends on a post's face)
+    const inPosts = (section.runs.length + 1) * 110;
+    assert.ok(railed >= 0.95 * (planLength(section.path) - inPosts), `${windersPerTurn} winders: the rail covers the whole path`);
     for (const piece of section.handrail.pieces) assert.ok(slopeDeg(piece) <= RAILING_STEEP_ANGLE_DEG + 1e-6);
   }
 });
@@ -464,4 +477,105 @@ test('base rail off (default): nothing changes', () => {
   const r = bentStair({ railingBent: false });
   assert.equal(r.railingModel.sections[0].baseRail, null);
   assert.equal(takeoffForBent(r, r.fullConfig).filter((i) => i.elementType === 'BASERAIL').length, 0);
+});
+
+// ---- handrail ends at posts (reported with a screenshot: a rail running THROUGH the start newel and stopping short of
+// the end newel) and the manual height correction of an end at its post ----
+import { railingEndKey, sanitizeRailingEndOffsets, MAX_RAILING_END_OFFSET_MM } from '../railingSolver.js';
+
+function allPosts(planLayout, config, model) {
+  return [...buildPostModels(planLayout, config), ...model.posts.filter((p) => !p.removed)];
+}
+
+test('every handrail run starts and ends ON the face of the post there — structural newels and corner posts included', () => {
+  for (const patch of [
+    { ...closed, railingSections: whole('inner') },
+    { ...cut, railingSections: whole('inner') },
+    { ...closed, stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 4, totalRise: 2600, railingSections: whole('inner') },
+    { ...closed, stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 4, totalRise: 2600, railingSections: whole('outer') },
+    { ...closed, stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 4, totalRise: 2600, railingBent: true, railingSections: whole('inner') },
+  ]) {
+    const { config, model, planLayout } = stair(patch);
+    const posts = allPosts(planLayout, config, model);
+    const section = model.sections[0];
+    const label = JSON.stringify(patch).slice(0, 90);
+    for (const run of section.runs) {
+      const ends = [
+        [run.pieces[0].start, run.startPostId, run.startAtPostFace],
+        [run.pieces[run.pieces.length - 1].end, run.endPostId, run.endAtPostFace],
+      ];
+      for (const [pt, postId, fitted] of ends) {
+        const post = posts.find((p) => p.postId === postId);
+        if (!post) continue;
+        assert.ok(fitted, `${label}: the end at ${postId} is fitted to the post`);
+        // on the square's boundary: the larger of |dx|, |dy| is exactly half the post, the other within it
+        const dx = Math.abs(pt.x - post.position.x);
+        const dy = Math.abs(pt.y - post.position.y);
+        assert.ok(Math.abs(Math.max(dx, dy) - post.size / 2) < 1e-6 && Math.min(dx, dy) <= post.size / 2 + 1e-6, `${label}: ${postId} — the rail ends ${Math.max(dx, dy).toFixed(1)} mm from the post centre, not on its face`);
+      }
+      // and no part of the run lies inside a post at its ends
+      for (const piece of run.pieces) {
+        const mid = { x: (piece.start.x + piece.end.x) / 2, y: (piece.start.y + piece.end.y) / 2 };
+        for (const postId of [run.startPostId, run.endPostId]) {
+          const post = posts.find((p) => p.postId === postId);
+          if (post) assert.ok(Math.max(Math.abs(mid.x - post.position.x), Math.abs(mid.y - post.position.y)) >= post.size / 2 - 1e-6, `${label}: a handrail piece inside ${postId}`);
+        }
+      }
+    }
+  }
+});
+
+test('railingEndOffsets: the end of a handrail at its post is moved up/down by hand; the other end and the line\'s plan stay; balusters follow', () => {
+  const patch = { ...closed, railingSections: whole('inner') };
+  const base = stair(patch).model.sections[0];
+  const endPostId = base.runs[0].endPostId;
+  const key = railingEndKey('s', endPostId, 'end');
+  const lowered = stair({ ...patch, railingEndOffsets: { [key]: -120 } }).model.sections[0];
+  const b = base.runs[0].pieces;
+  const l = lowered.runs[0].pieces;
+  assert.equal(lowered.runs[0].endOffsetMm, -120);
+  assert.ok(Math.abs(l[l.length - 1].end.z - (b[b.length - 1].end.z - 120)) < 1e-6, 'the point on the post face is exactly 120 mm lower');
+  assert.ok(Math.abs(l[0].start.z - b[0].start.z) < 1e-6, 'the other end stays');
+  assert.ok(Math.abs(l[l.length - 1].end.x - b[b.length - 1].end.x) < 1e-6 && Math.abs(l[l.length - 1].end.y - b[b.length - 1].end.y) < 1e-6, 'still on the same post face');
+  // balusters reach the corrected handrail: the last one is shorter than before
+  const lastTop = (sec) => sec.balusters[sec.balusters.length - 1].zTop;
+  assert.ok(lastTop(lowered) < lastTop(base) - 50);
+  // sanitizing: only "...|start" / "...|end" keys, finite, non-zero, clamped
+  assert.deepEqual(sanitizeRailingEndOffsets({ [key]: -5000, 'x|y|middle': 10, 'a|b|start': 'abc', 'c|d|end': 0 }), { [key]: -MAX_RAILING_END_OFFSET_MM });
+});
+
+test('railingEndOffsets move the point ON THE POST FACE by exactly the amount — also where the run reaches the post by a steep winder piece, and with a bent handrail', () => {
+  for (const railingBent of [false, true]) {
+    const patch = { ...closed, stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 4, totalRise: 2600, railingBent, railingSections: whole('inner') };
+    const base = stair(patch).model.sections[0];
+    const lowered = stair({ ...patch, railingEndOffsets: { [railingEndKey('s', 'post-corner-0', 'end')]: -150 } }).model.sections[0];
+    const endOf = (sec) => sec.runs[0].pieces[sec.runs[0].pieces.length - 1].end;
+    assert.equal(base.runs[0].endPostId, 'post-corner-0');
+    assert.ok(Math.abs(endOf(lowered).z - (endOf(base).z - 150)) < 1, `bent ${railingBent}: ${(endOf(base).z - endOf(lowered).z).toFixed(1)} mm lower instead of 150`);
+    assert.ok(Math.hypot(endOf(lowered).x - endOf(base).x, endOf(lowered).y - endOf(base).y) < 1e-6, 'same point of the post face in plan');
+  }
+});
+
+test('no short stub next to a post: where the nosing line kinks just before the corner post, the straight handrail is carried on to the post face', async () => {
+  const { RAIL_END_STUB_MM } = await import('../railingSolver.js');
+  const { config, model, planLayout } = stair({ ...closed, stairType: 'L', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 4, totalRise: 2600, railingSections: whole('inner') });
+  const run = model.sections[0].runs[0];
+  assert.equal(run.endPostId, 'post-corner-0');
+  // the flight before the corner is ONE straight piece from the start newel's face to the corner post's face
+  assert.equal(run.pieces.length, 1, 'no extra piece at the post');
+  const post = buildPostModels(planLayout, config).find((p) => p.postId === 'post-corner-0');
+  const end = run.pieces[0].end;
+  assert.ok(Math.abs(Math.max(Math.abs(end.x - post.position.x), Math.abs(end.y - post.position.y)) - post.size / 2) < 1e-6, 'on the post face');
+  // no piece next to a post is shorter than the stub limit while continuing the previous piece's direction
+  for (const sec of model.sections) for (const r of sec.runs) {
+    if (r.pieces.length < 2) continue;
+    for (const [stub, next] of [[r.pieces[0], r.pieces[1]], [r.pieces[r.pieces.length - 1], r.pieces[r.pieces.length - 2]]]) {
+      const plan = (pc) => Math.hypot(pc.end.x - pc.start.x, pc.end.y - pc.start.y);
+      const cos = ((stub.end.x - stub.start.x) * (next.end.x - next.start.x) + (stub.end.y - stub.start.y) * (next.end.y - next.start.y)) / (plan(stub) * plan(next) || 1);
+      assert.ok(plan(stub) >= RAIL_END_STUB_MM - 1e-6 || cos < Math.cos((RAILING_CORNER_ANGLE_DEG * Math.PI) / 180), `a ${plan(stub).toFixed(0)} mm stub at a post`);
+    }
+  }
+  // the balusters stand under the handrail's own line
+  const s = model.sections[0];
+  for (const b of s.balusters) assert.ok(b.heightMm > 300 && b.heightMm < 1300, `baluster ${b.heightMm.toFixed(0)} mm`);
 });
