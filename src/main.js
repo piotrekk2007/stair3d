@@ -494,6 +494,7 @@ function offerPlanSVG() {
     viewport,
     showWinderBlanks: false,
     layers: { widths: true, walkline: true, runBoundaries: true, stepBoundaries: false, stringers: true, railing: true, ceilingOpening: false },
+    clientView: true, // no editing aids in the client's offer
     posts: lastModels.postModels || [],
     stringerModels: lastModels.stringerModels,
     stringerConstruction: lastModels.stringerConstruction,

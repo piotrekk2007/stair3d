@@ -350,11 +350,12 @@ function stringerSpacingXML(planLayout, config) {
  *   klikalny, żeby dało się go przywrócić), słup ze zmienioną długością ma pomarańczowy obrys.
  * @param {{outer, inner}|null} [options.stringerModels]  StringerModel po stronach + [options.stringerConstruction]
  *   ich geometria konstrukcyjna — wangi rysowane jako prawdziwe deski w rzucie (boardPlanFootprint).
+ * @param {boolean} [options.clientView]  the plan for the client (the offer): no editing aids (balustrade end rings)
  * @param {Object[]|null} [options.posts]  Wszystkie słupy (buildStaircase allPostModels, także usunięte) —
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, openingEdit = false, activeBoundary = null } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, openingEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -453,7 +454,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
         const first = s.runs[0]?.pieces[0]?.start;
         const lastRun = s.runs[s.runs.length - 1];
         const last = lastRun?.pieces[lastRun.pieces.length - 1]?.end;
-        const ring = (p) => (p ? `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="70" fill="none" stroke="#1a5fb4" stroke-width="18"/>` : '');
+        // the blue rings mark where a balustrade section starts / ends — an editing aid, left out of the client's plan
+        const ring = (p) => (p && !clientView ? `<circle class="railing-end-ring" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="70" fill="none" stroke="#1a5fb4" stroke-width="18"/>` : '');
         return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${panes}${dots}${ring(first)}${ring(last)}</g>`;
       })
       .join('');

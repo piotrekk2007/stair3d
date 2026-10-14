@@ -218,3 +218,11 @@ test('stacked inner wangi (axis gap 0): their height overlap is reported on the 
   const cut = stacked(quiet(() => buildStaircase(cfg({ stringerConstructionTypeInner: 'cut' }))));
   assert.ok(cut.length === 1 && /nakładanej/.test(cut[0].message));
 });
+
+test('regression: the client\'s plan (offer) has no blue balustrade end rings; the working plan keeps them', () => {
+  const c = { ...createDefaultConfig(), stairType: 'L', railingEnabled: true, railingSections: [{ id: 's', side: 'inner', fromStep: 0, toStep: null }] };
+  const m = quiet(() => buildStaircase(c));
+  const draw = (clientView) => renderPlan2DSVG(m.planLayout, m.fullConfig, m.derived, { viewport: { x: -500, y: -3500, width: 4000, height: 4000 }, railingModel: m.railingModel, clientView });
+  assert.equal((draw(false).match(/class="railing-end-ring"/g) || []).length, 2);
+  assert.ok(!draw(true).includes('stroke="#1a5fb4" stroke-width="18"'));
+});
