@@ -190,3 +190,31 @@ test('regression: the plan\'s walking-direction arrow stands on the first flight
     assert.ok(x > Math.min(...xs) && x < Math.max(...xs), `${JSON.stringify(patch)}: arrow at x = ${x}`);
   }
 });
+
+test('stacked inner wangi (axis gap 0): their height overlap is reported on the upper board with the fix, and goes when corrected by hand', async () => {
+  const { postAnchorId } = await import('../stringerProfileModel.js');
+  const stacked = (m) => m.stringerConstruction.inner.flatMap((g) => g.diagnostics.filter((d) => d.ruleId === 'STRINGER-STACKED-OVERLAP'));
+  const m = quiet(() => buildStaircase(cfg()));
+  const [a, c] = m.stringerModels.inner.segments;
+  const found = stacked(m);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].severity, 'WARNING');
+  assert.equal(found[0].elementId, c.id, 'on the upper board (C), where it is edited');
+  assert.ok(found[0].value > 100, `${found[0].value} mm`);
+  assert.match(found[0].message, /Profil wangi/);
+  // it reaches the validation list; the generic "pockets overlap inside the post" (wrong advice here) is not given
+  const gate = runTakeoffValidationGate(m);
+  assert.ok(gate.diagnostics.some((d) => d.ruleId === 'STRINGER-STACKED-OVERLAP'));
+  assert.ok(!gate.diagnostics.some((d) => d.ruleId === 'JOINT-POST-POCKETS-OVERLAP'));
+
+  // corrected in the profile editor: A's top edge lowered and C's bottom edge raised at the post face
+  const fix = (low, up) => quiet(() => buildStaircase(cfg({ manualStringerProfileOverrides: { inner: { mode: 'MANUAL', lower: {}, upper: {}, inserted: [], anchors: { [postAnchorId('post-corner-0', a.id)]: { upper: { dv: low } }, [postAnchorId('post-corner-0', c.id)]: { lower: { dv: up } } } } } })));
+  const partly = stacked(fix(-150, 250));
+  assert.ok(partly.length === 1 && partly[0].value < found[0].value, 'less overlap');
+  assert.equal(stacked(fix(-250, 350)).length, 0, 'apart: nothing to report');
+
+  // side by side (axes one board apart) nothing overlaps; on an overlay lower board its treads count too
+  assert.equal(stacked(quiet(() => buildStaircase(cfg({ uAxisGapMm: 40 })))).length, 0);
+  const cut = stacked(quiet(() => buildStaircase(cfg({ stringerConstructionTypeInner: 'cut' }))));
+  assert.ok(cut.length === 1 && /nakładanej/.test(cut[0].message));
+});

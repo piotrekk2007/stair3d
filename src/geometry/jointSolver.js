@@ -320,6 +320,9 @@ export function buildJointModel({ stringerModels, stringerConstruction, postMode
     const boxes = pockets.map((p) => pocketBox(post, p));
     for (let a = 0; a < boxes.length; a++) {
       for (let b = a + 1; b < boxes.length; b++) {
+        // two boards entering the SAME face are the stacked wangi of a 180° winder zone: where they overlap the boards
+        // themselves overlap — reported (with the fix) as STRINGER-STACKED-OVERLAP, not as a pocket weakness
+        if (pockets[a].faceId === pockets[b].faceId) continue;
         if (boxesOverlap(boxes[a], boxes[b])) {
           diagnostics.push(finding('WARNING', 'JOINT-POST-POCKETS-OVERLAP', postId, `Gniazda w słupie ${postId} (${pockets[a].label}, ${pockets[b].label}) nachodzą na siebie wewnątrz słupa — zmniejsz głębokość wręgu albo zwiększ przekrój słupa.`));
         }

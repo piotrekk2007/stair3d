@@ -162,9 +162,14 @@ dotąd).
   - deska wangi niosąca tylko stopnie zaczęte na poprzedniej desce dostaje węzeł profilu
     (`stringerConstructionGeometry.js buildPitchKnots`).
 
-Znane ograniczenie: przy rozstawie osi 0 wangi A i C leżą w jednej płaszczyźnie i **przy słupie zachodzą na siebie
-wysokością** — górna krawędź A jest wyżej niż dolna krawędź C (`JOINT-POST-POCKETS-OVERLAP`). Na razie nie są
-automatycznie docinane; można je skorygować w edytorze „Profil wangi” (kotwice przy słupie).
+**Wangi jedna nad drugą** (rozstaw osi mniejszy niż grubość wangi): wangi A i C leżą w jednym pasie rzutu i przy
+słupie zachodzą na siebie wysokością — górna krawędź A jest wyżej niż dolna krawędź C. Decyzja użytkownika 2026-10-14
+(wariant 2): **nie są docinane automatycznie**. `stackedStringers.js checkStackedInnerStringers` porównuje górną
+krawędź A z dolną krawędzią C na całej wspólnej długości (co 10 mm; przy wandze nakładanej A doliczona grubość
+stopni leżących na niej) i zgłasza WARNING `STRINGER-STACKED-OVERLAP` na wandze C — ile milimetrów i gdzie — z
+podpowiedzią: obniżyć górną krawędź A albo podnieść dolną krawędź C punktami na licu słupa w edytorze „Profil wangi”.
+Ogólne `JOINT-POST-POCKETS-OVERLAP` nie jest dla dwóch desek wchodzących w tę samą ścianę słupa zgłaszane (jego rada —
+płytszy wręg, grubszy słup — tu nie pomaga).
 
 Testy: `geometry/__tests__/halfTurnU.test.js`. Zakres: kiedy opcja działa, rozstaw osi, równe biegi na półokręgu,
 szerokość przy duszy, szerokość 0,4 m od duszy, słup środkowy i dwa słupy, odbicie dla skrętu w lewo, rozstaw równy

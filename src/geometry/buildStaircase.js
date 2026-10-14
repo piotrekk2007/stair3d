@@ -17,6 +17,7 @@ import { isCantilever, cantileverConfig, buildCantileverBox } from './cantilever
 import { renderCantileverProfiles } from './cantileverRenderer.js';
 import { isMetal, metalConfig, buildMetalStructure } from './metalStructureModel.js';
 import { renderMetalStructure } from './metalStructureRenderer.js';
+import { checkStackedInnerStringers } from './stackedStringers.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
@@ -110,6 +111,15 @@ export function buildStaircase(inputConfig) {
         outer: buildStringerConstructionGeometry(stringerModels.outer, fullConfig),
         inner: buildStringerConstructionGeometry(stringerModels.inner, fullConfig),
       };
+  // A 180° winder zone whose inner wangi stand one above the other (stackedStringers.js): their height overlap at the
+  // central post is reported on the upper board (corrected by hand in the profile editor — user decision 2026-10-14)
+  const stacked = noWangi ? [] : checkStackedInnerStringers({ planLayout, stringerModels, stringerConstruction, config: fullConfig });
+  if (stacked.length) {
+    stringerConstruction.inner = stringerConstruction.inner.map((g) => {
+      const own = stacked.filter((d) => d.elementId === g.segmentId);
+      return own.length ? { ...g, diagnostics: [...(g.diagnostics || []), ...own] } : g;
+    });
+  }
   const structuralPostModels = noWangi ? [] : buildPostModels(planLayout, fullConfig);
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end

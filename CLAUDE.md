@@ -92,8 +92,10 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   and C set by the distance between their inner wangi AXES (`uAxisGapMm`, 0 = C's wanga over A's; inner-line gap =
   axis gap − board thickness, may be negative). One turn `{halfTurn, innerCorners, outerCorners, centre, postSpots}`;
   one central post on the axes (two corner posts when the gap is wider than post − board). `winderArc.js
-  halfTurnWinderGeometry`, `planLayout.js buildHalfTurnLocal`; doc section in WINDER_ARC_LAYOUT.md. Known: at axis gap
-  0 the two inner wangi overlap in height at the post (`JOINT-POST-POCKETS-OVERLAP`), not trimmed automatically.
+  halfTurnWinderGeometry`, `planLayout.js buildHalfTurnLocal`; doc section in WINDER_ARC_LAYOUT.md. Stacked inner wangi
+  (axis gap < board thickness) overlap in height near the post: NOT trimmed (user decision, variant 2) — WARNING
+  `STRINGER-STACKED-OVERLAP` on C's board with the amount and the fix (post-face points in "Profil wangi";
+  `stackedStringers.js`).
 - `planLayout.walkline = {path, points}` — the drawn walkline (arc as chords) and one point per edge (edit pivots).
 - Override layers applied in `buildPlanLayout` (in this order): `manualEdgeOverrides` (`{[boundary]: {inner?, outer?}}`,
   older `{movedEndpoint, point}` still read — `edgeOverrides.js edgeOverrideEndpoints`), the automatic housing recess
