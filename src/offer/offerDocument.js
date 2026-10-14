@@ -25,10 +25,10 @@ const CSS = `
   .meta { display: flex; justify-content: space-between; gap: 10mm; font-size: 9.5pt; }
   .meta .box { flex: 1; }
   .muted { color: #777; }
-  .images { display: flex; gap: 4mm; margin-top: 4mm; break-inside: avoid; }
-  .images figure { flex: 1; margin: 0; border: 1px solid #e3d6c6; border-radius: 2mm; padding: 2mm; text-align: center; }
-  .images img { width: 100%; height: auto; max-height: 80mm; object-fit: contain; }
-  .images svg { width: 100%; height: 78mm; display: block; }
+  .images { display: flex; flex-direction: column; gap: 4mm; margin-top: 4mm; }
+  .images figure { margin: 0; border: 1px solid #e3d6c6; border-radius: 2mm; padding: 2mm; text-align: center; break-inside: avoid; }
+  .images img { width: 100%; height: auto; max-height: 112mm; object-fit: contain; }
+  .images svg { width: 100%; height: 110mm; display: block; }
   .images figcaption { font-size: 8.5pt; color: #777; }
   table { width: 100%; border-collapse: collapse; break-inside: avoid; }
   td, th { padding: 1.4mm 2mm; vertical-align: top; }

@@ -108,3 +108,38 @@ test('project file: the offer settings survive save and load; an older file gets
   const old = buildProjectPayload(createDefaultConfig(), {});
   assert.equal(parseProjectFile(JSON.stringify(old)).meta.offer, null);
 });
+
+test('RABAT is internal: no line of its own, the material lines lose it on their material part only, extras on their price; CNC + projekt and installation untouched', () => {
+  // material 2200 (+ CNC share 440, NOT discounted), extra item 300, installation 800 (not discounted)
+  const plain = buildOffer({ summary, manualItems, settings });
+  const o = buildOffer({ summary, manualItems, settings: { ...settings, discountPct: 10 } });
+  assert.ok(!o.lines.some((l) => /rabat/i.test(l.label) || l.kind === 'discount'), 'no discount line');
+  assert.deepEqual(o.lines.map((l) => l.label), plain.lines.map((l) => l.label));
+  const by = (offer, label) => offer.lines.find((l) => l.label.startsWith(label));
+  assert.equal(by(o, 'Schody').net, 2400 - 200, 'main line: (1000 + 500 + 500) less 10 %, its CNC share 400 kept');
+  assert.equal(by(o, 'Podstopnie').net, 240 - 20);
+  const lacquer = by(o, 'Lakierowanie');
+  assert.equal(lacquer.unitNet, 270);
+  assert.equal(lacquer.net, 270);
+  assert.equal(o.lines.find((l) => l.kind === 'installation').net, 800);
+  assert.equal(o.discountBaseNet, 2500, 'material 2200 + extra item 300');
+  assert.equal(o.discountNet, 250);
+  assert.equal(o.totals.net, plain.totals.net - 250);
+  assert.equal(o.totals.vat, Math.round(o.totals.net * 8) / 100);
+  // rounding of the per-line amounts never changes the total
+  const three = { lines: ['A', 'B', 'C'].map((label) => ({ label, cost: 1, unpriced: 0, manual: false })) };
+  const t = buildOffer({ summary: three, settings: { ...createDefaultOfferSettings(), cncProjectCostNet: 100, discountPct: 7, separateCategories: ['A', 'B'] } });
+  assert.equal(Math.round(t.lines.reduce((sum, l) => sum + l.net, 0) * 100) / 100, Math.round((3 * 0.93 + 100) * 100) / 100);
+  // clamped; the PDF shows no discount anywhere
+  assert.equal(sanitizeOfferSettings({ discountPct: 140 }).discountPct, 100);
+  assert.equal(sanitizeOfferSettings({ discountPct: -3 }).discountPct, 0);
+  const html = buildOfferHTML({ offer: o, settings: { ...settings, discountPct: 10 }, company: sanitizeCompany({}), facts: { rows: [], comfort: [] }, date: new Date(2026, 9, 14) });
+  assert.ok(!/rabat/i.test(html));
+});
+
+test('the PDF shows the 3D view and the plan one under the other, at full width', () => {
+  const html = buildOfferHTML({ offer: buildOffer({ summary, manualItems, settings }), settings, company: sanitizeCompany({}), facts: { rows: [], comfort: [] }, image3d: 'data:image/jpeg;base64,AA', planSvg: '<svg></svg>', date: new Date(2026, 9, 14) });
+  assert.match(html, /\.images \{[^}]*flex-direction: column/);
+  assert.match(html, /\.images img \{[^}]*max-height: 112mm/);
+  assert.match(html, /\.images svg \{[^}]*height: 110mm/);
+});

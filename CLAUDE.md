@@ -246,7 +246,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   post price table; manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
   project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
 - Offer (`offer/offerModel.js`, `offerDocument.js`, `ui/offerPanel.js`): CNC + projekt is a hidden lump sum spread over
-  material lines; categories can be shown separately; extras, installation, VAT 23/8/0, gross; printed via the
+  material lines; categories can be shown separately; extras, discount (`discountPct`: % of the material + extras only,
+  never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation, VAT
+  23/8/0, gross; 3D view and plan one under the other at full width; printed via the
   browser's print-to-PDF. Company data = browser setting (`localStorage`), offer data = project.
 
 ## Plan 2D and workspace UI

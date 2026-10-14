@@ -27,6 +27,8 @@ export function createOfferPanel(container, handlers) {
     <h4>Koszty</h4>
     <label class="of-row">CNC + projekt (ryczałt, netto) [zł]<input type="number" min="0" step="10" data-set="cncProjectCostNet"></label>
     <div class="of-hint">Nie jest widoczny w PDF — rozkłada się proporcjonalnie na pozycje materiału („materiał wraz z przygotowaniem”).</div>
+    <label class="of-row">Rabat na materiał [%]<input type="number" min="0" max="100" step="0.5" data-set="discountPct"></label>
+    <div class="of-hint">Wewnętrzny — w PDF nie ma pozycji „Rabat”, pozycje materiału i dodatkowe są po prostu niższe. Liczony od materiału z kosztorysu i pozycji dodatkowych — nie od CNC + projekt ani od montażu.</div>
     <label class="of-row">Montaż (netto) [zł]<input type="number" min="0" step="10" data-set="installationCostNet"></label>
     <label class="of-row">Stawka VAT
       <select data-set="vatRatePct">${OFFER_VAT_RATES.map((r) => `<option value="${r}">${r}%</option>`).join('')}</select>
@@ -102,7 +104,7 @@ export function updateOfferPanel(panel, { offer, categories, settings }) {
          <tr><td>VAT ${offer.totals.vatRatePct}%</td><td class="num">${money(offer.totals.vat)}</td></tr>
          <tr class="of-gross"><td>Razem brutto</td><td class="num">${money(offer.totals.gross)}</td></tr>
        </tbody></table>
-       <div class="of-hint">Wewnętrznie: materiał ${money(offer.materialNet)} + CNC i projekt ${money(offer.cncProjectNet)} (niewidoczne dla Klienta).</div>`
+       <div class="of-hint">Wewnętrznie: materiał ${money(offer.materialNet)} + CNC i projekt ${money(offer.cncProjectNet)} (niewidoczne dla Klienta).${offer.discountNet > 0 ? ` Rabat ${money(offer.discountNet)} od ${money(offer.discountBaseNet)} (materiał + pozycje dodatkowe) — już w cenach pozycji.` : ''}</div>`
     : '<div class="of-hint">Brak pozycji do wyceny.</div>';
   const cats = panel.querySelector('[data-of="categories"]');
   const key = categories.join('|');

@@ -8,6 +8,11 @@
 //  * the material is ONE line ("Schody — materiał wraz z przygotowaniem"), unless the seller ticks categories to show
 //    separately (e.g. risers) — such a line carries its own share of the CNC + projekt sum;
 //  * the manual extra items (Kosztorys → "Pozycje dodatkowe", e.g. white lacquer on the stringers) are separate lines;
+//  * discount (RABAT, user decisions 2026-10-14): a percentage of the MATERIAL only — the takeoff's priced material
+//    plus the manual extra items of the Kosztorys; never of the CNC + projekt sum (even though it is shown inside the
+//    material lines) nor of the installation. INTERNAL: no line of its own — every material line loses the discount on
+//    its own material part (not on its CNC + projekt share), every extra item on its price; the client sees only the
+//    lower amounts;
 //  * installation: a manual net amount, its own line;
 //  * net, VAT (rate chosen per project), gross.
 //
@@ -26,6 +31,7 @@ export function createDefaultOfferSettings() {
   return {
     cncProjectCostNet: 0,
     installationCostNet: 0,
+    discountPct: 0, // % rabatu na materiał (z kosztorysu i pozycje dodatkowe) — nie na CNC + projekt ani montaż
     vatRatePct: 23,
     separateCategories: [],
     client: { name: '', address: '', phone: '', email: '' },
@@ -45,6 +51,7 @@ export function sanitizeOfferSettings(value) {
   return {
     cncProjectCostNet: num(value.cncProjectCostNet),
     installationCostNet: num(value.installationCostNet),
+    discountPct: Math.min(100, num(value.discountPct)),
     vatRatePct: OFFER_VAT_RATES.includes(Number(value.vatRatePct)) ? Number(value.vatRatePct) : d.vatRatePct,
     separateCategories: Array.isArray(value.separateCategories) ? value.separateCategories.filter((c) => typeof c === 'string') : [],
     client: { name: str(value.client?.name), address: str(value.client?.address), phone: str(value.client?.phone), email: str(value.client?.email) },
@@ -73,7 +80,7 @@ export function separableCategories(summary) {
 /**
  * @param {{summary: {lines: Array}, manualItems?: Array<{name, qty, unit, price}>, settings: Object, blocked?: boolean}} input
  * @returns {{lines: Array<{label, detail?, qty?, unit?, unitNet?, net, kind}>, totals: {net, vat, gross, vatRatePct},
- *   materialNet: number, cncProjectNet: number, warnings: string[]}}
+ *   materialNet: number, cncProjectNet: number, discountBaseNet: number, discountNet: number, warnings: string[]}}
  */
 export function buildOffer({ summary, manualItems = [], settings, blocked = false }) {
   const s = sanitizeOfferSettings(settings);
@@ -87,29 +94,37 @@ export function buildOffer({ summary, manualItems = [], settings, blocked = fals
   const cnc = round2(s.cncProjectCostNet);
   const share = (cost) => (materialNet > 0 ? (cnc * cost) / materialNet : 0);
 
+  const keep = 1 - s.discountPct / 100; // what the discount leaves of a material amount
   const lines = [];
   const separate = priced.filter((l) => s.separateCategories.includes(l.label));
   const rest = priced.filter((l) => !s.separateCategories.includes(l.label));
-  const restNet = rest.reduce((sum, l) => sum + l.cost + share(l.cost), 0) + (materialNet > 0 ? 0 : cnc);
+  const restNet = rest.reduce((sum, l) => sum + l.cost * keep + share(l.cost), 0) + (materialNet > 0 ? 0 : cnc);
   if (rest.length > 0 || restNet > 0) {
     lines.push({ kind: 'material', label: MAIN_LINE_LABEL, detail: rest.length ? `w tym: ${rest.map((l) => l.label.replace(' (z modelu)', '').toLowerCase()).join(', ')}` : '', net: round2(restNet) });
   }
-  for (const l of separate) lines.push({ kind: 'material', label: `${l.label.replace(' (z modelu)', '')} — materiał wraz z przygotowaniem`, net: round2(l.cost + share(l.cost)) });
+  for (const l of separate) lines.push({ kind: 'material', label: `${l.label.replace(' (z modelu)', '')} — materiał wraz z przygotowaniem`, net: round2(l.cost * keep + share(l.cost)) });
   // rounding each share must not change the total: the difference goes to the first material line
   const materialLines = lines.filter((l) => l.kind === 'material');
+  const materialDiscount = round2(materialNet * (1 - keep));
   if (materialLines.length) {
-    const diff = round2(materialNet + cnc - materialLines.reduce((sum, l) => sum + l.net, 0));
+    const diff = round2(materialNet - materialDiscount + cnc - materialLines.reduce((sum, l) => sum + l.net, 0));
     materialLines[0].net = round2(materialLines[0].net + diff);
   }
   for (const r of manualItems || []) {
     if (!(r.qty > 0) || !(r.price > 0)) continue;
-    lines.push({ kind: 'extra', label: r.name, qty: r.qty, unit: r.unit, unitNet: r.price, net: round2(r.qty * r.price) });
+    const unitNet = round2(r.price * keep);
+    lines.push({ kind: 'extra', label: r.name, qty: r.qty, unit: r.unit, unitNet, net: round2(r.qty * unitNet) });
   }
+  // the discount, for the seller only: the material (without its CNC + projekt share) and the extra items before it
+  const extrasBefore = (manualItems || []).filter((r) => r.qty > 0 && r.price > 0).reduce((sum, r) => sum + round2(r.qty * r.price), 0);
+  const extrasAfter = lines.filter((l) => l.kind === 'extra').reduce((sum, l) => sum + l.net, 0);
+  const discountBaseNet = round2(materialNet + extrasBefore);
+  const discountNet = round2(materialDiscount + extrasBefore - extrasAfter);
   if (s.installationCostNet > 0) lines.push({ kind: 'installation', label: 'Montaż', net: round2(s.installationCostNet) });
 
   const net = round2(lines.reduce((sum, l) => sum + l.net, 0));
   const vat = round2((net * s.vatRatePct) / 100);
-  return { lines, totals: { net, vat, gross: round2(net + vat), vatRatePct: s.vatRatePct }, materialNet, cncProjectNet: cnc, warnings };
+  return { lines, totals: { net, vat, gross: round2(net + vat), vatRatePct: s.vatRatePct }, materialNet, cncProjectNet: cnc, discountBaseNet, discountNet, warnings };
 }
 
 const RAILING_INFILL_LABELS = {
