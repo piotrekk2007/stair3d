@@ -105,7 +105,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   outer line (key side exact; the given dimensions come first: other sides within one going, then riser in range,
   then deviation / 2h+s — a riser forced out of range is a WARNING, never a reason to outgrow the room;
   `STAIR3D-FIT-01`). Going 150–320, found by sampling + narrowing (a side is not one straight line of the going).
-  `stairwellManualCounts`: counts stay the user's and editable, only the going is fitted. `rebuild()` copies the
+  `stairwellManualCounts`: counts stay the user's and editable, only the going is fitted. A U laid out as one 180°
+  zone: side B = 2 × width + axis gap − board thickness — given B, the fit derives `uAxisGapMm` (exact, AUTO).
+  Key dimensions (rise, width, stairwell sides, axis gap, ceiling opening) take 1 mm steps in the panel. `rebuild()` copies the
   result back into config; driven fields show AUTO.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`
   relative to `planLayout.bounds` min corner); `deriveCeilingFit` → collisions/headroom; "Dosuń otwór" alignment.

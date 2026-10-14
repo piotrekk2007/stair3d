@@ -108,17 +108,17 @@ export function createUI({
   live(gui.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
 
   const dims = gui.addFolder('Wymiary ogólne');
-  lockable(dims.add(config, 'totalRise', 2000, 3600, 10).name('Wys. kondygnacji [mm]'), 'totalRise');
-  lockable(dims.add(config, 'stairWidth', 700, 1400, 10).name('Szerokość biegu [mm]'), 'stairWidth');
+  lockable(dims.add(config, 'totalRise', 2000, 3600, 1).name('Wys. kondygnacji [mm]'), 'totalRise');
+  lockable(dims.add(config, 'stairWidth', 700, 1400, 1).name('Szerokość biegu [mm]'), 'stairWidth');
   lockable(dims.add(config, 'treadGoing', 150, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
 
   // Dopasowanie do klatki (geometry/stairwellFit.js): the going and the straight-tread counts are derived from the
   // stairwell's sides, like the riser height from the floor height. 0 = no dimension for that side.
   const well = gui.addFolder('Klatka schodowa');
   live(well.add(config, 'stairwellFitEnabled')).name('Dopasuj do klatki');
-  live(well.add(config, 'stairwellSideAMm', 0, 12000, 10)).name('Bok A (wzdłuż biegu A) [mm]');
-  live(well.add(config, 'stairwellSideBMm', 0, 12000, 10)).name('Bok B (L, U) [mm]');
-  live(well.add(config, 'stairwellSideCMm', 0, 12000, 10)).name('Bok C (tylko U) [mm]');
+  live(well.add(config, 'stairwellSideAMm', 0, 12000, 1)).name('Bok A (wzdłuż biegu A) [mm]');
+  live(well.add(config, 'stairwellSideBMm', 0, 12000, 1)).name('Bok B (L, U) [mm]');
+  live(well.add(config, 'stairwellSideCMm', 0, 12000, 1)).name('Bok C (tylko U) [mm]');
   live(well.add(config, 'stairwellKeySide', ['A', 'B', 'C'])).name('Bok kluczowy (dokładny)');
   // manual counts: the fit only solves the going for the key side; the tread counts stay editable
   live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie');
@@ -148,7 +148,8 @@ export function createUI({
   // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.
   live(steps.add(config, 'uSingleWinderZone')).name('U, B = 0: jedna klatka zabiegowa 180°');
   live(steps.add(config, 'uWindersTotal', 2, 14, 1)).name('Zabiegowe łącznie (klatka 180°)');
-  live(steps.add(config, 'uAxisGapMm', 0, 800, 5)).name('Rozstaw osi wang A–C [mm] (0 = wanga nad wangą)');
+  // (driven by "Dopasuj do klatki" when side B is given: B = 2 × width + axis gap − board thickness)
+  lockable(steps.add(config, 'uAxisGapMm', 0, 800, 1).name('Rozstaw osi wang A–C [mm] (0 = wanga nad wangą)'), 'uAxisGapMm');
 
   const winder = gui.addFolder('Geometria zabiegu');
   lockable(winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]'), 'walklineOffset');
@@ -361,10 +362,10 @@ export function createUI({
   // Kształt: prostokąt z suwaków poniżej albo wielokąt narysowany na planie 2D (geometry/ceilingOpening.js).
   live(ceiling.add(config, 'openingShape', { 'prostokąt (suwaki)': OPENING_SHAPES.RECT, 'wielokąt (rysowany na planie 2D)': OPENING_SHAPES.POLYGON })).name('Kształt otworu');
   if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
-  lockable(ceiling.add(config, 'openingLength', 800, 6000, 50).name('Otwór: długość (Y) [mm]'), 'openingLength');
-  lockable(ceiling.add(config, 'openingWidth', 700, 6000, 50).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
-  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 10).name('Otwór: offset X [mm]'), 'openingOffsetX');
-  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 10).name('Otwór: offset Y [mm]'), 'openingOffsetY');
+  lockable(ceiling.add(config, 'openingLength', 800, 6000, 1).name('Otwór: długość (Y) [mm]'), 'openingLength');
+  lockable(ceiling.add(config, 'openingWidth', 700, 6000, 1).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
+  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 1).name('Otwór: offset X [mm]'), 'openingOffsetX');
+  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 1).name('Otwór: offset Y [mm]'), 'openingOffsetY');
   // Dosunięcie otworu do narożnika/boku rzutu schodów (alignedOpeningOffsets) — zmienia tylko offsety w config,
   // więc cofanie i plik projektu działają jak przy suwakach. Pole zablokowane (kłódka) nie jest ruszane.
   const alignProxy = {

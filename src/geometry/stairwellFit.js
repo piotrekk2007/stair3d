@@ -200,6 +200,10 @@ export function solveStairwellFit(config) {
   // a U laid out as one 180° winder zone (winderArc.js isHalfTurnU) has no straight tread in B, and must keep none
   const oneZone = !!config.uSingleWinderZone && config.stairType === 'U' && config.turn1Type === 'winder' && config.turn2Type === 'winder';
   const maxCountFor = (s) => (oneZone && s === 'B' ? 0 : FIT_MAX_TREADS_PER_LEG);
+  // ...and its side B is two widths plus the gap between A's and C's inner lines (axis gap − board thickness), whatever
+  // the going: given B, the AXIS GAP is what meets it, exactly (no tread count could)
+  const axisGapFromB = oneZone ? oneZoneAxisGapFor(config, targets.B) : null;
+  if (axisGapFromB !== null) config = { ...config, uAxisGapMm: axisGapFromB };
 
   // The order of preference described in the header. `deviations` = |achieved − target| of every non-key side.
   const riserOff = (derived) => Math.max(0, config.minRiser - derived.riserHeight, derived.riserHeight - config.maxRiser);
@@ -263,6 +267,7 @@ export function solveStairwellFit(config) {
   const missed = sides.filter((s) => !s.key && s.deviation !== null && Math.abs(s.deviation) > SIDE_MET_TOLERANCE_MM);
   const values = { treadGoing: best.cand.treadGoing };
   for (const s of letters) values[COUNT_FIELD[s]] = best.cand[COUNT_FIELD[s]];
+  if (axisGapFromB !== null) values.uAxisGapMm = axisGapFromB;
 
   const diagnostics = missed.map((s) =>
     fitDiag(
@@ -297,15 +302,26 @@ export function solveStairwellFit(config) {
   };
 }
 
+// The axis gap of a U laid out as one 180° winder zone that makes its side B come out at `targetB`
+// (B = 2 × stairWidth + axisGap − stringerThickness, planLayout.js buildHalfTurnLocal); null when it does not apply or
+// would be negative.
+function oneZoneAxisGapFor(config, targetB) {
+  const oneZone = !!config.uSingleWinderZone && config.stairType === 'U' && config.turn1Type === 'winder' && config.turn2Type === 'winder';
+  if (!oneZone || !(targetB > 0)) return null;
+  const gap = targetB - 2 * config.stairWidth + (Number(config.stringerThickness) || 0);
+  return gap >= 0 ? Math.round(gap * 1000) / 1000 : null;
+}
+
 /**
  * The config fields the fit is currently deriving (AUTO in the UI, not editable while it is on): the going, and the
  * tread count of every flight whose side has a target — only the going with manual counts. [] when the fit is off.
  */
 export function stairwellDrivenFields(config) {
   if (!config.stairwellFitEnabled) return [];
-  if (config.stairwellManualCounts) return ['treadGoing'];
+  const gap = oneZoneAxisGapFor(config, stairwellTargets(config).B) !== null ? ['uAxisGapMm'] : [];
+  if (config.stairwellManualCounts) return ['treadGoing', ...gap];
   const targets = stairwellTargets(config);
-  return ['treadGoing', ...Object.keys(targets).filter((s) => targets[s] !== null).map((s) => COUNT_FIELD[s])];
+  return ['treadGoing', ...Object.keys(targets).filter((s) => targets[s] !== null && !(gap.length && s === 'B')).map((s) => COUNT_FIELD[s]), ...gap];
 }
 
 /** The config the stair is built from: the user's config with the fitted going/counts applied (if any). */

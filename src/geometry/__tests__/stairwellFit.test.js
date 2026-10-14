@@ -195,3 +195,19 @@ test('manual counts: the tread counts stay the user\'s (and editable), only the 
   assert.equal(none.values, null);
   assert.match(none.message, /ręcznie ustawionych liczbach stopni/);
 });
+
+test('a U laid out as one 180° winder zone: side B (two widths + the gap between A and C) is met EXACTLY by the axis gap', () => {
+  // the user's project (2026-10-14): width 920, B = 1886 — no tread count can change B, only the axis gap
+  const config = fitConfig({ stairType: 'U', totalRise: 3070, stairWidth: 920, treadsLegA: 5, treadsLegB: 0, treadsLegC: 5, uSingleWinderZone: true, uWindersTotal: 6, uAxisGapMm: 95, stairwellSideAMm: 2000, stairwellSideBMm: 1886, stairwellSideCMm: 2350, stairwellKeySide: 'C', stairwellManualCounts: true });
+  const fit = solveStairwellFit(config);
+  assert.ok(fit.values);
+  assert.equal(fit.values.uAxisGapMm, 1886 - 2 * 920 + config.stringerThickness);
+  const b = fit.sides.find((s) => s.side === 'B');
+  assert.ok(Math.abs(b.achieved - 1886) < SIDE_TOLERANCE_MM, `${b.achieved}`);
+  assert.ok(Math.abs(sidesOf(applyStairwellFit(config, fit))[1] - 1886) < SIDE_TOLERANCE_MM);
+  assert.ok(!fit.diagnostics.some((d) => d.parameter === 'stairwellSideBMm'), 'B is not reported as missed');
+  // the axis gap is shown as derived (AUTO); without a B dimension it stays the user's
+  assert.ok(stairwellDrivenFields(config).includes('uAxisGapMm'));
+  assert.ok(!stairwellDrivenFields({ ...config, stairwellSideBMm: 0 }).includes('uAxisGapMm'));
+  assert.equal(solveStairwellFit({ ...config, stairwellSideBMm: 0 }).values.uAxisGapMm, undefined);
+});

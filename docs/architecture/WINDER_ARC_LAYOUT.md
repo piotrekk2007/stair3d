@@ -152,7 +152,9 @@ dotąd).
   `cornerPostIdAt`).
 - Pomiar szerokości zabiegu 0,4 m od duszy (`walklineModel.js offsetLineRoundHalfTurn`): linia odsunięta to proste
   przy A i C i półokrąg wokół środka duszy.
-- Dopasowanie do klatki (`stairwellFit.js`) przy tej opcji nie dokłada stopni do biegu B.
+- Dopasowanie do klatki (`stairwellFit.js`) przy tej opcji nie dokłada stopni do biegu B, a gdy podany jest bok B,
+  **wylicza rozstaw osi** tak, żeby B wyszedł dokładnie: B = 2 × szerokość biegu + rozstaw osi − grubość wangi (np.
+  szerokość 920, B = 1886 → rozstaw 86 mm); `uAxisGapMm` jest wtedy AUTO.
 - Poprawki we wspólnym kodzie, których ten układ wymagał (każda z testem, który nie przechodzi na starym kodzie):
   - narożnik, w którym linia zawraca (linie A i C się pokrywają), jest narożnikiem (`pathUtils.js
     goesStraightThrough`);
