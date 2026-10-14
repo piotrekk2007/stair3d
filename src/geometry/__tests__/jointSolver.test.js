@@ -109,11 +109,10 @@ test('3D: the post mesh is the box with the pockets taken out (closed, exact vol
 import { boardPlanFootprint } from '../stringerModel.js';
 import { clipToConvex, polygonArea } from '../polygonClip.js';
 
-test('postless corner: the boards no longer overlap — at the outer (convex) corner only the tongue in the housing, at a concave one nothing', () => {
+test('postless corner: the boards do not overlap and no board has a housing for another (user decision 2026-10-14: lap and bolt, no wręg)', () => {
   for (const patch of [{}, { hasCornerPost: false }, { turnDirection: 'left' }, { stairType: 'U' }, { stringerConstructionTypeOuter: 'cut' }]) {
     const m = build(patch);
     const t = m.fullConfig.stringerThickness;
-    const d = Math.min(m.fullConfig.stringerHousingDepthMm, t - 1);
     for (const side of ['outer', 'inner']) {
       const segs = m.stringerModels[side].segments;
       const geos = m.stringerConstruction[side];
@@ -123,18 +122,15 @@ test('postless corner: the boards no longer overlap — at the outer (convex) co
         const fa = boardPlanFootprint(segs[i - 1], geos[i - 1]);
         const fb = boardPlanFootprint(segs[i], geos[i]);
         const overlap = polygonArea(clipToConvex(fa, fb));
-        const expected = butt.housed ? d * t : 0;
-        assert.ok(Math.abs(overlap - expected) < 1, `${JSON.stringify(patch)} ${side} ${segs[i].id}: overlap ${overlap} vs ${expected}`);
+        assert.ok(overlap < 1, `${JSON.stringify(patch)} ${side} ${segs[i].id}: overlap ${overlap}`);
+        assert.equal(butt.housed, false);
+        assert.equal(butt.depthMm, 0);
+        assert.ok(!(geos[i - 1].housings || []).some((x) => x.kind === 'butt'), 'no housing for the butting board');
         const joint = m.joints.joints.find((j) => j.type === 'STRINGER_STRINGER_BUTT' && j.segmentId === segs[i].id);
-        assert.ok(joint, 'listed in the joint model');
-        if (butt.housed) {
-          const h = geos[i - 1].housings.find((x) => x.kind === 'butt');
-          assert.ok(h && Math.abs(h.uEnd - h.uStart - t) < 1e-6, 'the housing in the through board is as wide as the butting board is thick');
-          assert.ok(geos[i - 1].housingPockets.length > 0);
-        }
+        assert.ok(joint, 'listed in the joint model (bolted)');
       }
     }
-    // the outer stringer at a turn always butts into a housing
-    assert.ok(m.stringerConstruction.outer.slice(1).every((g) => g.ends.start.butt?.housed), JSON.stringify(patch));
+    // the outer stringer at a turn: the next board butts flush against the inner face of the previous one
+    for (const g of m.stringerConstruction.outer.slice(1)) assert.ok(Math.abs(g.ends.start.u - t) < 1e-6 && g.ends.start.butt?.housed === false, JSON.stringify(patch));
   }
 });

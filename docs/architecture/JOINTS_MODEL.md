@@ -8,7 +8,7 @@ stopni/podstopni w wandze, ale też połączenia wanga–słup, wanga–wanga i 
 | Złącze | Wybrany typ | Uwagi |
 |---|---|---|
 | wanga ↔ słup konstrukcyjny | **wręg pełnym przekrojem** — koniec wangi wchodzi całym przekrojem w gniazdo wyfrezowane w licu słupa | głębokość `postHousingDepthMm`, domyślnie 20 mm — DO WERYFIKACJI (brak źródła; BWF-GUID-F-02 opisuje dla porównania czop ≥12 × ≥45 mm) |
-| wanga ↔ wanga (narożnik bez słupa) | **doczołowo we wręg** — jedna deska przechodzi, druga dochodzi do jej lica i wchodzi w płytki wręg | etap 3 |
+| wanga ↔ wanga (narożnik bez słupa) | **na zakładkę, bez wręgu** (decyzja użytkownika 2026-10-14) — jedna deska przechodzi, druga dochodzi równo do jej lica; skręcane śrubami | etap 3 |
 | łączniki (śruby schodowe / kołki) | **tak, jako parametry** — liczba i rozstaw na złącze, otwory na DXF obu elementów, pozycja w kosztorysie „bez ceny" | etap 4 |
 
 ## Architektura
@@ -86,7 +86,15 @@ wersji.
 - Ograniczenia: rowek pod zakładkę podstopnia w DXF stopnia (`treadNotchEntities`) jest rysowany z niewyciętego
   obrysu; kosztorys liczy powierzchnię/formatkę stopnia jak dotąd (wycięcie jest niewielkie).
 
-## Etap 3 (zrobiony): wanga ↔ wanga — doczołowo we wręg (narożnik bez słupa)
+## Etap 3 (zrobiony): wanga ↔ wanga — na zakładkę, bez wręgu (narożnik bez słupa)
+
+**Zmiana 2026-10-14 (decyzja użytkownika):** złącza wang **nie mają żadnego wręgu** — jedna wanga zachodzi na drugą i
+są skręcane śrubami. W narożniku wypukłym deska B dochodzi **równo do wewnętrznego lica A** (`butt.u = grubość A`,
+`depthMm = 0`, `housed = false`, bez gniazda `kind: 'butt'`). W narożniku wklęsłym deska A przechodzi o grubość za
+narożnik, a ten kawałek ma **stałą wysokość — taką, jaką profil ma w narożniku** (`stringerConstructionGeometry.js
+flattenBeyond`), więc lico końca A i początek B mają te same wysokości góry i dołu i dolegają do siebie (wcześniej A
+dalej się wznosiła i w miejscu styku powstawał uskok — „szpiczaste” końce wang wewnętrznych bez słupa). Opis niżej
+(wręg) dotyczy stanu sprzed tej zmiany.
 
 `stringerConstructionGeometry.js computeOpenCornerExtensions` (każde złącze `LAP_JOINT`, którego linie łańcucha się
 spotykają) — deska PRZED narożnikiem (A) przechodzi, deska za nim (B) dochodzi do niej:

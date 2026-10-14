@@ -282,3 +282,13 @@ Zabieg rozłożony od łuku linii biegu ma długi, płaski bok zewnętrzny przy 
 `minimumStringerDepthMm − (zapas + grubość stopnia)` mogło nie wystarczyć: 1 mm braku przy 300 mm i stromym biegu.
 AUTO pogłębia wtedy całą deskę do gardła + 1 mm i zgłasza `STRINGER-DEPTH-FOR-SUPPORT` (INFO). Minimalna głębokość to
 minimum, a stopień nigdy nie zostaje bez podparcia. Zob. docs/architecture/WINDER_ARC_LAYOUT.md.
+
+## Zawinięcia konturu przy stromej duszy (2026-10-14)
+
+Kontur dolny i górny to linia odniesienia przesunięta prostopadle (`offsetPolylineByNormal`). Tam, gdzie linia
+odniesienia ostro zmienia nachylenie — łagodny bieg, a zaraz strome zabiegi przy duszy bez słupa (200 mm wzniosu na
+100 mm) — sąsiednie przesunięte odcinki przecinają się „za sobą” i kontur cofa się w `u`. Powstawało wcięcie w
+kształcie V w desce („szpiczaste” wangi). `polylineProfile.js unfoldOffsetPolyline` prostuje takie miejsce, zachowując
+wszystkie punkty (niosą identyfikatory węzłów): na konturze dolnym punkt cofający się, a na górnym (czytanym od końca)
+punkt wysunięty za późniejszy, trafia na prostą między sąsiednimi poprawnymi punktami — zawsze po stronie, która
+zostawia więcej materiału. Kontur bez zawinięć zostaje bez zmian.

@@ -142,7 +142,10 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
   lap-jointed boards are solved as one group profile and sliced per board; at a POST each board is independent (user
   decision) and treads standing wholly on the post neither shape the board nor get a housing. Board ends: plumb faces,
   the first board's foot cut along the floor; a board entering a post goes `postHousingDepthMm` past its face; at a
-  postless corner one board butts into the other's housing. Cut boards: notched comb with plumb riser cuts. Closed
+  postless corner the boards LAP, with no housing (user decision 2026-10-14): convex — B butts flush against A's inner
+  face; concave — A runs one thickness past the corner LEVEL at the corner's heights (`flattenBeyond`), B starts flush
+  against it; bolted (`jointConnectors.js`). An offset contour folding back at a sharp turn of the reference (steep
+  dusza winders) is straightened toward more material (`polylineProfile.js unfoldOffsetPolyline`). Cut boards: notched comb with plumb riser cuts. Closed
   boards: `housings[]` (`kind` tread/riser/butt; tread housing extended by the nosing), united `housingPockets` (real
   pockets in 3D). Diagnostics: `STRINGER-MIN-DEPTH`, `STRINGER-MIN-SECTION`, `STRINGER-TREAD-SUPPORT`,
   `STRINGER-CONTOUR-SELF-INTERSECTION`, `STRINGER-OVERRIDE-*`, `STRINGER-FILLET-CLAMPED`, `STRINGER-SPLINE-REJECTED`,
@@ -167,8 +170,8 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
 Docs: [JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md).
 - Stringer ↔ post: full-section housing in the post (`postHousingDepthMm`, DO WERYFIKACJI); pocket on the face the
   board enters. Tread ↔ post: ONE plain notch and ONE full-width tongue on the face it bears on most
-  (`postTreadHousingDepthMm`); risers cut flush, not housed. Stringer ↔ stringer at a postless corner: butt joint
-  into a housing. Stair bolts in stringer joints (`jointConnector*`, DO WERYFIKACJI), crossing groups shifted, clash /
+  (`postTreadHousingDepthMm`); risers cut flush, not housed. Stringer ↔ stringer at a postless corner: lap joint,
+  no housing, bolted. Stair bolts in stringer joints (`jointConnector*`, DO WERYFIKACJI), crossing groups shifted, clash /
   edge / spacing / short / post-weakening findings.
 - Output `{joints, pocketsByPost, holesByPost, holesBySegment, treadCuts, riserCuts, connectors, postWeakening,
   diagnostics}` read by renderers, DXF, takeoff (`connectorItems.js`, unpriced) and the 3D layer "Złącza"

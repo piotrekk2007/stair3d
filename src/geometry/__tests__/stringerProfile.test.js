@@ -628,14 +628,14 @@ for (const [label, patch] of END_CASES) {
 // Joints stage 3 (user decision 2026-09-28): at the outer (convex) corner the first board runs to the corner and the
 // second butts into a housing in its inner face — no more boards running past the corner (with hasCornerPost off the
 // first board used to stick out one thickness beyond the second board's outer face).
-test('board ends: at a postless outer corner the first board ends at the corner, the second butts into it; both cut plumb', () => {
+test('board ends: at a postless outer corner the first board ends at the corner, the second butts flush against its inner face (no housing); both cut plumb', () => {
   const { config, geo, models } = flight({ ...GEOMETRIES.L, totalRise: 2700, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut', hasCornerPost: false });
   const [a, b] = geo.outer;
   const segA = models.outer.segments[0];
   assert.ok(Math.abs(a.ends.end.u - segA.referenceLine.length) < 1e-6, 'the first board ends exactly at the outer corner');
-  const depth = Math.min(config.stringerHousingDepthMm, segA.thickness - 1);
-  assert.ok(Math.abs(b.ends.start.u - (segA.thickness - depth)) < 1e-6, 'the second board starts inside the first board by the housing depth');
-  assert.deepEqual(b.ends.start.butt, { intoSegmentId: segA.id, depthMm: depth, faceU: segA.thickness, housed: true });
+  assert.ok(config.stringerHousingDepthMm > 0);
+  assert.ok(Math.abs(b.ends.start.u - segA.thickness) < 1e-6, 'the second board starts at the inner face of the first');
+  assert.deepEqual(b.ends.start.butt, { intoSegmentId: segA.id, depthMm: 0, faceU: segA.thickness, housed: false });
   const lowEnd = a.lowerCurve[a.lowerCurve.length - 1].b;
   assert.ok(Math.abs(lowEnd.u - a.ends.end.u) < 1e-6, 'the lower contour ends at the same plane as the top');
 });

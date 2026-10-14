@@ -27,7 +27,7 @@
 // ends up at distance (d - r)/cos(phi) + r from the reference vertex — >= d only while r <= d.
 // Corners turning the other way only ever add material, so they are always safe.
 
-import { offsetPolylineByNormal, valueAtU, simplifyCollinear } from './polylineProfile.js';
+import { offsetPolylineByNormal, unfoldOffsetPolyline, valueAtU, simplifyCollinear } from './polylineProfile.js';
 import {
   filletPolyline,
   feasibleRadii,
@@ -592,8 +592,9 @@ export function solveStringerProfile({ reference, constructionType, params, over
       })
     );
   }
-  const lowerNominal = offsetPolylineByNormal(reference, lowerDistance, 'down');
-  const upperNominal = closed ? offsetPolylineByNormal(reference, topMarginFromReferenceMm, 'up') : null;
+  // (a fold of the offset at a sharp turn of the reference is straightened — polylineProfile.js unfoldOffsetPolyline)
+  const lowerNominal = unfoldOffsetPolyline(offsetPolylineByNormal(reference, lowerDistance, 'down'), 'lower');
+  const upperNominal = closed ? unfoldOffsetPolyline(offsetPolylineByNormal(reference, topMarginFromReferenceMm, 'up'), 'upper') : null;
 
   const lowerBase = buildControlPolygon({ reference, contour: PROFILE_CONTOURS.LOWER, nominalPoints: lowerNominal, overrides, findings });
   const upperBase = closed ? buildControlPolygon({ reference, contour: PROFILE_CONTOURS.UPPER, nominalPoints: upperNominal, overrides, findings }) : null;

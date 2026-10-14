@@ -169,3 +169,44 @@ export function valueAtU(polyline, u) {
   const t = b.u - a.u !== 0 ? (u - a.u) / (b.u - a.u) : 0;
   return a.v + (b.v - a.v) * t;
 }
+
+// An offset contour folds where the reference turns sharply on the side it is offset to (the steep winders at a
+// dusza without a post: a flight's gentle pitch, then 200 mm per 100 mm): consecutive offset segments meet BEHIND
+// each other and the polyline steps back in u — a V-shaped notch cut into the board ("pointed" wangi, user report
+// 2026-10-14). This straightens such a fold, keeping every point (they carry the knots' ids) and always on the side
+// that keeps MORE material: on a LOWER contour a point stepping back (u not past every point before it) is moved onto
+// the straight line between the last point before it and the next point beyond it; on an UPPER contour, read from its
+// far end, a point reaching past a later one is moved likewise. Points already in u order are untouched.
+export function unfoldOffsetPolyline(points, contour) {
+  const n = points.length;
+  if (n < 3) return points;
+  const ordered = contour === 'upper' ? [...points].reverse().map((p) => ({ ...p, u: -p.u })) : points.map((p) => ({ ...p }));
+  const good = new Array(n).fill(false);
+  let maxU = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (ordered[i].u > maxU + 1e-9) {
+      good[i] = true;
+      maxU = ordered[i].u;
+    }
+  }
+  let i = 0;
+  while (i < n) {
+    if (good[i]) {
+      i++;
+      continue;
+    }
+    const from = i - 1;
+    let to = i;
+    while (to < n && !good[to]) to++;
+    if (from >= 0 && to < n) {
+      const a = ordered[from];
+      const b = ordered[to];
+      for (let k = from + 1; k < to; k++) {
+        const t = (k - from) / (to - from);
+        ordered[k] = { ...ordered[k], u: a.u + (b.u - a.u) * t, v: a.v + (b.v - a.v) * t };
+      }
+    }
+    i = to;
+  }
+  return contour === 'upper' ? ordered.reverse().map((p) => ({ ...p, u: -p.u })) : ordered;
+}

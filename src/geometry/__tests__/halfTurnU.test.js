@@ -226,3 +226,41 @@ test('regression: the client\'s plan (offer) has no blue balustrade end rings; t
   assert.equal((draw(false).match(/class="railing-end-ring"/g) || []).length, 2);
   assert.ok(!draw(true).includes('stroke="#1a5fb4" stroke-width="18"'));
 });
+
+test('regression: postless inner wangi meet flush — the piece past a corner keeps the corner\'s height, so the next board starts exactly as high (no step, no notch)', () => {
+  // the user's case: one 180° zone, inner lines 70 mm apart (axis gap 110), no structural post
+  const m = quiet(() => buildStaircase(cfg({ uAxisGapMm: 110, hasCornerPost: false })));
+  const segs = m.stringerModels.inner.segments;
+  const geos = m.stringerConstruction.inner;
+  assert.equal(segs.length, 3, 'A, the 70 mm dusza piece, C');
+  assert.ok(near(segs[1].referenceLine.length, 70, 1e-6));
+  const slice = (g, u) => {
+    const vs = [];
+    const o = g.outerContour;
+    for (let i = 0; i < o.length; i++) {
+      const a = o[i];
+      const b = o[(i + 1) % o.length];
+      if ((a.u - u) * (b.u - u) > 0 || a.u === b.u) continue;
+      vs.push(a.v + ((b.v - a.v) * (u - a.u)) / (b.u - a.u));
+    }
+    return { lo: Math.min(...vs), hi: Math.max(...vs) };
+  };
+  for (let i = 0; i + 1 < segs.length; i++) {
+    const a = geos[i];
+    const b = geos[i + 1];
+    const corner = segs[i].referenceLine.length;
+    // the end of A (one thickness past its corner) is level at the corner's heights …
+    const atCorner = slice(a, corner - 1e-6);
+    const atEnd = slice(a, a.ends.end.u - 1e-6);
+    assert.ok(near(atEnd.hi, atCorner.hi, 1e-3) && near(atEnd.lo, atCorner.lo, 1e-3), `${segs[i].id}: level past the corner`);
+    // … exactly the heights B starts with
+    const start = slice(b, b.ends.start.u + 1e-6);
+    assert.ok(near(start.hi, atEnd.hi, 1e-3) && near(start.lo, atEnd.lo, 1e-3), `${segs[i].id} -> ${segs[i + 1].id}: ${JSON.stringify([atEnd, start])}`);
+  }
+  // no board's outline steps back along its length (the folds cut V-shaped notches into the boards)
+  for (const g of geos) {
+    const top = g.topProfile;
+    const bottom = g.bottomProfile;
+    for (const line of [top, bottom]) for (let k = 1; k < line.length; k++) assert.ok(line[k].u >= line[k - 1].u - 1e-6, `${g.segmentId}: the contour steps back at u = ${line[k].u}`);
+  }
+});

@@ -73,7 +73,7 @@ import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm, postHousingDepthM
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
 import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, closingAnchorId, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
-import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope } from './profileCurve.js';
+import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope, lineSegment, curveStart, curveEnd } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 import { topRiserElevation } from './riserSolver.js';
@@ -119,9 +119,10 @@ function computeOpenCornerExtensions(model, hasCornerPost, config = {}) {
     const dAB = dot(dirA, B.inwardNormal); // > 0: A arrives from B's outer side (concave corner)
     const lenA = A.referenceLine.length;
     if (dBA > 0.5) {
-      const depth = Math.min(housingDepthMm(config), Math.max(0, A.thickness - 1));
+      // no housing (wręg) between two wangi (user decision 2026-10-14): B butts flush against A's inner face — the
+      // boards lap and are bolted (jointConnectors.js)
       const face = A.thickness / dBA;
-      butts.set(B.id, { u: face - depth, intoSegmentId: A.id, depthMm: depth, housed: depth > 0, housingU: [lenA - B.thickness / Math.max(-dAB, 1e-6), lenA] });
+      butts.set(B.id, { u: face, intoSegmentId: A.id, depthMm: 0, housed: false, housingU: [lenA - B.thickness / Math.max(-dAB, 1e-6), lenA] });
     } else if (dAB > 0.5) {
       extendEndOf.add(i);
       butts.set(B.id, { u: 0, intoSegmentId: A.id, depthMm: 0, housed: false, housingU: null });
@@ -685,6 +686,16 @@ function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
   return { ...profileOverrides, lower, upper, anchors, inserted };
 }
 
+// A curve continued LEVEL from its first point back to u0 and from its last point on to u1 (where it does not reach).
+function flattenBeyond(curve, u0, u1) {
+  if (!curve.length) return curve;
+  const first = curveStart(curve);
+  const last = curveEnd(curve);
+  const before = first.u > u0 + GEOMETRY_EPS ? [lineSegment({ u: u0, v: first.v }, first)] : [];
+  const after = last.u < u1 - GEOMETRY_EPS ? [lineSegment(last, { u: u1, v: last.v })] : [];
+  return [...before, ...curve, ...after];
+}
+
 function buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds = new Set(), isLastGroupOfSide = true, lastTreadIndex = null) {
   const withBearings = group.filter((s) => s.treadBearings.length > 0);
   if (withBearings.length === 0) return group.map(emptySegmentGeometry);
@@ -754,13 +765,19 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // A contour is continued along its end tangent to reach an end face only up to this steepness; a
     // steeper end edge (the narrow dusza treads of a tight winder) becomes a flat cap (see sliceCurveByU).
     const maxDrop = MAX_END_EXTENSION_SLOPE;
-    const lowerGroupSlice = mergeCollinearLines(sliceCurveByU(solved.lowerCurve, segStart + spanStart, segStart + spanEnd, maxDrop));
+    // At a postless lap joint a board runs one thickness past its corner to cover the corner square and the next board
+    // butts against it there. That piece keeps the height the profile has AT the corner (it is not continued up the
+    // slope): its face then matches the next board's starting face exactly — the two boards meet flush instead of in a
+    // step (user report 2026-10-14: "pointed" ends of inner wangi without a post).
+    const { extendStart, extendEnd } = extendInfo.get(segment.id) || {};
+    const flatFrom = extendEnd ? Math.min(spanEnd, segmentLengths[i]) : spanEnd;
+    const flatTo = extendStart ? Math.max(spanStart, 0) : spanStart;
+    const slice = (curve) => flattenBeyond(sliceCurveByU(curve, segStart + flatTo, segStart + flatFrom, maxDrop), segStart + spanStart, segStart + spanEnd);
+    const lowerGroupSlice = mergeCollinearLines(slice(solved.lowerCurve));
     const lowerCurve = translateCurveU(lowerGroupSlice, -segStart);
     const firstLower = solved.lowerCurve[0];
     const startCapped = segStart + spanStart < firstLower.a.u - GEOMETRY_EPS && edgeSlope(firstLower, true) > MAX_END_EXTENSION_SLOPE;
-    const upperCurveSolved = solved.upperCurve
-      ? translateCurveU(mergeCollinearLines(sliceCurveByU(solved.upperCurve, segStart + spanStart, segStart + spanEnd, maxDrop)), -segStart)
-      : null;
+    const upperCurveSolved = solved.upperCurve ? translateCurveU(mergeCollinearLines(slice(solved.upperCurve)), -segStart) : null;
     // Arcs become chords only here, at the edge of the profile model, never inside it.
     const bottomPolyline = curveToPolyline(lowerCurve);
     const topPolyline = upperCurveSolved ? curveToPolyline(upperCurveSolved) : null;
