@@ -77,8 +77,18 @@ export function sanitizePostOverrides(raw) {
  * and the post list can never disagree about which post is meant.
  */
 export function cornerPostIdAt(planLayout, point) {
-  const i = planLayout.turns.findIndex((turn) => Math.hypot(turn.innerCorner.x - point.x, turn.innerCorner.y - point.y) < 1);
-  return i < 0 ? null : `post-corner-${i}`;
+  const near = (c) => Math.hypot(c.x - point.x, c.y - point.y) < 1;
+  for (let i = 0; i < planLayout.turns.length; i++) {
+    const turn = planLayout.turns[i];
+    // a 180° winder zone: its post spots (one central post for both dusza corners, or one per corner)
+    if (turn.postSpots) {
+      const j = turn.postSpots.findIndex((spot) => spot.anchors.some(near));
+      if (j >= 0) return `post-corner-${i + j}`;
+      continue;
+    }
+    if (near(turn.innerCorner)) return `post-corner-${i}`;
+  }
+  return null;
 }
 
 /** True when a corner post is switched on globally but the user removed this particular one. */
@@ -224,6 +234,12 @@ export function buildAllPostModels(planLayout, config) {
       const isDuplicate = placedCorners.some((c) => Math.hypot(c.x - turn.innerCorner.x, c.y - turn.innerCorner.y) < POST_COINCIDENCE_MM);
       if (isDuplicate) return;
       placedCorners.push(turn.innerCorner);
+      // one 180° winder zone (planLayout.js buildHalfTurnLocal): ONE central post between the dusza's two corners, on the
+      // wangi's axes; both inner boards of the zone (A's end, C's start) butt into it
+      if (turn.postSpots) {
+        turn.postSpots.forEach((spot, j) => models.push({ postId: `post-corner-${i + j}`, kind: 'corner', position: spot.at, anchor: spot.anchors[0], anchors: spot.anchors, elevation: { bottom: 0, top: totalRise }, size: postSize }));
+        return;
+      }
       models.push({ postId: `post-corner-${i}`, kind: 'corner', position: cornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
     });
   }
@@ -235,7 +251,7 @@ export function buildAllPostModels(planLayout, config) {
   // so the spot is never left empty.
   const overrides = sanitizePostOverrides(config.manualPostOverrides);
   const overlaps = (a, b) => Math.abs(a.position.x - b.position.x) < (a.size + b.size) / 2 && Math.abs(a.position.y - b.position.y) < (a.size + b.size) / 2;
-  const coveredByCornerPost = (post) => models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && (Math.hypot(m.anchor.x - post.anchor.x, m.anchor.y - post.anchor.y) < POST_COINCIDENCE_MM || overlaps(m, post)));
+  const coveredByCornerPost = (post) => models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && ((m.anchors || [m.anchor]).some((a) => Math.hypot(a.x - post.anchor.x, a.y - post.anchor.y) < POST_COINCIDENCE_MM) || overlaps(m, post)));
 
   const kept = models.filter((m) => !((m.postId === 'post-start' || m.postId === 'post-end') && coveredByCornerPost(m)));
 

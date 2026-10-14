@@ -119,3 +119,56 @@ wywrotki przy 2 zabiegach (sprawdzone, że na starym kodzie nie przechodzi). Poz
 - siatkę prostych konturów;
 - pogłębienie wangi (potwierdzone, że bez poprawki nie przechodzi);
 - pomiar 400 mm od duszy (potwierdzone, że ze starym pomiarem nie przechodzi).
+
+## Jedna klatka zabiegowa 180° (U bez stopni w biegu B)
+
+Decyzja użytkownika 2026-10-14: w schodach U, w których bieg B nie ma stopni prostych, a oba zakręty są zabiegowe, oba
+zakręty mogą być **jedną klatką zabiegową** z dowolną łączną liczbą zabiegów, wokół **jednego słupa środkowego**.
+Odstęp biegów A i C ustawia się jako **rozstaw osi wewnętrznych wang A i C**; 0 oznacza wangę C dokładnie nad wangą A
+(jedna płaszczyzna, oba wchodzą w ten sam słup). Włącza się to opcją (domyślnie wyłączone — zostają dwa zakręty jak
+dotąd).
+
+- Konfiguracja: `uSingleWinderZone` (przełącznik), `uWindersTotal` (łączna liczba zabiegów), `uAxisGapMm` (rozstaw
+  osi). Stosowane tylko, gdy `stairType = 'U'`, `treadsLegB = 0` i oba zakręty są `winder` (`winderArc.js
+  isHalfTurnU`); wtedy `windersPerTurn` nie gra roli.
+- Geometria (`winderArc.js halfTurnWinderGeometry`, układ lokalny jak dla ćwiartki, skręt w prawo): A idzie w +y z
+  linią wewnętrzną x = W; C wraca w −y z linią wewnętrzną x = W + g, gdzie g = rozstaw osi − grubość wangi (ujemne,
+  gdy osie są bliżej niż grubość deski: stopnie C sięgają wtedy nad stopnie A, pół kondygnacji wyżej). Linia biegu:
+  prosta `walklineOffset` od linii A, **półokrąg** wokół środka duszy o promieniu `walklineOffset + g/2`, prosta
+  `walklineOffset` od linii C. Strefa zabiegów to `uWindersTotal` równych odcinków na linii biegu, **zawsze
+  wyśrodkowana na półokręgu** (także gdy A albo C nie ma stopni prostych — przypięta do narożnika strefa dawałaby
+  krawędzie przecinające pierwszą/ostatnią krawędź schodów). Każda krawędź przechodzi przez swój punkt linii biegu i
+  swój punkt na linii wewnętrznej; końce przy duszy rozłożone równo wzdłuż linii A, odcinka duszy i linii C (każdy zabieg
+  ma tę samą szerokość przy duszy). Gdy półokrąg się nie mieści, linia biegu jest przysuwana do duszy
+  (`fittingHalfTurnOffset`, jak przy ćwiartce).
+- Rzut (`planLayout.js buildHalfTurnLocal`): jeden zakręt `turns[0]` z `halfTurn: true`, `innerCorners`/`outerCorners`
+  (po dwa narożniki), `centre` (środek półokręgu), `postSpots`. Stopień przy środku duszy, którego krawędzie przednia i
+  tylna przecinają się (dusza zachodząca, g < 0), ma zarys od punktu przecięcia — leży on w słupie, który i tak ten
+  stopień wycina.
+- Słup (`postSolver.js`): **jeden słup środkowy** na osiach wang — w połowie między osią A i C, pół grubości deski od
+  linii duszy — gdy obejmuje obie wangi (rozstaw osi ≤ przekrój słupa − grubość wangi). Przy szerszym rozstawie stoją
+  **dwa słupy**, po jednym na każdym narożniku duszy, a między nimi deska duszy. Słup środkowy należy do obu narożników
+  (`anchors`): wanga wewnętrzna A kończy się w nim, wanga C z niego wychodzi (`stringerSolver.js boardEndPosts`,
+  `cornerPostIdAt`).
+- Pomiar szerokości zabiegu 0,4 m od duszy (`walklineModel.js offsetLineRoundHalfTurn`): linia odsunięta to proste
+  przy A i C i półokrąg wokół środka duszy.
+- Dopasowanie do klatki (`stairwellFit.js`) przy tej opcji nie dokłada stopni do biegu B.
+- Poprawki we wspólnym kodzie, których ten układ wymagał (każda z testem, który nie przechodzi na starym kodzie):
+  - narożnik, w którym linia zawraca (linie A i C się pokrywają), jest narożnikiem (`pathUtils.js
+    goesStraightThrough`);
+  - cofanie końca stopnia przy wandze wpuszczanej liczone w stronę WŁASNEJ krawędzi stopnia (`edgeOverrides.js`), a
+    dwa narożniki w jednym punkcie dostają w zarysie kolejno swoje miejsca; dla zwykłych schodów wynik bez zmian
+    (1080 układów porównanych bit w bit);
+  - deska wangi niosąca tylko stopnie zaczęte na poprzedniej desce dostaje węzeł profilu
+    (`stringerConstructionGeometry.js buildPitchKnots`).
+
+Znane ograniczenie: przy rozstawie osi 0 wangi A i C leżą w jednej płaszczyźnie i **przy słupie zachodzą na siebie
+wysokością** — górna krawędź A jest wyżej niż dolna krawędź C (`JOINT-POST-POCKETS-OVERLAP`). Na razie nie są
+automatycznie docinane; można je skorygować w edytorze „Profil wangi” (kotwice przy słupie).
+
+Testy: `geometry/__tests__/halfTurnU.test.js`. Zakres: kiedy opcja działa, rozstaw osi, równe biegi na półokręgu,
+szerokość przy duszy, szerokość 0,4 m od duszy, słup środkowy i dwa słupy, odbicie dla skrętu w lewo, rozstaw równy
+grubości wangi, krótka deska duszy, dopasowanie do klatki, oferta, strzałka kierunku na planie. Skan 768 konfiguracji
+(prawo/lewo, rozstaw 0/40/120/300, A 0/2/4, C 0/3, 4–10 zabiegów, wangi wpuszczane/nakładane, balustrada po obu
+stronach): 0 wywrotek, 0 przecinających się konturów; zostają ustalenia o zbyt stromej/płytkiej wandze przy bardzo małej
+liczbie zabiegów albo bez stopni prostych w A i C.

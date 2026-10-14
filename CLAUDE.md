@@ -87,6 +87,13 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   starting/ending with winders starts/ends the zone at the corner (one post there). If the arc does not fit at the
   configured offset, the turn uses the largest offset that fits (`fittingWalklineOffset`, `turns[].walklineOffsetMm`,
   WARNING `WINDER-WALKLINE-MOVED`). `buildTurnLocalProportional` (old method) only serves invalid input.
+- **One 180° winder zone** (U, `treadsLegB = 0`, both turns winders, `uSingleWinderZone`; user decision 2026-10-14):
+  `uWindersTotal` winders on a walkline with a HALF CIRCLE round the dusza's middle, zone centred on it; flights A
+  and C set by the distance between their inner wangi AXES (`uAxisGapMm`, 0 = C's wanga over A's; inner-line gap =
+  axis gap − board thickness, may be negative). One turn `{halfTurn, innerCorners, outerCorners, centre, postSpots}`;
+  one central post on the axes (two corner posts when the gap is wider than post − board). `winderArc.js
+  halfTurnWinderGeometry`, `planLayout.js buildHalfTurnLocal`; doc section in WINDER_ARC_LAYOUT.md. Known: at axis gap
+  0 the two inner wangi overlap in height at the post (`JOINT-POST-POCKETS-OVERLAP`), not trimmed automatically.
 - `planLayout.walkline = {path, points}` — the drawn walkline (arc as chords) and one point per edge (edit pivots).
 - Override layers applied in `buildPlanLayout` (in this order): `manualEdgeOverrides` (`{[boundary]: {inner?, outer?}}`,
   older `{movedEndpoint, point}` still read — `edgeOverrides.js edgeOverrideEndpoints`), the automatic housing recess
@@ -114,7 +121,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   de-duplicated); a start/end newel overlapping a corner post is not placed; per-post edits `manualPostOverrides`
   (`removed`, `topDeltaMm`, `bottomDeltaMm`; removing a corner post turns that inner joint into a lap joint);
   balustrade posts are PostModels with `kind: 'railing'` and their own `sizeMm`. `buildAllPostModels` includes removed
-  ones (ghosts in the plan).
+  ones (ghosts in the plan). A post can belong to several chain points (`anchors` — the central post of a 180° zone);
+  a chain point where the line turns back is a corner (`pathUtils.js goesStraightThrough`).
 
 ## Stringers (wangi)
 

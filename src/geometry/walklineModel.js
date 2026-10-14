@@ -20,6 +20,46 @@ const ARC_SAMPLE_DEG = 3;
 
 /** The line `offsetMm` from the inner line, into the stair: offset straights joined by arcs round convex corners. */
 export function offsetLineFromInner(planLayout, offsetMm) {
+  const half = (planLayout.turns || []).find((t) => t.halfTurn);
+  if (half && offsetMm > 0) return offsetLineRoundHalfTurn(planLayout, offsetMm, half);
+  return offsetLineAlong(planLayout, offsetMm);
+}
+
+// A 180° winder zone (planLayout.js buildHalfTurnLocal): the dusza between flights A and C is a short piece of inner
+// line — possibly running BACK when C's wanga stands over A's — so the line `offsetMm` from it is A's offset straight,
+// a HALF CIRCLE round the dusza's middle (radius offsetMm + half the gap between the inner lines, exactly how the
+// walkline itself is laid out at offsetMm = walklineOffset) and C's offset straight.
+function offsetLineRoundHalfTurn(planLayout, offsetMm, turn) {
+  const path = (planLayout.innerFullPath || []).filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
+  const [c1, c2] = turn.innerCorners;
+  const i1 = path.findIndex((p) => near(p, c1));
+  const i2 = path.findIndex((p, i) => i >= i1 && near(p, c2));
+  if (i1 < 1 || i2 < 0 || i2 >= path.length - 1) return offsetLineAlong(planLayout, offsetMm);
+  const handedness = planLayout.handedness;
+  const lineA = offsetLineAlong({ innerFullPath: path.slice(0, i1 + 1), handedness }, offsetMm);
+  const lineC = offsetLineAlong({ innerFullPath: path.slice(i2), handedness }, offsetMm);
+  const ctr = turn.centre;
+  const from = lineA[lineA.length - 1];
+  const to = lineC[0];
+  const radius = Math.hypot(from.x - ctr.x, from.y - ctr.y);
+  const a0 = Math.atan2(from.y - ctr.y, from.x - ctr.x);
+  let sweep = Math.atan2(to.y - ctr.y, to.x - ctr.x) - a0;
+  while (sweep <= 0) sweep += 2 * Math.PI;
+  // round the far side of the dusza: the arc's middle lies ahead in A's walking direction
+  const ahead = normalize({ x: c1.x - path[i1 - 1].x, y: c1.y - path[i1 - 1].y });
+  const midOf = (sw) => ({ x: Math.cos(a0 + sw / 2), y: Math.sin(a0 + sw / 2) });
+  if (midOf(sweep).x * ahead.x + midOf(sweep).y * ahead.y < midOf(sweep - 2 * Math.PI).x * ahead.x + midOf(sweep - 2 * Math.PI).y * ahead.y) sweep -= 2 * Math.PI;
+  const steps = Math.max(2, Math.ceil(Math.abs(sweep) / ((ARC_SAMPLE_DEG * Math.PI) / 180)));
+  const arc = [];
+  for (let k = 1; k < steps; k++) {
+    const ang = a0 + (sweep * k) / steps;
+    arc.push({ x: ctr.x + Math.cos(ang) * radius, y: ctr.y + Math.sin(ang) * radius });
+  }
+  return [...lineA, ...arc, ...lineC];
+}
+
+function offsetLineAlong(planLayout, offsetMm) {
   const path = (planLayout.innerFullPath || []).filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
   if (path.length < 2 || !(offsetMm > 0)) return [];
   const handed = planLayout.handedness || 1;

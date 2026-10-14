@@ -466,15 +466,25 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${dimensionLine(fmt(b.minX), fmt(-b.maxY) - 350, fmt(b.maxX), fmt(-b.maxY) - 350, `${fmt(footprintX)} mm`)}
     ${dimensionLine(fmt(b.minX) - 350, fmt(-b.maxY), fmt(b.minX) - 350, fmt(-b.minY), `${fmt(footprintY)} mm`)}`;
 
-  const arrowStart = planLayout.innerFullPath[0];
-  const arrowXML = `
-    <g stroke="#c0392b" stroke-width="20" fill="#c0392b">
-      <line x1="${fmt(arrowStart.x + config.stairWidth / 2)}" y1="${fmt(-arrowStart.y + 200)}"
-            x2="${fmt(arrowStart.x + config.stairWidth / 2)}" y2="${fmt(-arrowStart.y - 400)}"/>
-      <polygon points="${fmt(arrowStart.x + config.stairWidth / 2 - 60)},${fmt(-arrowStart.y - 300)}
-                        ${fmt(arrowStart.x + config.stairWidth / 2 + 60)},${fmt(-arrowStart.y - 300)}
-                        ${fmt(arrowStart.x + config.stairWidth / 2)},${fmt(-arrowStart.y - 460)}"/>
+  // The walking-direction arrow: in the middle of the first front edge, along the first flight. (It used to stand at
+  // the inner line's start + half the width in +x — beside the flight for a right turn.)
+  const arrowXML = (() => {
+    const inner0 = planLayout.innerFullPath[0];
+    const outer0 = planLayout.outerFullPath[0];
+    const outer1 = planLayout.outerFullPath[1] || outer0;
+    const len = Math.hypot(outer1.x - outer0.x, outer1.y - outer0.y) || 1;
+    const d = { x: (outer1.x - outer0.x) / len, y: (outer1.y - outer0.y) / len };
+    const n = { x: -d.y, y: d.x };
+    const mid = { x: (inner0.x + outer0.x) / 2, y: (inner0.y + outer0.y) / 2 };
+    const at = (along, across = 0) => `${fmt(mid.x + d.x * along + n.x * across)},${fmt(-(mid.y + d.y * along + n.y * across))}`;
+    const [x1, y1] = at(-200).split(',');
+    const [x2, y2] = at(400).split(',');
+    return `
+    <g class="plan-arrow" stroke="#c0392b" stroke-width="20" fill="#c0392b">
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>
+      <polygon points="${at(300, -60)} ${at(300, 60)} ${at(460)}"/>
     </g>`;
+  })();
 
   const legendXML = `
     <g font-size="${px(12)}" fill="#222">

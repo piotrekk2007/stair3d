@@ -207,11 +207,6 @@ function normalToward(a, b, toward) {
   return n;
 }
 
-function midpoint(points) {
-  const pts = points.length ? points : [{ x: 0, y: 0 }];
-  return { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length };
-}
-
 // Where `corner` lands when moved along its edge (corner -> hinge) onto the line parallel to chain segment a->b,
 // `depth` toward the tread. Falls back to `depth` along the edge when the edge runs along the wanga.
 function recessCorner(corner, hinge, a, b, depth, toward) {
@@ -240,19 +235,23 @@ export function recessTreadToWangi(tread, depthMm) {
     const depth = depthMm[side];
     if (!(depth > 0)) continue;
     const chain = chains[side];
-    const other = side === 'inner' ? chains.outer : chains.inner;
-    const toward = other.length ? midpoint(other) : midpoint([tread.frontEdge[1 - idx], tread.backEdge[1 - idx]]);
+    // "Toward the tread" from each end's OWN edge: the front corner's segment of the chain points to the front edge's
+    // other end, the back corner's to the back edge's. (The middle of the other chain was used before — wrong for a
+    // chain that turns back round a 180° winder zone's dusza, where that middle can lie on the other flight's side.)
+    const towardFront = tread.frontEdge[1 - idx];
+    const towardBack = tread.backEdge[1 - idx];
     if (chain.length < 2) {
       // no chain to measure from (a collapsed dusza point): the old rule, `depth` along the edge
       front[idx] = shiftAlong(tread.frontEdge[idx], tread.frontEdge[1 - idx], depth);
       back[idx] = shiftAlong(tread.backEdge[idx], tread.backEdge[1 - idx], depth);
       continue;
     }
-    front[idx] = recessCorner(tread.frontEdge[idx], tread.frontEdge[1 - idx], chain[0], chain[1], depth, toward);
-    back[idx] = recessCorner(tread.backEdge[idx], tread.backEdge[1 - idx], chain[chain.length - 2], chain[chain.length - 1], depth, toward);
+    front[idx] = recessCorner(tread.frontEdge[idx], tread.frontEdge[1 - idx], chain[0], chain[1], depth, towardFront);
+    back[idx] = recessCorner(tread.backEdge[idx], tread.backEdge[1 - idx], chain[chain.length - 2], chain[chain.length - 1], depth, towardBack);
     for (let i = 1; i < chain.length - 1; i++) {
-      const n1 = normalToward(chain[i - 1], chain[i], toward);
-      const n2 = normalToward(chain[i], chain[i + 1], toward);
+      // the piece before a chain corner faces the tread's front, the piece after it the tread's back
+      const n1 = normalToward(chain[i - 1], chain[i], towardFront);
+      const n2 = normalToward(chain[i], chain[i + 1], towardBack);
       const denom = 1 + n1.x * n2.x + n1.y * n2.y;
       const n = denom < 1e-6 ? n2 : { x: (n1.x + n2.x) / denom, y: (n1.y + n2.y) / denom };
       interior.push({ from: chain[i], to: { x: chain[i].x + n.x * depth, y: chain[i].y + n.y * depth } });
@@ -306,9 +305,16 @@ export function applyHousingRecess(treads, config) {
       [original.backEdge[1], back[1]],
       ...interior.map((m) => [m.from, m.to]),
     ];
+    // Each outline point takes the first not-yet-used matching corner, in outline order: where the inner line turns
+    // back on itself (a 180° winder zone whose two inner lines coincide) the front and back inner corners are ONE
+    // point, met twice along the outline — the first time it is the front corner, the second time the back one.
+    const used = new Set();
     const moveTo = (p) => {
-      const hit = map.find(([from]) => pointsEqual(from, p));
-      return hit ? hit[1] : p;
+      let i = map.findIndex(([from], k) => !used.has(k) && pointsEqual(from, p));
+      if (i < 0) i = map.findIndex(([from]) => pointsEqual(from, p));
+      if (i < 0) return p;
+      used.add(i);
+      return map[i][1];
     };
     tread.outline = original.outline.map(moveTo);
     tread.frontEdge = front;

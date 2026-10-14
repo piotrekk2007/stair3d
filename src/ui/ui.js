@@ -144,6 +144,11 @@ export function createUI({
   live(steps.add(config, 'turn2Type', ['winder', 'landing'])).name('Zakręt 2: typ (tylko U)');
   live(steps.add(config, 'mergeLandings')).name('1 duży podest (oba zakręty = landing)');
   lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, tylko U)'), 'treadsLegC');
+  // U with no straight tread in B and two winder turns: ONE 180° winder zone round one central post (winderArc.js
+  // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.
+  live(steps.add(config, 'uSingleWinderZone')).name('U, B = 0: jedna klatka zabiegowa 180°');
+  live(steps.add(config, 'uWindersTotal', 2, 14, 1)).name('Zabiegowe łącznie (klatka 180°)');
+  live(steps.add(config, 'uAxisGapMm', 0, 800, 5)).name('Rozstaw osi wang A–C [mm] (0 = wanga nad wangą)');
 
   const winder = gui.addFolder('Geometria zabiegu');
   lockable(winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]'), 'walklineOffset');

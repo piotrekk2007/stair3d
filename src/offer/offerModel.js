@@ -15,6 +15,7 @@
 // the project; the offer settings (client, number, amounts) are PROJECT data, saved in the project file.
 
 import { BLONDEL_RANGE_MM } from '../config/schema.js';
+import { isHalfTurnU, halfTurnWinderCount } from '../geometry/winderArc.js';
 import { glassType } from '../geometry/railingGlass.js';
 import { round2 } from '../util/format.js';
 
@@ -137,7 +138,9 @@ export function stairFacts(config, derived, extras = {}) {
     ['Głębokość stopnia (na linii biegu)', `${Math.round(g)} mm`],
     ['Szerokość biegu', `${Math.round(config.stairWidth)} mm`],
     ['Kąt nachylenia', `${pitchDeg.toFixed(1)}°`],
-    config.stairType !== 'straight' ? ['Stopnie zabiegowe', `${config.windersPerTurn} na zakręcie`] : null,
+    config.stairType !== 'straight'
+      ? ['Stopnie zabiegowe', isHalfTurnU(config) ? `${halfTurnWinderCount(config)} w jednej klatce zabiegowej 180°` : `${config.windersPerTurn} na zakręcie`]
+      : null,
     ['Grubość stopnia / nosek', `${config.treadThickness} mm / ${config.nosing} mm`],
     ['Podstopnie', config.hasRiserBoards ? `tak (${config.riserBoardThickness} mm)` : 'nie (schody otwarte)'],
     config.stairConstruction === 'cantilever'

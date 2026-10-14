@@ -15,7 +15,7 @@
 // read the right field for the right purpose — which is exactly what buildRawWalks (reads
 // chain fields) and buildBearingsForWalk (reads frontEdge/backEdge fields) each do.
 
-import { cumulativeDistances, isCollinear, projectPointOntoLine, pointsEqual } from './pathUtils.js';
+import { cumulativeDistances, goesStraightThrough, projectPointOntoLine, pointsEqual } from './pathUtils.js';
 import { COLLINEAR_EPS } from './tolerances.js';
 import { isCornerPostRemoved, buildPostModels } from './postSolver.js';
 import { inwardNormal } from './planLayout.js';
@@ -70,7 +70,7 @@ function splitWalkIntoRuns(walk) {
   const cum = cumulativeDistances(pts);
   const cornerIdx = [0];
   for (let i = 1; i < pts.length - 1; i++) {
-    if (!isCollinear(pts[i - 1], pts[i], pts[i + 1])) cornerIdx.push(i);
+    if (!goesStraightThrough(pts[i - 1], pts[i], pts[i + 1])) cornerIdx.push(i);
   }
   cornerIdx.push(pts.length - 1);
 
@@ -173,9 +173,11 @@ function boardEndPosts(segment, posts) {
     sizeMm: p.size,
     elevation: { ...p.elevation },
   });
+  // (the central post of a 180° winder zone belongs to both of the dusza's corners — `anchors`)
+  const anchorsOf = (p) => p.anchors || [p.anchor];
   const withAnchor = posts.filter((p) => p.anchor);
-  const atStart = withAnchor.find((p) => near(p.anchor, start));
-  const atEnd = withAnchor.find((p) => near(p.anchor, end));
+  const atStart = withAnchor.find((p) => anchorsOf(p).some((a) => near(a, start)));
+  const atEnd = withAnchor.find((p) => anchorsOf(p).some((a) => near(a, end)));
   return { startPost: atStart ? describe(atStart, +1) : null, endPost: atEnd ? describe(atEnd, -1) : null };
 }
 

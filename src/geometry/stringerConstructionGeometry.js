@@ -253,6 +253,16 @@ function buildPitchKnots(effectiveByGroup, segmentLengths, closingId) {
     }
     offset += segmentLengths[i];
   }
+  // A group whose only bearings continue a tread that started on another board (a short piece of the inner line
+  // between two posts, e.g. the dusza of a 180° winder zone) has no tread front corner of its own: the first of them
+  // gives the knot, so the board still has a profile instead of none.
+  if (knots.length === 0) {
+    const i = effectiveByGroup.findIndex((group) => group.length > 0);
+    if (i >= 0) {
+      const b = effectiveByGroup[i][0];
+      knots.push({ u: offsets[i] + b.uStart, v: b.bearingElevation, id: anchorIdForTread(b.treadIndex) });
+    }
+  }
   const lastSegBearings = effectiveByGroup[effectiveByGroup.length - 1];
   const last = lastSegBearings[lastSegBearings.length - 1];
   const lastOffset = offsets[offsets.length - 1];

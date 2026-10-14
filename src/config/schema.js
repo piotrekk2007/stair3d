@@ -1,5 +1,5 @@
 import { resolveOpening, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
-import { arcWinderGeometry, fittingWalklineOffset } from '../geometry/winderArc.js';
+import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
 export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
@@ -30,6 +30,11 @@ export function createDefaultConfig() {
     treadGoing: 270, // mm, głębokość stopnia (na linii biegu) — stała dla odcinków prostych i celu w zabiegu
     treadsLegA: 5, // liczba stopni prostych przed zabiegiem (lub wszystkich, gdy stairType==='straight')
     windersPerTurn: 5, // liczba stopni zabiegowych w skręcie 90° (gdy dany zakręt jest typu 'winder')
+    // U bez stopni prostych w biegu B (treadsLegB = 0), oba zakręty zabiegowe: JEDNA klatka zabiegowa 180° wokół
+    // jednego słupa środkowego (geometry/winderArc.js halfTurnWinderGeometry; decyzja użytkownika 2026-10-14).
+    uSingleWinderZone: false,
+    uWindersTotal: 7, // łączna liczba stopni zabiegowych tej jednej klatki
+    uAxisGapMm: 0, // mm, rozstaw OSI wewnętrznych wang biegów A i C; 0 = wanga C dokładnie nad wangą A
     treadsLegB: 5, // liczba stopni prostych po zabiegu (dla U: odcinek środkowy między zakrętami)
     treadsLegC: 5, // liczba stopni prostych na trzecim odcinku (tylko dla stairType==='U')
 
@@ -309,6 +314,22 @@ function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffs
   return { type: 'winder', method: 'proportional', feasible: true, message: '', minInnerSegment, minInnerWidthOk: minInnerSegment >= minInnerWidth };
 }
 
+// The one 180° zone (winderArc.js): feasible when its half circle fits at the configured walkline offset.
+function checkHalfTurnFeasibility(config) {
+  const count = halfTurnWinderCount(config);
+  const params = { stairWidth: config.stairWidth, treadGoing: config.treadGoing, walklineOffset: config.walklineOffset, minInnerWidth: config.minInnerWidth, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) };
+  const fitted = fittingHalfTurnOffset(params, count);
+  const geo = fitted === null ? null : halfTurnWinderGeometry({ ...params, walklineOffset: fitted }, 0, count);
+  if (!geo) {
+    return { type: 'winder', method: 'walkline-half-arc', feasible: false, message: `Zabieg 180° niewykonalny: ${count} stopni × ${config.treadGoing} mm nie obejdzie duszy — zwiększ liczbę stopni zabiegowych lub głębokość stopnia.`, minInnerSegment: null, minInnerWidthOk: false };
+  }
+  const reduced = fitted < config.walklineOffset - 1e-6;
+  const message = reduced
+    ? `Zabieg 180° nie mieści się na linii biegu ${config.walklineOffset} mm od duszy: ${count} stopni × ${config.treadGoing} mm to mniej niż półokrąg (${Math.round(Math.PI * (config.walklineOffset + params.innerGap / 2))} mm). Zabieg rozłożono na linii biegu ${Math.round(fitted)} mm od duszy — zwiększ liczbę stopni zabiegowych lub głębokość stopnia.`
+    : '';
+  return { type: 'winder', method: 'walkline-half-arc', feasible: !reduced, message, minInnerSegment: geo.duszaWidth, minInnerWidthOk: geo.duszaWidth >= config.minInnerWidth, walklineOffsetMm: fitted };
+}
+
 export function deriveStairData(config) {
   const { stairType, totalRise, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, minRiser, maxRiser, turn1Type, turn2Type, stairWidth, mergeLandings } = config;
 
@@ -325,8 +346,11 @@ export function deriveStairData(config) {
   const turn1Contribution = numTurns >= 1 ? (turn1Type === 'landing' ? 1 : windersPerTurn) : 0;
   const turn2Contribution = numTurns >= 2 ? (turn2Type === 'landing' ? 1 : windersPerTurn) : 0;
 
-  const numTreads =
-    stairType === 'straight'
+  // one 180° winder zone instead of two turns (winderArc.js isHalfTurnU)
+  const halfTurn = isHalfTurnU(config);
+  const numTreads = halfTurn
+    ? treadsLegA + halfTurnWinderCount(config) + treadsLegC
+    : stairType === 'straight'
       ? treadsLegA
       : stairType === 'U'
       ? isBigLanding
@@ -342,8 +366,9 @@ export function deriveStairData(config) {
   const riserRangeOk = riserHeight >= minRiser && riserHeight <= maxRiser;
 
   const turnChecks = [];
-  if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
-  if (numTurns >= 2) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
+  if (halfTurn) turnChecks.push(checkHalfTurnFeasibility(config));
+  else if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
+  if (numTurns >= 2 && !halfTurn) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
 
   const turnFeasible = turnChecks.every((t) => t.feasible);
   const turnFeasibleMessage = turnChecks

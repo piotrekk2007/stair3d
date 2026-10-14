@@ -146,11 +146,11 @@ function sideAtCount(line, n) {
 }
 
 // Every combination of tread counts for the given flights (each minCount..FIT_MAX_TREADS_PER_LEG).
-function countCombos(letters, minCountFor) {
+function countCombos(letters, minCountFor, maxCountFor = () => FIT_MAX_TREADS_PER_LEG) {
   let combos = [{}];
   for (const s of letters) {
     const next = [];
-    for (const c of combos) for (let n = minCountFor(s); n <= FIT_MAX_TREADS_PER_LEG; n++) next.push({ ...c, [s]: n });
+    for (const c of combos) for (let n = minCountFor(s); n <= maxCountFor(s); n++) next.push({ ...c, [s]: n });
     combos = next;
   }
   return combos;
@@ -197,6 +197,9 @@ export function solveStairwellFit(config) {
   }
   const others = letters.filter((s) => s !== key && targets[s] !== null);
   const minCountFor = (s) => (s === 'A' && config.stairType === 'straight' ? 1 : 0);
+  // a U laid out as one 180° winder zone (winderArc.js isHalfTurnU) has no straight tread in B, and must keep none
+  const oneZone = !!config.uSingleWinderZone && config.stairType === 'U' && config.turn1Type === 'winder' && config.turn2Type === 'winder';
+  const maxCountFor = (s) => (oneZone && s === 'B' ? 0 : FIT_MAX_TREADS_PER_LEG);
 
   // The order of preference described in the header. `deviations` = |achieved − target| of every non-key side.
   const riserOff = (derived) => Math.max(0, config.minRiser - derived.riserHeight, derived.riserHeight - config.maxRiser);
@@ -208,8 +211,8 @@ export function solveStairwellFit(config) {
   };
   const manual = !!config.stairwellManualCounts;
   // manual counts: every flight keeps the user's count — one candidate, only the going is solved
-  const combos = manual ? [Object.fromEntries(others.map((s) => [s, config[COUNT_FIELD[s]]]))] : countCombos(others, minCountFor);
-  const keyCounts = manual ? [config[COUNT_FIELD[key]]] : Array.from({ length: FIT_MAX_TREADS_PER_LEG - minCountFor(key) + 1 }, (_, i) => minCountFor(key) + i);
+  const combos = manual ? [Object.fromEntries(others.map((s) => [s, config[COUNT_FIELD[s]]]))] : countCombos(others, minCountFor, maxCountFor);
+  const keyCounts = manual ? [config[COUNT_FIELD[key]]] : Array.from({ length: maxCountFor(key) - minCountFor(key) + 1 }, (_, i) => minCountFor(key) + i);
 
   let best = null;
   for (const nKey of keyCounts) {

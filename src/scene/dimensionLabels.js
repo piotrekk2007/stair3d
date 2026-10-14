@@ -223,10 +223,11 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
   const zBottom = (tread) => zGoing(tread) - stringerDepth;
 
   const turnIndexByTreadIndex = getTurnIndexByTreadIndex(planLayout.treads);
-  const cornerFor = (side, tread) => {
+  // the corners of a turn on one side (a 180° winder zone has two on each side)
+  const cornersFor = (side, tread) => {
     const turn = planLayout.turns[turnIndexByTreadIndex.get(tread.index)];
-    if (!turn) return null;
-    return side === 'outer' ? turn.outerCorner : turn.innerCorner;
+    if (!turn) return [];
+    return side === 'outer' ? turn.outerCorners || [turn.outerCorner] : turn.innerCorners || [turn.innerCorner];
   };
 
   const segments = getMeasurableSegments(planLayout.treads);
@@ -245,8 +246,7 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
     }
 
     for (const side of ['outer', 'inner']) {
-      const corner = first.type === 'winder' ? cornerFor(side, first) : null;
-      const pieces = buildPieces(segment, side, corner ? [corner] : [], zBottom, zGoing);
+      const pieces = buildPieces(segment, side, first.type === 'winder' ? cornersFor(side, first) : [], zBottom, zGoing);
       const sideLabel = side === 'outer' ? 'zewn.' : 'wewn.';
 
       pieces.forEach((piece, i) => {
@@ -270,8 +270,7 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
         const turnIdx = turnIndexByTreadIndex.get(t.index);
         if (seen.has(turnIdx)) continue;
         seen.add(turnIdx);
-        const corner = cornerFor(side, t);
-        if (corner) corners.push(corner);
+        corners.push(...cornersFor(side, t));
       }
 
       const pieces = buildPieces(run, side, corners, zBottom, zGoing);

@@ -58,6 +58,13 @@ export function isCollinear(a, b, c, eps = COLLINEAR_EPS) {
   return Math.abs(crossZ(a, b, c)) < eps;
 }
 
+// A path a -> b -> c goes STRAIGHT ON through b: collinear AND not turning back. A path that reverses at b (a 180°
+// winder zone whose two inner lines coincide — C's inner line runs back down A's) is collinear too, but b is a real
+// corner there. THE test for "is b a corner of a path".
+export function goesStraightThrough(a, b, c, eps = COLLINEAR_EPS) {
+  return isCollinear(a, b, c, eps) && (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) > 0;
+}
+
 // Rzutuje punkt p na NIESKOŃCZONĄ prostą przechodzącą przez lineStart->lineEnd. Zwraca:
 // - u: odległość rzutu od lineStart wzdłuż kierunku prostej (może być < 0 lub > długość
 //   odcinka — rzut nie jest przycinany, bo punkt po ręcznej edycji może leżeć poza oryginalnym

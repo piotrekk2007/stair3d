@@ -1,6 +1,6 @@
-import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, isCollinear, normalizeVector } from './pathUtils.js';
+import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, goesStraightThrough, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs } from './edgeOverrides.js';
-import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset } from './winderArc.js';
+import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
 // Metoda zabiegu: OD LINII BIEGU (winderArc.js) — linia biegu to prosta, ćwiartka łuku wokół narożnika duszy i
@@ -82,7 +82,7 @@ function removeCollinearPoints(points) {
     const a = result[result.length - 1];
     const b = points[i];
     const c = points[i + 1];
-    if (!isCollinear(a, b, c)) result.push(b);
+    if (!goesStraightThrough(a, b, c)) result.push(b);
   }
   result.push(points[points.length - 1]);
   return result;
@@ -658,6 +658,169 @@ function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn,
   };
 }
 
+// The point where segments a1-a2 and b1-b2 cross (strictly inside both), or null.
+function segmentCrossing(a1, a2, b1, b2) {
+  const d1 = { x: a2.x - a1.x, y: a2.y - a1.y };
+  const d2 = { x: b2.x - b1.x, y: b2.y - b1.y };
+  const den = d1.x * d2.y - d1.y * d2.x;
+  if (Math.abs(den) < 1e-12) return null;
+  const w = { x: b1.x - a1.x, y: b1.y - a1.y };
+  const t = (w.x * d2.y - w.y * d2.x) / den;
+  const u = (w.x * d1.y - w.y * d1.x) / den;
+  if (!(t > 1e-9 && t < 1 - 1e-9 && u > 1e-9 && u < 1 - 1e-9)) return null;
+  return { x: a1.x + d1.x * t, y: a1.y + d1.y * t };
+}
+
+function halfTurnPostSpots(params, geo) {
+  const t = params.stringerThickness || 0;
+  const y = geo.Yc + t / 2;
+  if (params.innerGap + t <= (params.postSize || 0) - t + 1e-6) return [{ at: { x: geo.centre.x, y }, anchors: [geo.c1, geo.c2] }];
+  return [
+    { at: { x: geo.c1.x - t / 2, y }, anchors: [geo.c1] },
+    { at: { x: geo.c2.x + t / 2, y }, anchors: [geo.c2] },
+  ];
+}
+
+// ONE 180° winder zone of a U stair with no middle flight (winderArc.js halfTurnWinderGeometry): straight treads of A,
+// the winders round the dusza, straight treads of C coming back. Same local frame and output shape as buildTurnLocal;
+// a single turn with BOTH inner corners (`innerCorners`) — one central post stands between them (postSolver.js).
+function buildHalfTurnLocal(params, treadsIn, windersCount, treadsOut) {
+  const off = fittingHalfTurnOffset(params, windersCount);
+  const geo = off === null ? null : halfTurnWinderGeometry({ ...params, walklineOffset: off }, treadsIn, windersCount);
+  if (!geo) return null;
+  const { stairWidth: W, treadGoing: g } = params;
+  const { s0, Yc, c1, c2, xInnerC, xOuterC, yZoneEndC } = geo;
+  const zoneEnd = treadsIn + windersCount;
+  const yEnd = yZoneEndC - treadsOut * g;
+  const Oc1 = { x: 0, y: Yc + W };
+  const Oc2 = { x: xOuterC, y: Yc + W };
+  const distinct = (pts) => pts.filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
+  const outerPath = [{ x: 0, y: 0 }, Oc1, Oc2, { x: xOuterC, y: yEnd }];
+  const innerPath = distinct([{ x: W, y: 0 }, c1, c2, { x: xInnerC, y: yEnd }]);
+  const outerTurnPath = [{ x: 0, y: s0 }, Oc1, Oc2, { x: xOuterC, y: yZoneEndC }];
+  const innerTurnPath = geo.innerPath;
+  const outerTurnCum = cumulativeDistances(outerTurnPath);
+  const innerTurnCum = cumulativeDistances(innerTurnPath);
+  const innerC1Along = innerTurnCum[1];
+  const innerC2Along = innerTurnPath.length > 3 ? innerTurnCum[2] : innerTurnCum[1];
+  const numTreads = treadsIn + windersCount + treadsOut;
+  const ENTRANCE = { x: 0, y: 1 };
+  const EXIT = { x: 0, y: -1 };
+  const ACROSS = { x: 1, y: 0 };
+  const INNER_ACROSS = { x: Math.sign(c2.x - c1.x) || 1, y: 0 };
+
+  const innerPts = [];
+  const outerPts = [];
+  const walkPts = [];
+  const innerAlong = [];
+  const outerAlong = [];
+  const innerDirAt = [];
+  const outerDirAt = [];
+  for (let k = 0; k <= numTreads; k++) {
+    if (k < treadsIn) {
+      innerPts.push({ x: W, y: k * g });
+      outerPts.push({ x: 0, y: k * g });
+      walkPts.push({ x: W - off, y: k * g });
+      innerDirAt.push(ENTRANCE);
+      outerDirAt.push(ENTRANCE);
+    } else if (k > zoneEnd) {
+      const y = yZoneEndC - (k - zoneEnd) * g;
+      innerPts.push({ x: xInnerC, y });
+      outerPts.push({ x: xOuterC, y });
+      walkPts.push({ x: xInnerC + off, y });
+      innerDirAt.push(EXIT);
+      outerDirAt.push(EXIT);
+    } else {
+      const b = geo.boundaries[k - treadsIn];
+      innerPts.push(b.inner);
+      outerPts.push(b.outer);
+      walkPts.push(b.walk);
+      const ia = b.innerAlong;
+      const oa = alongOnPath(outerTurnPath, outerTurnCum, b.outer);
+      innerAlong[k] = ia;
+      outerAlong[k] = oa;
+      const innerDir = ia <= innerC1Along + 1e-9 ? ENTRANCE : ia <= innerC2Along + 1e-9 ? INNER_ACROSS : EXIT;
+      const outerDir = oa <= outerTurnCum[1] + 1e-9 ? ENTRANCE : oa <= outerTurnCum[2] + 1e-9 ? ACROSS : EXIT;
+      innerDirAt.push(k === treadsIn ? ENTRANCE : k === zoneEnd ? EXIT : innerDir);
+      outerDirAt.push(k === treadsIn ? ENTRANCE : k === zoneEnd ? EXIT : outerDir);
+    }
+  }
+
+  const treads = [];
+  for (let i = 0; i < numTreads; i++) {
+    const k0 = i;
+    const k1 = i + 1;
+    const isWinder = k0 >= treadsIn && k0 < zoneEnd;
+    const innerChain = isWinder ? subPathPoints(innerTurnPath, innerTurnCum, innerAlong[k0], innerAlong[k1]) : [innerPts[k0], innerPts[k1]];
+    const outerChain = isWinder ? subPathPoints(outerTurnPath, outerTurnCum, outerAlong[k0], outerAlong[k1]) : [outerPts[k0], outerPts[k1]];
+    // Round a dusza whose two sides overlap (C's wanga over A's), the front and back edges of a tread next to the
+    // dusza's middle cross each other — inside the central post. Its outline then starts at that crossing (the post
+    // cuts the tread there anyway, jointSolver.js); the chains and edges stay as they are.
+    const tip = isWinder ? segmentCrossing(innerPts[k0], outerPts[k0], innerPts[k1], outerPts[k1]) : null;
+    const tread = {
+      index: i,
+      type: isWinder ? 'winder' : 'straight',
+      outline: tip ? [tip, ...[...outerChain].reverse()] : [...innerChain, ...[...outerChain].reverse()],
+      frontEdge: [innerPts[k0], outerPts[k0]],
+      backEdge: [innerPts[k1], outerPts[k1]],
+      innerChain,
+      outerChain,
+    };
+    if (isWinder) {
+      const m = i - treadsIn;
+      const inner0 = innerPts[k0];
+      const inner1 = innerPts[k1];
+      const outer0 = outerPts[k0];
+      const outer1 = outerPts[k1];
+      tread.winderInfo = {
+        frontEdge: { inner: inner0, outer: outer0, innerDirection: innerDirAt[k0], outerDirection: outerDirAt[k0] },
+        backEdge: { inner: inner1, outer: outer1, innerDirection: innerDirAt[k1], outerDirection: outerDirAt[k1] },
+        direction: normalizeVector(geo.tangentAt(s0 + (m + 0.5) * g)),
+        stationStart: m * g,
+        stationEnd: (m + 1) * g,
+        widths: {
+          atFront: Math.hypot(outer0.x - inner0.x, outer0.y - inner0.y),
+          atBack: Math.hypot(outer1.x - inner1.x, outer1.y - inner1.y),
+        },
+        walklinePosition: { index: m, count: windersCount, fractionStart: m / windersCount, fractionEnd: (m + 1) / windersCount },
+      };
+    }
+    treads.push(tread);
+  }
+
+  const walkPath = distinct([{ x: W - off, y: 0 }, ...geo.arcPoints, { x: xInnerC + off, y: yEnd }]);
+  return {
+    outerPath,
+    innerPath,
+    treads,
+    turnInfo: {
+      type: 'winder',
+      halfTurn: true,
+      innerCorner: c1,
+      innerCorners: [c1, c2],
+      outerCorner: Oc1,
+      outerCorners: [Oc1, Oc2],
+      // the middle of the dusza (the half circle's centre)
+      centre: { ...geo.centre },
+      // Where the structural post(s) of the zone stand (postSolver.js). ONE central post (user decision) on the
+      // wangi's axes — midway between A's and C's, half a board in from the dusza line — when it can hold both inner
+      // boards (axis gap <= post size − board thickness); otherwise a post at each dusza corner, on the crossing of
+      // A's (C's) axis with the dusza board's, the dusza board running between them.
+      postSpots: halfTurnPostSpots(params, geo),
+      innerTurnSegmentLength: geo.duszaWidth,
+      outerBendPoint: Oc1,
+      innerBendPoint: c1,
+      method: 'walkline-half-arc',
+      walklineOffsetMm: off,
+      innerGapMm: params.innerGap,
+      windersCount,
+    },
+    walkline: { path: walkPath, points: walkPts },
+    numTreadsUsed: numTreads,
+    exitOuterPoint: outerPath[outerPath.length - 1],
+  };
+}
+
 function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut, startIndex, pins) {
   if (turnType === 'landing') return buildLandingLocal(params, treadsIn, treadsOut, startIndex);
   return buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, pins);
@@ -676,6 +839,12 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
   // czego wstawiać między dwie połówki jednego podestu), więc jest ignorowany. Przy
   // mergeLandings=false zachowanie wraca do 2 osobnych półpodestów na kolejnych wysokościach.
   const isBigLanding = numTurns === 2 && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
+
+  // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
+  const half = numTurns === 2 && isHalfTurnU(config)
+    ? buildHalfTurnLocal({ ...params, stringerThickness: config.stringerThickness, postSize: config.postSize, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) }, treadsLegA, halfTurnWinderCount(config), treadsLegC)
+    : null;
+  if (half) return finishLayout(config, { outerFullPath: half.outerPath, innerFullPath: half.innerPath, treads: half.treads, turns: [half.turnInfo], walkPath: half.walkline.path, walkPoints: half.walkline.points });
 
   // a flight that starts (ends) with winders starts (ends) at the inner corner — see winderArc.js pins
   const call1 = buildTurnOrLanding(turn1Type, params, treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0, {
@@ -722,6 +891,11 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
     });
   }
 
+  return finishLayout(config, { outerFullPath, innerFullPath, treads, turns, walkPath, walkPoints });
+}
+
+// Mirrors a right-turn layout for a left turn and packs the result.
+function finishLayout({ turnDirection }, { outerFullPath, innerFullPath, treads, turns, walkPath, walkPoints }) {
   if (turnDirection === 'left') {
     outerFullPath = outerFullPath.map(mirrorX);
     innerFullPath = innerFullPath.map(mirrorX);
@@ -741,6 +915,10 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
       t.outerCorner = mirrorX(t.outerCorner);
       if (t.outerBendPoint) t.outerBendPoint = mirrorX(t.outerBendPoint);
       if (t.innerBendPoint) t.innerBendPoint = mirrorX(t.innerBendPoint);
+      if (t.innerCorners) t.innerCorners = t.innerCorners.map(mirrorX);
+      if (t.outerCorners) t.outerCorners = t.outerCorners.map(mirrorX);
+      if (t.centre) t.centre = mirrorX(t.centre);
+      if (t.postSpots) t.postSpots = t.postSpots.map((p) => ({ at: mirrorX(p.at), anchors: p.anchors.map(mirrorX) }));
     }
   }
 
