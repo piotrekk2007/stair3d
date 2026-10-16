@@ -1728,3 +1728,64 @@ code {
 #offer-panel .of-totals { margin-top: 4px; }
 #offer-panel .of-gross td { font-weight: 700; color: #5a3d24; border-top: 2px solid #8a5a34; }
 #offer-panel .of-company summary { cursor: pointer; margin-top: 12px; color: #5a3d24; }
+
+/* ============================ Warianty schodów w klatce (lewy) ============================ */
+#stairwell-variants {
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+#stairwell-variants .sv-title,
+#stairwell-variants .sv-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+#stairwell-variants button {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 4px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+#stairwell-variants .sv-note {
+  margin: 4px 0;
+  font-size: 11px;
+}
+#stairwell-variants .sv-card {
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--c-ok);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-top: 6px;
+}
+#stairwell-variants .sv-card.bad {
+  border-left-color: var(--c-err);
+  opacity: 0.85;
+}
+#stairwell-variants .sv-card.applied {
+  outline: 2px solid var(--c-accent, #1a5fb4);
+}
+#stairwell-variants .sv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 0;
+}
+#stairwell-variants .sv-row b.warn,
+#stairwell-variants .sv-problem {
+  color: var(--c-err);
+}
+#stairwell-variants .sv-problem {
+  font-size: 11px;
+  margin-top: 3px;
+  line-height: 1.35;
+}

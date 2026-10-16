@@ -23,4 +23,19 @@ export const stairwellFitAssumptions = defineRuleSet([
     notes:
       'A side is measured on the outer line (outer face of the outer wanga = the wall line) from the first tread\'s front edge WITHOUT its nosing, which projects config.nosing further. The going must be constant in a flight, so with several given sides only the key one can be exact in general; a non-key side is reported (WARNING) with its deviation. The winder count, stair width and every other parameter stay the user\'s.',
   },
+  {
+    ruleId: 'STAIR3D-WELL-01',
+    category: 'A',
+    description:
+      "Stairwell designer (room first, src/designer/stairwellVariants.js): a SHORT variant list decided by rules - the stair type and turn from the entry and exit; the user's width, narrowed only when the room or the exit edge needs it (10 mm steps; to the exact width a two-turn U needs for its wall-to-wall side), never below 800 mm (PL-LEGAL-A-05*); winders n-1, n, n+1 around n = round(walkline arc / going) + 1, at least 3 per 90 degree turn; one landing variant; a U as one 180 degree zone when its axis gap is 0..300 mm, else two turns. Sorted: fitting the room and exit, riser in range, distinct rules in error, ceiling collisions, |2h+s - 625|.",
+    condition: 'exit side exact (last back edge on the exit edge, 1 mm) ; sides along walls <= the wall ; width in [800, stairWidth] ; U one zone iff 0 <= axisGap <= 300',
+    configRefs: ['stairwellRoomEnabled', 'stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellExitSide', 'stairwellWallGapMm', 'stairWidth', 'walklineOffset', 'treadGoing'],
+    ruleType: 'SOFTWARE_DESIGN_CHOICE',
+    jurisdiction: 'COMPANY',
+    source: "Stair3D software choice (user decisions 2026-10-16: few variants, own width reduced only when needed, winders around a computed count plus one landing, U as one zone when it fits). 800 mm is PL-LEGAL-A-05*; 300 mm, the +1 and the minimum of 3 winders are this software's own choices.",
+    severity: 'INFO',
+    blocksGeneration: false,
+    status: 'ASSUMPTION',
+    notes: 'The variants are proposals only; applying one writes ordinary config fields, judged by the validator as always.',
+  },
 ]);

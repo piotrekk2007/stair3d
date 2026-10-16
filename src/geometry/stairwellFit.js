@@ -183,11 +183,21 @@ function fitDiag(severity, parameter, message, extra = {}) {
 
 /**
  * @param {Object} config  the user's config (targets in stairwellSide{A,B,C}Mm, key in stairwellKeySide)
+ * @param {{limits?: Object<string, {min?:number, max?:number}>}} [opts]  `limits`: a range a non-key side must stay in
+ *   (a wall it must not pass, an exit edge it must reach — the room-first designer, designer/stairwellVariants.js): a
+ *   variant outside it (± SIDE_MET_TOLERANCE_MM) is dropped; inside, the deviation from the target counts as usual
  * @returns {StairwellFit}
  */
-export function solveStairwellFit(config) {
+export function solveStairwellFit(config, opts = {}) {
   const off = { enabled: false, status: 'OFF', values: null, sides: [], blondel: null, riserHeight: null, message: '', diagnostics: [] };
   if (!config.stairwellFitEnabled) return off;
+  const limits = opts.limits || {};
+  // |achieved − target|, or null for a side outside its limits (the variant is dropped)
+  const deviationOf = (s, achieved, target) => {
+    const lim = limits[s];
+    if (lim && ((Number.isFinite(lim.max) && achieved > lim.max + SIDE_MET_TOLERANCE_MM) || (Number.isFinite(lim.min) && achieved < lim.min - SIDE_MET_TOLERANCE_MM))) return null;
+    return Math.abs(achieved - target);
+  };
   const letters = sideLetters(config.stairType);
   const targets = stairwellTargets(config);
   const key = letters.includes(config.stairwellKeySide) ? config.stairwellKeySide : letters[0];
@@ -234,7 +244,9 @@ export function solveStairwellFit(config) {
       for (const s of others) cand[COUNT_FIELD[s]] = combo[s];
       const derived = deriveStairData(cand);
       if (!derived.turnFeasible && !manual) continue;
-      const score = scoreOf(derived, others.map((s) => Math.abs(sideAtCount(lines[s], combo[s]) - targets[s])), going);
+      const devs = others.map((s) => deviationOf(s, sideAtCount(lines[s], combo[s]), targets[s]));
+      if (devs.some((d) => d === null)) continue;
+      const score = scoreOf(derived, devs, going);
       if (!bestHere || lexicographicallyLess(score, bestHere.score)) bestHere = { cand, score };
     }
     if (!bestHere) continue;
@@ -245,7 +257,9 @@ export function solveStairwellFit(config) {
     const cand = { ...bestHere.cand, treadGoing: finalGoing };
     const { derived, sides } = measure(cand);
     if (!derived.turnFeasible && !manual) continue;
-    const score = scoreOf(derived, others.map((s) => Math.abs(sides[letters.indexOf(s)] - targets[s])), finalGoing);
+    const devs = others.map((s) => deviationOf(s, sides[letters.indexOf(s)], targets[s]));
+    if (devs.some((d) => d === null)) continue;
+    const score = scoreOf(derived, devs, finalGoing);
     if (!best || lexicographicallyLess(score, best.score)) best = { cand, derived, sides, score };
   }
 

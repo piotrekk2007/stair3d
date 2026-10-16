@@ -60,18 +60,36 @@ function sideSegment(room, side) {
 }
 
 /**
- * The rigid transform between the plan frame and the room frame, or null without a room.
- * @returns {{room, entrySide:string, walk:{x,y}, right:{x,y}, origin:{x,y}, outerOnLeft:boolean,
- *   toRoom:(p)=>{x,y}, toPlan:(q)=>{x,y}, entryLine:[{x,y},{x,y}]} | null}
+ * The room seen from its entry: `walk` = into the room, `right` = the walker's right, the entry side from `leftEnd` to
+ * `rightEnd`; `toLocal(q)` = {a: across from the left end, b: depth into the room}; `across` / `depth` = the room's
+ * size that way. null without a room.
  */
-export function stairPlacement(config, planLayout) {
+export function entryFrame(config) {
   const room = stairwellRoom(config);
-  if (!room || !planLayout) return null;
+  if (!room) return null;
   const entrySide = ROOM_SIDES.includes(config.stairwellEntrySide) ? config.stairwellEntrySide : 'S';
   const walk = mul(OUT[entrySide], -1); // into the room
   const right = { x: walk.y, y: -walk.x };
   const [p, q] = sideSegment(room, entrySide);
   const [leftEnd, rightEnd] = dot(p, right) <= dot(q, right) ? [p, q] : [q, p];
+  const across = entrySide === 'S' || entrySide === 'N' ? room.width : room.length;
+  const depth = entrySide === 'S' || entrySide === 'N' ? room.length : room.width;
+  const toLocal = (pt) => {
+    const d = sub(pt, leftEnd);
+    return { a: dot(d, right), b: dot(d, walk) };
+  };
+  return { room, entrySide, walk, right, leftEnd, rightEnd, entryLine: [leftEnd, rightEnd], across, depth, toLocal };
+}
+
+/**
+ * The rigid transform between the plan frame and the room frame, or null without a room.
+ * @returns {{room, entrySide:string, walk:{x,y}, right:{x,y}, origin:{x,y}, outerOnLeft:boolean,
+ *   toRoom:(p)=>{x,y}, toPlan:(q)=>{x,y}, entryLine:[{x,y},{x,y}]} | null}
+ */
+export function stairPlacement(config, planLayout) {
+  const frame = entryFrame(config);
+  if (!frame || !planLayout) return null;
+  const { room, entrySide, walk, right, leftEnd, rightEnd } = frame;
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
   const inward = mul(walk, Number(config.stairwellEntryOffsetMm) || 0);
   const bounds = planLayout.bounds || { minX: 0, maxX: 0 };
@@ -112,8 +130,9 @@ export function openingExitEdge(outline, side) {
   return best && { a: best.a, b: best.b, normal: best.normal, index: best.index, length: best.length };
 }
 
-// What the entry and exit directions call for.
-function requiredStair(placement, exitEdge) {
+/** What the entry and exit directions call for ({stairType, turnDirection?, label}, null for an oblique exit); `placement`
+ * = stairPlacement or entryFrame (walk, right, entryLine). */
+export function requiredStair(placement, exitEdge, preferredTurn = 'right') {
   const n = exitEdge.normal;
   const along = dot(n, placement.walk);
   const across = dot(n, placement.right);
@@ -121,7 +140,11 @@ function requiredStair(placement, exitEdge) {
   if (along < -SAME_DIRECTION_COS) {
     const mid = mul(add(exitEdge.a, exitEdge.b), 0.5);
     const entryMid = mul(add(placement.entryLine[0], placement.entryLine[1]), 0.5);
-    const side = dot(sub(mid, entryMid), placement.right);
+    // the turn toward the side the exit edge lies on; an edge reaching across the entry's middle says nothing — the
+    // project's own turn direction is kept
+    const across = [exitEdge.a, exitEdge.b].map((p) => dot(sub(p, entryMid), placement.right));
+    const ambiguous = Math.min(...across) < 0 && Math.max(...across) > 0;
+    const side = ambiguous ? (preferredTurn === 'left' ? -1 : 1) : dot(sub(mid, entryMid), placement.right);
     return side >= 0 ? { stairType: 'U', turnDirection: 'right', label: 'schody U, skręt w prawo' } : { stairType: 'U', turnDirection: 'left', label: 'schody U, skręt w lewo' };
   }
   if (across > SAME_DIRECTION_COS) return { stairType: 'L', turnDirection: 'right', label: 'schody L, skręt w prawo' };
@@ -176,7 +199,7 @@ export function stairwellReport(config, planLayout, placement, openingRoomOutlin
   if (side && !exitEdge) {
     diagnostics.push(diag('STAIRWELL-EXIT-EDGE', 'WARNING', 'stairwellExitSide', `Otwór w stropie nie ma krawędzi od strony ${side} — wyjście ze schodów nie jest określone.`));
   } else if (exitEdge) {
-    required = requiredStair(placement, exitEdge);
+    required = requiredStair(placement, exitEdge, config.turnDirection);
     const last = planLayout.treads[planLayout.treads.length - 1];
     const back = last ? last.backEdge.map(placement.toRoom) : [];
     const front = last ? last.frontEdge.map(placement.toRoom) : [];

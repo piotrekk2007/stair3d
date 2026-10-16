@@ -124,8 +124,13 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   its plan frame; `stairPlacement` is one rigid transform placing it in the room (plan +Y = entry walking direction,
   outer wanga along the wall away from the turn). `stairwellReport` → `built.stairwell` (gate): WARNING
   `STAIRWELL-OUTSIDE`, `-EXIT-DIRECTION` (the stair the entry/exit call for), `-EXIT-OFFSET`, `-EXIT-EDGE`. Plan 2D
-  layer `stairwell` (walls, entry arrow, exit edge; drawn in the stair frame). Stage 2 (variant generator + list),
-  3 (opening derived from the stair), 4 (polygon room, walls) are not done; the old side-length fit stays meanwhile.
+  layer `stairwell` (walls, entry arrow, exit edge; drawn in the stair frame). **Variant list** (stage 2,
+  `designer/stairwellVariants.js`, "🔎 Szukaj wariantów schodów", `ui/stairwellVariantsPanel.js`): 3–6 variants by
+  rules (type from entry/exit; the user's width narrowed only when needed, ≥ 800; winders n−1..n+1 around
+  round(arc/going)+1 + one landing; U as one zone when the axis gap is 0..300), each solved once (straight/L:
+  `solveStairwellFit` with `opts.limits`; U: `solveUExit`, exit-driven), measured on a real layout, sorted; "Zastosuj"
+  writes the patch (`stairwellFitEnabled: false`). Stage 3 (opening derived from the stair), 4 (polygon room, walls)
+  are not done; the old side-length fit stays meanwhile.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
   in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
   with a stairwell room; `resolveOpening(config, frame)` → plan `outline` + `relativeOutline`; `deriveCeilingFit` →

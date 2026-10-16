@@ -57,3 +57,36 @@ All WARNING: stage 1 only measures; the automatic layout (stage 2) is what makes
 "wejście (side)") and the exit edge (thick green, "wyjście — piętro (side)"). Layer `stairwell` ("Klatka (ściany,
 wejście, wyjście)"). "Dopasuj widok" includes the room. The plan is still drawn in the STAIR frame (the stair walks
 up the screen), so with an entry other than S the room appears rotated — drawing the plan in the room frame is open.
+
+## Stage 2 — the variant list (`src/designer/stairwellVariants.js`, rule `STAIR3D-WELL-01`)
+
+"🔎 Szukaj wariantów schodów" (folder "Klatka schodowa") lists a FEW stairs fitting the room — few by rules, not
+by a sweep (user decision 2026-10-16), the whole list in ~0.1–0.6 s, no background worker:
+
+- type + turn from the entry and exit (`requiredStair`; an exit edge reaching across the entry's middle keeps the
+  project's own U turn direction);
+- the user's `stairWidth`, narrowed only when the room / exit edge needs it (10 mm steps; a two-turn U to the exact
+  width its wall-to-wall side B needs), never below `VARIANT_MIN_WIDTH_MM` = 800 (PL-LEGAL-A-05*);
+- winders n − 1, n, n + 1 (window slid into the range; ≥ 3 per 90° turn), n = round(walkline arc / going) + 1
+  (quarter arc of `walklineOffset` per turn, half circle for one zone), plus ONE landing variant;
+- U: one 180° zone when its axis gap would be 0..`U_ZONE_MAX_AXIS_GAP_MM` (300), else two turns.
+
+Solving each candidate once:
+- straight / L: one `solveStairwellFit` — the exit side the key (exact), side A within `limits` (never past the far
+  wall / the exit edge's far end, long enough for flight B's back edge to lie on the exit edge). `solveStairwellFit`
+  takes `opts.limits = {side: {min?, max?}}`: a variant outside is dropped.
+- U (`solveUExit`): its exit lies at offset + A − C, so for each straight-count difference nA − nC (±8) and middle
+  count the going is solved for the exit (sampled 150..320 + halving), then equal straights are added to A and C
+  while A stays inside — every one checked on the real layout (adding a tread to a flight that starts with winders
+  is not linear). One zone: the axis gap from side B (exact). Two turns: the middle count + a narrower stair make B
+  exact (re-solved at that width, up to 4 rounds).
+
+Each variant is measured on a real layout: `stairwellReport` (must be clean = `ok`), ceiling fit, `validateStaircase`
+(errors / distinct error rules / warnings), riser, going, 2h+s, the winders' going 400 mm from the dusza. Sorted: ok,
+riser in range, distinct rules in error, ceiling collisions, |2h+s − 625|. The list (`ui/stairwellVariantsPanel.js`,
+left panel) is view state; "Zastosuj" writes `patch` (type, turn, turn types, winder counts, width, going, counts,
+axis gap, `stairwellFitEnabled: false`) into config + one undo step; the list is marked out of date when an input it
+was computed from changes. Hand edge edits stay if the tread layout key is unchanged, else they go stale as always.
+
+Open: the opening derived from the stair (stage 3); a polygon room, solid/open walls, walls in 3D (stage 4); the plan
+drawn in the room frame.

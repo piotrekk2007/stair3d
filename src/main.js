@@ -40,6 +40,8 @@ import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d
 import { boundaryEditPoints } from './plan2d/edgeEdit.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
 import { stairwellPlanDrawing } from './geometry/stairwell.js';
+import { generateStairwellVariants } from './designer/stairwellVariants.js';
+import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stairwellVariantsPanel.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
@@ -132,6 +134,7 @@ let currentPlanLayout = null;
 let currentDerived = null;
 let currentPlan2DSVG = '';
 let lastModels = null;
+let variantsPanel = null; // the stairwell variant list (set once the panels exist)
 let lastDiagnostics = []; // AKTYWNE (bez objętych wyjątkiem)
 let lastWaived = [];
 let lastStaleWaivers = [];
@@ -285,6 +288,7 @@ function rebuild() {
   if (!planViewport) fitPlanView();
 
   updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit, built.stairwellFit);
+  if (variantsPanel) showStairwellVariants();
   const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
   updateStructuralPanel(structuralPanel, built.structural);
@@ -949,6 +953,35 @@ const exporter = createExports({
 // Panele
 // ---------------------------------------------------------------------------------------------
 const infoPanel = createInfoPanel(ws.leftEl);
+// "Szukaj wariantów" (designer/stairwellVariants.js): a short list of stairs fitting the stairwell room; applying one
+// writes its patch into config. The list is view state (not undo, not the project file); it is marked out of date
+// when an input it was computed from changes.
+const STAIRWELL_VARIANT_INPUTS = ['stairwellRoomEnabled', 'stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellStraightWall', 'stairwellWallGapMm', 'stairwellExitSide', 'openingShape', 'openingPolygon', 'openingWidth', 'openingLength', 'openingOffsetX', 'openingOffsetY', 'totalRise', 'minRiser', 'maxRiser', 'walklineOffset', 'stringerThickness', 'ceilingThickness', 'minHeadroom'];
+const stairwellVariantsKey = () => JSON.stringify(STAIRWELL_VARIANT_INPUTS.map((k) => config[k]));
+const variantsState = { result: null, appliedId: null, key: null, ms: null, userWidth: null };
+function showStairwellVariants() {
+  renderStairwellVariants(variantsPanel, variantsState.result, { appliedId: variantsState.appliedId, userWidth: variantsState.userWidth, ms: variantsState.ms, stale: variantsState.result && variantsState.key !== stairwellVariantsKey() });
+}
+function searchStairwellVariants() {
+  const t0 = performance.now();
+  variantsState.userWidth = config.stairWidth;
+  variantsState.result = generateStairwellVariants(JSON.parse(JSON.stringify({ ...config, stairWidth: variantsState.userWidth })));
+  variantsState.ms = Math.round(performance.now() - t0);
+  variantsState.key = stairwellVariantsKey();
+  variantsState.appliedId = null;
+  showStairwellVariants();
+}
+function applyStairwellVariant(id) {
+  const v = variantsState.result?.variants.find((x) => x.id === id);
+  if (!v?.patch) return;
+  Object.assign(config, v.patch);
+  variantsState.appliedId = id;
+  rebuild();
+  uiRefresh?.();
+  commitHistory();
+  if (viewState.view === '2d') fitPlanView();
+}
+variantsPanel = createStairwellVariantsPanel(ws.leftEl, { onSearch: searchStairwellVariants, onApply: applyStairwellVariant });
 const inspectorPanel = createInspectorPanel(ws.tabBody('inspector'));
 inspectorPanel.addEventListener('change', (e) => {
   const key = e.target?.dataset?.postEdit;
@@ -1244,6 +1277,7 @@ const gui = createUI({
     return room ? { minX: 0, maxX: room.width, minY: 0, maxY: room.length } : lastModels?.planLayout?.bounds ?? null;
   },
   onStartOpeningDraw: () => startOpeningDraw(),
+  onFindStairwellVariants: () => searchStairwellVariants(),
   appearance,
   onAppearanceChange: () => {
     setAppearance(appearance);

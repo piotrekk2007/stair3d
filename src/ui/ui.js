@@ -70,6 +70,7 @@ export function createUI({
   onAppearanceChange,
   getPlanBounds,
   onStartOpeningDraw,
+  onFindStairwellVariants,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -125,6 +126,8 @@ export function createUI({
   live(well.add(config, 'stairwellStraightWall', { 'lewa ściana': 'left', 'prawa ściana': 'right' })).name('Proste: wzdłuż ściany');
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
   live(well.add(config, 'stairwellExitSide', { 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
+  // the variant list (designer/stairwellVariants.js) — shown above the parameters, "Zastosuj" per variant
+  if (onFindStairwellVariants) well.add({ find: onFindStairwellVariants }, 'find').name('🔎 Szukaj wariantów schodów');
   live(well.add(config, 'stairwellFitEnabled')).name('Dopasuj do klatki');
   live(well.add(config, 'stairwellSideAMm', 0, 12000, 1)).name('Bok A (wzdłuż biegu A) [mm]');
   live(well.add(config, 'stairwellSideBMm', 0, 12000, 1)).name('Bok B (L, U) [mm]');
