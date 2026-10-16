@@ -22,8 +22,8 @@
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { buildPlanLayout } from '../geometry/planLayout.js';
 import { solveStairwellFit, outerSideLengths, BLONDEL_TARGET_MM, FIT_GOING_RANGE_MM, FIT_MAX_TREADS_PER_LEG } from '../geometry/stairwellFit.js';
-import { entryFrame, openingExitEdge, requiredStair, stairPlacement, stairwellReport, ROOM_SIDES } from '../geometry/stairwell.js';
-import { resolveOpening, openingFrame } from '../geometry/ceilingOpening.js';
+import { entryFrame, openingExitEdge, requiredStair, stairPlacement, stairwellReport, stairwellExitOutline, ROOM_SIDES } from '../geometry/stairwell.js';
+import { resolveOpening } from '../geometry/ceilingOpening.js';
 import { treadGoingAtOffsetFromInner, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { validateStaircase } from '../validator/StaircaseValidator.js';
 
@@ -49,9 +49,10 @@ const lexLess = (a, b) => {
   return false;
 };
 
-// The opening's outline in the ROOM frame (its own coordinates — the frame does not matter for that).
-function openingRoomOutline(config) {
-  return resolveOpening(config, { toPlan: (p) => p, toRelative: (p) => p }).relativeOutline;
+// The outline the exit edge is taken from, ROOM frame: the given opening (its own coordinates — the frame does not
+// matter for that), or the room's exit wall line when the opening is derived from the stair.
+function exitOutline(config) {
+  return stairwellExitOutline(config, resolveOpening(config, { toPlan: (p) => p, toRelative: (p) => p }).relativeOutline);
 }
 
 function naturalWinders(config, halfTurn) {
@@ -125,7 +126,7 @@ export function planStairwellVariants(config) {
   const frame = entryFrame(config);
   if (!frame) return { ok: false, message: 'Włącz klatkę (pomieszczenie) i podaj jej wymiary.', required: null, rejected: [], candidates: [] };
   const side = ROOM_SIDES.includes(config.stairwellExitSide) ? config.stairwellExitSide : null;
-  const exit = side ? openingExitEdge(openingRoomOutline(config), side) : null;
+  const exit = side ? openingExitEdge(exitOutline(config), side) : null;
   if (!exit) return { ok: false, message: `Otwór w stropie nie ma krawędzi od strony ${side || '—'} — wskaż krawędź wyjścia.`, required: null, rejected: [], candidates: [] };
   const required = requiredStair(frame, exit, config.turnDirection);
   if (!required) return { ok: false, message: 'Krawędź wyjścia jest ukośna względem wejścia — żaden obsługiwany typ schodów nie kończy się prostopadle do niej.', required: null, rejected: [], candidates: [] };
@@ -314,8 +315,8 @@ export function evaluateStairwellVariant(config, cand) {
   const derived = deriveStairData(cfg);
   const full = { ...cfg, riserHeight: derived.riserHeight };
   const planLayout = buildPlanLayout(full);
-  const report = stairwellReport(full, planLayout, stairPlacement(full, planLayout), resolveOpening(full, openingFrame(full, planLayout)).relativeOutline);
   const ceiling = deriveCeilingFit(full, planLayout, derived.riserHeight);
+  const report = stairwellReport(full, planLayout, stairPlacement(full, planLayout), stairwellExitOutline(full, ceiling.openingRelativeOutline));
   const validation = validateStaircase(full);
   const winders = planLayout.treads.filter((t) => t.type === 'winder');
   const winderGoingAt400 = winders.length ? Math.min(...winders.map((t) => treadGoingAtOffsetFromInner(t, WINDER_WIDTH_MEASURE_OFFSET_MM, planLayout))) : null;
@@ -336,6 +337,8 @@ export function evaluateStairwellVariant(config, cand) {
     treadsLegC: patch.treadsLegC ?? null,
     uAxisGapMm: patch.uAxisGapMm ?? null,
     ceilingCollisions: ceiling.violatingTreads.length,
+    // the opening the variant needs (DERIVED mode): its size along the room's axes
+    openingSize: ceiling.openingMode === 'derived' ? openingSize(ceiling.openingRelativeOutline) : null,
     errors: validation.errors.length,
     // distinct rules broken (one rule failing on every winder is one problem, not five)
     errorRules: new Set(validation.errors.map((d) => d.ruleId)).size,
@@ -344,6 +347,12 @@ export function evaluateStairwellVariant(config, cand) {
     protrusionMm: report.protrusionMm,
   };
   return out;
+}
+
+function openingSize(outline) {
+  const xs = outline.map((p) => p.x);
+  const ys = outline.map((p) => p.y);
+  return { x: Math.max(...xs) - Math.min(...xs), y: Math.max(...ys) - Math.min(...ys), corners: outline.length };
 }
 
 const sortKey = (v) =>

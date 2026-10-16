@@ -279,7 +279,7 @@ export function openingXML(opening, editMode = false) {
   const color = invalid ? '#c0392b' : '#1a5fb4';
   const minX = Math.min(...pts.map((p) => p.x));
   const maxY = Math.max(...pts.map((p) => p.y));
-  const label = opening.shape === 'polygon' ? 'otwór w stropie (wielokąt)' : invalid ? 'otwór w stropie (prostokąt — wielokąt niepoprawny)' : 'otwór w stropie (prostokąt)';
+  const label = opening.shape === 'derived' ? 'otwór w stropie (wyznaczony ze schodów)' : opening.shape === 'polygon' ? 'otwór w stropie (wielokąt)' : invalid ? 'otwór w stropie (prostokąt — wielokąt niepoprawny)' : 'otwór w stropie (prostokąt)';
   let xml = `<polygon class="opening-body${editMode ? ' editable' : ''}" points="${polygonPoints(pts)}" fill="${color}" fill-opacity="${editMode ? 0.1 : 0.05}" stroke="${color}" stroke-width="1.5" stroke-dasharray="10 5" ${HAIR} pointer-events="${editMode ? 'all' : 'none'}"/>`;
   xml += `<text x="${fmt(minX + px(6))}" y="${fmt(-maxY + px(14))}" font-size="${px(11)}" fill="${color}" pointer-events="none">${label}</text>`;
   if (editMode) {

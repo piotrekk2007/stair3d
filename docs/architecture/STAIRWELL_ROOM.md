@@ -88,5 +88,21 @@ left panel) is view state; "Zastosuj" writes `patch` (type, turn, turn types, wi
 axis gap, `stairwellFitEnabled: false`) into config + one undo step; the list is marked out of date when an input it
 was computed from changes. Hand edge edits stay if the tread layout key is unchanged, else they go stale as always.
 
-Open: the opening derived from the stair (stage 3); a polygon room, solid/open walls, walls in 3D (stage 4); the plan
-drawn in the room frame.
+## Stage 3 — the opening derived from the stair (`ceilingOpening.js requiredOpeningRelative`)
+
+`config.openingMode` = `given` (the rectangle / polygon, checked against the stair — as before) | `derived` (folder
+"Strop i otwór", "Otwór: wyznaczany ze schodów"). Derived: the treads whose top comes within `minHeadroom` of the
+slab's underside (exactly the ones `deriveCeilingFit` checks) must lie in the opening, so it is the UNION of their
+bounding rectangles along the opening frame's axes (`rectUnion.js unionRectangles`; L → an L-shaped polygon, a
+winder's rectangle a little more than the winder), each rectangle rounded OUTWARD to 0.1 mm (the precision a stored
+polygon keeps); with a room an edge closer to a wall than wanga + wall gap (+1) goes to the wall (never pulled back
+inside). Several separate pieces → one rectangle round all; no tread needing it → the sliders' rectangle. Recomputed
+on every rebuild, shape `'derived'` (plan label "wyznaczony ze schodów", info row "Otwór wyznaczony … mm"); the ceiling
+fit passes by construction. "⇩ Zapisz wyznaczony otwór jako zadany" freezes it as a given polygon; any hand edit of
+the opening on the plan does the same.
+
+Exit with a derived opening: there is no edge to end on, so `stairwellExitOutline` gives the room with its
+`stairwellExitSide` wall moved `stairwellExitInsetMm` (default 0) into the room — used by `stairwellReport` and the
+variant designer. Variants show the opening they need ("potrzebny otwór").
+
+Open: a polygon room, solid/open walls, walls in 3D (stage 4); the plan drawn in the room frame.

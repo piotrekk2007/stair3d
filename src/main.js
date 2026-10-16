@@ -669,11 +669,13 @@ function toOpeningRelative(p) {
 // więc pierwsze przeciągnięcie prostokąta zamienia go w wielokąt o tych samych 4 narożnikach.
 function currentOpeningRelative() {
   if (!currentPlanLayout) return [];
-  const o = resolveOpening(config, openingFrame(config, currentPlanLayout));
-  return o.relativeOutline.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
+  // the opening as it is now — also a derived one (editing it turns it into a given polygon)
+  const rel = lastModels?.ceilingFit?.openingRelativeOutline || resolveOpening(config, openingFrame(config, currentPlanLayout)).relativeOutline;
+  return rel.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
 }
 function setOpeningPolygon(points, final) {
   config.openingShape = OPENING_SHAPES.POLYGON;
+  config.openingMode = 'given'; // a hand edit of the opening makes it a given one
   config.openingPolygon = final ? sanitizeOpeningPolygon(points) : points;
   rebuild();
   if (final) {
@@ -956,7 +958,7 @@ const infoPanel = createInfoPanel(ws.leftEl);
 // "Szukaj wariantów" (designer/stairwellVariants.js): a short list of stairs fitting the stairwell room; applying one
 // writes its patch into config. The list is view state (not undo, not the project file); it is marked out of date
 // when an input it was computed from changes.
-const STAIRWELL_VARIANT_INPUTS = ['stairwellRoomEnabled', 'stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellStraightWall', 'stairwellWallGapMm', 'stairwellExitSide', 'openingShape', 'openingPolygon', 'openingWidth', 'openingLength', 'openingOffsetX', 'openingOffsetY', 'totalRise', 'minRiser', 'maxRiser', 'walklineOffset', 'stringerThickness', 'ceilingThickness', 'minHeadroom'];
+const STAIRWELL_VARIANT_INPUTS = ['stairwellRoomEnabled', 'stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellStraightWall', 'stairwellWallGapMm', 'stairwellExitSide', 'stairwellExitInsetMm', 'openingMode', 'openingShape', 'openingPolygon', 'openingWidth', 'openingLength', 'openingOffsetX', 'openingOffsetY', 'totalRise', 'minRiser', 'maxRiser', 'walklineOffset', 'stringerThickness', 'ceilingThickness', 'minHeadroom'];
 const stairwellVariantsKey = () => JSON.stringify(STAIRWELL_VARIANT_INPUTS.map((k) => config[k]));
 const variantsState = { result: null, appliedId: null, key: null, ms: null, userWidth: null };
 function showStairwellVariants() {
@@ -1278,6 +1280,11 @@ const gui = createUI({
   },
   onStartOpeningDraw: () => startOpeningDraw(),
   onFindStairwellVariants: () => searchStairwellVariants(),
+  onFreezeDerivedOpening: () => {
+    const rel = lastModels?.ceilingFit?.openingMode === 'derived' ? lastModels.ceilingFit.openingRelativeOutline : null;
+    if (!rel) return;
+    setOpeningPolygon(rel.map((p) => ({ x: p.x, y: p.y })), true);
+  },
   appearance,
   onAppearanceChange: () => {
     setAppearance(appearance);

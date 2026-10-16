@@ -71,6 +71,7 @@ export function createUI({
   getPlanBounds,
   onStartOpeningDraw,
   onFindStairwellVariants,
+  onFreezeDerivedOpening,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -125,6 +126,7 @@ export function createUI({
   live(well.add(config, 'stairwellEntryOffsetMm', 0, 6000, 1)).name('Wejście: 1. stopień od boku [mm]');
   live(well.add(config, 'stairwellStraightWall', { 'lewa ściana': 'left', 'prawa ściana': 'right' })).name('Proste: wzdłuż ściany');
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
+  live(well.add(config, 'stairwellExitInsetMm', 0, 6000, 1)).name('Wyjście przy otworze wyznaczanym: od ściany [mm]');
   live(well.add(config, 'stairwellExitSide', { 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
   // the variant list (designer/stairwellVariants.js) — shown above the parameters, "Zastosuj" per variant
   if (onFindStairwellVariants) well.add({ find: onFindStairwellVariants }, 'find').name('🔎 Szukaj wariantów schodów');
@@ -369,9 +371,13 @@ export function createUI({
   live(structural.add(config, 'structuralHandrailMaxDeflectionMm', 5, 60, 1)).name('Poręcz/słupek: ugięcie ≤ [mm]');
   structural.close();
 
-  const ceiling = gui.addFolder('Strop i otwór (ręczny)');
+  const ceiling = gui.addFolder('Strop i otwór');
   lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
   lockable(ceiling.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
+  // Given (the shape below) or DERIVED from the stair — the opening the treads need for their headroom
+  // (geometry/ceilingOpening.js requiredOpeningRelative); "Zapisz…" freezes the derived one as a given polygon.
+  live(ceiling.add(config, 'openingMode', { 'zadany (prostokąt / wielokąt)': 'given', 'wyznaczany ze schodów': 'derived' })).name('Otwór');
+  if (onFreezeDerivedOpening) ceiling.add({ freeze: onFreezeDerivedOpening }, 'freeze').name('⇩ Zapisz wyznaczony otwór jako zadany');
   // Kształt: prostokąt z suwaków poniżej albo wielokąt narysowany na planie 2D (geometry/ceilingOpening.js).
   live(ceiling.add(config, 'openingShape', { 'prostokąt (suwaki)': OPENING_SHAPES.RECT, 'wielokąt (rysowany na planie 2D)': OPENING_SHAPES.POLYGON })).name('Kształt otworu');
   if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
@@ -562,6 +568,11 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, 
     rows.push(`<div class="note error">${derived.turnFeasibleMessage}</div>`);
   }
 
+  if (ceilingFit?.openingMode === 'derived') {
+    const xs = ceilingFit.openingRelativeOutline.map((p) => p.x);
+    const ys = ceilingFit.openingRelativeOutline.map((p) => p.y);
+    rows.push(`<div class="row resultant"><span>Otwór wyznaczony ${AUTO_BADGE}</span><b>${(Math.max(...xs) - Math.min(...xs)).toFixed(0)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} mm${ceilingFit.openingRelativeOutline.length > 4 ? ` (${ceilingFit.openingRelativeOutline.length} narożn.)` : ''}</b></div>`);
+  }
   if (ceilingFit) {
     const ceilingClass = ceilingFit.fits ? 'ok' : 'warn';
     rows.push(`<div class="row ${ceilingClass}"><span>Otwór w stropie / skrajnia</span><b>${ceilingFit.fits ? 'OK' : 'KOLIZJA'}</b></div>`);

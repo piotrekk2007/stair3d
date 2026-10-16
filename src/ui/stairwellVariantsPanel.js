@@ -20,6 +20,7 @@ function card(v, applied) {
     const reduced = width < v.userWidth - 0.05;
     body += `<div class="sv-row"><span>szerokość biegu</span><b class="${reduced ? 'warn' : ''}">${fmt1(width)} mm${reduced ? ' (zmniejszona)' : ''}</b></div>`;
     if (m.uAxisGapMm !== null) body += `<div class="sv-row"><span>odstęp osi wang A–C</span><b>${fmt0(m.uAxisGapMm)} mm</b></div>`;
+    if (m.openingSize) body += `<div class="sv-row"><span>potrzebny otwór</span><b>${fmt0(m.openingSize.x)} × ${fmt0(m.openingSize.y)} mm${m.openingSize.corners > 4 ? ` (${m.openingSize.corners} narożn.)` : ''}</b></div>`;
     body += `<div class="sv-row"><span>błędy / ostrzeżenia</span><b class="${m.errors ? 'warn' : ''}">${m.errors} / ${m.warnings}${m.ceilingCollisions ? ` (strop: ${m.ceilingCollisions})` : ''}</b></div>`;
   }
   const problems = v.problems.map((p) => `<div class="sv-problem">${escapeHtml(p)}</div>`).join('');

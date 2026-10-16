@@ -259,3 +259,25 @@ export function stairwellPlanDrawing(report, config) {
     exitSide: report.exitEdge ? config.stairwellExitSide : null,
   };
 }
+
+/**
+ * The outline the exit edge is taken from (ROOM frame, CCW): the ceiling opening — or, with the opening DERIVED from
+ * the stair (`openingMode: 'derived'`, there is no given edge to end on), the room itself with its
+ * `stairwellExitSide` wall moved `stairwellExitInsetMm` into the room.
+ */
+export function stairwellExitOutline(config, openingRoomOutline) {
+  const room = stairwellRoom(config);
+  if (config.openingMode !== 'derived' || !room) return openingRoomOutline;
+  const d = Math.max(0, Number(config.stairwellExitInsetMm) || 0);
+  let [x0, y0, x1, y1] = [0, 0, room.width, room.length];
+  if (config.stairwellExitSide === 'S') y0 += d;
+  else if (config.stairwellExitSide === 'N') y1 -= d;
+  else if (config.stairwellExitSide === 'W') x0 += d;
+  else if (config.stairwellExitSide === 'E') x1 -= d;
+  return [
+    { x: x0, y: y0 },
+    { x: x1, y: y0 },
+    { x: x1, y: y1 },
+    { x: x0, y: y1 },
+  ];
+}

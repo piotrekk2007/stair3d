@@ -1,4 +1,4 @@
-import { resolveOpening, openingFrame, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
+import { resolveOpening, openingFrame, requiredOpeningRelative, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
 import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
@@ -77,6 +77,9 @@ export function createDefaultConfig() {
     stairwellEntryOffsetMm: 0, // mm, the first tread's front edge (no nosing) this far inside the entry side
     stairwellStraightWall: 'left', // 'left' | 'right' — the wall a STRAIGHT stair runs along (seen walking up)
     stairwellExitSide: 'N', // 'S' | 'N' | 'W' | 'E' — the opening edge where the upper floor is (the last tread ends on it)
+    // mm — with the opening DERIVED from the stair (openingMode 'derived') there is no opening edge to end on: the exit
+    // is the room's `stairwellExitSide` wall line moved this far into the room
+    stairwellExitInsetMm: 0,
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza
@@ -283,6 +286,7 @@ export function createDefaultConfig() {
     // Kształt otworu: 'rect' = prostokąt z suwaków powyżej, 'polygon' = wielokąt narysowany na planie 2D
     // (openingPolygon, punkty w tym samym układzie co offsety — patrz geometry/ceilingOpening.js).
     openingShape: 'rect',
+    openingMode: 'given', // 'given' | 'derived' — geometry/ceilingOpening.js OPENING_MODES
     openingPolygon: [],
   };
 }
@@ -440,7 +444,10 @@ export function alignedOpeningOffsets(config, bounds, targetId) {
 export function deriveCeilingFit(config, planLayout, riserHeight) {
   const { totalRise, ceilingThickness, minHeadroom } = config;
   // Prostokąt albo narysowany wielokąt — jeden obrys (geometry/ceilingOpening.js). open* = jego obwiednia.
-  const opening = resolveOpening(config, openingFrame(config, planLayout));
+  // in DERIVED mode the opening is the one the stair needs (requiredOpeningRelative)
+  const frame = openingFrame(config, planLayout);
+  const derivedRelative = config.openingMode === 'derived' ? requiredOpeningRelative(config, planLayout, riserHeight, frame) : null;
+  const opening = resolveOpening(config, frame, derivedRelative);
   const { minX: openMinX, maxX: openMaxX, minY: openMinY, maxY: openMaxY } = opening;
 
   const soffitZ = totalRise - ceilingThickness;
@@ -462,6 +469,7 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
     openingOutline: opening.outline,
     openingInvalidReason: opening.invalidReason,
     openingRelativeOutline: opening.relativeOutline,
+    openingMode: opening.shape === 'derived' ? 'derived' : 'given',
     soffitZ,
     fits: violatingTreads.length === 0,
     violatingTreads,

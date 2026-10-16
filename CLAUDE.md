@@ -129,10 +129,13 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   rules (type from entry/exit; the user's width narrowed only when needed, ≥ 800; winders n−1..n+1 around
   round(arc/going)+1 + one landing; U as one zone when the axis gap is 0..300), each solved once (straight/L:
   `solveStairwellFit` with `opts.limits`; U: `solveUExit`, exit-driven), measured on a real layout, sorted; "Zastosuj"
-  writes the patch (`stairwellFitEnabled: false`). Stage 3 (opening derived from the stair), 4 (polygon room, walls)
-  are not done; the old side-length fit stays meanwhile.
+  writes the patch (`stairwellFitEnabled: false`). **Opening derived from the stair** (stage 3, `openingMode:
+  'derived'`): `ceilingOpening.js requiredOpeningRelative` = union of the bounding rectangles (opening frame, rounded
+  outward to 0.1, snapped to room walls) of the treads that need headroom; exit then = the room's exit wall moved in by
+  `stairwellExitInsetMm` (`stairwellExitOutline`); "⇩ Zapisz wyznaczony otwór jako zadany" / a hand edit freezes it.
+  Stage 4 (polygon room, walls) is not done; the old side-length fit stays meanwhile.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
-  in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
+  — or DERIVED from the stair (`openingMode`, above) — in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
   with a stairwell room; `resolveOpening(config, frame)` → plan `outline` + `relativeOutline`; `deriveCeilingFit` →
   collisions/headroom; "Dosuń otwór" alignment (to the room with a room).
 

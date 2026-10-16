@@ -15,8 +15,13 @@
 
 import { signedPolygonArea, segmentsProperlyIntersect } from './pathUtils.js';
 import { stairPlacement } from './stairwell.js';
+import { unionRectangles } from './rectUnion.js';
 
 export const OPENING_SHAPES = Object.freeze({ RECT: 'rect', POLYGON: 'polygon' });
+// How the opening is set (`config.openingMode`): GIVEN — the rectangle / polygon above, checked against the stair;
+// DERIVED — the opening the stair needs (`requiredOpeningRelative`), recomputed on every change (stage 3 of the
+// room-first designer, docs/architecture/STAIRWELL_ROOM.md).
+export const OPENING_MODES = Object.freeze({ GIVEN: 'given', DERIVED: 'derived' });
 
 // Dwa kolejne punkty bliżej niż to są jednym punktem (np. podwójne kliknięcie przy rysowaniu).
 export const OPENING_POINT_MERGE_MM = 1;
@@ -104,12 +109,17 @@ function boundsFrame(bounds) {
  *           minX:number, maxX:number, minY:number, maxY:number}}  `relativeOutline` = the outline in the opening's own
  *           frame, CCW (the room frame with a stairwell)
  */
-export function resolveOpening(config, frameOrBounds) {
+export function resolveOpening(config, frameOrBounds, derivedRelative = null) {
   const frame = typeof frameOrBounds?.toPlan === 'function' ? frameOrBounds : boundsFrame(frameOrBounds);
   let shape = OPENING_SHAPES.RECT;
   let relative = rectangleOpeningPolygon(config);
   let invalidReason = null;
-  if (config.openingShape === OPENING_SHAPES.POLYGON) {
+  // the derived opening (`derivedRelative`, from requiredOpeningRelative) wins in DERIVED mode; with no tread needing
+  // one it falls back to the rectangle from the sliders
+  if (config.openingMode === OPENING_MODES.DERIVED && derivedRelative?.length >= 3) {
+    shape = 'derived';
+    relative = derivedRelative;
+  } else if (config.openingShape === OPENING_SHAPES.POLYGON) {
     const poly = sanitizeOpeningPolygon(config.openingPolygon);
     const issue = openingPolygonIssue(poly);
     if (issue) invalidReason = issue;
@@ -123,6 +133,51 @@ export function resolveOpening(config, frameOrBounds) {
   const xs = outline.map((p) => p.x);
   const ys = outline.map((p) => p.y);
   return { shape, outline, relative, relativeOutline, invalidReason, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+/**
+ * The opening the stair NEEDS, in the opening's own frame (`frame` — the room with a stairwell): the treads whose top
+ * comes within `minHeadroom` of the slab's underside (the ones deriveCeilingFit checks) must lie in it, so it is the
+ * union of their bounding rectangles taken along the frame's axes (an opening is cut square to the walls; a winder's
+ * rectangle is a little more than the winder), an edge next to a room wall taken to the wall. Several separate pieces
+ * → one rectangle round all. null when no tread needs it.
+ * @returns {{x,y}[]|null}  CCW
+ */
+export function requiredOpeningRelative(config, planLayout, riserHeight, frame) {
+  const threshold = config.totalRise - config.ceilingThickness - config.minHeadroom;
+  const rects = [];
+  for (const tread of planLayout.treads) {
+    if ((tread.index + 1) * riserHeight <= threshold || !(tread.outline?.length >= 3)) continue;
+    const pts = tread.outline.map(frame.toRelative);
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    // rounded OUTWARD to 0.1 mm — the precision a stored polygon keeps (sanitizeOpeningPolygon), so the opening frozen
+    // as a given one still holds every tread
+    const down = (v) => Math.floor(v * 10 + 1e-6) / 10;
+    const up = (v) => Math.ceil(v * 10 - 1e-6) / 10;
+    rects.push({ uStart: down(Math.min(...xs)), uEnd: up(Math.max(...xs)), vBottom: down(Math.min(...ys)), vTop: up(Math.max(...ys)) });
+  }
+  if (rects.length === 0) return null;
+  // with a stairwell room an edge closer to a wall than the wanga along it (+ the wall gap) goes to the wall: the slab
+  // is not left as a strip over the wanga
+  const room = frame.placement?.room;
+  if (room) {
+    const snap = (Number(config.stringerThickness) || 0) + Math.max(0, Number(config.stairwellWallGapMm) || 0) + 1;
+    for (const r of rects) {
+      // (never pulled back: a tread a hair past the wall keeps its outward-rounded edge)
+      if (r.uStart <= snap) r.uStart = Math.min(r.uStart, 0);
+      if (room.width - r.uEnd <= snap) r.uEnd = Math.max(r.uEnd, room.width);
+      if (r.vBottom <= snap) r.vBottom = Math.min(r.vBottom, 0);
+      if (room.length - r.vTop <= snap) r.vTop = Math.max(r.vTop, room.length);
+    }
+  }
+  const loops = unionRectangles(rects);
+  if (loops.length === 1) return loops[0].map((p) => ({ x: p.u, y: p.v }));
+  const x0 = Math.min(...rects.map((r) => r.uStart));
+  const x1 = Math.max(...rects.map((r) => r.uEnd));
+  const y0 = Math.min(...rects.map((r) => r.vBottom));
+  const y1 = Math.max(...rects.map((r) => r.vTop));
+  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
 
 function onSegment(p, a, b) {
