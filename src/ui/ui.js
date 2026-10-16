@@ -411,6 +411,7 @@ export function createUI({
 
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));
+  view.add(viewState, 'showWalls').name('Pokaż ściany klatki').onChange((v) => onViewChange('showWalls', v));
   view.add(viewState, 'showDimensions').name('Pokaż wymiary').onChange((v) => onViewChange('showDimensions', v));
   view.add(viewState, 'showStringerLengths').name('Długości wang').onChange((v) => onViewChange('showStringerLengths', v));
   view.add(viewState, 'showWinderBlanks').name('Formatki zabiegowe').onChange((v) => onViewChange('showWinderBlanks', v));

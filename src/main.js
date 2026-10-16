@@ -57,6 +57,7 @@ const app = document.getElementById('app');
 const config = createDefaultConfig();
 const viewState = {
   showCeiling: true,
+  showWalls: true, // the stairwell room's walls (stairwell.js stairwellWalls), when there is a room
   showDimensions: true,
   showStringerLengths: false,
   showWinderBlanks: false,
@@ -125,6 +126,7 @@ const appearance = defaultAppearance();
 
 let currentRoot = null;
 let currentCeiling = null;
+let currentWalls = null;
 let currentDimLabels = null;
 let currentStringerLengthLabels = null;
 let currentWinderBlankLabels = null;
@@ -226,7 +228,7 @@ let uiRefresh = null;
 let fitWasEnabled = false;
 
 function rebuild() {
-  for (const group of [currentRoot, currentCeiling, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
+  for (const group of [currentRoot, currentCeiling, currentWalls, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
     if (!group) continue;
     scene.remove(group);
     disposeGroup(group);
@@ -235,7 +237,7 @@ function rebuild() {
   // Kolejność zgodna z architekturą: solver 2D (planLayout) -> wangi -> podstopnie -> słupy ->
   // 3D. buildStaircase.js jest jedynym miejscem, które składa modele w drzewo Three.js.
   const built = buildStaircase(config);
-  const { root, ceilingMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = built;
+  const { root, ceilingMesh, wallsMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = built;
   lastModels = built;
   // "Dopasuj do klatki": the stair was built from the fitted going/counts (buildStaircase applies the fit itself);
   // they are copied into config so the sliders, the project file and undo show what the stair really is — like an
@@ -252,6 +254,8 @@ function rebuild() {
   // cień słońca obejmuje dokładnie te schody (sceneSetup.js fitShadowToBox)
   sceneApi.fitShadowToBox(new THREE.Box3().setFromObject(root));
   currentCeiling = ceilingMesh;
+  currentWalls = wallsMesh;
+  if (wallsMesh) scene.add(wallsMesh);
 
   currentDimLabels = buildDimensionLabels(planLayout, config, derived);
   scene.add(currentDimLabels);
@@ -398,6 +402,7 @@ function disposeGroup(group) {
 function applyOverlayVisibility() {
   const technical = !viewState.clientMode;
   if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
+  if (currentWalls) currentWalls.visible = viewState.showWalls;
   if (currentDimLabels) currentDimLabels.visible = viewState.showDimensions && technical;
   if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical;
   if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical;
@@ -478,7 +483,7 @@ function offerImage3D() {
   const center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
   // a little more room than the on-screen "Dopasuj" — the whole stair with its posts must fit the picture
   const radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
-  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
+  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentWalls, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
   const was = hidden.map((o) => o.visible);
   hidden.forEach((o) => (o.visible = false));
   const groundWas = sceneApi.helpers.ground.visible;
@@ -751,7 +756,7 @@ function handleCommitChange() {
 function handleViewChange(key, value) {
   viewState[key] = value;
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
-  if (['showCeiling', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
+  if (['showCeiling', 'showWalls', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();
 }

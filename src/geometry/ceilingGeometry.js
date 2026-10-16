@@ -2,7 +2,9 @@ import * as THREE from 'three';
 
 const SLAB_MARGIN = 1500; // mm, wizualny margines płyty stropu wokół otworu
 
-export function buildCeiling(ceilingFit, config) {
+// `slabOutline` (plan frame): the slab's own outline — the stairwell room grown by its walls (stairwell.js
+// stairwellWalls); without it the slab is the opening's box plus SLAB_MARGIN.
+export function buildCeiling(ceilingFit, config, slabOutline = null) {
   const { ceilingThickness } = config;
   const { openMinX, openMaxX, openMinY, openMaxY, soffitZ, openingOutline } = ceilingFit;
 
@@ -12,10 +14,9 @@ export function buildCeiling(ceilingFit, config) {
   const slabMaxY = openMaxY + SLAB_MARGIN;
 
   const shape = new THREE.Shape();
-  shape.moveTo(slabMinX, slabMinY);
-  shape.lineTo(slabMaxX, slabMinY);
-  shape.lineTo(slabMaxX, slabMaxY);
-  shape.lineTo(slabMinX, slabMaxY);
+  const slab = slabOutline?.length >= 3 ? slabOutline : [{ x: slabMinX, y: slabMinY }, { x: slabMaxX, y: slabMinY }, { x: slabMaxX, y: slabMaxY }, { x: slabMinX, y: slabMaxY }];
+  shape.moveTo(slab[0].x, slab[0].y);
+  for (const p of slab.slice(1)) shape.lineTo(p.x, p.y);
   shape.closePath();
 
   // Otwór = obrys z deriveCeilingFit (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js).

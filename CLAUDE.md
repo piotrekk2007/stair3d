@@ -133,7 +133,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   'derived'`): `ceilingOpening.js requiredOpeningRelative` = union of the bounding rectangles (opening frame, rounded
   outward to 0.1, snapped to room walls) of the treads that need headroom; exit then = the room's exit wall moved in by
   `stairwellExitInsetMm` (`stairwellExitOutline`); "⇩ Zapisz wyznaczony otwór jako zadany" / a hand edit freezes it.
-  Stage 4 (polygon room, walls) is not done; the old side-length fit stays meanwhile.
+  **Walls in 3D** (`stairwellWalls` → `stairwellWallsRenderer.js`, `built.wallsMesh`, toggle "Pokaż ściany klatki";
+  the slab then covers the room). Not done: solid/open sides, a polygon room; the old side-length fit stays meanwhile.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
   — or DERIVED from the stair (`openingMode`, above) — in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
   with a stairwell room; `resolveOpening(config, frame)` → plan `outline` + `relativeOutline`; `deriveCeilingFit` →

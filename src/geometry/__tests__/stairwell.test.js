@@ -145,3 +145,22 @@ test('buildStaircase carries the stairwell; its findings reach the validation ga
   assert.deepEqual(drawing.room[0], { x: 0, y: 0 });
   assert.equal(drawing.entrySide, 'S');
 });
+
+test('3D walls: every side but the open entry, corners closed, up to the slab; the slab covers the room and its walls', async () => {
+  const { stairwellWalls, STAIRWELL_WALL_DRAWN_THICKNESS_MM: T } = await import('../stairwell.js');
+  const { buildStairwellWalls } = await import('../stairwellWallsRenderer.js');
+  const c = cfg({ stairType: 'L', ...room({ stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 2500 }), totalRise: 2800, ceilingThickness: 250 });
+  const built = buildStaircase(c);
+  const walls = stairwellWalls(built.stairwell, built.fullConfig);
+  assert.deepEqual(walls.pieces.map((p) => p.side).sort(), ['E', 'N', 'W']);
+  const n = walls.pieces.find((p) => p.side === 'N');
+  assert.ok(near(Math.hypot(n.b.x - n.a.x, n.b.y - n.a.y), 3000 + 2 * T), 'N closes both corners');
+  const w = walls.pieces.find((p) => p.side === 'W');
+  assert.ok(near(Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y), 2500 + T), 'W stops at the open entry side');
+  assert.equal(n.height, 2550);
+  assert.equal(walls.slab.length, 4);
+  const mesh = buildStairwellWalls(walls);
+  assert.equal(mesh.children.length, 3);
+  assert.ok(built.wallsMesh && built.wallsMesh.name === 'StairwellWalls');
+  assert.equal(buildStaircase(cfg({ stairType: 'L' })).wallsMesh, null);
+});

@@ -281,3 +281,45 @@ export function stairwellExitOutline(config, openingRoomOutline) {
     { x: x0, y: y1 },
   ];
 }
+
+// Drawn thickness of the stairwell's walls in 3D — presentation only (the walls are not part of the stair, not
+// exported, not measured); the real walls are the user's building.
+export const STAIRWELL_WALL_DRAWN_THICKNESS_MM = 120;
+
+/**
+ * The stairwell's walls and slab for the 3D view, in the PLAN frame: one piece per room side except the open entry
+ * side — its inner face from `a` to `b` (extended past a corner shared with another wall so the corners close),
+ * `outward` = away from the room — up to the slab's underside; `slab` = the room grown by the wall thickness.
+ * null without a room.
+ */
+export function stairwellWalls(report, config) {
+  const placement = report?.placement;
+  if (!placement) return null;
+  const { room, entrySide } = placement;
+  const T = STAIRWELL_WALL_DRAWN_THICKNESS_MM;
+  const height = Math.max(0, (Number(config.totalRise) || 0) - (Number(config.ceilingThickness) || 0));
+  const order = ['S', 'E', 'N', 'W']; // the room outline's sides in CCW order
+  const pieces = [];
+  for (let i = 0; i < 4; i++) {
+    const side = order[i];
+    if (side === entrySide) continue;
+    let [a, b] = sideSegment(room, side);
+    const dir = normalize(sub(b, a));
+    if (order[(i + 3) % 4] !== entrySide) a = sub(a, mul(dir, T));
+    if (order[(i + 1) % 4] !== entrySide) b = add(b, mul(dir, T));
+    const out = OUT[side];
+    pieces.push({ side, a: placement.toPlan(a), b: placement.toPlan(b), outward: sub(placement.toPlan(add(a, out)), placement.toPlan(a)), thickness: T, height });
+  }
+  const grow = [
+    { x: -T, y: -T },
+    { x: room.width + T, y: -T },
+    { x: room.width + T, y: room.length + T },
+    { x: -T, y: room.length + T },
+  ];
+  return { pieces, slab: grow.map(placement.toPlan) };
+}
+
+function normalize(v) {
+  const l = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / l, y: v.y / l };
+}

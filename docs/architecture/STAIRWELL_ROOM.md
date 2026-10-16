@@ -105,4 +105,15 @@ Exit with a derived opening: there is no edge to end on, so `stairwellExitOutlin
 `stairwellExitSide` wall moved `stairwellExitInsetMm` (default 0) into the room — used by `stairwellReport` and the
 variant designer. Variants show the opening they need ("potrzebny otwór").
 
-Open: a polygon room, solid/open walls, walls in 3D (stage 4); the plan drawn in the room frame.
+## Stage 4 (part) — the walls in 3D
+
+`stairwell.js stairwellWalls(report, config)`: one piece per room side except the open entry side (inner face a→b
+in the plan frame, extended by the wall thickness past a corner shared with another wall, `outward`), height = the
+slab's underside (totalRise − ceilingThickness), drawn thickness `STAIRWELL_WALL_DRAWN_THICKNESS_MM` = 120
+(presentation only); `slab` = the room grown by that thickness — `ceilingGeometry.js buildCeiling(…, slabOutline)`
+then makes the slab cover the room instead of the opening's box + 1500 mm. `stairwellWallsRenderer.js` extrudes the
+pieces as translucent boxes (`built.wallsMesh`, group "StairwellWalls", outside the stair root: not exported, not
+selectable); toggle "Pokaż ściany klatki" (`viewState.showWalls`), hidden in the offer/standard-view pictures.
+
+Open (user decision 2026-10-16: walls in 3D first): solid/open sides, a polygon room (check / designer), the plan
+drawn in the room frame.
