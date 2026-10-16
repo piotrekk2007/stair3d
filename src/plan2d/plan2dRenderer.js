@@ -232,6 +232,42 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
   return `<g id="edge-edit-layer">${xml}</g>`;
 }
 
+// The stairwell room (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls as a thick
+// grey outline — the entry side drawn thin and dashed (it is open) with an arrow into the room — and the exit edge
+// of the opening (where the upper floor is) thick green. Drawing only (pointer-events none).
+export function stairwellXML(drawing) {
+  if (!drawing?.room || drawing.room.length < 3) return '';
+  const wall = '#6b6b6b';
+  const [ea, eb] = drawing.entry;
+  const room = drawing.room;
+  let xml = '';
+  for (let i = 0; i < room.length; i++) {
+    const a = room[i];
+    const b = room[(i + 1) % room.length];
+    const isEntry = (Math.hypot(a.x - ea.x, a.y - ea.y) < 1e-6 && Math.hypot(b.x - eb.x, b.y - eb.y) < 1e-6) || (Math.hypot(a.x - eb.x, a.y - eb.y) < 1e-6 && Math.hypot(b.x - ea.x, b.y - ea.y) < 1e-6);
+    xml += isEntry
+      ? `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${wall}" stroke-width="1.2" stroke-dasharray="8 6" ${HAIR}/>`
+      : `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${wall}" stroke-width="6" stroke-linecap="square" ${HAIR}/>`;
+  }
+  // entry: an arrow from outside the room through the middle of the entry side, along the walking direction
+  const mid = { x: (ea.x + eb.x) / 2, y: (ea.y + eb.y) / 2 };
+  const dx = eb.x - ea.x;
+  const dy = eb.y - ea.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const walk = { x: -dy / len, y: dx / len }; // left of left→right along the entry side = into the room
+  const tail = { x: mid.x - walk.x * px(40), y: mid.y - walk.y * px(40) };
+  const head = { x: mid.x + walk.x * px(6), y: mid.y + walk.y * px(6) };
+  xml += `<line x1="${fmt(tail.x)}" y1="${fmt(-tail.y)}" x2="${fmt(head.x)}" y2="${fmt(-head.y)}" stroke="${wall}" stroke-width="2" ${HAIR} marker-end="url(#stairwell-arrow)"/>`;
+  xml += `<text x="${fmt(tail.x)}" y="${fmt(-tail.y + px(14))}" font-size="${px(11)}" fill="${wall}" text-anchor="middle">wejście (${drawing.entrySide})</text>`;
+  if (drawing.exit) {
+    const [a, b] = drawing.exit;
+    xml += `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="#2e7d32" stroke-width="4" ${HAIR}/>`;
+    xml += `<text x="${fmt((a.x + b.x) / 2)}" y="${fmt(-(a.y + b.y) / 2 - px(8))}" font-size="${px(11)}" fill="#2e7d32" text-anchor="middle">wyjście — piętro (${drawing.exitSide})</text>`;
+  }
+  const marker = `<defs><marker id="stairwell-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${wall}"/></marker></defs>`;
+  return `<g id="stairwell-layer" pointer-events="none">${marker}${xml}</g>`;
+}
+
 // Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).
 // Poza trybem edycji to tylko rysunek (pointer-events none — nie zasłania kliknięć w stopnie). W trybie edycji:
 // kółka na wierzchołkach (.opening-vertex, przeciągnij; prawy klik usuwa), kropki w połowie boków (.opening-mid,
@@ -355,7 +391,7 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, openingEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -503,12 +539,14 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
+  const stairwellXMLStr = layers.stairwell === false ? '' : stairwellXML(stairwell);
   const editXML = editMode ? editHandlesXML(planLayout, liveEdits, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
     <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
     ${gridXMLStr}
+    ${stairwellXMLStr}
     ${treadsXML}
     ${winderBlanksXML}
     ${stringersXML}

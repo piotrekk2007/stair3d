@@ -115,6 +115,16 @@ export function createUI({
   // Dopasowanie do klatki (geometry/stairwellFit.js): the going and the straight-tread counts are derived from the
   // stairwell's sides, like the riser height from the floor height. 0 = no dimension for that side.
   const well = gui.addFolder('Klatka schodowa');
+  // The room the stair is placed in (geometry/stairwell.js): with it on, the ceiling opening is given in the room's
+  // frame and the plan shows the walls, the entry and the exit; findings in Walidacja (STAIRWELL-*).
+  live(well.add(config, 'stairwellRoomEnabled')).name('Klatka: pomieszczenie');
+  live(well.add(config, 'stairwellRoomWidthMm', 500, 12000, 1)).name('Klatka: szerokość (X) [mm]');
+  live(well.add(config, 'stairwellRoomLengthMm', 500, 12000, 1)).name('Klatka: długość (Y) [mm]');
+  live(well.add(config, 'stairwellEntrySide', { 'od dołu planu (S)': 'S', 'od góry planu (N)': 'N', 'od lewej (W)': 'W', 'od prawej (E)': 'E' })).name('Wejście: bok klatki');
+  live(well.add(config, 'stairwellEntryOffsetMm', 0, 6000, 1)).name('Wejście: 1. stopień od boku [mm]');
+  live(well.add(config, 'stairwellStraightWall', { 'lewa ściana': 'left', 'prawa ściana': 'right' })).name('Proste: wzdłuż ściany');
+  live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
+  live(well.add(config, 'stairwellExitSide', { 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
   live(well.add(config, 'stairwellFitEnabled')).name('Dopasuj do klatki');
   live(well.add(config, 'stairwellSideAMm', 0, 12000, 1)).name('Bok A (wzdłuż biegu A) [mm]');
   live(well.add(config, 'stairwellSideBMm', 0, 12000, 1)).name('Bok B (L, U) [mm]');
@@ -460,6 +470,7 @@ export function createUI({
     ['stringerSpacing', 'Rozstaw wang / min. głębokość'],
     ['railing', 'Balustrada (poręcz, tralki, krańce)'],
     ['ceilingOpening', 'Otwór w stropie'],
+    ['stairwell', 'Klatka (ściany, wejście, wyjście)'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));

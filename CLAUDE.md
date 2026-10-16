@@ -117,8 +117,19 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   zone: side B = 2 × width + axis gap − board thickness — given B, the fit derives `uAxisGapMm` (exact, AUTO).
   Key dimensions (rise, width, stairwell sides, axis gap, ceiling opening) take 1 mm steps in the panel. `rebuild()` copies the
   result back into config; driven fields show AUTO.
-- **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`
-  relative to `planLayout.bounds` min corner); `deriveCeilingFit` → collisions/headroom; "Dosuń otwór" alignment.
+- **Stairwell room** (`stairwell.js`, stage 1 of the room-first designer — user decisions 2026-10-16; docs
+  [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): `stairwellRoomEnabled`, a rectangle
+  `stairwellRoomWidthMm` × `stairwellRoomLengthMm` (room frame, sides S/N/W/E), entry side + offset (+ wall for a
+  straight stair), wall gap, exit = the opening edge where the upper floor is (`stairwellExitSide`). The stair keeps
+  its plan frame; `stairPlacement` is one rigid transform placing it in the room (plan +Y = entry walking direction,
+  outer wanga along the wall away from the turn). `stairwellReport` → `built.stairwell` (gate): WARNING
+  `STAIRWELL-OUTSIDE`, `-EXIT-DIRECTION` (the stair the entry/exit call for), `-EXIT-OFFSET`, `-EXIT-EDGE`. Plan 2D
+  layer `stairwell` (walls, entry arrow, exit edge; drawn in the stair frame). Stage 2 (variant generator + list),
+  3 (opening derived from the stair), 4 (polygon room, walls) are not done; the old side-length fit stays meanwhile.
+- **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
+  in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
+  with a stairwell room; `resolveOpening(config, frame)` → plan `outline` + `relativeOutline`; `deriveCeilingFit` →
+  collisions/headroom; "Dosuń otwór" alignment (to the room with a room).
 
 ## Treads, risers, posts
 

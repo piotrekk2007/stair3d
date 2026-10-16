@@ -23,6 +23,7 @@ import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { solveStairwellFit, applyStairwellFit } from './stairwellFit.js';
+import { stairPlacement, stairwellReport } from './stairwell.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
 
@@ -179,6 +180,8 @@ export function buildStaircase(inputConfig) {
 
   const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig);
+  // the stairwell room the stair is placed in (stairwell.js): placement + what does not match (outside, exit)
+  const stairwell = stairwellReport(config, planLayout, stairPlacement(config, planLayout), ceilingFit.openingRelativeOutline);
   // strop przyjmuje cień, ale go nie rzuca — inaczej słońce z góry zostawiłoby schody w cieniu płyty
   ceilingMesh.receiveShadow = true;
 
@@ -188,5 +191,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, planLayout, derived, ceilingFit, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

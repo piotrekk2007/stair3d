@@ -1,4 +1,4 @@
-import { resolveOpening, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
+import { resolveOpening, openingFrame, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
 import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
@@ -65,6 +65,18 @@ export function createDefaultConfig() {
     stairwellSideCMm: 0, // mm, bok wzdłuż biegu C (tylko U)
     stairwellKeySide: 'A', // 'A' | 'B' | 'C' — bok, który musi wyjść dokładnie
     stairwellManualCounts: false, // true = liczby stopni w biegach ustawia użytkownik, dopasowanie liczy tylko głębokość
+
+    // Stairwell ROOM (geometry/stairwell.js, stage 1 of the room-first designer): a rectangle the stair is placed in.
+    // Room frame: X across (width), Y along (length), (0,0) its lower-left corner on the plan; sides S/N/W/E. With
+    // the room on, the ceiling opening (offsets / polygon) is given in the ROOM frame, not relative to the stair.
+    stairwellRoomEnabled: false,
+    stairwellRoomWidthMm: 2000, // mm, X
+    stairwellRoomLengthMm: 3000, // mm, Y
+    stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
+    stairwellEntrySide: 'S', // 'S' | 'N' | 'W' | 'E' — the side one enters through (walking into the room)
+    stairwellEntryOffsetMm: 0, // mm, the first tread's front edge (no nosing) this far inside the entry side
+    stairwellStraightWall: 'left', // 'left' | 'right' — the wall a STRAIGHT stair runs along (seen walking up)
+    stairwellExitSide: 'N', // 'S' | 'N' | 'W' | 'E' — the opening edge where the upper floor is (the last tread ends on it)
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza
@@ -428,7 +440,7 @@ export function alignedOpeningOffsets(config, bounds, targetId) {
 export function deriveCeilingFit(config, planLayout, riserHeight) {
   const { totalRise, ceilingThickness, minHeadroom } = config;
   // Prostokąt albo narysowany wielokąt — jeden obrys (geometry/ceilingOpening.js). open* = jego obwiednia.
-  const opening = resolveOpening(config, planLayout.bounds);
+  const opening = resolveOpening(config, openingFrame(config, planLayout));
   const { minX: openMinX, maxX: openMaxX, minY: openMinY, maxY: openMaxY } = opening;
 
   const soffitZ = totalRise - ceilingThickness;
@@ -449,6 +461,7 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
     openingShape: opening.shape,
     openingOutline: opening.outline,
     openingInvalidReason: opening.invalidReason,
+    openingRelativeOutline: opening.relativeOutline,
     soffitZ,
     fits: violatingTreads.length === 0,
     violatingTreads,

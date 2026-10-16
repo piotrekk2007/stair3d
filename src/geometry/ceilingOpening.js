@@ -5,7 +5,8 @@
 //   - 'polygon' — dowolny wielokąt narysowany na planie 2D (`config.openingPolygon`).
 // Oba są w TYM SAMYM układzie: punkty względem lewego-dolnego rogu rzutu schodów
 // (planLayout.bounds.minX/minY) — dokładnie jak offsety prostokąta — więc otwór przesuwa się razem z
-// rzutem tak samo w obu trybach. `resolveOpening()` zamienia jedno albo drugie na JEDEN obrys w
+// rzutem tak samo w obu trybach. With a stairwell room (geometry/stairwell.js) that frame is the ROOM instead
+// (`openingFrame`): the opening stays where it is in the room and the stair is placed in it. `resolveOpening()` zamienia jedno albo drugie na JEDEN obrys w
 // układzie planu, z którego korzysta wszystko dalej (sprawdzenie skrajni, strop 3D, plan 2D, walidacja).
 //
 // Wielokąt niepoprawny (mniej niż 3 punkty, zerowe pole, samoprzecięcie) NIE jest po cichu
@@ -13,6 +14,7 @@
 // (walidator zgłasza go jako CEILING-OPENING-INVALID).
 
 import { signedPolygonArea, segmentsProperlyIntersect } from './pathUtils.js';
+import { stairPlacement } from './stairwell.js';
 
 export const OPENING_SHAPES = Object.freeze({ RECT: 'rect', POLYGON: 'polygon' });
 
@@ -78,12 +80,32 @@ export function rectangleOpeningPolygon(config) {
 const toCCW = (pts) => (signedPolygonArea(pts) < 0 ? [...pts].reverse() : pts);
 
 /**
- * Obrys otworu w układzie planu (mm), zawsze CCW.
- * @returns {{shape:'rect'|'polygon', outline:{x,y}[], relative:{x,y}[], invalidReason:string|null,
- *           minX:number, maxX:number, minY:number, maxY:number}}
+ * The frame the opening's points (rectangle offsets / polygon) are given in: relative to the stair plan's lower-left
+ * corner (planLayout.bounds min) — or, with a stairwell room (geometry/stairwell.js), the ROOM frame, the stair being
+ * placed in the room. `toPlan` / `toRelative` convert a point; `room` says which.
  */
-export function resolveOpening(config, bounds) {
+export function openingFrame(config, planLayout) {
+  const placement = stairPlacement(config, planLayout);
+  if (placement) return { room: true, placement, toPlan: placement.toPlan, toRelative: placement.toRoom };
+  const b = planLayout?.bounds;
+  return boundsFrame(b);
+}
+
+function boundsFrame(bounds) {
   const origin = { x: bounds?.minX ?? 0, y: bounds?.minY ?? 0 };
+  return { room: false, placement: null, toPlan: (p) => ({ x: origin.x + p.x, y: origin.y + p.y }), toRelative: (p) => ({ x: p.x - origin.x, y: p.y - origin.y }) };
+}
+
+/**
+ * Obrys otworu w układzie planu (mm), zawsze CCW.
+ * @param {Object} config
+ * @param {Object} frameOrBounds  openingFrame(...) or (older callers) planLayout.bounds
+ * @returns {{shape:'rect'|'polygon', outline:{x,y}[], relative:{x,y}[], relativeOutline:{x,y}[], invalidReason:string|null,
+ *           minX:number, maxX:number, minY:number, maxY:number}}  `relativeOutline` = the outline in the opening's own
+ *           frame, CCW (the room frame with a stairwell)
+ */
+export function resolveOpening(config, frameOrBounds) {
+  const frame = typeof frameOrBounds?.toPlan === 'function' ? frameOrBounds : boundsFrame(frameOrBounds);
   let shape = OPENING_SHAPES.RECT;
   let relative = rectangleOpeningPolygon(config);
   let invalidReason = null;
@@ -96,10 +118,11 @@ export function resolveOpening(config, bounds) {
       relative = poly;
     }
   }
-  const outline = toCCW(relative.map((p) => ({ x: origin.x + p.x, y: origin.y + p.y })));
+  const relativeOutline = toCCW(relative);
+  const outline = relativeOutline.map(frame.toPlan); // a rigid transform keeps the orientation
   const xs = outline.map((p) => p.x);
   const ys = outline.map((p) => p.y);
-  return { shape, outline, relative, invalidReason, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  return { shape, outline, relative, relativeOutline, invalidReason, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
 function onSegment(p, a, b) {

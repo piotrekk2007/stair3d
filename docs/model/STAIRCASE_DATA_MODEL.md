@@ -263,7 +263,9 @@ Korzeń modelu. Jeden na projekt.
   `walklineOffset`, `walklineSplitOffset`, `minInnerWidth`, `treadThickness`, `nosing`,
   `stringerHeight`, `stringerThickness`, `stringerConstructionType`, `timberGrade`,
   `hasRiserBoards`, `riserBoardThickness`, `postSize`, `hasCornerPost`, `minRiser`/`maxRiser`,
-  `minHeadroom`, `ceilingThickness`, `openingLength/Width/OffsetX/OffsetY`, `designProfileId`
+  `minHeadroom`, `ceilingThickness`, `openingLength/Width/OffsetX/OffsetY` (relative to the plan bounds, or to the
+  stairwell ROOM when `stairwellRoomEnabled` — `stairwellRoom*`/`stairwellEntry*`/`stairwellExitSide`, see
+  docs/architecture/STAIRWELL_ROOM.md), `designProfileId`
   — **to jest dzisiejszy `config` z `src/config/schema.js`, tu formalnie przypisany jako
   wejście obiektu `Staircase`**, nie osobna, równoległa struktura.
 - **Dane obliczane:** `numTreads`, `numRisers`, `riserHeight` (§2.6), `runs: Run[]` (w

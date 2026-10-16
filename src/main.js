@@ -34,11 +34,12 @@ import { createManualItemsEditor } from './ui/manualItemsEditor.js';
 import { createDefaultManualItems, sanitizeManualItems, applyManualItems } from './takeoff/manualItems.js';
 import { addWaiver, removeWaiver } from './diagnostics/waivers.js';
 import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
-import { resolveOpening, sanitizeOpeningPolygon, moveOpeningVertex, insertOpeningVertex, removeOpeningVertex, translateOpening, OPENING_SHAPES } from './geometry/ceilingOpening.js';
+import { resolveOpening, openingFrame, sanitizeOpeningPolygon, moveOpeningVertex, insertOpeningVertex, removeOpeningVertex, translateOpening, OPENING_SHAPES } from './geometry/ceilingOpening.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { boundaryEditPoints } from './plan2d/edgeEdit.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
+import { stairwellPlanDrawing } from './geometry/stairwell.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
@@ -83,6 +84,7 @@ const viewState = {
     winderWidth: false,
     stringerSpacing: false,
     ceilingOpening: true,
+    stairwell: true,
   },
 };
 const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: true };
@@ -596,7 +598,7 @@ function handleSelectTakeoffItem(item) {
 // ---------------------------------------------------------------------------------------------
 function fitPlanView() {
   if (!currentPlanLayout) return;
-  const bounds = planSvgBounds(currentPlanLayout, lastModels?.ceilingFit?.openingOutline || []);
+  const bounds = planSvgBounds(currentPlanLayout, [...(lastModels?.ceilingFit?.openingOutline || []), ...(stairwellPlanDrawing(lastModels?.stairwell, config)?.room || [])]);
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = fitToBounds(bounds, rect.width || 800, rect.height || 600, PLAN_VIEW_MARGIN_MM);
   regeneratePlan2D();
@@ -639,6 +641,7 @@ function regeneratePlan2D() {
     opening: lastModels?.ceilingFit
       ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }
       : null,
+    stairwell: stairwellPlanDrawing(lastModels?.stairwell, config),
     openingEdit: openingMode === 'edit',
   });
   if (plan2dPanel.classList.contains('visible')) {
@@ -653,21 +656,17 @@ function regeneratePlan2D() {
 // openingPolygon (punkty względem lewego-dolnego rogu rzutu, jak offsety prostokąta — geometry/ceilingOpening.js),
 // potem zwykły rebuild(); historia dopiero po puszczeniu przeciągnięcia / zamknięciu rysunku.
 // ---------------------------------------------------------------------------------------------
-function planOrigin() {
-  const b = currentPlanLayout?.bounds;
-  return { x: b?.minX ?? 0, y: b?.minY ?? 0 };
-}
+// (the opening's own frame: relative to the plan's lower-left corner, or the stairwell ROOM — ceilingOpening.js openingFrame)
 function toOpeningRelative(p) {
-  const o = planOrigin();
-  return { x: Math.round((p.x - o.x) * 10) / 10, y: Math.round((p.y - o.y) * 10) / 10 };
+  const q = openingFrame(config, currentPlanLayout).toRelative(p);
+  return { x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 };
 }
 // Otwór, jaki jest teraz (prostokąt albo wielokąt), jako wielokąt względny — z niego startuje każda edycja,
 // więc pierwsze przeciągnięcie prostokąta zamienia go w wielokąt o tych samych 4 narożnikach.
 function currentOpeningRelative() {
   if (!currentPlanLayout) return [];
-  const o = resolveOpening(config, currentPlanLayout.bounds);
-  const origin = planOrigin();
-  return o.outline.map((p) => ({ x: Math.round((p.x - origin.x) * 10) / 10, y: Math.round((p.y - origin.y) * 10) / 10 }));
+  const o = resolveOpening(config, openingFrame(config, currentPlanLayout));
+  return o.relativeOutline.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
 }
 function setOpeningPolygon(points, final) {
   config.openingShape = OPENING_SHAPES.POLYGON;
@@ -1213,7 +1212,11 @@ planApi = attachPlanInteractions({
   },
   onOpeningTranslate: (dx, dy, final) => {
     if (!openingBase) return;
-    setOpeningPolygon(translateOpening(openingBase, dx, dy), final);
+    // (a plan-frame move, turned into the opening's own frame — the room may be rotated against the plan)
+    const f = openingFrame(config, currentPlanLayout);
+    const o = f.toRelative({ x: 0, y: 0 });
+    const d = f.toRelative({ x: dx, y: dy });
+    setOpeningPolygon(translateOpening(openingBase, d.x - o.x, d.y - o.y), final);
     if (final) openingBase = null;
   },
   onOpeningDrawFinish: (points) => {
@@ -1235,7 +1238,11 @@ const gui = createUI({
   viewState,
   onViewChange: handleViewChange,
   onFitPlanView: fitPlanView,
-  getPlanBounds: () => lastModels?.planLayout?.bounds ?? null,
+  // the frame the opening is aligned in: the stairwell room when there is one, else the stair's plan
+  getPlanBounds: () => {
+    const room = lastModels?.stairwell?.placement?.room;
+    return room ? { minX: 0, maxX: room.width, minY: 0, maxY: room.length } : lastModels?.planLayout?.bounds ?? null;
+  },
   onStartOpeningDraw: () => startOpeningDraw(),
   appearance,
   onAppearanceChange: () => {
