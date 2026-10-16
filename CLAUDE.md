@@ -109,39 +109,35 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   then feed the recess), the automatic housing recess
   (`applyHousingRecess`: a tread ends t − d from a housed wanga's chain line, on a line parallel to it —
   `recessTreadToWangi`), `manualTreadOverhangs` (one tread's own side, `{side, offsetMm}`).
-- **Stairwell fit** (`stairwellFit.js`): no longer in the panel (replaced by the stairwell room — project v5 migrates a
-  project that used it to a room); still the per-variant going/count solver of the designer (`opts.limits`). It derives going + straight counts from side lengths of the
+- **Stairwell** (`stairwell.js` model v3 + `designer/stairwellVariants.js`, user decisions 2026-10-16; docs
+  [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): no drawn room — the side lengths A/B/C of the outer line
+  (`stairwellSide{A,B,C}Mm`, measured like `outerSideLengths`), each FIXED (exact) or FREE (follows from the counts,
+  no limit — the entry floats), each optionally along a WALL (`stairwellWall*`, `stairwellWallGapMm`).
+  `wellFrame` = the WALL frame (x from wall A, y from the end wall; a mirror of the plan for a right turn) — the
+  opening is given in it whenever the stairwell is on, so it stays put when a free side changes. `stairwellReport` →
+  `built.stairwell` (gate): WARNING `STAIRWELL-SIDE-FIXED` for a fixed side off > 1 mm. Plan 2D layer `stairwell`
+  (walls + each side's dimension, fixed 🔒 green/red, free "(swobodny)"); 3D walls (`stairwellWalls` →
+  `stairwellWallsRenderer.js`, `built.wallsMesh`, "Pokaż ściany klatki"; the slab covers the stair + walls).
+  **Variants** ("🔎 Szukaj wariantów schodów w klatce", folder 5, `ui/stairwellVariantsPanel.js`): the project's type;
+  winders n−1..n+1 round round(arc/going)+1 + one landing; U one zone when the axis gap is 0..300 (the width narrows to
+  (B + board)/2 for a smaller fixed B), else two turns (width solved for B) + one zone; width < 800 a warning, < 500
+  dropped. Each = ONE `solveStairwellFit` with the fixed sides as targets (key = the fixed exit side, else the first
+  fixed), free sides via `opts.freeSides` (counts chosen for the riser); a fixed side still off → the variant's
+  problem; sorted, "Zastosuj" writes the patch. **Opening derived** (`openingMode: 'derived'`):
+  `requiredOpeningRelative` = union of the headroom treads' bounding rectangles (frame axes, outward 0.1 mm, snapped
+  to `frame.wallLines`); "⇩ Zapisz wyznaczony otwór jako zadany" / a hand edit freezes it.
+- **Stairwell fit** (`stairwellFit.js`): not in the panel — the per-variant going/count solver of the designer
+  (`opts.limits`, `opts.freeSides`). It derives going + straight counts from side lengths of the
   outer line (key side exact; the given dimensions come first: other sides within one going, then riser in range,
   then deviation / 2h+s — a riser forced out of range is a WARNING, never a reason to outgrow the room;
   `STAIR3D-FIT-01`). Going 150–320, found by sampling + narrowing (a side is not one straight line of the going).
-  `stairwellManualCounts`: counts stay the user's and editable, only the going is fitted. A U laid out as one 180°
-  zone: side B = 2 × width + axis gap − board thickness — given B, the fit derives `uAxisGapMm` (exact, AUTO).
-  Key dimensions (rise, width, stairwell sides, axis gap, ceiling opening) take 1 mm steps in the panel. `rebuild()` copies the
-  result back into config; driven fields show AUTO.
-- **Stairwell room** (`stairwell.js`, stage 1 of the room-first designer — user decisions 2026-10-16; docs
-  [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): `stairwellRoomEnabled`, a rectangle
-  `stairwellRoomWidthMm` × `stairwellRoomLengthMm` (room frame, sides S/N/W/E), entry side + offset (+ wall for a
-  straight stair), wall gap, exit = the opening edge where the upper floor is — `stairwellExitSide: 'auto'` = the one
-  the project's TYPE calls for (`exitSideFor`), a compass side overrides; picked on the plan ("⌂ Wejście" / "⇧ Wyjście"
-  HUD modes); the opening edited in the room (edge drag, wall snap, distances to the walls). The stair keeps
-  its plan frame; `stairPlacement` is one rigid transform placing it in the room (plan +Y = entry walking direction,
-  outer wanga along the wall away from the turn). `stairwellReport` → `built.stairwell` (gate): WARNING
-  `STAIRWELL-OUTSIDE`, `-EXIT-DIRECTION` (the stair the entry/exit call for), `-EXIT-OFFSET`, `-EXIT-EDGE`. Plan 2D
-  layer `stairwell` (walls, entry arrow, exit edge; drawn in the stair frame). **Variant list** (stage 2,
-  `designer/stairwellVariants.js`, "🔎 Szukaj wariantów schodów", `ui/stairwellVariantsPanel.js`): 3–6 variants by
-  rules (the PROJECT's type and turn; the user's width narrowed only when needed, < 800 only a warning; winders n−1..n+1 around
-  round(arc/going)+1 + one landing; U as one zone when the axis gap is 0..300), each solved once (straight/L:
-  `solveStairwellFit` with `opts.limits`; U: `solveUExit`, exit-driven), measured on a real layout, sorted; "Zastosuj"
-  writes the patch (`stairwellFitEnabled: false`). **Opening derived from the stair** (stage 3, `openingMode:
-  'derived'`): `ceilingOpening.js requiredOpeningRelative` = union of the bounding rectangles (opening frame, rounded
-  outward to 0.1, snapped to room walls) of the treads that need headroom; exit then = the room's exit wall moved in by
-  `stairwellExitInsetMm` (`stairwellExitOutline`); "⇩ Zapisz wyznaczony otwór jako zadany" / a hand edit freezes it.
-  **Walls in 3D** (`stairwellWalls` → `stairwellWallsRenderer.js`, `built.wallsMesh`, toggle "Pokaż ściany klatki";
-  the slab then covers the room). Not done: solid/open sides, a polygon room; the old side-length fit stays meanwhile.
+  A U laid out as one 180° zone: side B = 2 × width + axis gap − board thickness — given B, the fit derives
+  `uAxisGapMm` (exact). Key dimensions (rise, width, stairwell sides, axis gap, ceiling opening) take 1 mm steps.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
-  — or DERIVED from the stair (`openingMode`, above) — in the frame of `openingFrame(config, planLayout)`: relative to `planLayout.bounds` min corner, or the ROOM frame
-  with a stairwell room; `resolveOpening(config, frame)` → plan `outline` + `relativeOutline`; `deriveCeilingFit` →
-  collisions/headroom; "Dosuń otwór" alignment (to the room with a room).
+  — or DERIVED from the stair (`openingMode`, above) — in the frame of `openingFrame(config, planLayout)`: relative to
+  `planLayout.bounds` min corner, or the WALL frame with the stairwell on; `resolveOpening(config, frame)` → plan
+  `outline` (CCW) + `relativeOutline`; edges dragged on the plan (`.opening-edge`, wall snap); `deriveCeilingFit` →
+  collisions/headroom; "Dosuń otwór" alignment.
 
 ## Treads, risers, posts
 
@@ -322,7 +318,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   housings, bearings, post faces, bolt holes, the board's own findings), posts (unfolded faces + pockets + holes),
   treads (outline, winder blank, riser groove, post cut), balustrade (pieces with cut angles, baluster cut list, glass
   panes). OBJ/DAE geometry export (`objExporter.js`, `daeExporter.js`). Missing geometry → `null`, never a fake file.
-- Project file (`project/projectIO.js`, `_version: 5`, migrations v1→v5; v5: the side-length fit → a stairwell room): `config` + top-level `edgeOverrides`,
+- Project file (`project/projectIO.js`, `_version: 6`, migrations v1→v6; v5: the side-length fit → a room, v6: a room → fixed/free sides): `config` + top-level `edgeOverrides`,
   `stringerProfileOverrides`, optional `postOverrides`, `projectName`, `notes`, `takeoffSettings`, `appearance`,
   `waivers`, `offer`. Runtime `config` still nests `manualEdgeOverrides`/`manualStringerProfileOverrides`/
   `manualPostOverrides`. New optional fields need no version bump; a changed shape does (RULES #15).

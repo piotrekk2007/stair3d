@@ -183,7 +183,9 @@ function fitDiag(severity, parameter, message, extra = {}) {
 
 /**
  * @param {Object} config  the user's config (targets in stairwellSide{A,B,C}Mm, key in stairwellKeySide)
- * @param {{limits?: Object<string, {min?:number, max?:number}>}} [opts]  `limits`: a range a non-key side must stay in
+ * @param {{limits?: Object<string, {min?:number, max?:number}>, freeSides?: string[]}} [opts]  `freeSides`: sides with no target
+ *   whose flights' counts are still CHOSEN (for the riser / 2h+s — a FREE side of the room-first designer, user
+ *   decision 2026-10-16); without it a side with no target keeps the config's count.  `limits`: a range a non-key side must stay in
  *   (a wall it must not pass, an exit edge it must reach — the room-first designer, designer/stairwellVariants.js): a
  *   variant outside it (± SIDE_MET_TOLERANCE_MM) is dropped; inside, the deviation from the target counts as usual
  * @returns {StairwellFit}
@@ -225,7 +227,9 @@ export function solveStairwellFit(config, opts = {}) {
   };
   const manual = !!config.stairwellManualCounts;
   // manual counts: every flight keeps the user's count — one candidate, only the going is solved
-  const combos = manual ? [Object.fromEntries(others.map((s) => [s, config[COUNT_FIELD[s]]]))] : countCombos(others, minCountFor, maxCountFor);
+  const free = (opts.freeSides || []).filter((s) => letters.includes(s) && s !== key && !others.includes(s));
+  const varied = [...others, ...free];
+  const combos = manual ? [Object.fromEntries(varied.map((s) => [s, config[COUNT_FIELD[s]]]))] : countCombos(varied, minCountFor, maxCountFor);
   const keyCounts = manual ? [config[COUNT_FIELD[key]]] : Array.from({ length: maxCountFor(key) - minCountFor(key) + 1 }, (_, i) => minCountFor(key) + i);
 
   let best = null;
@@ -241,7 +245,7 @@ export function solveStairwellFit(config, opts = {}) {
     let bestHere = null;
     for (const combo of combos) {
       const cand = { ...atGoing };
-      for (const s of others) cand[COUNT_FIELD[s]] = combo[s];
+      for (const s of varied) cand[COUNT_FIELD[s]] = combo[s];
       const derived = deriveStairData(cand);
       if (!derived.turnFeasible && !manual) continue;
       const devs = others.map((s) => deviationOf(s, sideAtCount(lines[s], combo[s]), targets[s]));

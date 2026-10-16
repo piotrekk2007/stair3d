@@ -25,8 +25,11 @@ import { sanitizePostOverrides } from '../geometry/postSolver.js';
 // Wersja 5: the side-length stairwell fit ("Dopasuj do klatki": stairwellSideA/B/CMm, stairwellKeySide,
 // stairwellManualCounts) is replaced by the stairwell ROOM (geometry/stairwell.js, user decision 2026-10-16) —
 // migrateV4ToV5 turns a project that used it into a room of those sides.
+// Wersja 6: the stairwell ROOM (a drawn rectangle with an entry and an exit) is replaced by FIXED / FREE side lengths
+// (geometry/stairwell.js model v3, user decision 2026-10-16) — migrateV5ToV6; the opening, given in the room, moves
+// to the wall frame (x from wall A, y from the end wall).
 const PROJECT_TYPE = 'schody3d-project';
-export const CURRENT_PROJECT_VERSION = 5;
+export const CURRENT_PROJECT_VERSION = 6;
 
 // Buduje payload bieżącej wersji z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
 // oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
@@ -145,11 +148,45 @@ function migrateV4ToV5(data) {
   return { ...data, _version: 5, config };
 }
 
+// v5 -> v6: a room (W × L, entered from S at an offset, the exit inset from a wall) becomes side lengths: the side the
+// stair ends on and a U's wall-to-wall B FIXED, side A FREE (a straight stair: A fixed) — the room's other walls are
+// the walls along the sides. The opening given in the room (origin the lower-left corner, y up) moves to the wall
+// frame: x from wall A (the left wall for a right turn, the right one for a left turn), y from the far wall down.
+// A room entered from another side than S keeps its opening numbers (rare; the user checks it).
+function migrateV5ToV6(data) {
+  const ROOM_FIELDS = ['stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellStraightWall', 'stairwellExitSide', 'stairwellExitInsetMm'];
+  const config = { ...(data.config || {}) };
+  const room = Object.fromEntries(ROOM_FIELDS.map((k) => [k, config[k]]));
+  for (const k of ROOM_FIELDS) delete config[k];
+  if (config.stairwellRoomEnabled && Number(room.stairwellRoomWidthMm) > 0 && Number(room.stairwellRoomLengthMm) > 0) {
+    const W = Number(room.stairwellRoomWidthMm);
+    const L = Number(room.stairwellRoomLengthMm);
+    const entry = Number(room.stairwellEntryOffsetMm) || 0;
+    const inset = Number(room.stairwellExitInsetMm) || 0;
+    const type = config.stairType;
+    if (type === 'U') Object.assign(config, { stairwellSideAMm: L - entry, stairwellSideAFixed: false, stairwellSideBMm: W, stairwellSideBFixed: true, stairwellSideCMm: L - inset, stairwellSideCFixed: true });
+    else if (type === 'L') Object.assign(config, { stairwellSideAMm: L - entry, stairwellSideAFixed: false, stairwellSideBMm: W - inset, stairwellSideBFixed: true });
+    else Object.assign(config, { stairwellSideAMm: L - entry - inset, stairwellSideAFixed: true });
+    if ((room.stairwellEntrySide || 'S') === 'S') {
+      const left = config.turnDirection === 'left' && type !== 'straight';
+      const mapX = (x) => (left ? W - x : x);
+      const mapY = (y) => L - y;
+      if (Array.isArray(config.openingPolygon)) config.openingPolygon = config.openingPolygon.map((p) => ({ x: mapX(p.x), y: mapY(p.y) }));
+      const w = Number(config.openingWidth) || 0;
+      const l = Number(config.openingLength) || 0;
+      if (Number.isFinite(config.openingOffsetX)) config.openingOffsetX = left ? W - (config.openingOffsetX + w) : config.openingOffsetX;
+      if (Number.isFinite(config.openingOffsetY)) config.openingOffsetY = L - (config.openingOffsetY + l);
+    }
+  }
+  return { ...data, _version: 6, config };
+}
+
 const MIGRATIONS = {
   1: migrateV1ToV2,
   2: migrateV2ToV3,
   3: migrateV3ToV4,
   4: migrateV4ToV5,
+  5: migrateV5ToV6,
 };
 
 // Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d albo nie da się

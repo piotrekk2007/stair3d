@@ -12,6 +12,7 @@ function card(v, applied) {
   let body = '';
   if (m) {
     const legs = [m.treadsLegA, m.treadsLegB, m.treadsLegC].filter((n) => n !== null && n !== undefined).join(' / ');
+    if (v.sides?.length) body += `<div class="sv-row"><span>boki</span><b>${v.sides.map((s) => `${s.side} ${fmt0(s.achieved)}${s.fixed ? (Math.abs(s.deviation) <= 1 ? ' 🔒' : ` ≠ ${s.target}`) : ''}`).join(' · ')}</b></div>`;
     body += `<div class="sv-row"><span>stopnie</span><b>${m.numTreads} (proste ${legs}${m.winders ? `, zabiegowe ${m.winders}` : ''})</b></div>`;
     body += `<div class="sv-row"><span>podstopień / stopień</span><b class="${m.riserOk ? '' : 'warn'}">${fmt1(m.riserHeight)} / ${fmt1(m.treadGoing)} mm</b></div>`;
     body += `<div class="sv-row"><span>2h+s</span><b class="${m.blondelOk ? '' : 'warn'}">${fmt0(m.blondel)} mm</b></div>`;

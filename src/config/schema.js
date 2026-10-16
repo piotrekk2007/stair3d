@@ -54,32 +54,27 @@ export function createDefaultConfig() {
     walklineSplitOffset: 400,
     minInnerWidth: 110, // mm, minimalna dopuszczalna szerokość stopnia przy duszy
 
-    // Dopasowanie do klatki (src/geometry/stairwellFit.js): gdy włączone, głębokość stopnia i liczby stopni
-    // prostych (treadsLegA/B/C) są WYLICZANE z długości boków klatki, tak jak wysokość podstopnia z totalRise.
-    // Bok = odcinek zewnętrznej linii schodów (lico wangi zewnętrznej, czyli ściana) od czoła pierwszego
-    // stopnia (bez noska) do narożnika / do tyłu ostatniego stopnia. 0 = bok bez wymiaru. Bok kluczowy
-    // wychodzi dokładnie, pozostałe najbliżej jak się da (głębokość stopnia jest jedna na całe schody).
-    stairwellFitEnabled: false,
-    stairwellSideAMm: 0, // mm, bok wzdłuż biegu A
-    stairwellSideBMm: 0, // mm, bok wzdłuż biegu B (L, U)
-    stairwellSideCMm: 0, // mm, bok wzdłuż biegu C (tylko U)
-    stairwellKeySide: 'A', // 'A' | 'B' | 'C' — bok, który musi wyjść dokładnie
-    stairwellManualCounts: false, // true = liczby stopni w biegach ustawia użytkownik, dopasowanie liczy tylko głębokość
-
-    // Stairwell ROOM (geometry/stairwell.js, stage 1 of the room-first designer): a rectangle the stair is placed in.
-    // Room frame: X across (width), Y along (length), (0,0) its lower-left corner on the plan; sides S/N/W/E. With
-    // the room on, the ceiling opening (offsets / polygon) is given in the ROOM frame, not relative to the stair.
-    stairwellRoomEnabled: false,
-    stairwellRoomWidthMm: 2000, // mm, X
-    stairwellRoomLengthMm: 3000, // mm, Y
+    // Stairwell (geometry/stairwell.js, model v3): the side lengths of the stair's outer line (the outer face of the
+    // outer wanga = the wall line) — A along flight A from the first front edge (no nosing) to the corner, B along
+    // flight B (U: wall to wall), C along flight C to the last back edge — each FIXED (must come out exactly) or FREE
+    // (follows from the tread counts); a side may run along a WALL. With it on, the ceiling opening is given from the
+    // walls (x from wall A, y from the end wall). The variant designer (designer/stairwellVariants.js) solves it.
+    stairwellRoomEnabled: false, // the stairwell dimensions are on
+    stairwellSideAMm: 0, // mm
+    stairwellSideBMm: 0, // mm (L, U)
+    stairwellSideCMm: 0, // mm (U)
+    stairwellSideAFixed: false,
+    stairwellSideBFixed: false,
+    stairwellSideCFixed: false,
+    stairwellWallA: true, // the side runs along a wall
+    stairwellWallB: true,
+    stairwellWallC: true,
     stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
-    stairwellEntrySide: 'S', // 'S' | 'N' | 'W' | 'E' — the side one enters through (walking into the room)
-    stairwellEntryOffsetMm: 0, // mm, the first tread's front edge (no nosing) this far inside the entry side
-    stairwellStraightWall: 'left', // 'left' | 'right' — the wall a STRAIGHT stair runs along (seen walking up)
-    stairwellExitSide: 'auto', // 'auto' (from the stair type — stairwell.js exitSideFor) | 'S' | 'N' | 'W' | 'E' — the opening edge where the upper floor is (the last tread ends on it)
-    // mm — with the opening DERIVED from the stair (openingMode 'derived') there is no opening edge to end on: the exit
-    // is the room's `stairwellExitSide` wall line moved this far into the room
-    stairwellExitInsetMm: 0,
+    // Internal to the per-variant solver (geometry/stairwellFit.js — no longer in the panel): when on, the going and
+    // the straight counts are derived from stairwellSide*Mm, the key side exact.
+    stairwellFitEnabled: false,
+    stairwellKeySide: 'A',
+    stairwellManualCounts: false,
 
     // Ręczne przesunięcia krawędzi między stopniami, ustawiane przeciąganiem na planie 2D —
     // patrz src/geometry/edgeOverrides.js. Klucz to "indeks granicy" (0..numTreads: 0 = pierwsza

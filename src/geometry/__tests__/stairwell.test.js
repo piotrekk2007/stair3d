@@ -4,193 +4,103 @@ import assert from 'node:assert/strict';
 import { createDefaultConfig, deriveStairData } from '../../config/schema.js';
 import { buildPlanLayout } from '../planLayout.js';
 import { buildStaircase } from '../buildStaircase.js';
-import { stairPlacement, stairwellReport, openingExitEdge, stairwellPlanDrawing } from '../stairwell.js';
+import { wellFrame, stairwellReport, stairwellWalls, stairwellPlanDrawing, wellSideLetters, exitSideLetter, STAIRWELL_WALL_DRAWN_THICKNESS_MM as T } from '../stairwell.js';
 import { resolveOpening, openingFrame } from '../ceilingOpening.js';
+import { buildStairwellWalls } from '../stairwellWallsRenderer.js';
 import { runTakeoffValidationGate } from '../../takeoff/index.js';
+import { renderPlan2DSVG } from '../../plan2d/plan2dRenderer.js';
 
 const cfg = (patch = {}) => ({ ...createDefaultConfig(), ...patch });
 const layout = (c) => buildPlanLayout({ ...c, riserHeight: deriveStairData(c).riserHeight });
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
-const ids = (report) => report.diagnostics.map((d) => d.ruleId);
-const room = (patch = {}) => ({ stairwellRoomEnabled: true, stairwellRoomWidthMm: 2000, stairwellRoomLengthMm: 4000, stairwellEntrySide: 'S', stairwellEntryOffsetMm: 0, stairwellWallGapMm: 0, ...patch });
-const report = (c) => {
-  const L = layout(c);
-  const placement = stairPlacement(c, L);
-  const opening = resolveOpening(c, openingFrame(c, L));
-  return stairwellReport(c, L, placement, opening.relativeOutline);
-};
+const well = (patch = {}) => ({ stairwellRoomEnabled: true, ...patch });
 
-test('no room: no placement, the opening stays relative to the stair plan (unchanged behaviour)', () => {
+test('sides per type and the side the stair ends on', () => {
+  assert.deepEqual(wellSideLetters('straight'), ['A']);
+  assert.deepEqual(wellSideLetters('L'), ['A', 'B']);
+  assert.deepEqual(wellSideLetters('U'), ['A', 'B', 'C']);
+  assert.equal(exitSideLetter('straight'), 'A');
+  assert.equal(exitSideLetter('L'), 'B');
+  assert.equal(exitSideLetter('U'), 'C');
+});
+
+test('no stairwell: no frame, no report; the opening stays relative to the stair plan', () => {
   const c = cfg({ stairType: 'L', openingOffsetX: 100, openingOffsetY: 200 });
   const L = layout(c);
-  assert.equal(stairPlacement(c, L), null);
-  const a = resolveOpening(c, L.bounds);
-  const b = resolveOpening(c, openingFrame(c, L));
-  assert.deepEqual(a.outline, b.outline);
-  assert.equal(stairwellReport(c, L, null, b.relativeOutline).enabled, false);
+  assert.equal(wellFrame(c, L), null);
+  assert.equal(stairwellReport(c, L).enabled, false);
+  assert.deepEqual(resolveOpening(c, openingFrame(c, L)).outline, resolveOpening(c, L.bounds).outline);
 });
 
-test('placement: plan +Y is the entry walking direction, the outer line along the wall, round trip exact', () => {
-  for (const [entry, walk] of [['S', { x: 0, y: 1 }], ['N', { x: 0, y: -1 }], ['W', { x: 1, y: 0 }], ['E', { x: -1, y: 0 }]]) {
-    const c = cfg({ stairType: 'straight', treadsLegA: 10, ...room({ stairwellEntrySide: entry, stairwellRoomWidthMm: 4000, stairwellWallGapMm: 10, stairwellEntryOffsetMm: 50 }) });
+test('wall frame: x from wall A, y from the end wall back toward the entry, for both turn directions', () => {
+  for (const turnDirection of ['right', 'left']) {
+    const c = cfg({ stairType: 'U', turnDirection, ...well() });
     const L = layout(c);
-    const p = stairPlacement(c, L);
-    assert.ok(near(p.walk.x, walk.x) && near(p.walk.y, walk.y), entry);
-    const a = p.toRoom({ x: 0, y: 0 });
-    const b = p.toRoom({ x: 0, y: 100 });
-    assert.ok(near(b.x - a.x, 100 * walk.x) && near(b.y - a.y, 100 * walk.y), `${entry}: +Y = walking`);
-    const q = p.toPlan(p.toRoom({ x: 123.4, y: 567.8 }));
-    assert.ok(near(q.x, 123.4) && near(q.y, 567.8));
-    // the outer line (plan x = 0) is 10 mm off the wall on the walker's left, the first front edge 50 mm inside
-    const left = { x: -walk.y, y: walk.x };
-    const wallDistance = { S: a.x, N: 4000 - a.x, W: 4000 - a.y, E: a.y }[entry];
-    assert.ok(near(wallDistance, 10), `${entry}: ${wallDistance}`);
-    const entryDistance = { S: a.y, N: 4000 - a.y, W: a.x, E: 4000 - a.x }[entry];
-    assert.ok(near(entryDistance, 50), `${entry}: entry ${entryDistance}`);
-    assert.ok(left);
+    const f = wellFrame(c, L);
+    const A = f.sides.A;
+    // the first front edge's outer end: on wall A (x 0), side A away from the end wall
+    const start = f.toRelative(L.outerFullPath[0]);
+    assert.ok(near(start.x, 0) && near(start.y, A.length), `${turnDirection}: ${JSON.stringify(start)}`);
+    // the inner line lies at positive x (inside the stair)
+    assert.ok(f.toRelative(L.innerFullPath[0]).x > 0, turnDirection);
+    const q = f.toPlan(f.toRelative({ x: 123, y: 456 }));
+    assert.ok(near(q.x, 123) && near(q.y, 456));
   }
 });
 
-test('a straight stair along the RIGHT wall has its inner wanga at that wall', () => {
-  const c = cfg({ stairType: 'straight', treadsLegA: 10, stairWidth: 900, ...room({ stairwellStraightWall: 'right' }) });
-  const p = stairPlacement(c, layout(c));
-  assert.ok(near(p.toRoom({ x: 900, y: 0 }).x, 2000));
-  assert.ok(near(p.toRoom({ x: 0, y: 0 }).x, 1100));
-});
-
-test('a left-turning L has its outer wanga along the right wall', () => {
-  const c = cfg({ stairType: 'L', turnDirection: 'left', ...room({ stairwellRoomWidthMm: 3000 }) });
-  const p = stairPlacement(c, layout(c));
-  assert.equal(p.outerOnLeft, false);
-  assert.ok(near(p.toRoom({ x: 0, y: 0 }).x, 3000));
-  assert.equal(ids(report(c)).includes('STAIRWELL-OUTSIDE'), false);
-});
-
-test('outside the room: reported with the amount', () => {
-  const c = cfg({ stairType: 'straight', treadsLegA: 10, ...room({ stairwellRoomLengthMm: 2000 }) });
+test('report: a fixed side off its dimension is a WARNING with the amount; a free side never is', () => {
+  const c = cfg({ stairType: 'L', ...well({ stairwellSideAMm: 3000, stairwellSideAFixed: true, stairwellSideBMm: 1, stairwellSideBFixed: false }) });
   const L = layout(c);
-  const r = report(c);
-  const d = r.diagnostics.find((x) => x.ruleId === 'STAIRWELL-OUTSIDE');
+  const r = stairwellReport(c, L);
+  const A = r.sides.find((s) => s.side === 'A');
+  assert.equal(A.fixed, true);
+  const d = r.diagnostics.find((x) => x.ruleId === 'STAIRWELL-SIDE-FIXED');
   assert.ok(d);
-  assert.equal(d.value, Math.round(L.bounds.maxY - 2000));
-  assert.match(d.message, /N/);
+  assert.equal(d.value, Math.round(A.achieved));
+  assert.equal(r.sides.find((s) => s.side === 'B').fixed, false);
+  assert.equal(r.diagnostics.length, 1);
+  // the gate carries it
+  assert.ok(runTakeoffValidationGate(buildStaircase(c)).diagnostics.some((x) => x.ruleId === 'STAIRWELL-SIDE-FIXED'));
 });
 
-test('exit: the edge facing a side; the required stair type from entry and exit', () => {
-  const sq = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
-  assert.equal(openingExitEdge(sq, 'N').index, 2);
-  assert.equal(openingExitEdge(sq, 'E').index, 1);
-  // an L-shaped opening: of the two edges facing N, the farther one
-  const ell = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 5 }, { x: 10, y: 5 }, { x: 10, y: 20 }, { x: 0, y: 20 }];
-  assert.equal(openingExitEdge(ell, 'N').index, 4);
-
-  const base = { ...room({ stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 3000 }), openingOffsetX: 0, openingOffsetY: 500, openingWidth: 2900, openingLength: 2000 };
-  const L = cfg({ stairType: 'L', ...base, stairwellExitSide: 'E' });
-  assert.equal(report(L).required.stairType, 'L');
-  assert.equal(report(L).required.turnDirection, 'right');
-  const wrong = cfg({ stairType: 'L', turnDirection: 'left', ...base, stairwellExitSide: 'E' });
-  const d = report(wrong).diagnostics.find((x) => x.ruleId === 'STAIRWELL-EXIT-DIRECTION');
-  assert.ok(d);
-  assert.match(d.message, /skręt w prawo/);
-  assert.equal(report(cfg({ stairType: 'L', ...base, stairwellExitSide: 'N' })).required.stairType, 'straight');
-  assert.equal(report(cfg({ stairType: 'L', ...base, stairwellExitSide: 'W' })).required.turnDirection, 'left');
-  const u = report(cfg({ stairType: 'L', ...base, stairwellExitSide: 'S', openingOffsetX: 1600, openingWidth: 1300 })).required;
-  assert.equal(u.stairType, 'U');
-  assert.equal(u.turnDirection, 'right');
-});
-
-test('exit offset: the last back edge on the exit line, or how far it is off (signed)', () => {
-  const c0 = cfg({ stairType: 'L', ...room({ stairwellRoomWidthMm: 3500, stairwellRoomLengthMm: 3000 }), stairwellExitSide: 'E' });
-  const L = layout(c0);
-  const last = L.treads[L.treads.length - 1].backEdge;
-  const exitX = last[0].x; // entry S, no gap: plan x = room x
-  const at = (dx) => cfg({ ...c0, openingOffsetX: 500, openingWidth: exitX - 500 + dx, openingOffsetY: 1000, openingLength: 1600 });
-  const ok = report(at(0));
-  assert.ok(near(ok.exitOffsetMm, 0, 1e-6));
-  assert.deepEqual(ids(ok), []);
-  const short = report(at(40));
-  assert.ok(near(short.exitOffsetMm, -40, 1e-6));
-  assert.match(short.diagnostics.find((x) => x.ruleId === 'STAIRWELL-EXIT-OFFSET').message, /za krótkie/);
-  const long = report(at(-40));
-  assert.match(long.diagnostics.find((x) => x.ruleId === 'STAIRWELL-EXIT-OFFSET').message, /za długie/);
-  // an exit edge shorter than the back edge
-  const narrow = report(cfg({ ...c0, openingOffsetX: 500, openingWidth: exitX - 500, openingOffsetY: 1800, openingLength: 300 }));
-  assert.ok(ids(narrow).includes('STAIRWELL-EXIT-EDGE'));
-});
-
-test('with a room the opening stays put in the ROOM when the stair changes; the plan outline is the room one placed', () => {
-  const c = cfg({ stairType: 'L', ...room({ stairwellEntrySide: 'W', stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 3000 }), openingOffsetX: 300, openingOffsetY: 400, openingWidth: 1000, openingLength: 1200 });
-  const roomRect = [{ x: 300, y: 400 }, { x: 1300, y: 400 }, { x: 1300, y: 1600 }, { x: 300, y: 1600 }];
-  for (const treadGoing of [240, 280]) {
-    const cc = { ...c, treadGoing };
-    const L = layout(cc);
-    const f = openingFrame(cc, L);
-    const o = resolveOpening(cc, f);
-    assert.deepEqual(o.relativeOutline, roomRect);
-    o.outline.forEach((p, i) => {
-      const q = f.toRelative(p);
-      assert.ok(near(q.x, roomRect[i].x, 1e-9) && near(q.y, roomRect[i].y, 1e-9));
-    });
+test('the opening given from the walls stays put when a free side changes (the entry floats)', () => {
+  const base = cfg({ stairType: 'U', turnDirection: 'right', ...well(), openingOffsetX: 200, openingOffsetY: 100, openingWidth: 1000, openingLength: 1200 });
+  const relative = [];
+  for (const treadsLegA of [3, 6]) {
+    const c = { ...base, treadsLegA };
+    const L = layout(c);
+    const f = openingFrame(c, L);
+    const o = resolveOpening(c, f);
+    relative.push(o.outline.map(f.toRelative).map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).sort().join(' '));
+    // the opening in the plan is the rectangle 200..1200 from wall A, 100..1300 from the end wall
+    for (const p of o.outline.map(f.toRelative)) assert.ok([200, 1200].includes(Math.round(p.x)) && [100, 1300].includes(Math.round(p.y)), JSON.stringify(p));
   }
+  assert.equal(relative[0], relative[1]);
 });
 
-test('buildStaircase carries the stairwell; its findings reach the validation gate; the plan drawing is in the plan frame', () => {
-  const c = cfg({ stairType: 'straight', treadsLegA: 10, ...room({ stairwellRoomLengthMm: 2000 }), stairwellExitSide: 'N' });
+test('walls: one per side along a wall, corners closed, a side without a wall left out; 3D walls and slab follow', () => {
+  const c = cfg({ stairType: 'U', ...well({ stairwellWallC: false }), totalRise: 2800, ceilingThickness: 250 });
   const built = buildStaircase(c);
-  assert.equal(built.stairwell.enabled, true);
-  const gate = runTakeoffValidationGate(built);
-  assert.ok(gate.diagnostics.some((d) => d.ruleId === 'STAIRWELL-OUTSIDE'));
-  const drawing = stairwellPlanDrawing(built.stairwell, c);
-  assert.equal(drawing.room.length, 4);
-  assert.deepEqual(drawing.room[0], { x: 0, y: 0 });
-  assert.equal(drawing.entrySide, 'S');
-});
-
-test('3D walls: every side but the open entry, corners closed, up to the slab; the slab covers the room and its walls', async () => {
-  const { stairwellWalls, STAIRWELL_WALL_DRAWN_THICKNESS_MM: T } = await import('../stairwell.js');
-  const { buildStairwellWalls } = await import('../stairwellWallsRenderer.js');
-  const c = cfg({ stairType: 'L', ...room({ stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 2500 }), totalRise: 2800, ceilingThickness: 250 });
-  const built = buildStaircase(c);
-  const walls = stairwellWalls(built.stairwell, built.fullConfig);
-  assert.deepEqual(walls.pieces.map((p) => p.side).sort(), ['E', 'N', 'W']);
-  const n = walls.pieces.find((p) => p.side === 'N');
-  assert.ok(near(Math.hypot(n.b.x - n.a.x, n.b.y - n.a.y), 3000 + 2 * T), 'N closes both corners');
-  const w = walls.pieces.find((p) => p.side === 'W');
-  assert.ok(near(Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y), 2500 + T), 'W stops at the open entry side');
-  assert.equal(n.height, 2550);
+  const walls = stairwellWalls(built.stairwell, built.fullConfig, built.planLayout);
+  assert.deepEqual(walls.pieces.map((p) => p.side), ['A', 'B']);
+  const B = walls.pieces.find((p) => p.side === 'B');
+  const sideB = built.stairwell.frame.sides.B;
+  assert.ok(near(Math.hypot(B.b.x - B.a.x, B.b.y - B.a.y), sideB.length + T), 'B closes the corner with A, not with C');
+  assert.equal(B.height, 2550);
   assert.equal(walls.slab.length, 4);
-  const mesh = buildStairwellWalls(walls);
-  assert.equal(mesh.children.length, 3);
-  assert.ok(built.wallsMesh && built.wallsMesh.name === 'StairwellWalls');
-  assert.equal(buildStaircase(cfg({ stairType: 'L' })).wallsMesh, null);
+  assert.equal(buildStairwellWalls(walls).children.length, 2);
+  assert.ok(built.wallsMesh);
+  assert.equal(buildStaircase(cfg({ stairType: 'U' })).wallsMesh, null);
 });
 
-test('exit AUTO follows the stair type from the entry: straight on, L toward the turn, U back to the entry side', async () => {
-  const { exitSideFor } = await import('../stairwell.js');
-  const at = (p) => exitSideFor(cfg({ stairwellExitSide: 'auto', ...p }));
-  assert.equal(at({ stairType: 'straight', stairwellEntrySide: 'S' }), 'N');
-  assert.equal(at({ stairType: 'L', turnDirection: 'right', stairwellEntrySide: 'S' }), 'E');
-  assert.equal(at({ stairType: 'L', turnDirection: 'left', stairwellEntrySide: 'S' }), 'W');
-  assert.equal(at({ stairType: 'U', stairwellEntrySide: 'S' }), 'S');
-  assert.equal(at({ stairType: 'L', turnDirection: 'right', stairwellEntrySide: 'W' }), 'S');
-  assert.equal(at({ stairType: 'straight', stairwellEntrySide: 'E' }), 'W');
-  assert.equal(exitSideFor(cfg({ stairType: 'U', stairwellExitSide: 'N' })), 'N', 'a hand-set side wins');
-});
-
-test('plan drawing: room sides and the opening edges facing a side are click targets; the opening box is measured from the walls', async () => {
-  const { renderPlan2DSVG, openingXML } = await import('../../plan2d/plan2dRenderer.js');
-  const c = cfg({ stairType: 'L', ...room({ stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 2500 }), openingOffsetX: 200, openingOffsetY: 300, openingWidth: 2000, openingLength: 1800 });
+test('plan: walls and every side dimension, a fixed one marked met / off', () => {
+  const c = cfg({ stairType: 'L', ...well({ stairwellSideBMm: 99999, stairwellSideBFixed: true }) });
   const built = buildStaircase(c);
-  const d = stairwellPlanDrawing(built.stairwell, c, built.ceilingFit.openingRelativeOutline);
-  assert.deepEqual(d.sides.map((s) => s.side), ['S', 'E', 'N', 'W']);
-  assert.deepEqual(d.exitCandidates.map((e) => e.side).sort(), ['E', 'N', 'S', 'W']);
-  assert.deepEqual(d.openingDims.map((x) => Math.round(x.value)), [200, 800, 300, 400]);
-  assert.equal(d.exitAuto, true);
-  const svg = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d, stairwellPick: 'entry' });
-  assert.equal((svg.match(/class="stairwell-pick entry"/g) || []).length, 4);
-  assert.equal((svg.match(/class="stairwell-pick exit"/g) || []).length, 0);
-  const svgExit = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d, stairwellPick: 'exit' });
-  assert.equal((svgExit.match(/class="stairwell-pick exit"/g) || []).length, 4);
-  const edit = openingXML({ outline: built.ceilingFit.openingOutline, shape: 'rect' }, true);
-  assert.equal((edit.match(/class="opening-edge"/g) || []).length, 4);
+  const d = stairwellPlanDrawing(built.stairwell, c, built.planLayout);
+  assert.equal(d.walls.length, 2);
+  assert.deepEqual(d.dims.map((x) => [x.side, x.fixed, x.ok]), [['A', false, true], ['B', true, false]]);
+  const svg = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d });
+  assert.match(svg, /id="stairwell-layer"/);
+  assert.match(svg, /B: \d+ \(sztywny 99999\)/);
+  assert.match(svg, /A: \d+ \(swobodny\)/);
 });

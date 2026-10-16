@@ -1,134 +1,77 @@
-# Stairwell room (klatka jako pomieszczenie) — `src/geometry/stairwell.js`
+# Stairwell (klatka schodowa) — fixed and free sides — `src/geometry/stairwell.js`, `src/designer/stairwellVariants.js`
 
-> **Rework 2026-10-16 (user feedback):** the stair TYPE and turn are the project's — the exit FOLLOWS from them
-> (`exitSideFor`: straight → the edge opposite the entry, L → the side edge toward the turn, U → the edge on the
-> entry side; `stairwellExitSide: 'auto'`, a compass side set by hand overrides); the designer never offers another
-> type (a hand-set exit that does not suit the type → no variants + why). Entry and exit are picked on the plan
-> ("⌂ Wejście": click a room side; "⇧ Wyjście": click an opening edge — the edge the type calls for = AUTO again; pick
-> targets drawn on top, one kind at a time). The opening is edited in the room: a whole edge dragged along its normal
-> (`.opening-edge`, 5 mm steps, snapping to walls/corners), the opening's distances to the four walls drawn. A width
-> below 800 mm is only a WARNING on a variant (`VARIANT_ABSOLUTE_MIN_WIDTH_MM` = 500 drops one); a narrowed variant
-> ranks last; a U one zone is offered also in a wider room; the going is free when the exit does not depend on it
-> (every going meeting the exit is tried). The old side-length "Dopasuj do klatki" UI is gone: project file v5
-> (`migrateV4ToV5`) turns a project that used it into a room of those sides; nothing drives the U axis gap any more.
-> Panel order: 1 Schody, 2 Budynek, 3 Klatka, 4 Otwór, 5 Bieg i stopnie (variant search on top), 6 Zabieg, 7 Wangi…,
-> 8 Wspornikowa/metalowa, 9 Balustrada. The sections below describe the stages as built; where they say "the type
-> follows from the entry and exit" read the above.
+Model v3 (user decisions 2026-10-16). Earlier models — a drawn room rectangle with an entry and an exit (stages 1–4,
+reworked once) — are in git history; they forced the entry onto a fixed line and treated the walls as limits, while
+a real stairwell is described by the dimensions that are RIGID.
 
-Stage 1 of the room-first designer (user decisions 2026-10-16). The stairwell is a ROOM the stair is placed in; the
-automatic layout that fits the stair to it (variant list: type, turns, winders, width, going, counts) is stage 2,
-the opening derived from the stair stage 3, a polygon room / solid-open walls / walls in 3D stage 4.
-
-## Inputs (config, all optional — `stairwellRoomEnabled: false` keeps the old behaviour)
+## Inputs (config, folder "3. Klatka schodowa")
 
 | field | meaning |
 | --- | --- |
-| `stairwellRoomEnabled` | the room is on |
-| `stairwellRoomWidthMm`, `stairwellRoomLengthMm` | rectangle, X × Y in the room frame |
-| `stairwellEntrySide` | `S`/`N`/`W`/`E` — the side one enters through; walking starts perpendicular to it, into the room |
-| `stairwellEntryOffsetMm` | the first tread's front edge (no nosing) this far inside the entry side |
-| `stairwellStraightWall` | `left`/`right` — the wall a straight stair runs along (seen walking up) |
-| `stairwellWallGapMm` | wall → outer face of the wanga along it (default 0: the outer line IS the wall line, as in `stairwellFit.js`) |
-| `stairwellExitSide` | `S`/`N`/`W`/`E` — the edge of the ceiling opening where the upper floor is; the last back edge must lie on it |
+| `stairwellRoomEnabled` | the stairwell dimensions are on |
+| `stairwellSide{A,B,C}Mm` | the side lengths of the stair's OUTER line (outer face of the outer wanga = the wall line), measured like `stairwellFit.js outerSideLengths`: A from the first front edge (no nosing) to the corner, B along flight B (L: to the last back edge; U: corner to corner, wall to wall), C from the corner to the last back edge (U) |
+| `stairwellSide{A,B,C}Fixed` | FIXED = must come out exactly; FREE = follows from the tread counts (no limit) |
+| `stairwellWall{A,B,C}` | the side runs along a wall (drawn in 2D / 3D, what the opening is measured from) |
+| `stairwellWallGapMm` | wall → wanga face |
 
-Room frame: X across (0..width), Y along (0..length), (0,0) its lower-left corner; sides by compass S (y = 0),
-N (y = length), W (x = 0), E (x = width).
+The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U C). Example (the user's U): B = 1885
+wall to wall and C = 2350 from the end wall to the slab edge fixed, A free — the entry floats (2000 or 2500 depending
+on the counts), so the entry and the exit need not be on one line.
 
-## Placement
+## Wall frame and the opening
 
-The plan keeps its own frame (flight A from the origin along +Y, outer line at x = 0; a left turn is mirrored to
-x ≤ 0). `stairPlacement(config, planLayout)` is ONE rigid transform (rotation + translation, det +1):
-plan +Y = the entry walking direction; plan (0, 0) — the outer end of the first front edge — on the entry line,
-`stairwellWallGapMm` off the wall on the walker's left for a right turn (or a straight stair along the left wall),
-on the right for a left turn; a straight stair along the right wall has its INNER line at that wall.
-`toRoom` / `toPlan` convert points. Nothing in the stair geometry changes.
-
-## Ceiling opening in the room frame
-
-`ceilingOpening.js openingFrame(config, planLayout)`: without a room the opening's offsets / polygon are relative to
-`planLayout.bounds` min (as before); with a room they are ROOM coordinates, converted by `placement.toPlan`.
-`resolveOpening(config, frame)` (still accepts plain bounds) returns the plan `outline` and the CCW
-`relativeOutline`; `deriveCeilingFit` exposes `openingRelativeOutline`. The opening drawn / dragged on the plan is
-converted back with `toRelative` (a translation is rotated, too). "Dosuń otwór" aligns to the room's sides.
+`wellFrame(config, planLayout)`: origin = the end of side A (the end wall's corner); x = the distance from wall A
+(along side B; a straight stair: across the flight toward the inner line); y = the distance from the end wall back
+toward the entry. A mirror image of the plan frame for a right turn — `resolveOpening` re-orients the plan outline
+(`toCCW`). `ceilingOpening.js openingFrame` uses it whenever the stairwell is on: the rectangle sliders are "od ściany A
+(X)" and "od ściany końcowej (Y)", polygons / edge drags / the derived opening live in it, so the opening stays put when
+a free side changes. `wallLines` = the walls in frame coordinates (x = −gap for wall A, y = −gap for the end wall, a U's
+wall C at x = B + gap) — the derived opening snaps its edges to them (never pulled back inside).
 
 ## Report — `stairwellReport` (built once in `buildStaircase` → `built.stairwell`, diagnostics in the gate)
 
-- `STAIRWELL-OUTSIDE` (WARNING): a tread outline or a stringer line point outside the room, with the largest
-  protrusion and the sides.
-- `STAIRWELL-EXIT-DIRECTION` (WARNING): the entry and exit call for another stair (`required`: exit normal = entry
-  direction → straight; ± the walker's right → L right/left; opposite → U, turning toward the side of the entry side's
-  middle the exit edge lies on) or the stair ends walking another way; oblique exit edge → no supported stair.
-- `STAIRWELL-EXIT-OFFSET` (WARNING): the last back edge's mean signed distance past the exit line (+ = under the
-  upper floor, "za długie"), tolerance `STAIRWELL_TOLERANCE_MM` = 1 mm.
-- `STAIRWELL-EXIT-EDGE` (WARNING): no opening edge faces the exit side (normal within 45°; of several, the farthest
-  that way, then the longest — `openingExitEdge`), or the back edge runs past the exit edge's ends.
+Every side measured (`sides: {side, achieved, target, fixed, deviation}`); a fixed side off by more than
+`WELL_TOLERANCE_MM` (1) → WARNING `STAIRWELL-SIDE-FIXED` with the amount. Free sides are never reported.
 
-All WARNING: stage 1 only measures; the automatic layout (stage 2) is what makes them match.
+## Walls
 
-## Plan 2D
+`stairwellWalls` (3D, presentation only): one piece per side along a wall, the outer side moved `gap` outward,
+extended at a corner shared with another wall (by the gap, and by the drawn thickness 120 mm in 3D), up to the slab's
+underside; `slab` = the box round the stair and the walls (wall frame) grown by 120 — `buildCeiling(…, slab)`.
+`stairwellWallsRenderer.js` draws them translucent ("Pokaż ściany klatki"). `stairwellPlanDrawing` → plan 2D layer
+`stairwell`: the walls (thick grey on the wall side) and every side's dimension outside them — a fixed one "B: 1885 🔒"
+(green; red "(sztywny …)" when off), a free one "(swobodny)".
 
-`stairwellPlanDrawing(report, config)` gives the room, entry side and exit edge in the PLAN frame;
-`plan2dRenderer.js stairwellXML` draws the walls (thick grey; the open entry side thin dashed with an arrow
-"wejście (side)") and the exit edge (thick green, "wyjście — piętro (side)"). Layer `stairwell` ("Klatka (ściany,
-wejście, wyjście)"). "Dopasuj widok" includes the room. The plan is still drawn in the STAIR frame (the stair walks
-up the screen), so with an entry other than S the room appears rotated — drawing the plan in the room frame is open.
+## The variant list — `designer/stairwellVariants.js` (rule STAIR3D-WELL-01)
 
-## Stage 2 — the variant list (`src/designer/stairwellVariants.js`, rule `STAIR3D-WELL-01`)
+"🔎 Szukaj wariantów schodów w klatce" (folder 5) — a few variants by rules: the project's type and turn; winders
+round n = round(walkline arc / going) + 1 (three counts, ≥ 3 per 90° turn) + one landing; a U as one 180° zone when its
+axis gap is 0..300 at the width it gets, else two turns + one zone. The width is the user's, narrowed where a fixed side
+needs it (one zone: 2 × width − board ≤ B, so the width becomes (B + board) / 2 when B is smaller; two turns: the width
+that makes B exact, re-solved up to 4 rounds) — below 800 mm a WARNING, below 500 dropped.
 
-"🔎 Szukaj wariantów schodów" (folder "Klatka schodowa") lists a FEW stairs fitting the room — few by rules, not
-by a sweep (user decision 2026-10-16), the whole list in ~0.1–0.6 s, no background worker:
+Each variant = ONE `solveStairwellFit` with the FIXED sides as targets: key = the exit side when fixed, else the first
+fixed one (exact); the other fixed sides as close as the counts allow (a U's B exact by the axis gap — the fit derives
+`uAxisGapMm` from B — or by the width); FREE sides via `opts.freeSides` — their flights' counts chosen for the riser /
+2h+s like the others, no target. A fixed side still off → a problem of the variant (listed, `ok: false`), never hidden.
+Measured on a real layout (report, ceiling fit with the opening from the walls, the validator) and sorted: fixed sides
+met, riser in range, width ≥ 800, distinct rules in error, ceiling collisions, |2h+s − 625|. "Zastosuj" writes the
+patch (type, turns, winders, width, going, counts, axis gap, `stairwellFitEnabled: false`).
 
-- type + turn from the entry and exit (`requiredStair`; an exit edge reaching across the entry's middle keeps the
-  project's own U turn direction);
-- the user's `stairWidth`, narrowed only when the room / exit edge needs it (10 mm steps; a two-turn U to the exact
-  width its wall-to-wall side B needs), never below `VARIANT_MIN_WIDTH_MM` = 800 (PL-LEGAL-A-05*);
-- winders n − 1, n, n + 1 (window slid into the range; ≥ 3 per 90° turn), n = round(walkline arc / going) + 1
-  (quarter arc of `walklineOffset` per turn, half circle for one zone), plus ONE landing variant;
-- U: one 180° zone when its axis gap would be 0..`U_ZONE_MAX_AXIS_GAP_MM` (300), else two turns.
+## Opening derived from the stair
 
-Solving each candidate once:
-- straight / L: one `solveStairwellFit` — the exit side the key (exact), side A within `limits` (never past the far
-  wall / the exit edge's far end, long enough for flight B's back edge to lie on the exit edge). `solveStairwellFit`
-  takes `opts.limits = {side: {min?, max?}}`: a variant outside is dropped.
-- U (`solveUExit`): its exit lies at offset + A − C, so for each straight-count difference nA − nC (±8) and middle
-  count the going is solved for the exit (sampled 150..320 + halving), then equal straights are added to A and C
-  while A stays inside — every one checked on the real layout (adding a tread to a flight that starts with winders
-  is not linear). One zone: the axis gap from side B (exact). Two turns: the middle count + a narrower stair make B
-  exact (re-solved at that width, up to 4 rounds).
+`openingMode: 'derived'` (folder 4): `requiredOpeningRelative` = the union of the bounding rectangles (frame axes,
+rounded outward to 0.1 mm, snapped to the walls) of the treads that need headroom; "⇩ Zapisz wyznaczony otwór jako
+zadany" / any hand edit freezes it as a given polygon. Variants show the opening they need.
 
-Each variant is measured on a real layout: `stairwellReport` (must be clean = `ok`), ceiling fit, `validateStaircase`
-(errors / distinct error rules / warnings), riser, going, 2h+s, the winders' going 400 mm from the dusza. Sorted: ok,
-riser in range, distinct rules in error, ceiling collisions, |2h+s − 625|. The list (`ui/stairwellVariantsPanel.js`,
-left panel) is view state; "Zastosuj" writes `patch` (type, turn, turn types, winder counts, width, going, counts,
-axis gap, `stairwellFitEnabled: false`) into config + one undo step; the list is marked out of date when an input it
-was computed from changes. Hand edge edits stay if the tread layout key is unchanged, else they go stale as always.
+## Project file
 
-## Stage 3 — the opening derived from the stair (`ceilingOpening.js requiredOpeningRelative`)
+v4 → v5 turned the old side-length fit into a room; v5 → v6 turns a room into sides (U: B = W and C = L − exit inset
+fixed, A = L − entry offset free; L: B fixed, A free; straight: A fixed) and moves its opening to the wall frame. The
+old fit (`stairwellFitEnabled`, `stairwellKeySide`, …) is internal to the solver, no longer in the panel.
 
-`config.openingMode` = `given` (the rectangle / polygon, checked against the stair — as before) | `derived` (folder
-"Strop i otwór", "Otwór: wyznaczany ze schodów"). Derived: the treads whose top comes within `minHeadroom` of the
-slab's underside (exactly the ones `deriveCeilingFit` checks) must lie in the opening, so it is the UNION of their
-bounding rectangles along the opening frame's axes (`rectUnion.js unionRectangles`; L → an L-shaped polygon, a
-winder's rectangle a little more than the winder), each rectangle rounded OUTWARD to 0.1 mm (the precision a stored
-polygon keeps); with a room an edge closer to a wall than wanga + wall gap (+1) goes to the wall (never pulled back
-inside). Several separate pieces → one rectangle round all; no tread needing it → the sliders' rectangle. Recomputed
-on every rebuild, shape `'derived'` (plan label "wyznaczony ze schodów", info row "Otwór wyznaczony … mm"); the ceiling
-fit passes by construction. "⇩ Zapisz wyznaczony otwór jako zadany" freezes it as a given polygon; any hand edit of
-the opening on the plan does the same.
+## Open
 
-Exit with a derived opening: there is no edge to end on, so `stairwellExitOutline` gives the room with its
-`stairwellExitSide` wall moved `stairwellExitInsetMm` (default 0) into the room — used by `stairwellReport` and the
-variant designer. Variants show the opening they need ("potrzebny otwór").
-
-## Stage 4 (part) — the walls in 3D
-
-`stairwell.js stairwellWalls(report, config)`: one piece per room side except the open entry side (inner face a→b
-in the plan frame, extended by the wall thickness past a corner shared with another wall, `outward`), height = the
-slab's underside (totalRise − ceilingThickness), drawn thickness `STAIRWELL_WALL_DRAWN_THICKNESS_MM` = 120
-(presentation only); `slab` = the room grown by that thickness — `ceilingGeometry.js buildCeiling(…, slabOutline)`
-then makes the slab cover the room instead of the opening's box + 1500 mm. `stairwellWallsRenderer.js` extrudes the
-pieces as translucent boxes (`built.wallsMesh`, group "StairwellWalls", outside the stair root: not exported, not
-selectable); toggle "Pokaż ściany klatki" (`viewState.showWalls`), hidden in the offer/standard-view pictures.
-
-Open (user decision 2026-10-16: walls in 3D first): solid/open sides, a polygon room (check / designer), the plan
-drawn in the room frame.
+Two fixed sides along the walking line (an L's A and B, a U's A and C) are met only as far as the counts allow — an
+asymmetric winder zone (`walklineSplitOffset`) could make the second exact; a straight stair's second wall; the plan
+is drawn in the stair frame.

@@ -70,8 +70,8 @@ test('parseProjectJSON: rejects invalid JSON', () => {
   assert.throws(() => parseProjectJSON('{not json'), /JSON/i);
 });
 
-test('CURRENT_PROJECT_VERSION is 5', () => {
-  assert.equal(CURRENT_PROJECT_VERSION, 5);
+test('CURRENT_PROJECT_VERSION is 6', () => {
+  assert.equal(CURRENT_PROJECT_VERSION, 6);
 });
 
 test('migration v3 -> v4: one shared stringerConstructionType becomes the same value on both sides', () => {
@@ -88,7 +88,7 @@ test('migration v3 -> v4: one shared stringerConstructionType becomes the same v
   assert.equal(config.stringerConstructionTypeInner, 'cut');
   assert.equal(config.stringerConstructionType, undefined, 'the old shared name is gone, no alias is kept');
   assert.deepEqual(config.lockedFields, ['stringerConstructionTypeOuter', 'stringerConstructionTypeInner', 'nosing']);
-  assert.equal(meta.schemaVersion, 5);
+  assert.equal(meta.schemaVersion, 6);
 });
 
 test('migration v1 -> v4 chains through v2 and v3', () => {
@@ -172,7 +172,7 @@ test('accepted validation waivers round-trip at the top level, outside config; o
   assert.deepEqual(parseProjectFile(JSON.stringify(buildProjectPayload(createDefaultConfig()))).meta.waivers, []);
 });
 
-test('migration v4 -> v5: the side-length fit becomes a stairwell room of those sides (U: C longer, the stair starts inside)', () => {
+test('migration v4 -> v6: the side-length fit ends as fixed / free sides (U: B and C fixed, A free)', () => {
   const v4 = {
     _type: 'schody3d-project',
     _version: 4,
@@ -180,15 +180,31 @@ test('migration v4 -> v5: the side-length fit becomes a stairwell room of those 
     edgeOverrides: {},
   };
   const { config, meta } = parseProjectFile(JSON.stringify(v4));
-  assert.equal(meta.schemaVersion, 5);
+  assert.equal(meta.schemaVersion, 6);
   assert.equal(config.stairwellFitEnabled, false);
   assert.equal(config.stairwellRoomEnabled, true);
-  assert.equal(config.stairwellRoomWidthMm, 1890);
-  assert.equal(config.stairwellRoomLengthMm, 2350);
-  assert.equal(config.stairwellEntryOffsetMm, 267);
-  assert.equal(config.stairwellExitSide, 'auto');
-  for (const k of ['stairwellSideAMm', 'stairwellSideBMm', 'stairwellSideCMm', 'stairwellKeySide', 'stairwellManualCounts']) assert.equal(config[k], undefined, k);
-  // a project that did not use the fit gets no room
-  const plain = parseProjectFile(JSON.stringify({ ...v4, config: { ...createDefaultConfig() } })).config;
+  assert.deepEqual([config.stairwellSideAMm, config.stairwellSideAFixed], [2083, false]);
+  assert.deepEqual([config.stairwellSideBMm, config.stairwellSideBFixed], [1890, true]);
+  assert.deepEqual([config.stairwellSideCMm, config.stairwellSideCFixed], [2350, true]);
+  for (const k of ['stairwellRoomWidthMm', 'stairwellRoomLengthMm', 'stairwellEntrySide', 'stairwellEntryOffsetMm', 'stairwellExitSide']) assert.equal(config[k], undefined, k);
+  // a project that did not use the fit gets no stairwell
+  const plain = parseProjectFile(JSON.stringify({ ...v4, config: { ...createDefaultConfig(), stairwellFitEnabled: false } })).config;
   assert.equal(plain.stairwellRoomEnabled, false);
+});
+
+test('migration v5 -> v6: a room becomes sides; its opening moves to the wall frame (x from wall A, y from the far wall)', () => {
+  const v5 = {
+    _type: 'schody3d-project',
+    _version: 5,
+    config: { ...createDefaultConfig(), stairType: 'U', turnDirection: 'right', stairwellRoomEnabled: true, stairwellRoomWidthMm: 1888, stairwellRoomLengthMm: 2350, stairwellEntrySide: 'S', stairwellEntryOffsetMm: 300, openingOffsetX: 100, openingOffsetY: 200, openingWidth: 1000, openingLength: 1500, openingPolygon: [{ x: 0, y: 0 }, { x: 10, y: 50 }] },
+    edgeOverrides: {},
+  };
+  const { config } = parseProjectFile(JSON.stringify(v5));
+  assert.deepEqual([config.stairwellSideAMm, config.stairwellSideAFixed, config.stairwellSideBMm, config.stairwellSideBFixed, config.stairwellSideCMm, config.stairwellSideCFixed], [2050, false, 1888, true, 2350, true]);
+  assert.equal(config.openingOffsetX, 100);
+  assert.equal(config.openingOffsetY, 2350 - (200 + 1500));
+  assert.deepEqual(config.openingPolygon, [{ x: 0, y: 2350 }, { x: 10, y: 2300 }]);
+  // a left turn: wall A is the room's right wall
+  const left = parseProjectFile(JSON.stringify({ ...v5, config: { ...v5.config, turnDirection: 'left' } })).config;
+  assert.equal(left.openingOffsetX, 1888 - (100 + 1000));
 });

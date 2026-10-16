@@ -5,8 +5,8 @@
 //   - 'polygon' — dowolny wielokąt narysowany na planie 2D (`config.openingPolygon`).
 // Oba są w TYM SAMYM układzie: punkty względem lewego-dolnego rogu rzutu schodów
 // (planLayout.bounds.minX/minY) — dokładnie jak offsety prostokąta — więc otwór przesuwa się razem z
-// rzutem tak samo w obu trybach. With a stairwell room (geometry/stairwell.js) that frame is the ROOM instead
-// (`openingFrame`): the opening stays where it is in the room and the stair is placed in it. `resolveOpening()` zamienia jedno albo drugie na JEDEN obrys w
+// rzutem tak samo w obu trybach. With the stairwell dimensions on (geometry/stairwell.js) that frame is the WALL frame
+// instead (`openingFrame`): x from wall A, y from the end wall — the opening stays put when a free side changes. `resolveOpening()` zamienia jedno albo drugie na JEDEN obrys w
 // układzie planu, z którego korzysta wszystko dalej (sprawdzenie skrajni, strop 3D, plan 2D, walidacja).
 //
 // Wielokąt niepoprawny (mniej niż 3 punkty, zerowe pole, samoprzecięcie) NIE jest po cichu
@@ -14,7 +14,7 @@
 // (walidator zgłasza go jako CEILING-OPENING-INVALID).
 
 import { signedPolygonArea, segmentsProperlyIntersect } from './pathUtils.js';
-import { stairPlacement } from './stairwell.js';
+import { wellFrame } from './stairwell.js';
 import { unionRectangles } from './rectUnion.js';
 
 export const OPENING_SHAPES = Object.freeze({ RECT: 'rect', POLYGON: 'polygon' });
@@ -86,19 +86,18 @@ const toCCW = (pts) => (signedPolygonArea(pts) < 0 ? [...pts].reverse() : pts);
 
 /**
  * The frame the opening's points (rectangle offsets / polygon) are given in: relative to the stair plan's lower-left
- * corner (planLayout.bounds min) — or, with a stairwell room (geometry/stairwell.js), the ROOM frame, the stair being
- * placed in the room. `toPlan` / `toRelative` convert a point; `room` says which.
+ * corner (planLayout.bounds min) — or, with the stairwell dimensions on (geometry/stairwell.js), the WALL frame (x from
+ * wall A, y from the end wall). `toPlan` / `toRelative` convert a point; `wall` says which; `wallLines` = the walls.
  */
 export function openingFrame(config, planLayout) {
-  const placement = stairPlacement(config, planLayout);
-  if (placement) return { room: true, placement, toPlan: placement.toPlan, toRelative: placement.toRoom };
-  const b = planLayout?.bounds;
-  return boundsFrame(b);
+  const frame = wellFrame(config, planLayout);
+  if (frame) return frame;
+  return boundsFrame(planLayout?.bounds);
 }
 
 function boundsFrame(bounds) {
   const origin = { x: bounds?.minX ?? 0, y: bounds?.minY ?? 0 };
-  return { room: false, placement: null, toPlan: (p) => ({ x: origin.x + p.x, y: origin.y + p.y }), toRelative: (p) => ({ x: p.x - origin.x, y: p.y - origin.y }) };
+  return { wall: false, wallLines: [], toPlan: (p) => ({ x: origin.x + p.x, y: origin.y + p.y }), toRelative: (p) => ({ x: p.x - origin.x, y: p.y - origin.y }) };
 }
 
 /**
@@ -107,7 +106,7 @@ function boundsFrame(bounds) {
  * @param {Object} frameOrBounds  openingFrame(...) or (older callers) planLayout.bounds
  * @returns {{shape:'rect'|'polygon', outline:{x,y}[], relative:{x,y}[], relativeOutline:{x,y}[], invalidReason:string|null,
  *           minX:number, maxX:number, minY:number, maxY:number}}  `relativeOutline` = the outline in the opening's own
- *           frame, CCW (the room frame with a stairwell)
+ *           frame, CCW (the wall frame with the stairwell dimensions on)
  */
 export function resolveOpening(config, frameOrBounds, derivedRelative = null) {
   const frame = typeof frameOrBounds?.toPlan === 'function' ? frameOrBounds : boundsFrame(frameOrBounds);
@@ -129,17 +128,17 @@ export function resolveOpening(config, frameOrBounds, derivedRelative = null) {
     }
   }
   const relativeOutline = toCCW(relative);
-  const outline = relativeOutline.map(frame.toPlan); // a rigid transform keeps the orientation
+  const outline = toCCW(relativeOutline.map(frame.toPlan)); // (the wall frame may be a mirror image of the plan's)
   const xs = outline.map((p) => p.x);
   const ys = outline.map((p) => p.y);
   return { shape, outline, relative, relativeOutline, invalidReason, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
 /**
- * The opening the stair NEEDS, in the opening's own frame (`frame` — the room with a stairwell): the treads whose top
+ * The opening the stair NEEDS, in the opening's own frame (`frame` — the wall frame with the stairwell on): the treads whose top
  * comes within `minHeadroom` of the slab's underside (the ones deriveCeilingFit checks) must lie in it, so it is the
  * union of their bounding rectangles taken along the frame's axes (an opening is cut square to the walls; a winder's
- * rectangle is a little more than the winder), an edge next to a room wall taken to the wall. Several separate pieces
+ * rectangle is a little more than the winder), an edge next to a wall taken to the wall. Several separate pieces
  * → one rectangle round all. null when no tread needs it.
  * @returns {{x,y}[]|null}  CCW
  */
@@ -158,17 +157,14 @@ export function requiredOpeningRelative(config, planLayout, riserHeight, frame) 
     rects.push({ uStart: down(Math.min(...xs)), uEnd: up(Math.max(...xs)), vBottom: down(Math.min(...ys)), vTop: up(Math.max(...ys)) });
   }
   if (rects.length === 0) return null;
-  // with a stairwell room an edge closer to a wall than the wanga along it (+ the wall gap) goes to the wall: the slab
-  // is not left as a strip over the wanga
-  const room = frame.placement?.room;
-  if (room) {
-    const snap = (Number(config.stringerThickness) || 0) + Math.max(0, Number(config.stairwellWallGapMm) || 0) + 1;
+  // with the stairwell's walls an edge closer to a wall than the wanga along it (+ the wall gap) goes to the wall: the
+  // slab is not left as a strip over the wanga (never pulled back: a tread a hair past keeps its outward-rounded edge)
+  const snap = (Number(config.stringerThickness) || 0) + Math.max(0, Number(config.stairwellWallGapMm) || 0) + 1;
+  for (const w of frame.wallLines || []) {
     for (const r of rects) {
-      // (never pulled back: a tread a hair past the wall keeps its outward-rounded edge)
-      if (r.uStart <= snap) r.uStart = Math.min(r.uStart, 0);
-      if (room.width - r.uEnd <= snap) r.uEnd = Math.max(r.uEnd, room.width);
-      if (r.vBottom <= snap) r.vBottom = Math.min(r.vBottom, 0);
-      if (room.length - r.vTop <= snap) r.vTop = Math.max(r.vTop, room.length);
+      const [lo, hi] = w.axis === 'x' ? ['uStart', 'uEnd'] : ['vBottom', 'vTop'];
+      if (Math.abs(r[lo] - w.value) <= snap) r[lo] = Math.min(r[lo], w.value);
+      if (Math.abs(r[hi] - w.value) <= snap) r[hi] = Math.max(r[hi], w.value);
     }
   }
   const loops = unionRectangles(rects);

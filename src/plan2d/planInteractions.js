@@ -185,8 +185,6 @@ export function attachPlanInteractions(opts) {
     onOpeningDrawFinish,
     onOpeningDrawCancel,
     onOpeningEdgeMove,
-    getStairwellPick = () => false,
-    onStairwellPick,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -406,14 +404,6 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
-    if (e.button === 0 && getStairwellPick()) {
-      const pickEl = e.target.closest('.stairwell-pick');
-      if (pickEl) {
-        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'stairwell', pick: pickEl.dataset.pick, side: pickEl.dataset.side } };
-        return;
-      }
-    }
-
     if (e.button === 0) {
       // Kolejność = kolejność rysowania w SVG (słupy nad wangami nad stopniami): to, co
       // użytkownik widzi na wierzchu, jest tym, co zaznacza. Identyfikatory pochodzą z
@@ -597,8 +587,7 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'stairwell' && onStairwellPick) onStairwellPick(hit.pick, hit.side);
-        else if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
+        if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
         else if (hit.kind === 'stringer' && onStringerClick) onStringerClick(hit.side);
         else onStepClick(hit.kind === 'step' ? hit.stepIndex : null);
       }

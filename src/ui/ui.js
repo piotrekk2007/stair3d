@@ -117,18 +117,18 @@ export function createUI({
   lockable(building.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
   lockable(building.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
 
+  // The stairwell as side lengths (geometry/stairwell.js, model v3): A along flight A (first front edge → corner),
+  // B along flight B (U: wall to wall), C along flight C (corner → last back edge); each FIXED (exact) or FREE (follows
+  // from the tread counts); a side may run along a wall. The variant search (folder 5) solves it; findings
+  // STAIRWELL-SIDE-FIXED; the opening (folder 4) is then given from the walls.
   const well = gui.addFolder('3. Klatka schodowa');
-  // The room the stair is placed in (geometry/stairwell.js): with it on, the ceiling opening is given in the room's
-  // frame and the plan shows the walls, the entry and the exit; findings in Walidacja (STAIRWELL-*).
-  live(well.add(config, 'stairwellRoomEnabled')).name('Klatka: pomieszczenie');
-  live(well.add(config, 'stairwellRoomWidthMm', 500, 12000, 1)).name('Klatka: szerokość (X) [mm]');
-  live(well.add(config, 'stairwellRoomLengthMm', 500, 12000, 1)).name('Klatka: długość (Y) [mm]');
-  live(well.add(config, 'stairwellEntrySide', { 'od dołu planu (S)': 'S', 'od góry planu (N)': 'N', 'od lewej (W)': 'W', 'od prawej (E)': 'E' })).name('Wejście: bok klatki');
-  live(well.add(config, 'stairwellEntryOffsetMm', 0, 6000, 1)).name('Wejście: 1. stopień od boku [mm]');
-  live(well.add(config, 'stairwellStraightWall', { 'lewa ściana': 'left', 'prawa ściana': 'right' })).name('Proste: wzdłuż ściany');
+  live(well.add(config, 'stairwellRoomEnabled')).name('Wymiary klatki: włączone');
+  for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana'], ['C', 'tylko U: do krawędzi stropu']]) {
+    live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);
+    live(well.add(config, `stairwellSide${s}Fixed`)).name(`Bok ${s}: sztywny (inaczej swobodny)`);
+    live(well.add(config, `stairwellWall${s}`)).name(`Bok ${s}: wzdłuż ściany`);
+  }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
-  live(well.add(config, 'stairwellExitInsetMm', 0, 6000, 1)).name('Wyjście przy otworze wyznaczanym: od ściany [mm]');
-  live(well.add(config, 'stairwellExitSide', { 'wynika z typu schodów (AUTO)': 'auto', 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
 
   const ceiling = gui.addFolder('4. Otwór w stropie');
   // Given (the shape below) or DERIVED from the stair — the opening the treads need for their headroom
@@ -140,8 +140,8 @@ export function createUI({
   if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
   lockable(ceiling.add(config, 'openingLength', 800, 6000, 1).name('Otwór: długość (Y) [mm]'), 'openingLength');
   lockable(ceiling.add(config, 'openingWidth', 700, 6000, 1).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
-  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 1).name('Otwór: od lewej ściany / rzutu (X) [mm]'), 'openingOffsetX');
-  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 1).name('Otwór: od dolnej ściany / rzutu (Y) [mm]'), 'openingOffsetY');
+  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 1).name('Otwór: od ściany A / rzutu (X) [mm]'), 'openingOffsetX');
+  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 1).name('Otwór: od ściany końcowej / rzutu (Y) [mm]'), 'openingOffsetY');
   // Dosunięcie otworu do narożnika/boku rzutu schodów (alignedOpeningOffsets) — zmienia tylko offsety w config,
   // więc cofanie i plik projektu działają jak przy suwakach. Pole zablokowane (kłódka) nie jest ruszane.
   const alignProxy = {
