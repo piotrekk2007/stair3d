@@ -216,7 +216,11 @@ function invalidStringerItem(side, segment, geo, config, materialId) {
 function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
   const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
   if (segment.treadBearings.length === 0) return null; // no physical board needed — nothing to take off
-  if (geo.diagnostics.some((d) => d.severity === 'ERROR')) return invalidStringerItem(side, segment, geo, config, materialId);
+  // Everything in the project is priced (user decision 2026-10-16): a board with a design ERROR (too shallow, a tread
+  // not supported, …) is still the board that is drawn — it is measured and priced from its contour as it is, with
+  // the errors on the item and a note. Only a board with no contour at all has nothing to measure.
+  if (!(geo.outerContour?.length >= 3)) return invalidStringerItem(side, segment, geo, config, materialId);
+  const errors = geo.diagnostics.filter((d) => d.severity === 'ERROR');
 
   // NET: the actual polygon area of the solved contour (already accounts for the notched top
   // on a 'cut' board, and for nothing extra on a 'closed' board — see stringerConstructionGeometry.js).
@@ -236,6 +240,7 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
   const stockVolumeMm3 = stockAreaMm2 * geo.thicknessMm;
 
   const notes = [];
+  if (errors.length > 0) notes.push(`UWAGA: wanga ma błędy konstrukcyjne (${errors.map((d) => d.ruleId).join(', ')}) — wyceniona z obecnego konturu; po poprawieniu projektu wymiary i cena mogą się zmienić.`);
   if (geo.diagnostics.length > 0) notes.push(`Diagnostyka konstrukcyjna: ${geo.diagnostics.map((d) => d.ruleId).join(', ')}`);
   const { catalogStock, notes: catalogNotes } = buildCatalogStock(materialId, { lengthMm, widthMm: blankDepthMm, thicknessMm: geo.thicknessMm });
   notes.push(...catalogNotes);
@@ -262,7 +267,7 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
     wasteFactor: wasteFactorFor(ELEMENT_TYPES.STRINGER, materialId, wasteFactors),
     optional: false,
     status: TAKEOFF_ITEM_STATUS.OK,
-    diagnostics: geo.diagnostics.filter((d) => d.severity === 'WARNING'),
+    diagnostics: geo.diagnostics.filter((d) => d.severity === 'WARNING' || d.severity === 'ERROR'),
     notes,
   });
 }

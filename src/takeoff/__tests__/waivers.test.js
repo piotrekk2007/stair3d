@@ -101,15 +101,17 @@ test('waiving one element does not unblock an identical rule on another element'
   assert.equal(takeoff.status, GATE_STATUS.BLOCKED);
 });
 
-test('a waiver never fabricates numbers: the flagged segment stays INVALID, every other item is unchanged', () => {
+test('a waived ERROR on a board: the board is still priced from its own contour (same numbers as without the error), every other item is unchanged', () => {
   const clean = buildPricedMaterialTakeoff(buildModels());
   const models = buildModels();
   const diag = withInjectedError(models);
   const waived = buildPricedMaterialTakeoff(models, { waivers: [createWaiver(diag)] });
 
   const bad = waived.items.find((i) => i.sourceElementId === 'stringer:outer:outer-seg-0');
-  assert.equal(bad.status, 'INVALID', 'a construction-level ERROR still marks its own item as not computable');
-  assert.equal(bad.calculatedCost, null);
+  const good = clean.items.find((i) => i.sourceElementId === 'stringer:outer:outer-seg-0');
+  assert.equal(bad.status, 'OK', 'everything in the project is priced (user decision 2026-10-16)');
+  assert.equal(bad.calculatedCost, good.calculatedCost);
+  assert.ok(bad.calculatedCost > 0);
 
   const others = (t) => t.items.filter((i) => i.sourceElementId !== 'stringer:outer:outer-seg-0' && !i.sourceElementId.startsWith('stringer:outer:outer-seg-0:'));
   assert.deepEqual(others(waived), others(clean));

@@ -244,7 +244,9 @@ values (user decision) — all flagged for verification. Config `structural*`, t
 
 Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 - `takeoff/materialTakeoff.js`: one item per physical component, NET vs STOCK (winder = its production blank; stringer
-  = smallest rectangle round the solved contour), INVALID items never get invented numbers; railing/glass/connector
+  = smallest rectangle round the solved contour), INVALID items never get invented numbers — but EVERYTHING in the
+  project is priced (user decision 2026-10-16): a board with a design ERROR (too shallow, …) is measured and priced
+  from its contour as it is, the error on the item + a note; only a board with no contour is INVALID; railing/glass/connector
   items in their own modules; `wasteFactors.js`, `materialCatalog.js`.
 - Pricing: generic per-material list (`pricing.js`) and the DREWEX board price list (`boardPricing.js`: PLN/running
   metre by depth range × length column × thickness class, waste already inside; CSV import/export) — MATERIAL only;

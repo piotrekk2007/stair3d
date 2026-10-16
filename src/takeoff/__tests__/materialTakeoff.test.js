@@ -207,7 +207,7 @@ test('scenario I (changed stringer thickness): only stringer volumes change, tre
 
 // --- Scenario K: invalid stringer geometry (hand-built, negative test) ---------------------------
 
-test('scenario K: a stringer segment carrying an ERROR diagnostic produces an INVALID takeoff item, never an invented quantity', () => {
+test('scenario K: a stringer segment carrying an ERROR diagnostic is still measured from its contour (everything is priced — user decision 2026-10-16), with the error on the item', () => {
   const scenario = build({ stairType: 'straight', treadsLegA: 5 });
   // Hand-corrupt one segment's construction geometry with an ERROR diagnostic — the same
   // "hand-built negative case" pattern used throughout this project's other diagnostic tests
@@ -230,13 +230,15 @@ test('scenario K: a stringer segment carrying an ERROR diagnostic produces an IN
   };
   const items = compute(corrupted);
   const outerStringer = items.find((i) => i.elementType === ELEMENT_TYPES.STRINGER && i.sourceElementId.startsWith('stringer:outer:'));
-  assert.equal(outerStringer.status, TAKEOFF_ITEM_STATUS.INVALID);
-  assert.equal(outerStringer.netVolume, null);
-  assert.equal(outerStringer.stockVolume, null);
-  assert.equal(outerStringer.wasteAdjustedQuantity, null);
+  const clean = compute(scenario).find((i) => i.elementType === ELEMENT_TYPES.STRINGER && i.sourceElementId.startsWith('stringer:outer:'));
+  assert.equal(outerStringer.status, TAKEOFF_ITEM_STATUS.OK);
+  assert.equal(outerStringer.stockVolume, clean.stockVolume, 'the same board, the same numbers');
+  assert.ok(outerStringer.stockVolume > 0 && outerStringer.netVolume > 0);
   assert.ok(outerStringer.diagnostics.some((d) => d.ruleId === 'TEST-FORCED-ERROR'));
-  // An invalid board must never produce housings (nothing trustworthy to hang them off of).
-  assert.equal(items.some((i) => i.sourceElementId.startsWith('stringer:outer:') && i.elementType === ELEMENT_TYPES.STRINGER_HOUSING), false);
+  assert.ok(outerStringer.notes.some((n) => /UWAGA: wanga ma błędy konstrukcyjne \(TEST-FORCED-ERROR\)/.test(n)));
+  // a board with no contour at all has nothing to measure: that one alone stays INVALID
+  const empty = compute({ ...scenario, models: { ...scenario.models, stringerConstruction: { ...scenario.models.stringerConstruction, outer: [{ ...scenario.models.stringerConstruction.outer[0], outerContour: [] }] } } });
+  assert.equal(empty.find((i) => i.elementType === ELEMENT_TYPES.STRINGER && i.sourceElementId.startsWith('stringer:outer:')).status, TAKEOFF_ITEM_STATUS.INVALID);
 });
 
 // --- Risers, posts, waste, overrides -------------------------------------------------------------
