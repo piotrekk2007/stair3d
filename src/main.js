@@ -245,8 +245,9 @@ function rebuild() {
   // them back changes nothing on the next rebuild.
   const fitValues = built.stairwellFit?.values;
   if (fitValues) Object.assign(config, fitValues);
-  if (config.stairwellFitEnabled || fitWasEnabled) uiRefresh?.();
-  fitWasEnabled = !!config.stairwellFitEnabled;
+  const fitOn = !!(config.stairwellFitEnabled || built.stairwellFit?.live);
+  if (fitOn || fitWasEnabled) uiRefresh?.();
+  fitWasEnabled = fitOn;
 
   scene.add(root);
   scene.add(ceilingMesh);

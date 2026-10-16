@@ -59,8 +59,9 @@ test('report: a fixed side off its dimension is a WARNING with the amount; a fre
   assert.equal(d.value, Math.round(A.achieved));
   assert.equal(r.sides.find((s) => s.side === 'B').fixed, false);
   assert.equal(r.diagnostics.length, 1);
-  // the gate carries it
-  assert.ok(runTakeoffValidationGate(buildStaircase(c)).diagnostics.some((x) => x.ruleId === 'STAIRWELL-SIDE-FIXED'));
+  // the gate carries it — for a side the live fit cannot meet (buildStaircase keeps the fixed sides itself)
+  const impossible = { ...c, stairwellSideAMm: 99999 };
+  assert.ok(runTakeoffValidationGate(buildStaircase(impossible)).diagnostics.some((x) => x.ruleId === 'STAIRWELL-SIDE-FIXED'));
 });
 
 test('the opening given from the walls stays put when a free side changes (the entry floats)', () => {
@@ -103,4 +104,19 @@ test('plan: walls and every side dimension, a fixed one marked met / off', () =>
   assert.match(svg, /id="stairwell-layer"/);
   assert.match(svg, /B: \d+ \(sztywny 99999\)/);
   assert.match(svg, /A: \d+ \(swobodny\)/);
+});
+
+test('regression (user, 2026-10-16): the fixed sides are kept LIVE — changing the winders or the axis gap by hand does not move the exit', () => {
+  const base = cfg({ stairType: 'U', turnDirection: 'right', totalRise: 3070, stairWidth: 955, stringerThickness: 40, walklineOffset: 500, treadsLegB: 0, uSingleWinderZone: true, turn1Type: 'winder', turn2Type: 'winder', ...well({ stairwellSideBMm: 1885, stairwellSideBFixed: true, stairwellSideCMm: 2350, stairwellSideCFixed: true }) });
+  for (const patch of [{ uWindersTotal: 6, uAxisGapMm: 15 }, { uWindersTotal: 5, uAxisGapMm: 0 }, { uWindersTotal: 8, uAxisGapMm: 200 }]) {
+    const built = buildStaircase({ ...base, ...patch });
+    const sides = Object.fromEntries(built.stairwell.sides.map((s) => [s.side, s.achieved]));
+    assert.ok(Math.abs(sides.B - 1885) <= 1, `${JSON.stringify(patch)}: B ${sides.B}`);
+    assert.ok(Math.abs(sides.C - 2350) <= 1, `${JSON.stringify(patch)}: C ${sides.C}`);
+    assert.equal(built.stairwellFit.live, true);
+  }
+  // counts by hand: only the going follows C — A comes from the user's counts
+  const manual = buildStaircase({ ...base, uWindersTotal: 6, treadsLegA: 4, treadsLegC: 5, stairwellManualCounts: true });
+  assert.equal(manual.fullConfig.treadsLegC, 5);
+  assert.ok(Math.abs(manual.stairwell.sides.find((s) => s.side === 'C').achieved - 2350) <= 1);
 });

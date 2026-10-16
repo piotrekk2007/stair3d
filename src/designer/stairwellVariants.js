@@ -22,7 +22,7 @@
 
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { buildPlanLayout } from '../geometry/planLayout.js';
-import { solveStairwellFit, BLONDEL_TARGET_MM } from '../geometry/stairwellFit.js';
+import { solveFixedSides, BLONDEL_TARGET_MM } from '../geometry/stairwellFit.js';
 import { stairwellReport, wellFixedTargets, wellSideLetters, exitSideLetter, WELL_TOLERANCE_MM } from '../geometry/stairwell.js';
 import { treadGoingAtOffsetFromInner, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { validateStaircase } from '../validator/StaircaseValidator.js';
@@ -38,8 +38,6 @@ export const U_ZONE_MAX_AXIS_GAP_MM = 300;
 // winders per 90° turn the designer proposes (the slider allows 2 — not a stair the workshop offers)
 const WINDERS_PER_TURN_RANGE = { min: 3, max: 6 };
 const ZONE_WINDERS_RANGE = { min: 3, max: 14 }; // the "Zabiegowe łącznie (klatka 180°)" slider
-// A two-turn U meets a fixed B by narrowing the stair: this many fit + width rounds.
-const WIDTH_ROUNDS = 4;
 
 function stairLabel(type, turn) {
   if (type === 'straight') return 'schody proste';
@@ -58,17 +56,6 @@ function around(n, range) {
   const out = [];
   for (let k = lo; k <= Math.min(range.max, lo + 2); k++) out.push(k);
   return out;
-}
-
-function fitPatch(targets, key) {
-  return {
-    stairwellFitEnabled: true,
-    stairwellManualCounts: false,
-    stairwellSideAMm: targets.A ?? 0,
-    stairwellSideBMm: targets.B ?? 0,
-    stairwellSideCMm: targets.C ?? 0,
-    stairwellKeySide: key,
-  };
 }
 
 /**
@@ -123,21 +110,11 @@ export function planStairwellVariants(config) {
   return { ok: candidates.length > 0, message, required, key, targets, free, rejected, candidates };
 }
 
-// One fit for a candidate; a two-turn U with a fixed B repeats it with the width that makes B exact (B grows 2 mm per
-// mm of width; never wider than the user's).
+// One candidate solved like the live stair (stairwellFit.js solveFixedSides — the same fixed-side rules), its counts
+// always chosen (a variant is a proposal).
 function fitCandidate(config, plan, cand) {
-  const run = (width) => solveStairwellFit({ ...config, ...cand.patch, stairWidth: width, ...fitPatch(plan.targets, plan.key) }, { freeSides: plan.free });
-  let width = cand.width;
-  let fit = run(width);
-  const twoTurnU = config.stairType === 'U' && !cand.patch.uSingleWinderZone && plan.targets.B !== null;
-  for (let k = 0; twoTurnU && fit.values && k < WIDTH_ROUNDS; k++) {
-    const achievedB = fit.sides.find((s) => s.side === 'B')?.achieved;
-    const next = Math.min(cand.width, Math.round((width - (achievedB - plan.targets.B) / 2) * 10) / 10);
-    if (!(next >= VARIANT_ABSOLUTE_MIN_WIDTH_MM) || Math.abs(next - width) <= 0.05) break;
-    width = next;
-    fit = run(width);
-  }
-  return { fit, width };
+  const fit = solveFixedSides({ ...config, ...cand.patch, stairWidth: cand.width, stairwellManualCounts: false });
+  return { fit, width: fit?.values?.stairWidth ?? cand.width };
 }
 
 /**

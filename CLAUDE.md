@@ -121,9 +121,11 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   **Variants** ("🔎 Szukaj wariantów schodów w klatce", folder 5, `ui/stairwellVariantsPanel.js`): the project's type;
   winders n−1..n+1 round round(arc/going)+1 + one landing; U one zone when the axis gap is 0..300 (the width narrows to
   (B + board)/2 for a smaller fixed B), else two turns (width solved for B) + one zone; width < 800 a warning, < 500
-  dropped. Each = ONE `solveStairwellFit` with the fixed sides as targets (key = the fixed exit side, else the first
-  fixed), free sides via `opts.freeSides` (counts chosen for the riser); a fixed side still off → the variant's
-  problem; sorted, "Zastosuj" writes the patch. **Opening derived** (`openingMode: 'derived'`):
+  dropped. Each = `solveFixedSides` (one `solveStairwellFit` with the fixed sides as targets, key = the fixed exit side,
+  else the first fixed; free sides via `opts.freeSides`; a U's B by the axis gap / width); a fixed side still off → the
+  variant's problem; sorted, "Zastosuj" writes the patch. **Kept LIVE**: `buildStaircase` runs `solveFixedSides` on
+  every change (memoised; `opts.allowInfeasible`) and `rebuild()` copies the going / counts (unless
+  `stairwellManualCounts`) / axis gap / width back as AUTO — the fixed sides stay pinned whatever the user edits. **Opening derived** (`openingMode: 'derived'`):
   `requiredOpeningRelative` = union of the headroom treads' bounding rectangles (frame axes, outward 0.1 mm, snapped
   to `frame.wallLines`); "⇩ Zapisz wyznaczony otwór jako zadany" / a hand edit freezes it.
 - **Stairwell fit** (`stairwellFit.js`): not in the panel — the per-variant going/count solver of the designer

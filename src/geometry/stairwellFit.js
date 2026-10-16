@@ -31,6 +31,7 @@
 import { buildPlanLayout } from './planLayout.js';
 import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { wellEnabled, wellFixedTargets, wellSideLetters, exitSideLetter } from './stairwell.js';
 
 const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
@@ -183,7 +184,7 @@ function fitDiag(severity, parameter, message, extra = {}) {
 
 /**
  * @param {Object} config  the user's config (targets in stairwellSide{A,B,C}Mm, key in stairwellKeySide)
- * @param {{limits?: Object<string, {min?:number, max?:number}>, freeSides?: string[]}} [opts]  `freeSides`: sides with no target
+ * @param {{limits?: Object<string, {min?:number, max?:number}>, freeSides?: string[], allowInfeasible?: boolean}} [opts]  `freeSides`: sides with no target
  *   whose flights' counts are still CHOSEN (for the riser / 2h+s — a FREE side of the room-first designer, user
  *   decision 2026-10-16); without it a side with no target keeps the config's count.  `limits`: a range a non-key side must stay in
  *   (a wall it must not pass, an exit edge it must reach — the room-first designer, designer/stairwellVariants.js): a
@@ -226,6 +227,9 @@ export function solveStairwellFit(config, opts = {}) {
     return riserOff(derived) > 0 ? [0, 1, blondel, total, 0] : [0, 0, total, blondel, 0];
   };
   const manual = !!config.stairwellManualCounts;
+  // a turn the layout calls infeasible (too few winders for the walkline, …) drops a variant — unless `allowInfeasible`
+  // (the stairwell's fixed sides, which must hold anyway: then it only ranks last, and the validator reports the turn)
+  const strictTurn = !manual && !opts.allowInfeasible;
   // manual counts: every flight keeps the user's count — one candidate, only the going is solved
   const free = (opts.freeSides || []).filter((s) => letters.includes(s) && s !== key && !others.includes(s));
   const varied = [...others, ...free];
@@ -247,10 +251,10 @@ export function solveStairwellFit(config, opts = {}) {
       const cand = { ...atGoing };
       for (const s of varied) cand[COUNT_FIELD[s]] = combo[s];
       const derived = deriveStairData(cand);
-      if (!derived.turnFeasible && !manual) continue;
+      if (!derived.turnFeasible && strictTurn) continue;
       const devs = others.map((s) => deviationOf(s, sideAtCount(lines[s], combo[s]), targets[s]));
       if (devs.some((d) => d === null)) continue;
-      const score = scoreOf(derived, devs, going);
+      const score = [derived.turnFeasible ? 0 : 1, ...scoreOf(derived, devs, going)];
       if (!bestHere || lexicographicallyLess(score, bestHere.score)) bestHere = { cand, score };
     }
     if (!bestHere) continue;
@@ -260,10 +264,10 @@ export function solveStairwellFit(config, opts = {}) {
     if (finalGoing === null) continue;
     const cand = { ...bestHere.cand, treadGoing: finalGoing };
     const { derived, sides } = measure(cand);
-    if (!derived.turnFeasible && !manual) continue;
+    if (!derived.turnFeasible && strictTurn) continue;
     const devs = others.map((s) => deviationOf(s, sides[letters.indexOf(s)], targets[s]));
     if (devs.some((d) => d === null)) continue;
-    const score = scoreOf(derived, devs, finalGoing);
+    const score = [derived.turnFeasible ? 0 : 1, ...scoreOf(derived, devs, finalGoing)];
     if (!best || lexicographicallyLess(score, best.score)) best = { cand, derived, sides, score };
   }
 
@@ -335,6 +339,14 @@ function oneZoneAxisGapFor(config, targetB) {
  * tread count of every flight whose side has a target — only the going with manual counts. [] when the fit is off.
  */
 export function stairwellDrivenFields(config) {
+  // the stairwell's fixed sides, kept live (solveFixedSides): the going, the counts (unless set by hand) and a one-zone
+  // U's axis gap when B is fixed
+  const plan = fixedSidesPlan(config);
+  if (plan) {
+    const gap = isOneZoneU(config) && plan.targets.B !== null ? ['uAxisGapMm'] : [];
+    if (config.stairwellManualCounts) return ['treadGoing', ...gap];
+    return ['treadGoing', ...wellSideLetters(config.stairType).filter((s) => !(gap.length && s === 'B')).map((s) => COUNT_FIELD[s]), ...gap];
+  }
   if (!config.stairwellFitEnabled) return [];
   const gap = oneZoneAxisGapFor(config, stairwellTargets(config).B) !== null ? ['uAxisGapMm'] : [];
   if (config.stairwellManualCounts) return ['treadGoing', ...gap];
@@ -345,4 +357,79 @@ export function stairwellDrivenFields(config) {
 /** The config the stair is built from: the user's config with the fitted going/counts applied (if any). */
 export function applyStairwellFit(config, fit = solveStairwellFit(config)) {
   return fit.values ? { ...config, ...fit.values } : config;
+}
+
+// --- The stairwell's FIXED sides kept on every change (geometry/stairwell.js model v3) -------------------------------
+
+const isOneZoneU = (config) => !!config.uSingleWinderZone && config.stairType === 'U' && config.turn1Type === 'winder' && config.turn2Type === 'winder' && !(Number(config.treadsLegB) > 0);
+
+/**
+ * The fit the stairwell's fixed sides call for, or null when the stairwell is off / has no fixed side: the key = the
+ * exit side when it is fixed (straight A, L B, U C), else the first fixed one; `free` = the sides without a dimension.
+ */
+export function fixedSidesPlan(config) {
+  if (!wellEnabled(config)) return null;
+  const targets = wellFixedTargets(config);
+  const letters = wellSideLetters(config.stairType);
+  const fixed = letters.filter((s) => targets[s] !== null);
+  if (fixed.length === 0) return null;
+  const exit = exitSideLetter(config.stairType);
+  return { targets, key: fixed.includes(exit) ? exit : fixed[0], free: letters.filter((s) => targets[s] === null) };
+}
+
+const VARIANT_WIDTH_FLOOR_MM = 500; // no stair below this (designer/stairwellVariants.js VARIANT_ABSOLUTE_MIN_WIDTH_MM)
+const WIDTH_ROUNDS = 4;
+let fixedSidesCache = { key: null, result: null };
+
+/**
+ * Solves the going and the counts (unless `stairwellManualCounts`) so the FIXED sides come out — the key side exact,
+ * the other fixed ones as close as the counts allow, the free sides' counts chosen for the riser (`freeSides`). A U's
+ * fixed B is met exactly: one 180° zone by its axis gap (the fit derives it; a B under 2 × width − board narrows the
+ * stair to (B + board) / 2), two turns by the width (re-solved up to WIDTH_ROUNDS times, never wider than given).
+ * The same for the live stair (buildStaircase, every change — the user's winders / turns / width are kept, only the
+ * driven fields change) and every variant of the designer. Without a solution the result says so (WARNING — the
+ * user's values stay). Memoised on the inputs it reads (an edge drag does not re-solve it).
+ * @returns {StairwellFit & {live:true}|null}
+ */
+export function solveFixedSides(config) {
+  const plan = fixedSidesPlan(config);
+  if (!plan) return null;
+  const { manualEdgeOverrides, manualStringerProfileOverrides, manualPostOverrides, manualTreadOverhangs, railingProfileOverrides, ...inputs } = config;
+  const cacheKey = JSON.stringify(inputs);
+  if (fixedSidesCache.key === cacheKey) return fixedSidesCache.result;
+
+  const t = Number(config.stringerThickness) || 0;
+  const given = Number(config.stairWidth) || 0;
+  const zone = isOneZoneU(config);
+  const B = plan.targets.B;
+  let width = zone && B !== null && 2 * given - t > B ? (B + t) / 2 : given;
+  const run = (w) =>
+    solveStairwellFit(
+      {
+        ...config,
+        stairWidth: w,
+        stairwellFitEnabled: true,
+        stairwellSideAMm: plan.targets.A ?? 0,
+        stairwellSideBMm: plan.targets.B ?? 0,
+        stairwellSideCMm: plan.targets.C ?? 0,
+        stairwellKeySide: plan.key,
+      },
+      { freeSides: plan.free, allowInfeasible: true },
+    );
+  let fit = run(width);
+  if (config.stairType === 'U' && !zone && B !== null) {
+    for (let k = 0; fit.values && k < WIDTH_ROUNDS; k++) {
+      const achievedB = fit.sides.find((s) => s.side === 'B')?.achieved;
+      const next = Math.min(given, Math.round((width - (achievedB - B) / 2) * 10) / 10);
+      if (!(next >= VARIANT_WIDTH_FLOOR_MM) || Math.abs(next - width) <= 0.05) break;
+      width = next;
+      fit = run(width);
+    }
+  }
+  const values = fit.values ? { ...fit.values, ...(Math.abs(width - given) > 1e-9 ? { stairWidth: width } : {}) } : null;
+  // the user's own values stay when there is no solution: a warning, never a blocked takeoff
+  const diagnostics = fit.diagnostics.map((d) => (d.severity === 'ERROR' ? { ...d, severity: 'WARNING' } : d));
+  const result = { ...fit, values, diagnostics, live: true, key: plan.key };
+  fixedSidesCache = { key: cacheKey, result };
+  return result;
 }

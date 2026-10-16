@@ -18,6 +18,23 @@ The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U
 wall to wall and C = 2350 from the end wall to the slab edge fixed, A free — the entry floats (2000 or 2500 depending
 on the counts), so the entry and the exit need not be on one line.
 
+## Kept LIVE — `stairwellFit.js solveFixedSides`
+
+The fixed sides hold on every change, not only when a variant is applied (user, 2026-10-16: "the exit treads must be
+pinned"): `buildStaircase` runs `solveFixedSides(config)` whenever the stairwell is on with a fixed side — the same
+solve the designer uses for each variant — and `rebuild()` copies the result back (AUTO): the going, the counts
+(unless "Liczby stopni ustawiam ręcznie" — then only the going follows the key side, e.g. 4 or 5 straight in C and A
+follows), a one-zone U's axis gap from a fixed B (`stairwellDrivenFields`: those fields show AUTO and are disabled — free
+B to set the axis gap by hand), the width when B needs it. The user's winders, turns, zone etc. stay theirs. A turn
+the layout calls infeasible (e.g. too few winders for the walkline) no longer drops the solution here
+(`opts.allowInfeasible`: it ranks last; the validator reports it — `WINDER-WALKLINE-MOVED` now names the zone's count
+and the count it needs, ≈ ⌈walkline arc / going⌉). No solution → WARNING, the user's values stay. Memoised on its
+inputs (manual overrides excluded), so an edge drag does not re-solve.
+
+Few winders in one 180° zone (e.g. 5 × 225 mm at a 500 mm walkline): the zone's goings cover only 1125 mm of walkline,
+the half circle at 500 mm needs π × 500 ≈ 1571 — the zone is laid out on a walkline ~200 mm from the post (narrow
+wedges at the dusza, big corner winders). That is the geometry, not a bug; the warning says how many winders it needs.
+
 ## Wall frame and the opening
 
 `wellFrame(config, planLayout)`: origin = the end of side A (the end wall's corner); x = the distance from wall A

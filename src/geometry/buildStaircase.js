@@ -22,7 +22,7 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
 import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
-import { solveStairwellFit, applyStairwellFit } from './stairwellFit.js';
+import { solveStairwellFit, applyStairwellFit, solveFixedSides } from './stairwellFit.js';
 import { stairwellReport, stairwellWalls } from './stairwell.js';
 import { buildStairwellWalls } from './stairwellWallsRenderer.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
@@ -73,7 +73,9 @@ export function buildStaircase(inputConfig) {
   // "Dopasuj do klatki" (stairwellFit.js): the going and straight-tread counts derived from the stairwell's side
   // lengths replace the user's values BEFORE anything is solved, so every model, the validation and the takeoff
   // see one and the same stair. With the fit off (or without a solution) this is the user's config unchanged.
-  const stairwellFit = solveStairwellFit(inputConfig);
+  // The stairwell's FIXED sides (stairwell.js) are kept the same way on every change — the going and the counts follow
+  // whatever the user edits (winders, turns, axis gap), so a fixed exit side stays "pinned" (user decision 2026-10-16).
+  const stairwellFit = solveFixedSides(inputConfig) || solveStairwellFit(inputConfig);
   const config = applyStairwellFit(inputConfig, stairwellFit);
   const derived = deriveStairData(config);
   // Cantilever stair (cantileverModel.js): the tread is the whole cladding box, no risers, no wangi, no structural posts.

@@ -29,17 +29,25 @@ export function checkWalklineMovedInTurn(config, planLayout) {
   return (planLayout.turns || [])
     .map((turn, i) => ({ turn, i }))
     .filter(({ turn }) => turn.walklineOffsetMm !== undefined && turn.walklineOffsetMm < config.walklineOffset - 1e-6)
-    .map(({ turn, i }) =>
-      finding(
+    .map(({ turn, i }) => {
+      // the arc the configured walkline needs: a quarter circle per 90° turn, a half circle for one 180° zone — and the
+      // winder count whose goings would cover it (an estimate: the zone also has to reach the flights)
+      const half = !!turn.halfTurn;
+      const count = half ? config.uWindersTotal : config.windersPerTurn;
+      const going = Number(config.treadGoing) || 0;
+      const arc = (half ? Math.PI : Math.PI / 2) * config.walklineOffset;
+      const needed = going > 0 ? Math.ceil(arc / going) : null;
+      const what = half ? `Strefa zabiegowa 180°: ${count} stopni zabiegowych` : `Zakręt ${i + 1}: ${count} stopni zabiegowych`;
+      return finding(
         'WARNING',
         'WINDER-WALKLINE-MOVED',
         'stair',
         `turn-${i}`,
         'walklineOffset',
-        `Zakręt ${i + 1}: ${config.windersPerTurn} stopni zabiegowych × ${config.treadGoing} mm nie mieści się na linii biegu ${config.walklineOffset} mm od duszy — zabieg rozłożono na linii biegu ${Math.round(turn.walklineOffsetMm)} mm od duszy. Zwiększ liczbę stopni zabiegowych lub głębokość stopnia, albo zmniejsz odsunięcie linii biegu.`,
+        `${what} × ${Math.round(going)} mm nie mieści się na linii biegu ${config.walklineOffset} mm od duszy — zabieg rozłożono na linii biegu ${Math.round(turn.walklineOffsetMm)} mm od duszy (stopnie przy duszy są bardzo wąskie, w narożnikach bardzo duże). ${needed && needed > count ? `Potrzeba ok. ${needed} stopni zabiegowych przy tej głębokości stopnia` : 'Zwiększ liczbę stopni zabiegowych'}, albo zwiększ głębokość stopnia lub zmniejsz odsunięcie linii biegu.`,
         { value: Math.round(turn.walklineOffsetMm), expected: config.walklineOffset, unit: 'mm' }
-      )
-    );
+      );
+    });
 }
 
 // --- Walkline consistency ------------------------------------------------------------------

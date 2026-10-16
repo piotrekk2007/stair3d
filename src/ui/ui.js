@@ -129,6 +129,9 @@ export function createUI({
     live(well.add(config, `stairwellWall${s}`)).name(`Bok ${s}: wzdłuż ściany`);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
+  // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
+  // the counts are AUTO; with the counts by hand only the going follows the key side (e.g. 4 or 5 straight in C)
+  live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie (AUTO tylko głębokość)');
 
   const ceiling = gui.addFolder('4. Otwór w stropie');
   // Given (the shape below) or DERIVED from the stair — the opening the treads need for their headroom
