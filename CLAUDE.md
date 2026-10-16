@@ -248,6 +248,10 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   items in their own modules; `wasteFactors.js`, `materialCatalog.js`.
 - Pricing: generic per-material list (`pricing.js`) and the DREWEX board price list (`boardPricing.js`: PLN/running
   metre by depth range × length column × thickness class, waste already inside; CSV import/export) — MATERIAL only;
+  a wanga by `stringerPricingMode` (user decision 2026-10-16): `whole` (its minimal rectangle — default), `strips`
+  (400 mm strips, each at its own depth measured at its own slant) or `split` (two straight blanks where they save the
+  most) — all with the whole board's length column, ONE price, the note says what was priced (`stockGeometry.js
+  stringerStrips / stringerSplitBlanks`, `calculatedDimensions.stringerPricing`);
   post price table; manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
   project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
 - Offer (`offer/offerModel.js`, `offerDocument.js`, `ui/offerPanel.js`): CNC + projekt is a hidden lump sum spread over

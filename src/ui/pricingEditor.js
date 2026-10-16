@@ -7,7 +7,7 @@
 //                            + dopłata do wang + tabela cen słupów
 //   settings.priceList     — już tylko podstopnie z płyty MDF (cena za m²)
 //   settings.wasteFactors  — odpad płyty MDF (pozycje z cenników desek/słupów mają odpad w cenie)
-import { createDefaultBoardPricing, parseBoardsCSV, boardsToCSV, RISER_MATERIALS, BOARD_THICKNESS_CLASSES_MM } from '../takeoff/boardPricing.js';
+import { createDefaultBoardPricing, parseBoardsCSV, boardsToCSV, RISER_MATERIALS, BOARD_THICKNESS_CLASSES_MM, STRINGER_PRICING_LABELS } from '../takeoff/boardPricing.js';
 import { DEFAULT_PRICE_LIST } from '../takeoff/pricing.js';
 import { DEFAULT_WASTE_FACTORS } from '../takeoff/wasteFactors.js';
 import { DEFAULT_MATERIAL_CATALOG } from '../takeoff/materialCatalog.js';
@@ -115,6 +115,9 @@ export function createPricingEditor(container, { settings, onChange }) {
           <div class="tkp-title">Materiał główny</div>
           <label>Gatunek <select data-kind="species">${species.map((s) => `<option ${s === p.species ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
           <label>Klasa <select data-kind="cls">${classes.map((c) => `<option ${c === p.cls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+          <label title="Jak liczyć cenę wangi z cennika desek — wanga zawsze jako jedna pozycja z jedną ceną; w notatce pozycji jest opis, co policzono.">Wycena wang <select data-kind="stringer-mode">
+            ${Object.entries(STRINGER_PRICING_LABELS).map(([v, l]) => `<option value="${v}" ${(p.stringerPricingMode || 'whole') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+          </select></label>
           <label>Podstopnie <select data-kind="riser">
             <option value="${RISER_MATERIALS.OAK}" ${p.riserMaterial === RISER_MATERIALS.OAK ? 'selected' : ''}>z drewna (deska 20 mm z cennika)</option>
             <option value="${RISER_MATERIALS.MDF}" ${p.riserMaterial === RISER_MATERIALS.MDF ? 'selected' : ''}>z płyty MDF/sklejki (cena za m²)</option>
@@ -200,6 +203,8 @@ export function createPricingEditor(container, { settings, onChange }) {
       render();
     } else if (kind === 'riser') {
       p.riserMaterial = el.value;
+    } else if (kind === 'stringer-mode') {
+      p.stringerPricingMode = el.value;
     } else if (kind === 'post') {
       const row = p.postPrices[Number(el.dataset.i)];
       row[el.dataset.field] = el.dataset.field === 'unit' ? el.value : Math.max(0, Number(el.value) || 0);

@@ -65,11 +65,29 @@ const DEFAULT_MULTIPLIERS = [
  * Wartości domyślne pochodzą z kalkulatora DREWEX (class-installer.php) i mogą różnić się od cen
  * faktycznie obowiązujących — prawdziwy cennik wczytuje się z pliku CSV (parseBoardsCSV).
  */
+// How a wanga is priced from the board price list (user decision 2026-10-16):
+//  * WHOLE  — the one straight blank the whole wanga can be cut from (its minimal rectangle) — as before;
+//  * STRIPS — "dokładnie": the blank's length in 400 mm strips, each priced at ITS OWN depth (the length column of
+//    the whole board — it is still one board);
+//  * SPLIT  — "uproszczona": two straight blanks, split where that saves the most material, each priced at its own
+//    depth — also with the whole board's length column (it is still ONE wanga; shorter columns would make the
+//    simplified mode cheaper than the exact one).
+// Always ONE price per wanga; the note says what was priced. The pieces come from the takeoff
+// (calculatedDimensions.stringerPricing — stockGeometry.js stringerStrips / stringerSplitBlanks).
+export const STRINGER_PRICING_MODES = Object.freeze({ WHOLE: 'whole', STRIPS: 'strips', SPLIT: 'split' });
+export const STRINGER_PRICING_LABELS = Object.freeze({
+  whole: 'cała formatka (z jednej deski)',
+  strips: 'dokładnie — pasy co 400 mm, każdy wg własnej głębokości',
+  split: 'uproszczona — dwie formatki',
+});
+
 export function createDefaultBoardPricing() {
   return {
     species: 'Dąb',
     cls: 'Klasa Natura',
     riserMaterial: RISER_MATERIALS.OAK,
+    // Jak wyceniać wangę (decyzja użytkownika 2026-10-16) — STRINGER_PRICING_MODES.
+    stringerPricingMode: STRINGER_PRICING_MODES.WHOLE,
     // Słupy: najmniejszy przekrój z tabeli, który jest >= przekroju słupa. Wartości domyślne to
     // pozycje "Drewniany 80×80/100×100" z cennika DREWEX (cena za sztukę) + 110×110 = 200 zł/mb;
     // słup o większym przekroju zostaje niewyceniony, dopóki nie dopiszesz dla niego wiersza.
@@ -266,6 +284,49 @@ function pricePost(item, pricing) {
  * @param {import('./takeoffTypes.js').MaterialTakeoffItem[]} items
  * @param {ReturnType<typeof createDefaultBoardPricing>} pricing
  */
+// The pieces a wanga is priced as in the chosen mode, or null for the whole blank (also for every other element).
+function stringerPiecesFor(item, mode) {
+  if (item.elementType !== ELEMENT_TYPES.STRINGER || !mode || mode === STRINGER_PRICING_MODES.WHOLE) return null;
+  const alt = item.calculatedDimensions?.stringerPricing;
+  const pieces = mode === STRINGER_PRICING_MODES.STRIPS ? alt?.strips : mode === STRINGER_PRICING_MODES.SPLIT ? alt?.split : null;
+  return pieces?.length ? { mode, pieces } : null;
+}
+
+// One price for the wanga from its pieces: each at its own depth, all with the WHOLE board's length column.
+function priceStringerPieces(item, pricing, blank, { mode, pieces }) {
+  const material = `${pricing.species} · ${pricing.cls}`;
+  const base = { ...item, material, materialId: boardMaterialId(pricing.species, pricing.cls), pricingSource: BOARD_PRICING_SOURCE, catalogStock: null };
+  const priced = [];
+  for (const piece of pieces) {
+    const lookup = lookupBoardPricePerMb(pricing.table, { species: pricing.species, cls: pricing.cls, thicknessMm: blank.thicknessMm, depthMm: piece.depthMm, lengthMm: blank.lengthMm });
+    if (!lookup.ok) return { ...base, priceBreakdown: null, notes: [...item.notes, `Brak ceny z cennika desek: ${lookup.reason}`] };
+    priced.push({ ...piece, pricePerMb: lookup.pricePerMb, cost: lookup.pricePerMb * (piece.lengthMm / 1000), lookup });
+  }
+  const cost = round2(priced.reduce((sum, p) => sum + p.cost, 0) * item.quantity);
+  const totalLength = priced.reduce((sum, p) => sum + p.lengthMm, 0);
+  const stockMeasure = item.wasteAdjustedUnit === 'm3' ? item.stockVolume : item.stockArea;
+  const what =
+    mode === STRINGER_PRICING_MODES.STRIPS
+      ? `pasy co 400 mm wg własnej głębokości (kolumna dł. ${priced[0].lookup.tier.label} — cała deska): ${priced.map((p) => `${Math.round(p.lengthMm)}×${Math.round(p.depthMm)}`).join(', ')} mm`
+      : priced.length > 1
+        ? `dwie formatki (kolumna dł. ${priced[0].lookup.tier.label} — cała deska): ${priced.map((p) => `${Math.round(p.lengthMm)}×${Math.round(p.depthMm)} mm (${fmtPln(p.pricePerMb)} zł/mb)`).join(' + ')}`
+        : `jedna formatka ${Math.round(priced[0].lengthMm)}×${Math.round(priced[0].depthMm)} mm (podział nie oszczędza materiału)`;
+  return {
+    ...base,
+    wasteFactor: 0,
+    wasteAdjustedQuantity: stockMeasure,
+    unitPrice: round4((cost / item.quantity / totalLength) * 1000),
+    priceUnit: 'mb',
+    currency: 'PLN',
+    calculatedCost: cost,
+    priceBreakdown: { mode, pieces: priced.map(({ lookup, ...p }) => ({ ...p, thicknessClass: lookup.thicknessClass })), lengthMm: blank.lengthMm, depthMm: blank.depthMm },
+    notes: [
+      ...item.notes,
+      `Cennik desek: ${pricing.species} ${pricing.cls} · wanga wyceniona: ${STRINGER_PRICING_LABELS[mode]} — ${what}${item.quantity > 1 ? ` × ${item.quantity} szt.` : ''} = ${fmtPln(cost)} zł (cała formatka: ${Math.round(blank.lengthMm)} × ${Math.round(blank.depthMm)} mm).`,
+    ],
+  };
+}
+
 export function applyBoardPricing(items, pricing) {
   return items.map((item) => {
     if (item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
@@ -273,6 +334,8 @@ export function applyBoardPricing(items, pricing) {
     if (item.elementType === ELEMENT_TYPES.POST) return pricePost(item, pricing);
     const blank = boardBlankOf(item, pricing.riserMaterial);
     if (!blank) return item;
+    const pieces = stringerPiecesFor(item, pricing.stringerPricingMode);
+    if (pieces) return priceStringerPieces(item, pricing, blank, pieces);
 
     const material = `${pricing.species} · ${pricing.cls}`;
     const base = { ...item, material, materialId: boardMaterialId(pricing.species, pricing.cls), pricingSource: BOARD_PRICING_SOURCE, catalogStock: null };
@@ -374,6 +437,7 @@ export function sanitizeBoardPricing(value) {
     species: typeof value.species === 'string' ? value.species : fresh.species,
     cls: typeof value.cls === 'string' ? value.cls : fresh.cls,
     riserMaterial: Object.values(RISER_MATERIALS).includes(value.riserMaterial) ? value.riserMaterial : fresh.riserMaterial,
+    stringerPricingMode: Object.values(STRINGER_PRICING_MODES).includes(value.stringerPricingMode) ? value.stringerPricingMode : fresh.stringerPricingMode,
     table: {
       boards: boards.length > 0 ? boards : fresh.table.boards,
       speciesMultipliers: multipliers.length > 0 ? multipliers : fresh.table.speciesMultipliers,

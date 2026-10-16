@@ -119,3 +119,112 @@ export function minAreaRectUV(points) {
   const r2 = (x) => Math.round(x * 100) / 100;
   return { lengthMm: r2(best.lengthMm), widthMm: r2(best.widthMm), angleDeg: r2(best.angleDeg) };
 }
+
+// --- Stringer blanks for fairer pricing (user decision 2026-10-16) ----------------------------------------------
+// A wanga's minimal straight rectangle (minAreaRectUV) is what a board must be to cut the whole wanga from ONE piece;
+// a profile that bends (a flight, then steeper winders) or widens at an end makes that rectangle much deeper than the
+// board mostly is. Two other readings of the same contour, chosen in the takeoff settings (boardPricing.js):
+//  * strips — the blank's length cut into STRIP_MM pieces, each as deep as the contour is within it;
+//  * split  — the contour covered by TWO straight blanks, split where that saves the most material.
+
+const STRIP_MM = 400;
+const SPLIT_STEP_MM = 50;
+const SPLIT_MIN_PART_MM = 300;
+const SPLIT_MIN_SAVING = 0.02; // a split saving less than 2 % of the one blank's area is not worth a second piece
+
+// The contour in the frame of its minimal rectangle: x along the blank's length, y across it.
+function inBlankFrame(points) {
+  const rect = minAreaRectUV(points);
+  const a = (rect.angleDeg * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { rect, pts: points.map((p) => ({ x: p.u * c + p.v * s, y: -p.u * s + p.v * c })) };
+}
+
+// The part of a polygon (x, y) with x within [x0, x1] (two straight cuts, Sutherland–Hodgman).
+function sliceX(pts, x0, x1) {
+  const cut = (poly, keep) => {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const q = poly[(i + 1) % poly.length];
+      const kp = keep(p);
+      const kq = keep(q);
+      if (kp >= 0) out.push(p);
+      if ((kp > 0 && kq < 0) || (kp < 0 && kq > 0)) {
+        const t = kp / (kp - kq);
+        out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+      }
+    }
+    return out;
+  };
+  return cut(cut(pts, (p) => p.x - x0), (p) => x1 - p.x);
+}
+
+// How deep one strip is: the narrowest it gets across, measured at the board's own local slant there (within
+// ±STRIP_MAX_TILT_DEG of the blank's axis) — a strip of a bending board lies slightly askew in the long blank's frame.
+const STRIP_MAX_TILT_DEG = 30;
+function stripDepth(part) {
+  let best = Infinity;
+  for (let deg = -STRIP_MAX_TILT_DEG; deg <= STRIP_MAX_TILT_DEG; deg += 0.5) {
+    const t = (deg * Math.PI) / 180;
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const p of part) {
+      const y = -p.x * s + p.y * c;
+      if (y < lo) lo = y;
+      if (y > hi) hi = y;
+    }
+    best = Math.min(best, hi - lo);
+  }
+  return best;
+}
+
+/** The blank cut into STRIP_MM pieces along its length: [{lengthMm, depthMm}] (each as deep as the contour there). */
+export function stringerStrips(points, stripMm = STRIP_MM) {
+  if (!points || points.length < 3) return [];
+  const { pts } = inBlankFrame(points);
+  const xs = pts.map((p) => p.x);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const strips = [];
+  for (let a = x0; a < x1 - 1e-6; a += stripMm) {
+    const b = Math.min(x1, a + stripMm);
+    const part = sliceX(pts, a, b);
+    if (part.length < 3) continue;
+    strips.push({ lengthMm: Math.round((b - a) * 100) / 100, depthMm: Math.round(stripDepth(part) * 100) / 100 });
+  }
+  return strips;
+}
+
+/**
+ * The contour covered by two straight blanks, split across the blank's length where the two (each its own minimal
+ * rectangle) take the least material; one blank when no split saves at least SPLIT_MIN_SAVING. [{lengthMm, depthMm}].
+ */
+export function stringerSplitBlanks(points) {
+  if (!points || points.length < 3) return [];
+  const { rect, pts } = inBlankFrame(points);
+  const whole = [{ lengthMm: rect.lengthMm, depthMm: rect.widthMm }];
+  const xs = pts.map((p) => p.x);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  // each part measured like a strip: its length ALONG the board, its depth across it (at its own slant) — never the
+  // longer side of its own rectangle (a short, wide end piece would swap them)
+  const r2 = (x) => Math.round(x * 100) / 100;
+  let best = null;
+  for (let s = x0 + SPLIT_MIN_PART_MM; s <= x1 - SPLIT_MIN_PART_MM + 1e-6; s += SPLIT_STEP_MM) {
+    const a = sliceX(pts, x0, s);
+    const b = sliceX(pts, s, x1);
+    if (a.length < 3 || b.length < 3) continue;
+    const parts = [
+      { lengthMm: r2(s - x0), depthMm: r2(stripDepth(a)) },
+      { lengthMm: r2(x1 - s), depthMm: r2(stripDepth(b)) },
+    ];
+    const area = parts[0].lengthMm * parts[0].depthMm + parts[1].lengthMm * parts[1].depthMm;
+    if (!best || area < best.area) best = { area, parts };
+  }
+  if (!best || best.area > rect.lengthMm * rect.widthMm * (1 - SPLIT_MIN_SAVING)) return whole;
+  return best.parts;
+}

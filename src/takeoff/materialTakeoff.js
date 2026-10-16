@@ -19,7 +19,7 @@
 import { signedPolygonArea } from '../geometry/pathUtils.js';
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
-import { boundingRectAlong, minAreaRectUV } from './stockGeometry.js';
+import { boundingRectAlong, minAreaRectUV, stringerStrips, stringerSplitBlanks } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
 import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
 import { buildRailingItems } from './railingItems.js';
@@ -251,7 +251,9 @@ function buildStringerBoardItem(side, segment, geo, config, wasteFactors) {
     quantity: 1,
     unit: 'szt',
     nominalDimensions: { lengthMm: nominalLengthMm, boardWidthMm: geo.boardWidthMm, thicknessMm: geo.thicknessMm, netAreaMm2 },
-    calculatedDimensions: { lengthMm, boardWidthMm: blankDepthMm, thicknessMm: geo.thicknessMm },
+    // the other two readings of the same contour the price list may use (takeoff settings, boardPricing.js):
+    // 400 mm strips each at its own depth, or two straight blanks
+    calculatedDimensions: { lengthMm, boardWidthMm: blankDepthMm, thicknessMm: geo.thicknessMm, stringerPricing: { strips: stringerStrips(geo.outerContour), split: stringerSplitBlanks(geo.outerContour) } },
     catalogStock,
     netVolume: netVolumeMm3 * MM3_TO_M3,
     netArea: netAreaMm2 * MM2_TO_M2,
