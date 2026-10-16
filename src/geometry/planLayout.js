@@ -1,5 +1,5 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, goesStraightThrough, normalizeVector } from './pathUtils.js';
-import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs } from './edgeOverrides.js';
+import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs, edgeLayoutKey } from './edgeOverrides.js';
 import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
@@ -28,9 +28,17 @@ export function buildPlanLayout(config) {
   // Ręczne przesunięcia krawędzi (przeciąganie na planie 2D) — jedno miejsce, więc każdy
   // konsument planLayout (widok 3D, plan 2D, wymiary, formatki zabiegowe) dostaje już
   // poprawioną geometrię bez własnej wiedzy o istnieniu edycji. Patrz edgeOverrides.js.
-  if (config.manualEdgeOverrides && Object.keys(config.manualEdgeOverrides).length > 0) {
-    layout.treads = applyManualEdgeOverrides(layout.treads, config.manualEdgeOverrides);
+  // Edits made on a different tread layout (another number of treads / winders / turns — edgeLayoutKey) are out of
+  // date: their boundary numbers now name other edges. They are NOT applied (and reported, kept until removed);
+  // edits whose result would be an invalid tread are skipped. `edgeOverrideStatus` says which did what.
+  const status = { applied: [], skipped: [], stale: [] };
+  const edits = config.manualEdgeOverrides || {};
+  if (Object.keys(edits).length > 0) {
+    const madeOn = config.manualEdgeOverridesLayout;
+    if (madeOn && madeOn !== edgeLayoutKey(config)) status.stale = Object.keys(edits).map(Number);
+    else layout.treads = applyManualEdgeOverrides(layout.treads, edits, status);
   }
+  layout.edgeOverrideStatus = status;
   // Automatyczne wgłębienie po stronie wpuszczanej — konsekwencja typu konstrukcji wangi, nie
   // ręczna edycja, więc stosowane zawsze, PO ręcznym przesunięciu wspólnego rogu (edytowany róg to
   // "prawdziwa" krawędź, którą dopiero wgłębiamy) i PRZED ewentualnym ręcznym wysunięciem stopnia

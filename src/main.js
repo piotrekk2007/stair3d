@@ -38,6 +38,7 @@ import { resolveOpening, sanitizeOpeningPolygon, moveOpeningVertex, insertOpenin
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { boundaryEditPoints } from './plan2d/edgeEdit.js';
+import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
@@ -798,8 +799,15 @@ function applyRailingEdit(action, sectionId, stepIndex, side) {
   commitHistory();
 }
 
+// Writes one edge edit, stamped with the tread layout it is made on (edgeOverrides.js edgeLayoutKey). Edits made on
+// another layout are out of date (not applied, reported): the first edit on the new layout replaces them.
+function setEdgeOverride(boundaryIndex, override) {
+  Object.assign(config, withEdgeOverride(config, boundaryIndex, override));
+}
+
 function handleResetEdgeOverrides() {
   config.manualEdgeOverrides = {};
+  delete config.manualEdgeOverridesLayout;
   config.manualTreadOverhangs = {};
   config.manualPostOverrides = {};
   rebuild();
@@ -1132,14 +1140,16 @@ planApi = attachPlanInteractions({
   // slide along — the stair's inner/outer chain lines, the same lines the nominal edge ends lie on
   getEdgeEditContext: (boundaryIndex) => {
     if (!currentPlanLayout) return null;
-    const at = (i) => boundaryEditPoints(currentPlanLayout, i, config.manualEdgeOverrides);
+    // only the edits in effect: an out-of-date or rejected edit must neither be dragged from nor block its neighbours
+    const live = effectiveEdgeOverrides(currentPlanLayout, config.manualEdgeOverrides);
+    const at = (i) => boundaryEditPoints(currentPlanLayout, i, live);
     const e = at(boundaryIndex);
     if (!e) return null;
     return { ...e, innerPath: currentPlanLayout.innerFullPath, outerPath: currentPlanLayout.outerFullPath, neighbours: { before: at(boundaryIndex - 1), after: at(boundaryIndex + 1) } };
   },
   onEdgeDragMove: (boundaryIndex, override) => {
     activeEdgeBoundary = boundaryIndex; // keeps the edge red with its pivot shown while it is dragged
-    config.manualEdgeOverrides[boundaryIndex] = override;
+    setEdgeOverride(boundaryIndex, override);
     rebuild(); // podgląd na żywo — BEZ wpisu do historii, patrz modelHistory.js
   },
   onEdgeDragEnd: (boundaryIndex, override) => {
@@ -1148,7 +1158,7 @@ planApi = attachPlanInteractions({
       regeneratePlan2D(); // a press without a move: nothing changed
       return;
     }
-    config.manualEdgeOverrides[boundaryIndex] = override;
+    setEdgeOverride(boundaryIndex, override);
     rebuild();
     commitHistory(); // dopiero puszczenie przeciągnięcia to jedna, zatwierdzona zmiana modelu
   },

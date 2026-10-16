@@ -98,7 +98,11 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `stackedStringers.js`).
 - `planLayout.walkline = {path, points}` — the drawn walkline (arc as chords) and one point per edge (edit pivots).
 - Override layers applied in `buildPlanLayout` (in this order): `manualEdgeOverrides` (`{[boundary]: {inner?, outer?}}`,
-  older `{movedEndpoint, point}` still read — `edgeOverrides.js edgeOverrideEndpoints`), the automatic housing recess
+  older `{movedEndpoint, point}` still read — `edgeOverrides.js edgeOverrideEndpoints`; stamped with the tread layout
+  they were made on, `manualEdgeOverridesLayout` = `edgeLayoutKey` (counts of treads / winders / turns): edits from
+  another layout are NOT applied — WARNING `EDGE-OVERRIDES-OUT-OF-DATE`, replaced by the first new edit
+  (`withEdgeOverride`); a rejected edit → WARNING `EDGE-OVERRIDE-SKIPPED`; `planLayout.edgeOverrideStatus
+  {applied, skipped, stale}`, the plan draws and drags only the applied ones (`effectiveEdgeOverrides`)), the automatic housing recess
   (`applyHousingRecess`: a tread ends t − d from a housed wanga's chain line, on a line parallel to it —
   `recessTreadToWangi`), `manualTreadOverhangs` (one tread's own side, `{side, offsetMm}`).
 - **Stairwell fit** (`stairwellFit.js`, "Dopasuj do klatki"): derives going + straight counts from side lengths of the

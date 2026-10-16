@@ -9,7 +9,7 @@
 // widoku nigdy nie przesuwało elementów interfejsu razem z planem.
 
 import { computeWinderBlank } from '../geometry/winderBlank.js';
-import { getBoundaryPoints, getNominalBoundaryPoints } from '../geometry/edgeOverrides.js';
+import { getBoundaryPoints, getNominalBoundaryPoints, effectiveEdgeOverrides } from '../geometry/edgeOverrides.js';
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { boardPlanFootprint } from '../geometry/stringerModel.js';
 import { boundaryEditPoints } from './edgeEdit.js';
@@ -497,11 +497,13 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const axisXMLStr = layers.axes ? axisXML(planLayout) : '';
   const walklineXMLStr = layers.walkline ? walklineXML(planLayout) : '';
   const runBoundariesXMLStr = layers.runBoundaries ? runBoundariesXML(planLayout) : '';
-  const stepBoundariesXMLStr = layers.stepBoundaries && !editMode ? stepBoundariesXML(planLayout, config.manualEdgeOverrides) : '';
+  // only the edge edits that really took effect are drawn as edited (an out-of-date or rejected one is not)
+  const liveEdits = effectiveEdgeOverrides(planLayout, config.manualEdgeOverrides);
+  const stepBoundariesXMLStr = layers.stepBoundaries && !editMode ? stepBoundariesXML(planLayout, liveEdits) : '';
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
-  const editXML = editMode ? editHandlesXML(planLayout, config.manualEdgeOverrides, config, activeBoundary) : '';
+  const editXML = editMode ? editHandlesXML(planLayout, liveEdits, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">

@@ -295,6 +295,24 @@ export function checkManualOverridesApplied(treadModels) {
     .map((t) => finding('INFO', 'VALIDATOR-MANUAL-OVERRIDE', 'tread', t.stepId, 'manualEdgeOverrides', `Wprowadzono ręczną korektę geometrii ${t.stepId}.`, {}));
 }
 
+// Edge edits that do NOT shape the layout: made on another tread layout (the number of treads / winders / turns has
+// changed since — their boundary numbers now name other edges), or rejected because the tread would be invalid. Kept
+// and reported, never silently re-applied (planLayout.js edgeOverrideStatus).
+export function checkEdgeOverridesNotApplied(planLayout) {
+  const s = planLayout?.edgeOverrideStatus;
+  if (!s) return [];
+  const out = [];
+  if (s.stale.length) {
+    out.push(
+      finding('WARNING', 'EDGE-OVERRIDES-OUT-OF-DATE', 'stair', null, 'manualEdgeOverrides', `${s.stale.length} ręczn${s.stale.length === 1 ? 'a edycja' : 'e edycje'} krawędzi stopni ${s.stale.length === 1 ? 'pochodzi' : 'pochodzą'} z innego układu stopni (zmieniono liczbę stopni, zabiegów lub zakrętów) — nie ${s.stale.length === 1 ? 'jest stosowana' : 'są stosowane'}. Pierwsza nowa edycja krawędzi je zastąpi; przycisk „Resetuj ręczne edycje krawędzi” (Plan 2D) usuwa je od razu.`, { value: s.stale.length })
+    );
+  }
+  for (const b of s.skipped) {
+    out.push(finding('WARNING', 'EDGE-OVERRIDE-SKIPPED', 'stair', `boundary-${b}`, 'manualEdgeOverrides', `Ręczna edycja krawędzi ${b} jest pominięta: przy obecnym układzie stopień miałby niepoprawny kształt. Usuń ją (prawy klik na krawędzi w trybie edycji) albo ustaw krawędź od nowa.`, { value: b }));
+  }
+  return out;
+}
+
 // --- Aggregator --------------------------------------------------------------------------------
 
 /**
@@ -319,6 +337,7 @@ export function evaluateAdditionalChecks({ config, derived, planLayout, treadMod
     ...checkMissingRiserSurfaces(treadModels, riserModels, config),
     ...checkMissingStringerSupport(treadModels, stringerModels),
     ...checkManualOverridesApplied(treadModels),
+    ...checkEdgeOverridesNotApplied(planLayout),
     ...checkWalklineMovedInTurn(config, planLayout),
   ];
 }

@@ -103,7 +103,7 @@ export function edgeOverrideEndpoints(override) {
 // któregoś z dotkniętych stopni wyszedłby zdegenerowany (zerowe/ujemne pole albo odwrócony
 // zwrot), edycja tej granicy jest pomijana (z ostrzeżeniem w konsoli) — reszta nadal się
 // stosuje. Zwraca nową tablicę stopni; nie mutuje `treads` przekazanego na wejściu.
-export function applyManualEdgeOverrides(treads, overrides) {
+export function applyManualEdgeOverrides(treads, overrides, report = null) {
   const keys = overrides ? Object.keys(overrides) : [];
   if (keys.length === 0) return treads;
 
@@ -115,7 +115,10 @@ export function applyManualEdgeOverrides(treads, overrides) {
     if (!override || !Number.isInteger(boundaryIndex)) continue;
 
     const { before, after, current } = getBoundaryPoints(result, boundaryIndex);
-    if (!current) continue; // granica już nie istnieje przy dzisiejszej liczbie stopni
+    if (!current) {
+      report?.skipped.push(boundaryIndex); // granica już nie istnieje przy dzisiejszej liczbie stopni
+      continue;
+    }
 
     const ends = edgeOverrideEndpoints(override);
     // [old, new] per moved end — both taken from the edge BEFORE either is moved
@@ -134,11 +137,41 @@ export function applyManualEdgeOverrides(treads, overrides) {
     );
     if (broken) {
       for (const [oldPoint, newPoint] of [...moves].reverse()) for (const tread of affected) retargetPoint(tread, newPoint, oldPoint);
-      console.warn(`Pominięto ręczną edycję krawędzi ${boundaryIndex}: wynikowy kształt stopnia byłby niepoprawny.`);
+      report?.skipped.push(boundaryIndex);
+    } else {
+      report?.applied.push(boundaryIndex);
     }
   }
 
   return result;
+}
+
+// Which tread layout a set of edge edits was made on: the edits are keyed by boundary number and hold absolute points,
+// so they only mean what they meant while the number of treads, winders and turns is the same. Stored with the edits
+// (config.manualEdgeOverridesLayout) when an edge is edited; a different key now = the edits are out of date.
+export function edgeLayoutKey(config) {
+  const f = (k) => (config?.[k] === undefined ? '' : String(config[k]));
+  return ['stairType', 'turnDirection', 'treadsLegA', 'treadsLegB', 'treadsLegC', 'windersPerTurn', 'turn1Type', 'turn2Type', 'mergeLandings', 'uSingleWinderZone', 'uWindersTotal']
+    .map((k) => `${k}=${f(k)}`)
+    .join(';');
+}
+
+/**
+ * The edge edits after setting one boundary's edit, stamped with the tread layout it is made on. Edits made on another
+ * layout (out of date — not applied) are dropped by this first edit on the new one; they no longer name these edges.
+ * @returns {{manualEdgeOverrides: Object, manualEdgeOverridesLayout: string}}
+ */
+export function withEdgeOverride(config, boundaryIndex, override) {
+  const key = edgeLayoutKey(config);
+  const current = config.manualEdgeOverridesLayout && config.manualEdgeOverridesLayout !== key ? {} : { ...(config.manualEdgeOverrides || {}) };
+  current[boundaryIndex] = override;
+  return { manualEdgeOverrides: current, manualEdgeOverridesLayout: key };
+}
+
+/** The edge edits that really shape the layout now (the ones buildPlanLayout applied) — what the plan draws and edits. */
+export function effectiveEdgeOverrides(planLayout, overrides) {
+  const applied = new Set(planLayout?.edgeOverrideStatus?.applied || []);
+  return Object.fromEntries(Object.entries(overrides || {}).filter(([k]) => applied.has(Number(k))));
 }
 
 // Przesuwa JEDEN róg stopnia (na krawędzi `edgeKey`, po stronie `sideIdx`) wzdłuż WŁASNEGO
