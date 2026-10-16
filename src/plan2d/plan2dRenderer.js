@@ -262,10 +262,30 @@ export function stairwellXML(drawing) {
   if (drawing.exit) {
     const [a, b] = drawing.exit;
     xml += `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="#2e7d32" stroke-width="4" ${HAIR}/>`;
-    xml += `<text x="${fmt((a.x + b.x) / 2)}" y="${fmt(-(a.y + b.y) / 2 - px(8))}" font-size="${px(11)}" fill="#2e7d32" text-anchor="middle">wyjście — piętro (${drawing.exitSide})</text>`;
+    xml += `<text x="${fmt((a.x + b.x) / 2)}" y="${fmt(-(a.y + b.y) / 2 - px(8))}" font-size="${px(11)}" fill="#2e7d32" text-anchor="middle">wyjście — piętro (${drawing.exitSide}${drawing.exitAuto ? ', AUTO' : ''})</text>`;
+  }
+  // the opening's distances to the walls
+  for (const d of drawing.openingDims || []) {
+    xml += `<line x1="${fmt(d.a.x)}" y1="${fmt(-d.a.y)}" x2="${fmt(d.b.x)}" y2="${fmt(-d.b.y)}" stroke="#1a5fb4" stroke-width="1" stroke-dasharray="3 3" ${HAIR}/>`;
+    xml += `<text x="${fmt((d.a.x + d.b.x) / 2)}" y="${fmt(-(d.a.y + d.b.y) / 2 - px(3))}" font-size="${px(10)}" fill="#1a5fb4" text-anchor="middle">${Math.round(d.value)}</text>`;
   }
   const marker = `<defs><marker id="stairwell-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${wall}"/></marker></defs>`;
   return `<g id="stairwell-layer" pointer-events="none">${marker}${xml}</g>`;
+}
+
+// "⌂ Wejście" / "⇧ Wyjście" modes (`pick` = 'entry' | 'exit'): every room side (→ entry) or every opening edge facing
+// a side (→ exit) as a wide click target, drawn ON TOP of everything (a stringer or a tread under it would take the
+// click otherwise). One kind at a time: an opening as large as the room has its edges on the walls.
+export function stairwellPickXML(drawing, pick) {
+  if (!drawing?.sides) return '';
+  let xml = '';
+  for (const s of pick === 'entry' ? drawing.sides : []) {
+    xml += `<line class="stairwell-pick entry" data-pick="entry" data-side="${s.side}" x1="${fmt(s.a.x)}" y1="${fmt(-s.a.y)}" x2="${fmt(s.b.x)}" y2="${fmt(-s.b.y)}" stroke="#6b6b6b" stroke-opacity="0.25" stroke-width="${px(14)}" pointer-events="stroke"><title>Wejście od tej strony (${s.side})</title></line>`;
+  }
+  for (const c of pick === 'exit' ? drawing.exitCandidates || [] : []) {
+    xml += `<line class="stairwell-pick exit" data-pick="exit" data-side="${c.side}" x1="${fmt(c.a.x)}" y1="${fmt(-c.a.y)}" x2="${fmt(c.b.x)}" y2="${fmt(-c.b.y)}" stroke="#2e7d32" stroke-opacity="0.3" stroke-width="${px(12)}" pointer-events="stroke"><title>Wyjście na tę krawędź otworu (${c.side})</title></line>`;
+  }
+  return `<g id="stairwell-pick-layer">${xml}</g>`;
 }
 
 // Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).
@@ -283,6 +303,12 @@ export function openingXML(opening, editMode = false) {
   let xml = `<polygon class="opening-body${editMode ? ' editable' : ''}" points="${polygonPoints(pts)}" fill="${color}" fill-opacity="${editMode ? 0.1 : 0.05}" stroke="${color}" stroke-width="1.5" stroke-dasharray="10 5" ${HAIR} pointer-events="${editMode ? 'all' : 'none'}"/>`;
   xml += `<text x="${fmt(minX + px(6))}" y="${fmt(-maxY + px(14))}" font-size="${px(11)}" fill="${color}" pointer-events="none">${label}</text>`;
   if (editMode) {
+    // a whole edge is dragged along its normal (the outline is CCW: outward = (dy, −dx))
+    pts.forEach((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      xml += `<line class="opening-edge" data-index="${i}" data-ax="${fmt(a.x)}" data-ay="${fmt(a.y)}" data-nx="${((b.y - a.y) / len).toFixed(6)}" data-ny="${(-(b.x - a.x) / len).toFixed(6)}" x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-opacity="0.001" stroke-width="${px(10)}" pointer-events="stroke"><title>Przeciągnij, żeby przesunąć ten bok otworu</title></line>`;
+    });
     pts.forEach((a, i) => {
       const b = pts[(i + 1) % pts.length];
       xml += `<circle class="opening-mid" data-after="${i}" cx="${fmt((a.x + b.x) / 2)}" cy="${fmt(-(a.y + b.y) / 2)}" r="${px(4)}" fill="${color}" fill-opacity="0.55" stroke="#fff" stroke-width="1" ${HAIR}/>`;
@@ -391,7 +417,7 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, stairwellPick = false, openingEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -539,7 +565,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
-  const stairwellXMLStr = layers.stairwell === false ? '' : stairwellXML(stairwell);
+  const stairwellXMLStr = layers.stairwell === false && !stairwellPick ? '' : stairwellXML(stairwell);
+  const stairwellPickXMLStr = stairwellPick ? stairwellPickXML(stairwell, stairwellPick) : '';
   const editXML = editMode ? editHandlesXML(planLayout, liveEdits, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
@@ -565,6 +592,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${editXML}
     ${overhangXML}
     ${openingEdit ? openingXMLStr : ''}
+    ${stairwellPickXMLStr}
   </svg>`;
 }
 

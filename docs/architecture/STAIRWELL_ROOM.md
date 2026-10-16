@@ -1,5 +1,20 @@
 # Stairwell room (klatka jako pomieszczenie) — `src/geometry/stairwell.js`
 
+> **Rework 2026-10-16 (user feedback):** the stair TYPE and turn are the project's — the exit FOLLOWS from them
+> (`exitSideFor`: straight → the edge opposite the entry, L → the side edge toward the turn, U → the edge on the
+> entry side; `stairwellExitSide: 'auto'`, a compass side set by hand overrides); the designer never offers another
+> type (a hand-set exit that does not suit the type → no variants + why). Entry and exit are picked on the plan
+> ("⌂ Wejście": click a room side; "⇧ Wyjście": click an opening edge — the edge the type calls for = AUTO again; pick
+> targets drawn on top, one kind at a time). The opening is edited in the room: a whole edge dragged along its normal
+> (`.opening-edge`, 5 mm steps, snapping to walls/corners), the opening's distances to the four walls drawn. A width
+> below 800 mm is only a WARNING on a variant (`VARIANT_ABSOLUTE_MIN_WIDTH_MM` = 500 drops one); a narrowed variant
+> ranks last; a U one zone is offered also in a wider room; the going is free when the exit does not depend on it
+> (every going meeting the exit is tried). The old side-length "Dopasuj do klatki" UI is gone: project file v5
+> (`migrateV4ToV5`) turns a project that used it into a room of those sides; nothing drives the U axis gap any more.
+> Panel order: 1 Schody, 2 Budynek, 3 Klatka, 4 Otwór, 5 Bieg i stopnie (variant search on top), 6 Zabieg, 7 Wangi…,
+> 8 Wspornikowa/metalowa, 9 Balustrada. The sections below describe the stages as built; where they say "the type
+> follows from the entry and exit" read the above.
+
 Stage 1 of the room-first designer (user decisions 2026-10-16). The stairwell is a ROOM the stair is placed in; the
 automatic layout that fits the stair to it (variant list: type, turns, winders, width, going, counts) is stage 2,
 the opening derived from the stair stage 3, a polygon room / solid-open walls / walls in 3D stage 4.

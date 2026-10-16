@@ -2,19 +2,22 @@
 // start at its entry and end on the opening's exit edge.
 //
 // Few variants, decided by rules first (user decision 2026-10-16 — no sweeps of dozens of combinations):
-//   - the stair TYPE and turn direction follow from the entry and the exit (stairwell.js requiredStair);
-//   - the WIDTH is the user's (`stairWidth`), reduced (in 10 mm steps, never below VARIANT_MIN_WIDTH_MM) only when the
-//     room or the exit edge is narrower than that — the variant says so;
+//   - the stair TYPE and turn direction are the PROJECT's (user decision 2026-10-16 — a U is never offered as a
+//     straight stair); the exit follows from them (stairwell.js exitSideFor) unless set by hand — a hand-set exit
+//     that does not fit the type gives no variants and says why;
+//   - the WIDTH is the user's (`stairWidth`), reduced (in 10 mm steps) only when the room or the exit edge is narrower
+//     than that — the variant says so; below VARIANT_MIN_WIDTH_MM it is only a WARNING (user decision 2026-10-16), a
+//     variant is dropped only below VARIANT_ABSOLUTE_MIN_WIDTH_MM (no stair at all);
 //   - WINDERS: n − 1, n, n + 1 around n = round(walkline arc / going) + 1 (a quarter arc of `walklineOffset` per 90°
 //     turn, a half circle for one 180° zone) — plus ONE landing variant for comparison;
 //   - a U is one 180° winder zone when the room's width leaves an axis gap of 0..U_ZONE_MAX_AXIS_GAP_MM, else two
-//     90° turns with a middle flight.
+//     90° turns with a middle flight plus one zone variant (a wider dusza).
 // Each variant is solved once: a straight or L stair by ONE stairwell fit (stairwellFit.js — the going and the
 // straight counts), the exit side exact (the key), the side along the far wall within limits (never past the wall,
 // always reaching the exit edge); a U by `solveUExit` (its exit lies at A − C from the far wall, so the going is
 // solved for that difference, then equal straights are added to A and C up to the wall). The result is measured on a
 // real layout (stairwellReport, ceiling fit, the validator) and the list is sorted: fitting first, then the riser in
-// its range, the number of distinct rules in error, collisions with the ceiling, 2h+s nearest the middle of its band.
+// its range, a width not below the minimum, the number of distinct rules in error, collisions with the ceiling, 2h+s nearest the middle of its band.
 //
 // Pure: no Three.js, no config mutation. `patch` = the config fields applying a variant writes. It lives outside
 // src/geometry because it reads the validator (geometry never imports validation — RULES.md).
@@ -22,14 +25,16 @@
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { buildPlanLayout } from '../geometry/planLayout.js';
 import { solveStairwellFit, outerSideLengths, BLONDEL_TARGET_MM, FIT_GOING_RANGE_MM, FIT_MAX_TREADS_PER_LEG } from '../geometry/stairwellFit.js';
-import { entryFrame, openingExitEdge, requiredStair, stairPlacement, stairwellReport, stairwellExitOutline, ROOM_SIDES } from '../geometry/stairwell.js';
+import { entryFrame, openingExitEdge, requiredStair, stairPlacement, stairwellReport, stairwellExitOutline, exitSideFor } from '../geometry/stairwell.js';
 import { resolveOpening } from '../geometry/ceilingOpening.js';
 import { treadGoingAtOffsetFromInner, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { validateStaircase } from '../validator/StaircaseValidator.js';
 
-// PL-LEGAL-A-05* (stairWidth >= 0.8 m for the stair kinds the workshop builds) — the narrowest width the designer
-// may reduce to.
+// PL-LEGAL-A-05* (stairWidth >= 0.8 m for the stair kinds the workshop builds) — below it a variant carries a
+// WARNING; below VARIANT_ABSOLUTE_MIN_WIDTH_MM there is no usable stair and the variant is dropped
+// (SOFTWARE_DESIGN_CHOICE, STAIR3D-WELL-01).
 export const VARIANT_MIN_WIDTH_MM = 800;
+export const VARIANT_ABSOLUTE_MIN_WIDTH_MM = 500;
 const WIDTH_STEP_MM = 10;
 // The widest axis gap a U still gets as ONE 180° zone (wider: two turns with a middle flight). SOFTWARE_DESIGN_CHOICE
 // (STAIR3D-WELL-01, src/rules/sets/stairwellFitAssumptions.js), not a published figure.
@@ -53,6 +58,11 @@ const lexLess = (a, b) => {
 // matter for that), or the room's exit wall line when the opening is derived from the stair.
 function exitOutline(config) {
   return stairwellExitOutline(config, resolveOpening(config, { toPlan: (p) => p, toRelative: (p) => p }).relativeOutline);
+}
+
+function stairLabel(type, turn) {
+  if (type === 'straight') return 'schody proste';
+  return `schody ${type}, skręt w ${turn === 'left' ? 'lewo' : 'prawo'}`;
 }
 
 function naturalWinders(config, halfTurn) {
@@ -125,11 +135,16 @@ function sidesPatch(targets, key) {
 export function planStairwellVariants(config) {
   const frame = entryFrame(config);
   if (!frame) return { ok: false, message: 'Włącz klatkę (pomieszczenie) i podaj jej wymiary.', required: null, rejected: [], candidates: [] };
-  const side = ROOM_SIDES.includes(config.stairwellExitSide) ? config.stairwellExitSide : null;
+  const side = exitSideFor(config);
   const exit = side ? openingExitEdge(exitOutline(config), side) : null;
-  if (!exit) return { ok: false, message: `Otwór w stropie nie ma krawędzi od strony ${side || '—'} — wskaż krawędź wyjścia.`, required: null, rejected: [], candidates: [] };
-  const required = requiredStair(frame, exit, config.turnDirection);
-  if (!required) return { ok: false, message: 'Krawędź wyjścia jest ukośna względem wejścia — żaden obsługiwany typ schodów nie kończy się prostopadle do niej.', required: null, rejected: [], candidates: [] };
+  const required = { stairType: config.stairType, turnDirection: config.turnDirection, label: stairLabel(config.stairType, config.turnDirection) };
+  if (!exit) return { ok: false, message: `Otwór w stropie nie ma krawędzi od strony ${side || '—'}, na której kończą się ${required.label} — popraw otwór albo wskaż wyjście.`, required, rejected: [], candidates: [] };
+  // a hand-set exit must suit the project's type
+  const geometric = requiredStair(frame, exit, config.turnDirection);
+  if (!geometric || geometric.stairType !== required.stairType || (required.stairType !== 'straight' && geometric.turnDirection !== required.turnDirection)) {
+    const why = geometric ? `takie wyjście wymagałoby: ${geometric.label}` : 'ta krawędź jest ukośna względem wejścia';
+    return { ok: false, message: `Wyjście ${side} nie pasuje do projektu (${required.label}) — ${why}. Ustaw wyjście „AUTO” albo zmień typ schodów.`, required, rejected: [], candidates: [] };
+  }
 
   const userWidth = Number(config.stairWidth) || 900;
   const t = Number(config.stringerThickness) || 0;
@@ -139,8 +154,8 @@ export function planStairwellVariants(config) {
   const widthFor = (rt) => (userWidth <= rt.widthMax + 1e-6 ? userWidth : floorTo(rt.widthMax, WIDTH_STEP_MM));
   const push = (id, label, patch, rt) => {
     const width = widthFor(rt);
-    if (!(width >= VARIANT_MIN_WIDTH_MM)) {
-      rejected.push(`${label}: szerokość biegu musiałaby być ≤ ${Math.floor(rt.widthMax)} mm, mniej niż ${VARIANT_MIN_WIDTH_MM} mm.`);
+    if (!(width >= VARIANT_ABSOLUTE_MIN_WIDTH_MM)) {
+      rejected.push(`${label}: szerokość biegu musiałaby być ≤ ${Math.floor(rt.widthMax)} mm — klatka jest za wąska na takie schody.`);
       return;
     }
     const limits = rt.aMinForWidth ? { ...rt.limits, A: { ...rt.limits.A, min: rt.aMinForWidth(width) } } : rt.limits;
@@ -159,14 +174,15 @@ export function planStairwellVariants(config) {
     const zoneWidth = widthFor(zoneRt);
     const axisGap = zoneRt.targets.B - 2 * zoneWidth + t;
     const twoRt = roomTargets(config, frame, exit, required, false);
+    const zone = (n) => push(`U-zone${n}`, `U, strefa 180°, ${n} zabiegowych`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: true, uWindersTotal: n, treadsLegB: 0 }, zoneRt);
     if (axisGap >= -1e-6 && axisGap <= U_ZONE_MAX_AXIS_GAP_MM) {
-      for (const n of around(naturalWinders(config, true), ZONE_WINDERS_RANGE)) {
-        push(`U-zone${n}`, `U, strefa 180°, ${n} zabiegowych`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: true, uWindersTotal: n, treadsLegB: 0 }, zoneRt);
-      }
+      for (const n of around(naturalWinders(config, true), ZONE_WINDERS_RANGE)) zone(n);
     } else {
+      // a wider room: two turns with a middle flight, and the one zone (a wider dusza) as one more variant
       for (const n of around(naturalWinders(config, false), WINDERS_PER_TURN_RANGE)) {
         push(`U-w${n}`, `U, 2 × ${n} zabiegowe`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: false, windersPerTurn: n }, twoRt);
       }
+      if (axisGap >= -1e-6) zone(Math.min(ZONE_WINDERS_RANGE.max, Math.max(ZONE_WINDERS_RANGE.min, naturalWinders(config, true))));
     }
     push('U-landing', 'U, podesty', { turn1Type: 'landing', turn2Type: 'landing', uSingleWinderZone: false, mergeLandings: false }, twoRt);
   }
@@ -197,7 +213,7 @@ function uSides(config) {
  * filled up to the far wall and the counts with the best riser / 2h+s are kept. Side B must be met too (flight C has
  * to reach the side wall / the exit edge): a one-zone U gets it from the axis gap (exact); a two-turn U from its
  * middle flight (a few counts the room allows) and, for the rest, a NARROWER stair — never below
- * VARIANT_MIN_WIDTH_MM, re-solved at the width it gets.
+ * VARIANT_ABSOLUTE_MIN_WIDTH_MM (below VARIANT_MIN_WIDTH_MM a warning), re-solved at the width it gets.
  * @returns {{values:Object|null, message:string}}
  */
 function solveUExit(config, cand) {
@@ -209,7 +225,7 @@ function solveUExit(config, cand) {
   let nBs = [0];
   if (!zone) {
     const lo = Math.max(0, Math.floor((rt.targets.B - 2 * width) / FIT_GOING_RANGE_MM.max) - 1);
-    const hi = Math.min(FIT_MAX_TREADS_PER_LEG, Math.ceil((rt.targets.B - 2 * VARIANT_MIN_WIDTH_MM) / FIT_GOING_RANGE_MM.min));
+    const hi = Math.min(FIT_MAX_TREADS_PER_LEG, Math.ceil((rt.targets.B - 2 * VARIANT_ABSOLUTE_MIN_WIDTH_MM) / FIT_GOING_RANGE_MM.min));
     nBs = [];
     for (let n = lo; n <= hi && nBs.length < 8; n++) nBs.push(n);
   }
@@ -223,7 +239,7 @@ function solveUExit(config, cand) {
     // the candidate's (the user's) width
     const nextWidth = Math.min(cand.width, Math.round((width - (result.sideB - rt.targets.B) / 2) * 10) / 10);
     if (Math.abs(nextWidth - width) <= 0.05) break;
-    if (nextWidth < VARIANT_MIN_WIDTH_MM) return { values: null, message: `Bok B wymagałby szerokości biegu ${Math.round(nextWidth)} mm (mniej niż ${VARIANT_MIN_WIDTH_MM} mm).` };
+    if (nextWidth < VARIANT_ABSOLUTE_MIN_WIDTH_MM) return { values: null, message: `Bok B wymagałby szerokości biegu ${Math.round(nextWidth)} mm — klatka jest za wąska na takie schody.` };
     width = nextWidth;
     nBs = [result.cfg.treadsLegB];
   }
@@ -243,7 +259,8 @@ function solveUExit(config, cand) {
 function solveUExitAt(config, base, rt, zone, nBs) {
   const exitDepth = rt.exitB - rt.offset; // A − C must come out at this
   const riserOff = (h) => Math.max(0, config.minRiser - h, h - config.maxRiser);
-  const scoreOf = (derived, shrink, slack) => [derived.turnFeasible ? 0 : 1, riserOff(derived.riserHeight) > 0 ? 1 : 0, Math.round(Math.abs(derived.blondel - BLONDEL_TARGET_MM) / 5), shrink, slack];
+  // (a stair narrowed below the minimum is a warning, never a rejection — but the last resort)
+  const scoreOf = (derived, shrink, slack) => [derived.turnFeasible ? 0 : 1, riserOff(derived.riserHeight) > 0 ? 1 : 0, base.stairWidth - shrink < VARIANT_MIN_WIDTH_MM ? 1 : 0, Math.round(Math.abs(derived.blondel - BLONDEL_TARGET_MM) / 5), shrink, slack];
   const samples = [];
   for (let g = FIT_GOING_RANGE_MM.min; g < FIT_GOING_RANGE_MM.max; g += GOING_SAMPLE_STEP_MM) samples.push(g);
   samples.push(FIT_GOING_RANGE_MM.max);
@@ -258,20 +275,19 @@ function solveUExitAt(config, base, rt, zone, nBs) {
         const s = uSides(trial(g));
         return s.A - s.C - exitDepth;
       };
-      // the bracket with the largest going where the exit offset changes sign
+      // every going meeting the exit: the roots of each sign change, and every sample already on it (when the exit
+      // does not depend on the going at all — nA = nC with the exit on the entry line — the going is free, and the
+      // riser / 2h+s pick it)
       const values = samples.map(off);
-      let g = null;
-      for (let i = samples.length - 1; i > 0 && g === null; i--) {
+      const roots = [];
+      for (let i = 0; i < samples.length; i++) {
+        if (Number.isFinite(values[i]) && Math.abs(values[i]) <= EXIT_TOLERANCE_MM / 10) roots.push(samples[i]);
+        if (i === 0) continue;
         let lo = samples[i - 1];
         let hi = samples[i];
         let fLo = values[i - 1];
         const fHi = values[i];
-        if (!Number.isFinite(fLo) || !Number.isFinite(fHi)) continue;
-        if (Math.abs(fHi) <= EXIT_TOLERANCE_MM / 10) {
-          g = hi;
-          break;
-        }
-        if (Math.sign(fLo) === Math.sign(fHi)) continue;
+        if (!Number.isFinite(fLo) || !Number.isFinite(fHi) || Math.abs(fLo) <= EXIT_TOLERANCE_MM / 10 || Math.abs(fHi) <= EXIT_TOLERANCE_MM / 10 || Math.sign(fLo) === Math.sign(fHi)) continue;
         for (let k = 0; k < 40 && hi - lo > 1e-4; k++) {
           const mid = (lo + hi) / 2;
           const fm = off(mid);
@@ -280,19 +296,20 @@ function solveUExitAt(config, base, rt, zone, nBs) {
             fLo = fm;
           } else hi = mid;
         }
-        g = (lo + hi) / 2;
+        roots.push((lo + hi) / 2);
       }
-      if (g === null) continue;
+      for (const g of roots) {
       for (let k = 0; nA0 + k <= FIT_MAX_TREADS_PER_LEG && nC0 + k <= FIT_MAX_TREADS_PER_LEG; k++) {
         const cfg = trial(g, k);
         const s = uSides(cfg);
         if (s.A > rt.targets.A + EXIT_TOLERANCE_MM) break;
         if (Math.abs(s.A - s.C - exitDepth) > EXIT_TOLERANCE_MM) continue;
         if (!zone && s.B < rt.targets.B - EXIT_TOLERANCE_MM) continue;
-        if (!zone && base.stairWidth - (s.B - rt.targets.B) / 2 < VARIANT_MIN_WIDTH_MM) continue; // would need too narrow a stair
+        if (!zone && base.stairWidth - (s.B - rt.targets.B) / 2 < VARIANT_ABSOLUTE_MIN_WIDTH_MM) continue; // no usable stair
         const derived = deriveStairData(cfg);
         const score = scoreOf(derived, zone ? 0 : (s.B - rt.targets.B) / 2, rt.targets.A - s.A);
         if (!best || lexLess(score, best.score)) best = { cfg, score, sideB: s.B };
+      }
       }
     }
   }
@@ -305,7 +322,7 @@ function solveUExitAt(config, base, rt, zone, nBs) {
  */
 export function evaluateStairwellVariant(config, cand) {
   const fit = fitCandidate(config, cand);
-  const out = { id: cand.id, label: cand.label, width: cand.width, widthReduced: cand.widthReduced, ok: false, patch: null, problems: [], metrics: null };
+  const out = { id: cand.id, label: cand.label, width: cand.width, widthReduced: cand.widthReduced, ok: false, patch: null, problems: [], warnings: [], metrics: null };
   if (!fit?.values) {
     out.problems.push(fit?.message || 'Nie da się dopasować głębokości stopnia.');
     return out;
@@ -322,6 +339,8 @@ export function evaluateStairwellVariant(config, cand) {
   const winderGoingAt400 = winders.length ? Math.min(...winders.map((t) => treadGoingAtOffsetFromInner(t, WINDER_WIDTH_MEASURE_OFFSET_MM, planLayout))) : null;
   out.patch = patch;
   out.problems = report.diagnostics.map((d) => d.message);
+  // only a warning (user decision 2026-10-16): the variant stays a proposal
+  if (patch.stairWidth < VARIANT_MIN_WIDTH_MM) out.warnings.push(`Szerokość biegu ${Math.round(patch.stairWidth)} mm — mniej niż ${VARIANT_MIN_WIDTH_MM} mm (PL-LEGAL-A-05).`);
   out.ok = report.diagnostics.length === 0;
   out.metrics = {
     numTreads: derived.numTreads,
@@ -356,7 +375,9 @@ function openingSize(outline) {
 }
 
 const sortKey = (v) =>
-  v.metrics ? [v.ok ? 0 : 1, v.metrics.riserOk ? 0 : 1, v.metrics.errorRules, v.metrics.ceilingCollisions, Math.abs(v.metrics.blondel - BLONDEL_TARGET_MM)] : [2, 0, 0, 0, 0];
+  v.metrics
+    ? [v.ok ? 0 : 1, v.metrics.riserOk ? 0 : 1, v.patch.stairWidth < VARIANT_MIN_WIDTH_MM ? 1 : 0, v.metrics.errorRules, v.metrics.ceilingCollisions, Math.abs(v.metrics.blondel - BLONDEL_TARGET_MM)]
+    : [2, 0, 0, 0, 0, 0];
 
 /**
  * The variant list for the room in `config`, best first.

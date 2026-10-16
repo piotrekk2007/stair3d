@@ -109,7 +109,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   then feed the recess), the automatic housing recess
   (`applyHousingRecess`: a tread ends t − d from a housed wanga's chain line, on a line parallel to it —
   `recessTreadToWangi`), `manualTreadOverhangs` (one tread's own side, `{side, offsetMm}`).
-- **Stairwell fit** (`stairwellFit.js`, "Dopasuj do klatki"): derives going + straight counts from side lengths of the
+- **Stairwell fit** (`stairwellFit.js`): no longer in the panel (replaced by the stairwell room — project v5 migrates a
+  project that used it to a room); still the per-variant going/count solver of the designer (`opts.limits`). It derives going + straight counts from side lengths of the
   outer line (key side exact; the given dimensions come first: other sides within one going, then riser in range,
   then deviation / 2h+s — a riser forced out of range is a WARNING, never a reason to outgrow the room;
   `STAIR3D-FIT-01`). Going 150–320, found by sampling + narrowing (a side is not one straight line of the going).
@@ -120,13 +121,15 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - **Stairwell room** (`stairwell.js`, stage 1 of the room-first designer — user decisions 2026-10-16; docs
   [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): `stairwellRoomEnabled`, a rectangle
   `stairwellRoomWidthMm` × `stairwellRoomLengthMm` (room frame, sides S/N/W/E), entry side + offset (+ wall for a
-  straight stair), wall gap, exit = the opening edge where the upper floor is (`stairwellExitSide`). The stair keeps
+  straight stair), wall gap, exit = the opening edge where the upper floor is — `stairwellExitSide: 'auto'` = the one
+  the project's TYPE calls for (`exitSideFor`), a compass side overrides; picked on the plan ("⌂ Wejście" / "⇧ Wyjście"
+  HUD modes); the opening edited in the room (edge drag, wall snap, distances to the walls). The stair keeps
   its plan frame; `stairPlacement` is one rigid transform placing it in the room (plan +Y = entry walking direction,
   outer wanga along the wall away from the turn). `stairwellReport` → `built.stairwell` (gate): WARNING
   `STAIRWELL-OUTSIDE`, `-EXIT-DIRECTION` (the stair the entry/exit call for), `-EXIT-OFFSET`, `-EXIT-EDGE`. Plan 2D
   layer `stairwell` (walls, entry arrow, exit edge; drawn in the stair frame). **Variant list** (stage 2,
   `designer/stairwellVariants.js`, "🔎 Szukaj wariantów schodów", `ui/stairwellVariantsPanel.js`): 3–6 variants by
-  rules (type from entry/exit; the user's width narrowed only when needed, ≥ 800; winders n−1..n+1 around
+  rules (the PROJECT's type and turn; the user's width narrowed only when needed, < 800 only a warning; winders n−1..n+1 around
   round(arc/going)+1 + one landing; U as one zone when the axis gap is 0..300), each solved once (straight/L:
   `solveStairwellFit` with `opts.limits`; U: `solveUExit`, exit-driven), measured on a real layout, sorted; "Zastosuj"
   writes the patch (`stairwellFitEnabled: false`). **Opening derived from the stair** (stage 3, `openingMode:
@@ -298,7 +301,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   (never ON a corner: `CORNER_MARGIN_MM`), between the neighbouring edges, and an edge cutting through a line piece
   with the stair on one side only (the hole of a 180° zone) is refused; Alt = free move of one end). Layers: grid, axes, widths, walkline, run/step boundaries, wangi as
   board footprints, posts, balustrade, opening, winder widths, stringer spacing, winder blanks.
-- Workspace (`ui/workspace.js`, `style.css` grid): toolbar, left info + lil-gui parameters (`ui/ui.js`), main view
+- Workspace (`ui/workspace.js`, `style.css` grid): toolbar, left info + the variant list + lil-gui parameters (`ui/ui.js`,
+  folders most to least important: 1 Schody, 2 Budynek, 3 Klatka, 4 Otwór, 5 Bieg i stopnie, 6 Zabieg, 7 Wangi/słupy/
+  podstopnie, 8 Wspornikowa/metalowa, 9 Balustrada, then checks, view, export), main view
   (Plan 2D | Widok 3D | Profil wangi | Profil poręczy), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
   selection (`ui/selection.js`, model ids only). Value states AUTO/USER/RĘCZNA (`ui/valueState.js`). Undo/redo of
   config snapshots (`history/modelHistory.js`), committed on drag end.
@@ -317,7 +322,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   housings, bearings, post faces, bolt holes, the board's own findings), posts (unfolded faces + pockets + holes),
   treads (outline, winder blank, riser groove, post cut), balustrade (pieces with cut angles, baluster cut list, glass
   panes). OBJ/DAE geometry export (`objExporter.js`, `daeExporter.js`). Missing geometry → `null`, never a fake file.
-- Project file (`project/projectIO.js`, `_version: 4`, migrations v1→v4): `config` + top-level `edgeOverrides`,
+- Project file (`project/projectIO.js`, `_version: 5`, migrations v1→v5; v5: the side-length fit → a stairwell room): `config` + top-level `edgeOverrides`,
   `stringerProfileOverrides`, optional `postOverrides`, `projectName`, `notes`, `takeoffSettings`, `appearance`,
   `waivers`, `offer`. Runtime `config` still nests `manualEdgeOverrides`/`manualStringerProfileOverrides`/
   `manualPostOverrides`. New optional fields need no version bump; a changed shape does (RULES #15).

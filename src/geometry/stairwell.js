@@ -6,8 +6,10 @@
 //   - the ENTRY: the side of the room one enters through (`stairwellEntrySide`; walking starts perpendicular to it,
 //     into the room) and how far inside the first tread's front edge stands (`stairwellEntryOffsetMm`, without the
 //     nosing); a straight stair also says which wall its flight runs along (`stairwellStraightWall`);
-//   - the EXIT: the edge of the ceiling opening where the upper floor is (`stairwellExitSide`, compass): the last
-//     tread's back edge must lie on it.
+//   - the EXIT: the edge of the ceiling opening where the upper floor is — by default FOLLOWING FROM THE STAIR TYPE
+//     (user decision 2026-10-16: the type is the user's; `stairwellExitSide: 'auto'`, `exitSideFor`): a straight
+//     stair exits on the edge opposite the entry, an L on the side edge toward its turn, a U on the edge on the entry
+//     side; a compass side (S/N/W/E) set by hand overrides it. The last tread's back edge must lie on it.
 // The ceiling opening (rectangle or polygon, geometry/ceilingOpening.js) is then given in the ROOM frame.
 //
 // The stair is not moved by any of this: the plan stays in its own frame (flight A from the origin along +Y, the
@@ -32,6 +34,21 @@ const FACING_COS = Math.SQRT1_2 - 1e-9;
 const SAME_DIRECTION_COS = Math.cos((5 * Math.PI) / 180);
 
 const dot = (a, b) => a.x * b.x + a.y * b.y;
+const sideFacing = (dir) => ROOM_SIDES.find((s) => Math.abs(OUT[s].x - dir.x) < 1e-9 && Math.abs(OUT[s].y - dir.y) < 1e-9) || null;
+
+/**
+ * The exit side (compass) the stair ends on: the hand-set `stairwellExitSide`, or ('auto') the one its type and turn
+ * call for, seen from the entry — straight: walking on; L: toward the turn; U: back to the entry side.
+ */
+export function exitSideFor(config) {
+  if (ROOM_SIDES.includes(config.stairwellExitSide)) return config.stairwellExitSide;
+  const entry = ROOM_SIDES.includes(config.stairwellEntrySide) ? config.stairwellEntrySide : 'S';
+  const walk = { x: -OUT[entry].x, y: -OUT[entry].y };
+  const right = { x: walk.y, y: -walk.x };
+  if (config.stairType === 'U') return entry;
+  if (config.stairType === 'L') return sideFacing(config.turnDirection === 'left' ? { x: -right.x, y: -right.y } : right);
+  return sideFacing(walk);
+}
 const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
@@ -192,7 +209,7 @@ export function stairwellReport(config, planLayout, placement, openingRoomOutlin
   }
 
   // 2. the exit: the last tread's back edge on the opening edge where the upper floor is
-  const side = ROOM_SIDES.includes(config.stairwellExitSide) ? config.stairwellExitSide : null;
+  const side = exitSideFor(config);
   const exitEdge = side ? openingExitEdge(openingRoomOutline, side) : null;
   let required = null;
   let exitOffsetMm = null;
@@ -247,16 +264,52 @@ export function stairwellReport(config, planLayout, placement, openingRoomOutlin
  * @param {ReturnType<typeof stairwellReport>} report
  * @returns {{room:{x,y}[], entry:[{x,y},{x,y}], exit:[{x,y},{x,y}]|null, entrySide:string, exitSide:string|null}|null}
  */
-export function stairwellPlanDrawing(report, config) {
+export function stairwellPlanDrawing(report, config, openingRoomOutline = null) {
   const placement = report?.placement;
   if (!placement) return null;
   const toPlan = placement.toPlan;
+  const { room } = placement;
+  // the room's sides, CCW from S (the outline's order) — what a click picks as the entry
+  const sides = ['S', 'E', 'N', 'W'].map((side, i) => ({ side, a: toPlan(room.outline[i]), b: toPlan(room.outline[(i + 1) % 4]) }));
+  // the opening's edges facing a compass side — what a click picks as the exit
+  const exitCandidates = [];
+  const outline = Array.isArray(openingRoomOutline) && openingRoomOutline.length >= 3 ? openingRoomOutline : [];
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-6) continue;
+    const n = { x: (b.y - a.y) / len, y: -(b.x - a.x) / len };
+    const side = ROOM_SIDES.find((s) => dot(n, OUT[s]) >= FACING_COS);
+    if (side) exitCandidates.push({ side, a: toPlan(a), b: toPlan(b) });
+  }
+  // how far the opening's box stands from each wall, drawn from the wall to the box at the box's middle
+  const openingDims = [];
+  if (outline.length >= 3) {
+    const xs = outline.map((p) => p.x);
+    const ys = outline.map((p) => p.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const mx = (x0 + x1) / 2;
+    const my = (y0 + y1) / 2;
+    const dim = (p, q) => {
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d > STAIRWELL_TOLERANCE_MM) openingDims.push({ a: toPlan(p), b: toPlan(q), value: d });
+    };
+    dim({ x: 0, y: my }, { x: x0, y: my });
+    dim({ x: x1, y: my }, { x: room.width, y: my });
+    dim({ x: mx, y: 0 }, { x: mx, y: y0 });
+    dim({ x: mx, y: y1 }, { x: mx, y: room.length });
+  }
   return {
-    room: placement.room.outline.map(toPlan),
+    room: room.outline.map(toPlan),
     entry: placement.entryLine.map(toPlan),
     exit: report.exitEdge ? [toPlan(report.exitEdge.a), toPlan(report.exitEdge.b)] : null,
     entrySide: placement.entrySide,
-    exitSide: report.exitEdge ? config.stairwellExitSide : null,
+    exitSide: report.exitEdge ? exitSideFor(config) : null,
+    exitAuto: !ROOM_SIDES.includes(config.stairwellExitSide),
+    sides,
+    exitCandidates,
+    openingDims,
   };
 }
 
@@ -270,10 +323,11 @@ export function stairwellExitOutline(config, openingRoomOutline) {
   if (config.openingMode !== 'derived' || !room) return openingRoomOutline;
   const d = Math.max(0, Number(config.stairwellExitInsetMm) || 0);
   let [x0, y0, x1, y1] = [0, 0, room.width, room.length];
-  if (config.stairwellExitSide === 'S') y0 += d;
-  else if (config.stairwellExitSide === 'N') y1 -= d;
-  else if (config.stairwellExitSide === 'W') x0 += d;
-  else if (config.stairwellExitSide === 'E') x1 -= d;
+  const side = exitSideFor(config);
+  if (side === 'S') y0 += d;
+  else if (side === 'N') y1 -= d;
+  else if (side === 'W') x0 += d;
+  else if (side === 'E') x1 -= d;
   return [
     { x: x0, y: y0 },
     { x: x1, y: y0 },

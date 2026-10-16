@@ -164,3 +164,33 @@ test('3D walls: every side but the open entry, corners closed, up to the slab; t
   assert.ok(built.wallsMesh && built.wallsMesh.name === 'StairwellWalls');
   assert.equal(buildStaircase(cfg({ stairType: 'L' })).wallsMesh, null);
 });
+
+test('exit AUTO follows the stair type from the entry: straight on, L toward the turn, U back to the entry side', async () => {
+  const { exitSideFor } = await import('../stairwell.js');
+  const at = (p) => exitSideFor(cfg({ stairwellExitSide: 'auto', ...p }));
+  assert.equal(at({ stairType: 'straight', stairwellEntrySide: 'S' }), 'N');
+  assert.equal(at({ stairType: 'L', turnDirection: 'right', stairwellEntrySide: 'S' }), 'E');
+  assert.equal(at({ stairType: 'L', turnDirection: 'left', stairwellEntrySide: 'S' }), 'W');
+  assert.equal(at({ stairType: 'U', stairwellEntrySide: 'S' }), 'S');
+  assert.equal(at({ stairType: 'L', turnDirection: 'right', stairwellEntrySide: 'W' }), 'S');
+  assert.equal(at({ stairType: 'straight', stairwellEntrySide: 'E' }), 'W');
+  assert.equal(exitSideFor(cfg({ stairType: 'U', stairwellExitSide: 'N' })), 'N', 'a hand-set side wins');
+});
+
+test('plan drawing: room sides and the opening edges facing a side are click targets; the opening box is measured from the walls', async () => {
+  const { renderPlan2DSVG, openingXML } = await import('../../plan2d/plan2dRenderer.js');
+  const c = cfg({ stairType: 'L', ...room({ stairwellRoomWidthMm: 3000, stairwellRoomLengthMm: 2500 }), openingOffsetX: 200, openingOffsetY: 300, openingWidth: 2000, openingLength: 1800 });
+  const built = buildStaircase(c);
+  const d = stairwellPlanDrawing(built.stairwell, c, built.ceilingFit.openingRelativeOutline);
+  assert.deepEqual(d.sides.map((s) => s.side), ['S', 'E', 'N', 'W']);
+  assert.deepEqual(d.exitCandidates.map((e) => e.side).sort(), ['E', 'N', 'S', 'W']);
+  assert.deepEqual(d.openingDims.map((x) => Math.round(x.value)), [200, 800, 300, 400]);
+  assert.equal(d.exitAuto, true);
+  const svg = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d, stairwellPick: 'entry' });
+  assert.equal((svg.match(/class="stairwell-pick entry"/g) || []).length, 4);
+  assert.equal((svg.match(/class="stairwell-pick exit"/g) || []).length, 0);
+  const svgExit = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d, stairwellPick: 'exit' });
+  assert.equal((svgExit.match(/class="stairwell-pick exit"/g) || []).length, 4);
+  const edit = openingXML({ outline: built.ceilingFit.openingOutline, shape: 'rect' }, true);
+  assert.equal((edit.match(/class="opening-edge"/g) || []).length, 4);
+});

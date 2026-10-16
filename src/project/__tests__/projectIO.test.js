@@ -70,8 +70,8 @@ test('parseProjectJSON: rejects invalid JSON', () => {
   assert.throws(() => parseProjectJSON('{not json'), /JSON/i);
 });
 
-test('CURRENT_PROJECT_VERSION is 4', () => {
-  assert.equal(CURRENT_PROJECT_VERSION, 4);
+test('CURRENT_PROJECT_VERSION is 5', () => {
+  assert.equal(CURRENT_PROJECT_VERSION, 5);
 });
 
 test('migration v3 -> v4: one shared stringerConstructionType becomes the same value on both sides', () => {
@@ -88,7 +88,7 @@ test('migration v3 -> v4: one shared stringerConstructionType becomes the same v
   assert.equal(config.stringerConstructionTypeInner, 'cut');
   assert.equal(config.stringerConstructionType, undefined, 'the old shared name is gone, no alias is kept');
   assert.deepEqual(config.lockedFields, ['stringerConstructionTypeOuter', 'stringerConstructionTypeInner', 'nosing']);
-  assert.equal(meta.schemaVersion, 4);
+  assert.equal(meta.schemaVersion, 5);
 });
 
 test('migration v1 -> v4 chains through v2 and v3', () => {
@@ -170,4 +170,25 @@ test('accepted validation waivers round-trip at the top level, outside config; o
   assert.equal(payload.config.waivers, undefined);
   assert.deepEqual(parseProjectFile(JSON.stringify(payload)).meta.waivers, waivers);
   assert.deepEqual(parseProjectFile(JSON.stringify(buildProjectPayload(createDefaultConfig()))).meta.waivers, []);
+});
+
+test('migration v4 -> v5: the side-length fit becomes a stairwell room of those sides (U: C longer, the stair starts inside)', () => {
+  const v4 = {
+    _type: 'schody3d-project',
+    _version: 4,
+    config: { ...createDefaultConfig(), stairType: 'U', stairwellFitEnabled: true, stairwellSideAMm: 2083, stairwellSideBMm: 1890, stairwellSideCMm: 2350, stairwellKeySide: 'C', stairwellManualCounts: true },
+    edgeOverrides: {},
+  };
+  const { config, meta } = parseProjectFile(JSON.stringify(v4));
+  assert.equal(meta.schemaVersion, 5);
+  assert.equal(config.stairwellFitEnabled, false);
+  assert.equal(config.stairwellRoomEnabled, true);
+  assert.equal(config.stairwellRoomWidthMm, 1890);
+  assert.equal(config.stairwellRoomLengthMm, 2350);
+  assert.equal(config.stairwellEntryOffsetMm, 267);
+  assert.equal(config.stairwellExitSide, 'auto');
+  for (const k of ['stairwellSideAMm', 'stairwellSideBMm', 'stairwellSideCMm', 'stairwellKeySide', 'stairwellManualCounts']) assert.equal(config[k], undefined, k);
+  // a project that did not use the fit gets no room
+  const plain = parseProjectFile(JSON.stringify({ ...v4, config: { ...createDefaultConfig() } })).config;
+  assert.equal(plain.stairwellRoomEnabled, false);
 });

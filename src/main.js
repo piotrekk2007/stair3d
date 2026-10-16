@@ -39,7 +39,7 @@ import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { boundaryEditPoints } from './plan2d/edgeEdit.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
-import { stairwellPlanDrawing } from './geometry/stairwell.js';
+import { stairwellPlanDrawing, exitSideFor } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
 import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stairwellVariantsPanel.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
@@ -145,6 +145,7 @@ let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; nul
 // Otwór w stropie na planie 2D: 'off' | 'edit' (uchwyty wierzchołków) | 'draw' (klikanie nowego wielokąta).
 // Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
 let openingMode = 'off';
+let stairwellPick = false; // the plan's "⌂ Wejście" / "⇧ Wyjście" mode: false | 'entry' | 'exit' (setStairwellPick)
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
 let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
@@ -650,7 +651,8 @@ function regeneratePlan2D() {
     opening: lastModels?.ceilingFit
       ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }
       : null,
-    stairwell: stairwellPlanDrawing(lastModels?.stairwell, config),
+    stairwell: stairwellPlanDrawing(lastModels?.stairwell, config, lastModels?.ceilingFit?.openingRelativeOutline),
+    stairwellPick,
     openingEdit: openingMode === 'edit',
   });
   if (plan2dPanel.classList.contains('visible')) {
@@ -688,8 +690,36 @@ function setOpeningPolygon(points, final) {
     commitHistory();
   }
 }
+// "⌂ Wejście" / "⇧ Wyjście" (view state, `stairwellPick`): a click on a room side sets the entry, on an opening edge
+// the exit (the edge the stair type calls for = AUTO again). One kind at a time.
+function setStairwellPick(kind) {
+  stairwellPick = kind && lastModels?.stairwell?.placement ? kind : false;
+  if (stairwellPick && openingMode !== 'off') setOpeningMode('off');
+  plan2dHud.querySelector('[data-action="stairwell-entry"]')?.classList.toggle('active', stairwellPick === 'entry');
+  plan2dHud.querySelector('[data-action="stairwell-exit"]')?.classList.toggle('active', stairwellPick === 'exit');
+  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = !stairwellPick && openingMode === 'off';
+    if (stairwellPick === 'entry') hint.textContent = 'Kliknij bok klatki (szary pas), od którego się wchodzi na schody.';
+    if (stairwellPick === 'exit') hint.textContent = 'Kliknij krawędź otworu (zielony pas), przy której jest piętro. Krawędź wynikająca z typu schodów = wyjście AUTO.';
+  }
+  regeneratePlan2D();
+}
+function applyStairwellPick(pick, side) {
+  if (pick === 'entry') config.stairwellEntrySide = side;
+  // (stays in the mode: the next click picks again; Esc / the button ends it)
+  else config.stairwellExitSide = side === exitSideFor({ ...config, stairwellExitSide: 'auto' }) ? 'auto' : side;
+  rebuild();
+  uiRefresh?.();
+  commitHistory();
+}
+
 function setOpeningMode(mode) {
   openingMode = mode;
+  if (mode !== 'off' && stairwellPick) {
+    stairwellPick = false;
+    plan2dHud.querySelectorAll('[data-action^="stairwell-"]').forEach((b) => b.classList.remove('active'));
+  }
   planApi?.resetDraft();
   const hud = document.querySelector('#plan2d-hud');
   hud?.querySelector('[data-action="opening-edit"]')?.classList.toggle('active', mode === 'edit');
@@ -715,6 +745,8 @@ function getOpeningSnapPoints() {
   const pts = [...getSnapPoints(), ...(currentPlanLayout.outerFullPath || []), ...(currentPlanLayout.innerFullPath || [])];
   pts.push({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY }, { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY });
   for (const p of lastModels?.ceilingFit?.openingOutline || []) pts.push(p);
+  // the stairwell's walls: the opening snaps to them
+  for (const p of stairwellPlanDrawing(lastModels?.stairwell, config)?.room || []) pts.push(p);
   return pts;
 }
 
@@ -1123,6 +1155,8 @@ plan2dHud.innerHTML = `
     <button type="button" data-action="edit" aria-pressed="false" title="Edycja krawędzi stopni: przeciągaj kółka na granicach stopni (narożniki), a po kliknięciu stopnia — romby przy jego bokach. To samo co „Edytuj krawędzie” w folderze Plan 2D.">✎ Edytuj</button>
     <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
     <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
+    <button type="button" data-action="stairwell-entry" title="Klatka: kliknij bok klatki, od którego się wchodzi">⌂ Wejście</button>
+    <button type="button" data-action="stairwell-exit" title="Klatka: kliknij krawędź otworu, przy której jest piętro">⇧ Wyjście</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
     <button type="button" data-action="fit" title="Dopasuj do widoku">⤢</button>
@@ -1150,6 +1184,8 @@ plan2dHud.querySelector('[data-action="edit"]').addEventListener('click', () => 
 syncPlanEditButton();
 plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw' ? 'off' : 'draw'));
 plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
+plan2dHud.querySelector('[data-action="stairwell-entry"]').addEventListener('click', () => setStairwellPick(stairwellPick === 'entry' ? false : 'entry'));
+plan2dHud.querySelector('[data-action="stairwell-exit"]').addEventListener('click', () => setStairwellPick(stairwellPick === 'exit' ? false : 'exit'));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1264,6 +1300,19 @@ planApi = attachPlanInteractions({
     setOpeningMode('edit'); // od razu można poprawiać narysowany otwór
   },
   onOpeningDrawCancel: () => setOpeningMode('off'),
+  // one edge of the opening moved along its normal (plan-frame shift → the opening's own frame)
+  onOpeningEdgeMove: (index, shift, final) => {
+    if (!openingBase) return;
+    const f = openingFrame(config, currentPlanLayout);
+    const o = f.toRelative({ x: 0, y: 0 });
+    const d = f.toRelative(shift);
+    const n = openingBase.length;
+    const moved = openingBase.map((p, i) => (i === index || i === (index + 1) % n ? { x: Math.round((p.x + d.x - o.x) * 10) / 10, y: Math.round((p.y + d.y - o.y) * 10) / 10 } : p));
+    setOpeningPolygon(moved, final);
+    if (final) openingBase = null;
+  },
+  getStairwellPick: () => stairwellPick,
+  onStairwellPick: applyStairwellPick,
   // Kliknięcia ustawiają WYŁĄCZNIE zaznaczenie (nie model, nie historia).
   onStepClick: (stepIndex) => setSelection(stepIndex === null ? null : { elementType: 'tread', stepIndex }),
   onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),

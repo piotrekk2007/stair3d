@@ -106,17 +106,18 @@ export function createUI({
 
   if (onReset) gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
 
-  const stairTypeCtrl = live(gui.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
-  live(gui.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
+  const stairFolder = gui.addFolder('1. Schody');
+  const stairTypeCtrl = live(stairFolder.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
+  live(stairFolder.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
+  live(stairFolder.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever', 'Metalowa: wanga na profilu': 'metal-profile', 'Metalowa: płaskowniki w zęby': 'metal-flat' })).name('Konstrukcja schodów');
 
-  const dims = gui.addFolder('Wymiary ogólne');
-  lockable(dims.add(config, 'totalRise', 2000, 3600, 1).name('Wys. kondygnacji [mm]'), 'totalRise');
-  lockable(dims.add(config, 'stairWidth', 700, 1400, 1).name('Szerokość biegu [mm]'), 'stairWidth');
-  lockable(dims.add(config, 'treadGoing', 150, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
 
-  // Dopasowanie do klatki (geometry/stairwellFit.js): the going and the straight-tread counts are derived from the
-  // stairwell's sides, like the riser height from the floor height. 0 = no dimension for that side.
-  const well = gui.addFolder('Klatka schodowa');
+  const building = gui.addFolder('2. Budynek');
+  lockable(building.add(config, 'totalRise', 2000, 3600, 1).name('Wys. kondygnacji [mm]'), 'totalRise');
+  lockable(building.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
+  lockable(building.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
+
+  const well = gui.addFolder('3. Klatka schodowa');
   // The room the stair is placed in (geometry/stairwell.js): with it on, the ceiling opening is given in the room's
   // frame and the plan shows the walls, the entry and the exit; findings in Walidacja (STAIRWELL-*).
   live(well.add(config, 'stairwellRoomEnabled')).name('Klatka: pomieszczenie');
@@ -127,18 +128,49 @@ export function createUI({
   live(well.add(config, 'stairwellStraightWall', { 'lewa ściana': 'left', 'prawa ściana': 'right' })).name('Proste: wzdłuż ściany');
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
   live(well.add(config, 'stairwellExitInsetMm', 0, 6000, 1)).name('Wyjście przy otworze wyznaczanym: od ściany [mm]');
-  live(well.add(config, 'stairwellExitSide', { 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
-  // the variant list (designer/stairwellVariants.js) — shown above the parameters, "Zastosuj" per variant
-  if (onFindStairwellVariants) well.add({ find: onFindStairwellVariants }, 'find').name('🔎 Szukaj wariantów schodów');
-  live(well.add(config, 'stairwellFitEnabled')).name('Dopasuj do klatki');
-  live(well.add(config, 'stairwellSideAMm', 0, 12000, 1)).name('Bok A (wzdłuż biegu A) [mm]');
-  live(well.add(config, 'stairwellSideBMm', 0, 12000, 1)).name('Bok B (L, U) [mm]');
-  live(well.add(config, 'stairwellSideCMm', 0, 12000, 1)).name('Bok C (tylko U) [mm]');
-  live(well.add(config, 'stairwellKeySide', ['A', 'B', 'C'])).name('Bok kluczowy (dokładny)');
-  // manual counts: the fit only solves the going for the key side; the tread counts stay editable
-  live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie');
+  live(well.add(config, 'stairwellExitSide', { 'wynika z typu schodów (AUTO)': 'auto', 'krawędź N otworu (góra)': 'N', 'krawędź S otworu (dół)': 'S', 'krawędź W otworu (lewo)': 'W', 'krawędź E otworu (prawo)': 'E' })).name('Wyjście: piętro przy');
 
-  const steps = gui.addFolder('Liczba stopni');
+  const ceiling = gui.addFolder('4. Otwór w stropie');
+  // Given (the shape below) or DERIVED from the stair — the opening the treads need for their headroom
+  // (geometry/ceilingOpening.js requiredOpeningRelative); "Zapisz…" freezes the derived one as a given polygon.
+  live(ceiling.add(config, 'openingMode', { 'zadany (prostokąt / wielokąt)': 'given', 'wyznaczany ze schodów': 'derived' })).name('Otwór');
+  if (onFreezeDerivedOpening) ceiling.add({ freeze: onFreezeDerivedOpening }, 'freeze').name('⇩ Zapisz wyznaczony otwór jako zadany');
+  // Kształt: prostokąt z suwaków poniżej albo wielokąt narysowany na planie 2D (geometry/ceilingOpening.js).
+  live(ceiling.add(config, 'openingShape', { 'prostokąt (suwaki)': OPENING_SHAPES.RECT, 'wielokąt (rysowany na planie 2D)': OPENING_SHAPES.POLYGON })).name('Kształt otworu');
+  if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
+  lockable(ceiling.add(config, 'openingLength', 800, 6000, 1).name('Otwór: długość (Y) [mm]'), 'openingLength');
+  lockable(ceiling.add(config, 'openingWidth', 700, 6000, 1).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
+  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 1).name('Otwór: od lewej ściany / rzutu (X) [mm]'), 'openingOffsetX');
+  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 1).name('Otwór: od dolnej ściany / rzutu (Y) [mm]'), 'openingOffsetY');
+  // Dosunięcie otworu do narożnika/boku rzutu schodów (alignedOpeningOffsets) — zmienia tylko offsety w config,
+  // więc cofanie i plik projektu działają jak przy suwakach. Pole zablokowane (kłódka) nie jest ruszane.
+  const alignProxy = {
+    target: OPENING_ALIGN_TARGETS[0].id,
+    apply() {
+      const bounds = getPlanBounds && getPlanBounds();
+      if (!bounds) return;
+      const poly = sanitizeOpeningPolygon(config.openingPolygon);
+      if (config.openingShape === OPENING_SHAPES.POLYGON && !openingPolygonIssue(poly)) {
+        // narysowany wielokąt: przesuwany w całości, tak by bok jego obwiedni leżał na boku rzutu
+        config.openingPolygon = alignedOpeningPolygon(poly, bounds, OPENING_ALIGN_TARGETS.find((t) => t.id === alignProxy.target));
+      } else {
+        const next = alignedOpeningOffsets(config, bounds, alignProxy.target);
+        const locked = config.lockedFields || [];
+        for (const key of ['openingOffsetX', 'openingOffsetY']) if (!locked.includes(key)) config[key] = next[key];
+      }
+      refreshUI(gui);
+      onChange();
+      (onCommit || onChange)();
+    },
+  };
+  ceiling.add(alignProxy, 'target', Object.fromEntries(OPENING_ALIGN_TARGETS.map((t) => [t.label, t.id]))).name('Dosuń otwór do');
+  ceiling.add(alignProxy, 'apply').name('⇲ Dosuń otwór');
+
+  const steps = gui.addFolder('5. Bieg i stopnie');
+  // the variant list (designer/stairwellVariants.js) — shown above the parameters, "Zastosuj" per variant
+  if (onFindStairwellVariants) steps.add({ find: onFindStairwellVariants }, 'find').name('🔎 Szukaj wariantów schodów w klatce');
+  lockable(steps.add(config, 'stairWidth', 700, 1400, 1).name('Szerokość biegu [mm]'), 'stairWidth');
+  lockable(steps.add(config, 'treadGoing', 150, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
   // L/U can start straight away with winders (0 straight treads before the first turn); a straight stair
   // needs at least one tread, so the minimum follows the stair type.
   const legACtrl = lockable(steps.add(config, 'treadsLegA', 0, 15, 1).name('Proste (odc. A)'), 'treadsLegA');
@@ -163,15 +195,14 @@ export function createUI({
   // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.
   live(steps.add(config, 'uSingleWinderZone')).name('U, B = 0: jedna klatka zabiegowa 180°');
   live(steps.add(config, 'uWindersTotal', 2, 14, 1)).name('Zabiegowe łącznie (klatka 180°)');
-  // (driven by "Dopasuj do klatki" when side B is given: B = 2 × width + axis gap − board thickness)
   lockable(steps.add(config, 'uAxisGapMm', 0, 800, 1).name('Rozstaw osi wang A–C [mm] (0 = wanga nad wangą)'), 'uAxisGapMm');
 
-  const winder = gui.addFolder('Geometria zabiegu');
+  const winder = gui.addFolder('6. Geometria zabiegu');
   lockable(winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]'), 'walklineOffset');
   lockable(winder.add(config, 'walklineSplitOffset', 0, 2500, 10).name('Zabieg przed narożnikiem (na linii biegu) [mm]'), 'walklineSplitOffset');
   lockable(winder.add(config, 'minInnerWidth', 80, 200, 5).name('Min. szer. przy duszy [mm]'), 'minInnerWidth');
 
-  const build = gui.addFolder('Konstrukcja');
+  const build = gui.addFolder('7. Wangi, słupy, podstopnie');
   const stringerConstructionOptions = Object.fromEntries(Object.entries(CONSTRUCTION_TYPE_LABELS_PL).map(([value, label]) => [label, value]));
   live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name('Typ wangi zewn.');
   live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name('Typ wangi wewn.');
@@ -207,8 +238,7 @@ export function createUI({
 
   // Schody wspornikowe (geometry/cantileverModel.js): profile stalowe w ścianie po stronie zewnętrznej, stopień =
   // skrzynka z okładzin (góra/front 40, spód/tył/bok 20) nasuwana na profile; bez wang i słupów, strona duszy wolna.
-  const cant = gui.addFolder('Konstrukcja: wspornikowa / metalowa');
-  live(cant.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever', 'Metalowa: wanga na profilu': 'metal-profile', 'Metalowa: płaskowniki w zęby': 'metal-flat' })).name('Konstrukcja schodów');
+  const cant = gui.addFolder('8. Konstrukcja wspornikowa / metalowa');
   live(cant.add(config, 'cantileverProfileWidthMm', 20, 100, 1)).name('Profil: szerokość [mm]');
   live(cant.add(config, 'cantileverProfileHeightMm', 30, 160, 1)).name('Profil: wysokość [mm]');
   live(cant.add(config, 'cantileverProfileCount', 2, 4, 1)).name('Profile na stopień (min. 2)');
@@ -237,7 +267,7 @@ export function createUI({
 
   // Balustrada (geometry/railingSolver.js): parametry poręczy/tralek + lista odcinków. Wszystko to `config`
   // (cofanie i plik projektu działają), więc zmiana idzie normalną drogą live -> rebuild -> commit.
-  const rail = gui.addFolder('Balustrada');
+  const rail = gui.addFolder('9. Balustrada');
   live(rail.add(config, 'railingEnabled')).name('Balustrada włączona');
   const handrailOptions = { '— własny —': '', ...Object.fromEntries(HANDRAIL_PRESETS.map((p) => [p.label, p.id])) };
   const handrailProxy = { preset: HANDRAIL_PRESETS.find((p) => p.shape === config.railingHandrailShape && p.width === config.railingHandrailWidthMm && p.height === config.railingHandrailHeightMm)?.id ?? '' };
@@ -370,44 +400,6 @@ export function createUI({
   live(structural.add(config, 'structuralHandrailLineKnM', 0.1, 3, 0.01)).name('Poręcz: obc. poziome [kN/m] (UK 0,36)');
   live(structural.add(config, 'structuralHandrailMaxDeflectionMm', 5, 60, 1)).name('Poręcz/słupek: ugięcie ≤ [mm]');
   structural.close();
-
-  const ceiling = gui.addFolder('Strop i otwór');
-  lockable(ceiling.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
-  lockable(ceiling.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
-  // Given (the shape below) or DERIVED from the stair — the opening the treads need for their headroom
-  // (geometry/ceilingOpening.js requiredOpeningRelative); "Zapisz…" freezes the derived one as a given polygon.
-  live(ceiling.add(config, 'openingMode', { 'zadany (prostokąt / wielokąt)': 'given', 'wyznaczany ze schodów': 'derived' })).name('Otwór');
-  if (onFreezeDerivedOpening) ceiling.add({ freeze: onFreezeDerivedOpening }, 'freeze').name('⇩ Zapisz wyznaczony otwór jako zadany');
-  // Kształt: prostokąt z suwaków poniżej albo wielokąt narysowany na planie 2D (geometry/ceilingOpening.js).
-  live(ceiling.add(config, 'openingShape', { 'prostokąt (suwaki)': OPENING_SHAPES.RECT, 'wielokąt (rysowany na planie 2D)': OPENING_SHAPES.POLYGON })).name('Kształt otworu');
-  if (onStartOpeningDraw) ceiling.add({ draw: onStartOpeningDraw }, 'draw').name('✏ Rysuj otwór na planie 2D');
-  lockable(ceiling.add(config, 'openingLength', 800, 6000, 1).name('Otwór: długość (Y) [mm]'), 'openingLength');
-  lockable(ceiling.add(config, 'openingWidth', 700, 6000, 1).name('Otwór: szerokość (X) [mm]'), 'openingWidth');
-  lockable(ceiling.add(config, 'openingOffsetX', -6000, 6000, 1).name('Otwór: offset X [mm]'), 'openingOffsetX');
-  lockable(ceiling.add(config, 'openingOffsetY', -6000, 6000, 1).name('Otwór: offset Y [mm]'), 'openingOffsetY');
-  // Dosunięcie otworu do narożnika/boku rzutu schodów (alignedOpeningOffsets) — zmienia tylko offsety w config,
-  // więc cofanie i plik projektu działają jak przy suwakach. Pole zablokowane (kłódka) nie jest ruszane.
-  const alignProxy = {
-    target: OPENING_ALIGN_TARGETS[0].id,
-    apply() {
-      const bounds = getPlanBounds && getPlanBounds();
-      if (!bounds) return;
-      const poly = sanitizeOpeningPolygon(config.openingPolygon);
-      if (config.openingShape === OPENING_SHAPES.POLYGON && !openingPolygonIssue(poly)) {
-        // narysowany wielokąt: przesuwany w całości, tak by bok jego obwiedni leżał na boku rzutu
-        config.openingPolygon = alignedOpeningPolygon(poly, bounds, OPENING_ALIGN_TARGETS.find((t) => t.id === alignProxy.target));
-      } else {
-        const next = alignedOpeningOffsets(config, bounds, alignProxy.target);
-        const locked = config.lockedFields || [];
-        for (const key of ['openingOffsetX', 'openingOffsetY']) if (!locked.includes(key)) config[key] = next[key];
-      }
-      refreshUI(gui);
-      onChange();
-      (onCommit || onChange)();
-    },
-  };
-  ceiling.add(alignProxy, 'target', Object.fromEntries(OPENING_ALIGN_TARGETS.map((t) => [t.label, t.id]))).name('Dosuń otwór do');
-  ceiling.add(alignProxy, 'apply').name('⇲ Dosuń otwór');
 
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));

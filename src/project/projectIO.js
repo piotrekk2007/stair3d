@@ -22,8 +22,11 @@ import { sanitizePostOverrides } from '../geometry/postSolver.js';
 // Wersja 4: `stringerConstructionType` (jeden typ dla obu wang) rozdzielony na
 // `stringerConstructionTypeOuter`/`stringerConstructionTypeInner` — każda wanga może mieć inny typ
 // konstrukcji. Migracja v3 -> v4 kopiuje starą wartość na obie strony (zachowanie sprzed zmiany).
+// Wersja 5: the side-length stairwell fit ("Dopasuj do klatki": stairwellSideA/B/CMm, stairwellKeySide,
+// stairwellManualCounts) is replaced by the stairwell ROOM (geometry/stairwell.js, user decision 2026-10-16) —
+// migrateV4ToV5 turns a project that used it into a room of those sides.
 const PROJECT_TYPE = 'schody3d-project';
-export const CURRENT_PROJECT_VERSION = 4;
+export const CURRENT_PROJECT_VERSION = 5;
 
 // Buduje payload bieżącej wersji z bieżącego (płaskiego, runtime'owego) configu — czysta funkcja,
 // oddzielona od exportProjectJSON() specjalnie po to, żeby dało się ją przetestować bez
@@ -112,10 +115,41 @@ function migrateV3ToV4(data) {
   return { ...data, _version: 4, config };
 }
 
+// v4 -> v5: a project that used the side-length fit gets a stairwell ROOM of those sides — X across = side B (the
+// stair's width for a straight one), Y along = side A (a U: the longer of A and C, the stair starting C − A inside
+// when C is longer) — entered from S, the exit following from the type. The room's lower-left corner is the stair
+// plan's lower-left corner the fit filled exactly, so an opening given relative to the plan stays where it was. The
+// going and the counts the fit produced are already in the config; the fit's fields are dropped.
+function migrateV4ToV5(data) {
+  const { stairwellSideAMm, stairwellSideBMm, stairwellSideCMm, stairwellKeySide, stairwellManualCounts, ...config } = data.config || {};
+  if (config.stairwellFitEnabled && !config.stairwellRoomEnabled) {
+    const A = Number(stairwellSideAMm) || 0;
+    const B = Number(stairwellSideBMm) || 0;
+    const C = Number(stairwellSideCMm) || 0;
+    const type = config.stairType;
+    const width = type === 'straight' ? Number(config.stairWidth) || 0 : B;
+    const length = type === 'U' ? Math.max(A, C) : A;
+    if (width > 0 && length > 0) {
+      Object.assign(config, {
+        stairwellRoomEnabled: true,
+        stairwellRoomWidthMm: width,
+        stairwellRoomLengthMm: length,
+        stairwellEntrySide: 'S',
+        stairwellEntryOffsetMm: type === 'U' ? Math.max(0, C - A) : 0,
+        stairwellExitSide: 'auto',
+        stairwellWallGapMm: 0,
+      });
+    }
+  }
+  config.stairwellFitEnabled = false;
+  return { ...data, _version: 5, config };
+}
+
 const MIGRATIONS = {
   1: migrateV1ToV2,
   2: migrateV2ToV3,
   3: migrateV3ToV4,
+  4: migrateV4ToV5,
 };
 
 // Rzuca błąd z czytelnym komunikatem, jeśli plik nie jest projektem schody3d albo nie da się

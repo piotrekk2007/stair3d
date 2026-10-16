@@ -23,7 +23,7 @@ function card(v, applied) {
     if (m.openingSize) body += `<div class="sv-row"><span>potrzebny otwór</span><b>${fmt0(m.openingSize.x)} × ${fmt0(m.openingSize.y)} mm${m.openingSize.corners > 4 ? ` (${m.openingSize.corners} narożn.)` : ''}</b></div>`;
     body += `<div class="sv-row"><span>błędy / ostrzeżenia</span><b class="${m.errors ? 'warn' : ''}">${m.errors} / ${m.warnings}${m.ceilingCollisions ? ` (strop: ${m.ceilingCollisions})` : ''}</b></div>`;
   }
-  const problems = v.problems.map((p) => `<div class="sv-problem">${escapeHtml(p)}</div>`).join('');
+  const problems = v.problems.map((p) => `<div class="sv-problem">${escapeHtml(p)}</div>`).join('') + (v.warnings || []).map((p) => `<div class="sv-warning">${escapeHtml(p)}</div>`).join('');
   const button = v.patch ? `<button type="button" data-variant-apply="${escapeHtml(v.id)}">${applied ? '✓ Zastosowany' : 'Zastosuj'}</button>` : '';
   return `<div class="${cls}"><div class="sv-head"><b>${escapeHtml(v.label)}</b>${button}</div>${body}${problems}</div>`;
 }
@@ -58,7 +58,7 @@ export function renderStairwellVariants(panel, result, { appliedId = null, userW
   }
   panel.hidden = false;
   const head = `<div class="sv-title"><b>Warianty schodów w klatce</b><span><button type="button" data-variant-search title="Policz ponownie dla obecnej klatki">↻</button><button type="button" data-variant-close title="Zamknij listę">×</button></span></div>`;
-  const req = result.required ? `<div class="sv-note">Wejście i wyjście wymagają: <b>${escapeHtml(result.required.label)}</b>${ms !== null ? ` · ${ms} ms` : ''}</div>` : '';
+  const req = result.required ? `<div class="sv-note">Warianty dla: <b>${escapeHtml(result.required.label)}</b>${ms !== null ? ` · ${ms} ms` : ''}</div>` : '';
   const staleNote = stale ? '<div class="sv-problem">Klatka, otwór albo parametry zmieniły się po wyszukaniu — lista może być nieaktualna (↻).</div>' : '';
   const message = result.message ? `<div class="sv-problem">${escapeHtml(result.message)}</div>` : '';
   const rejected = (result.rejected || []).map((r) => `<div class="sv-problem">${escapeHtml(r)}</div>`).join('');

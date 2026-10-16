@@ -76,7 +76,7 @@ export function createDefaultConfig() {
     stairwellEntrySide: 'S', // 'S' | 'N' | 'W' | 'E' — the side one enters through (walking into the room)
     stairwellEntryOffsetMm: 0, // mm, the first tread's front edge (no nosing) this far inside the entry side
     stairwellStraightWall: 'left', // 'left' | 'right' — the wall a STRAIGHT stair runs along (seen walking up)
-    stairwellExitSide: 'N', // 'S' | 'N' | 'W' | 'E' — the opening edge where the upper floor is (the last tread ends on it)
+    stairwellExitSide: 'auto', // 'auto' (from the stair type — stairwell.js exitSideFor) | 'S' | 'N' | 'W' | 'E' — the opening edge where the upper floor is (the last tread ends on it)
     // mm — with the opening DERIVED from the stair (openingMode 'derived') there is no opening edge to end on: the exit
     // is the room's `stairwellExitSide` wall line moved this far into the room
     stairwellExitInsetMm: 0,

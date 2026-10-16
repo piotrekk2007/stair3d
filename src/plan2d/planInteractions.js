@@ -184,6 +184,9 @@ export function attachPlanInteractions(opts) {
     onOpeningTranslate,
     onOpeningDrawFinish,
     onOpeningDrawCancel,
+    onOpeningEdgeMove,
+    getStairwellPick = () => false,
+    onStairwellPick,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -328,6 +331,15 @@ export function attachPlanInteractions(opts) {
       const svg = getSvg();
       const vertexEl = e.target.closest('.opening-vertex');
       const midEl = vertexEl ? null : e.target.closest('.opening-mid');
+      const edgeEl = vertexEl || midEl ? null : e.target.closest('.opening-edge');
+      if (svg && edgeEl && onOpeningEdgeMove) {
+        if (onOpeningDragStart) onOpeningDragStart();
+        panelEl.setPointerCapture(e.pointerId);
+        const d = edgeEl.dataset;
+        dragState = { pointerId: e.pointerId, kind: 'opening-edge', index: Number(d.index), start: screenToPlanPoint(svg, e.clientX, e.clientY), a: { x: Number(d.ax), y: Number(d.ay) }, n: { x: Number(d.nx), y: Number(d.ny) }, shift: { x: 0, y: 0 }, svg };
+        e.preventDefault();
+        return;
+      }
       const bodyEl = vertexEl || midEl ? null : e.target.closest('.opening-body');
       if (svg && (vertexEl || midEl || bodyEl)) {
         const raw = screenToPlanPoint(svg, e.clientX, e.clientY);
@@ -392,6 +404,14 @@ export function attachPlanInteractions(opts) {
       panelEl.setPointerCapture(e.pointerId);
       e.preventDefault();
       return;
+    }
+
+    if (e.button === 0 && getStairwellPick()) {
+      const pickEl = e.target.closest('.stairwell-pick');
+      if (pickEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'stairwell', pick: pickEl.dataset.pick, side: pickEl.dataset.side } };
+        return;
+      }
     }
 
     if (e.button === 0) {
@@ -465,6 +485,25 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-edge') {
+      const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      const { a, n } = dragState;
+      // the edge's new offset along its normal, 5 mm steps — or exactly at a snap point's (a wall, a corner) when near
+      let d = snapMm((raw.x - dragState.start.x) * n.x + (raw.y - dragState.start.y) * n.y);
+      const tol = 8 * mmPerPx();
+      let best = tol;
+      for (const r of getOpeningSnapPoints ? getOpeningSnapPoints() : []) {
+        const rd = (r.x - a.x) * n.x + (r.y - a.y) * n.y;
+        if (Math.abs(rd - d) < best && Math.abs(rd) > 1e-6) {
+          best = Math.abs(rd - d);
+          d = rd;
+        }
+      }
+      dragState.shift = { x: n.x * d, y: n.y * d };
+      onOpeningEdgeMove(dragState.index, dragState.shift, false);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-move') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       dragState.delta = { x: snapMm(raw.x - dragState.start.x), y: snapMm(raw.y - dragState.start.y) };
@@ -523,6 +562,13 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-edge') {
+      const { index, shift } = dragState;
+      dragState = null;
+      onOpeningEdgeMove(index, shift, true);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-move') {
       const { delta } = dragState;
       dragState = null;
@@ -551,7 +597,8 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
+        if (hit.kind === 'stairwell' && onStairwellPick) onStairwellPick(hit.pick, hit.side);
+        else if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
         else if (hit.kind === 'stringer' && onStringerClick) onStringerClick(hit.side);
         else onStepClick(hit.kind === 'step' ? hit.stepIndex : null);
       }

@@ -11,8 +11,8 @@ import { planStairwellVariants, generateStairwellVariants, VARIANT_MIN_WIDTH_MM 
 const room = (patch) => ({ ...createDefaultConfig(), stairwellRoomEnabled: true, stairwellEntrySide: 'S', stairwellEntryOffsetMm: 0, stairwellWallGapMm: 0, ...patch });
 // the user's Klimek project (2026-10): U, one 180° zone, width 965, rise 3070, walkline 500, opening = the whole well
 const KLIMEK = room({ stairType: 'U', turnDirection: 'right', totalRise: 3070, stairWidth: 965, stringerThickness: 40, walklineOffset: 500, minRiser: 150, maxRiser: 200, ceilingThickness: 380, treadGoing: 267, stairwellRoomWidthMm: 1890, stairwellRoomLengthMm: 2350, stairwellEntryOffsetMm: 267, stairwellExitSide: 'S', openingWidth: 1888, openingLength: 2350, openingOffsetX: 0, openingOffsetY: 0 });
-const L_ROOM = room({ stairwellRoomWidthMm: 2600, stairwellRoomLengthMm: 3000, stairwellExitSide: 'E', openingOffsetX: 0, openingOffsetY: 2000, openingWidth: 2500, openingLength: 1000 });
-const U_WIDE = room({ stairwellRoomWidthMm: 2600, stairwellRoomLengthMm: 3000, stairwellExitSide: 'S', openingOffsetX: 1700, openingOffsetY: 800, openingWidth: 900, openingLength: 2200 });
+const L_ROOM = room({ stairType: 'L', turnDirection: 'right', stairwellRoomWidthMm: 2600, stairwellRoomLengthMm: 3000, stairwellExitSide: 'auto', openingOffsetX: 0, openingOffsetY: 2000, openingWidth: 2500, openingLength: 1000 });
+const U_WIDE = room({ stairType: 'U', turnDirection: 'right', stairwellRoomWidthMm: 2600, stairwellRoomLengthMm: 3000, stairwellExitSide: 'S', openingOffsetX: 1700, openingOffsetY: 800, openingWidth: 900, openingLength: 2200 });
 
 // the applied variant, measured as the app would build it
 function applied(config, v) {
@@ -22,20 +22,44 @@ function applied(config, v) {
   return stairwellReport(full, L, stairPlacement(full, L), resolveOpening(full, openingFrame(full, L)).relativeOutline);
 }
 
-test('few candidates: winders n−1, n, n+1 and one landing; the type and turn from the entry and exit', () => {
+test("few candidates: winders n−1, n, n+1 and one landing, for the PROJECT's type and turn", () => {
   const p = planStairwellVariants(L_ROOM);
   assert.equal(p.required.stairType, 'L');
   assert.equal(p.required.turnDirection, 'right');
   assert.deepEqual(p.candidates.map((c) => c.id), ['L-w3', 'L-w4', 'L-w5', 'L-landing']);
   const u = planStairwellVariants(KLIMEK);
   assert.deepEqual(u.candidates.map((c) => c.id), ['U-zone6', 'U-zone7', 'U-zone8', 'U-landing']);
-  // a room too wide for one 180° zone: two turns
-  assert.ok(planStairwellVariants(U_WIDE).candidates.every((c) => !c.patch.uSingleWinderZone));
+  // a room too wide for one 180° zone at a small axis gap: two turns, plus the zone once
+  const wide = planStairwellVariants(U_WIDE).candidates;
+  assert.ok(wide.filter((c) => c.patch.uSingleWinderZone).length <= 1);
+  assert.ok(wide.some((c) => c.id.startsWith('U-w')));
 });
 
-test('an exit edge reaching across the entry\'s middle keeps the project\'s own U turn direction', () => {
-  assert.equal(planStairwellVariants({ ...KLIMEK, turnDirection: 'right' }).required.turnDirection, 'right');
+test("the type and turn are the project's: a U is never offered as anything else; a hand-set exit that does not suit it says why", () => {
   assert.equal(planStairwellVariants({ ...KLIMEK, turnDirection: 'left' }).required.turnDirection, 'left');
+  // regression (user, 2026-10-16): with the exit picked on the far side the designer used to offer a STRAIGHT stair
+  const wrong = generateStairwellVariants({ ...KLIMEK, stairwellExitSide: 'N' });
+  assert.equal(wrong.variants.length, 0);
+  assert.match(wrong.message, /nie pasuje do projektu \(schody U/);
+  const auto = planStairwellVariants({ ...KLIMEK, stairwellExitSide: 'auto' });
+  assert.ok(auto.candidates.length > 0 && auto.candidates.every((c) => c.patch.stairType === 'U'));
+});
+
+test('regression (user, 2026-10-16): a 1888 x 2350 stairwell takes a U with winders; a good riser, not the longest going', () => {
+  const c = room({ stairType: 'U', turnDirection: 'right', totalRise: 3070, stairWidth: 965, stringerThickness: 40, walklineOffset: 500, ceilingThickness: 380, stairwellRoomWidthMm: 1888, stairwellRoomLengthMm: 2350, openingWidth: 1888, openingLength: 2350, openingOffsetX: 0, openingOffsetY: 0 });
+  const best = generateStairwellVariants(c).variants[0];
+  assert.ok(best.ok, best.problems.join(' | '));
+  assert.equal(best.patch.uSingleWinderZone, true);
+  assert.ok(best.metrics.riserOk, `${best.metrics.riserHeight}`);
+  assert.ok(best.patch.treadGoing < 300, `${best.patch.treadGoing}`);
+});
+
+test('a width below 800 mm is a warning on the variant, never a reason to drop it', () => {
+  const c = room({ stairType: 'U', turnDirection: 'right', stairWidth: 965, stairwellRoomWidthMm: 1500, stairwellRoomLengthMm: 3000, openingWidth: 1500, openingLength: 3000, openingOffsetX: 0, openingOffsetY: 0 });
+  const r = generateStairwellVariants(c);
+  const narrow = r.variants.filter((v) => v.patch && v.patch.stairWidth < VARIANT_MIN_WIDTH_MM);
+  assert.ok(narrow.length > 0);
+  for (const v of narrow) assert.ok(v.warnings.some((w) => /mniej niż 800 mm/.test(w)));
 });
 
 test('every fitting variant, applied, starts at the entry, ends on the exit edge and stays inside the room', () => {
@@ -47,7 +71,7 @@ test('every fitting variant, applied, starts at the entry, ends on the exit edge
       const rep = applied(config, v);
       assert.deepEqual(rep.diagnostics, [], `${v.label}: ${rep.diagnostics.map((d) => d.message).join(' | ')}`);
       assert.ok(Math.abs(rep.exitOffsetMm) <= 1, `${v.label}: exit ${rep.exitOffsetMm}`);
-      assert.ok(v.patch.stairWidth >= VARIANT_MIN_WIDTH_MM && v.patch.stairWidth <= config.stairWidth);
+      assert.ok(v.patch.stairWidth <= config.stairWidth);
       assert.equal(v.patch.stairwellFitEnabled, false);
     }
   }
@@ -62,11 +86,11 @@ test('Klimek: the best variant is the one the user drew — one zone, 6 winders,
   assert.ok(best.metrics.riserOk);
 });
 
-test('a two-turn U meets the wall-to-wall side B by a narrower stair, never below the minimum', () => {
+test('a two-turn U meets the wall-to-wall side B by a narrower stair', () => {
   const r = generateStairwellVariants({ ...KLIMEK, stairWidth: 965 });
   const landing = r.variants.find((v) => v.id === 'U-landing');
   assert.ok(landing.ok);
-  assert.ok(landing.patch.stairWidth < 965 && landing.patch.stairWidth >= VARIANT_MIN_WIDTH_MM, `${landing.patch.stairWidth}`);
+  assert.ok(landing.patch.stairWidth < 965, `${landing.patch.stairWidth}`);
 });
 
 test('fit limits: a side with a maximum is never longer (the old fit put side A 98 mm past the wall)', () => {
