@@ -6,7 +6,7 @@
 // DOM. The result is a plain `config.manualEdgeOverrides` entry {inner, outer} — both ends at once.
 
 import { getBoundaryPoints, getNominalBoundaryPoints, edgeOverrideEndpoints } from '../geometry/edgeOverrides.js';
-import { cumulativeDistances, pointAtDistance } from '../geometry/pathUtils.js';
+import { cumulativeDistances, pointAtDistance, segmentsProperlyIntersect, subPathPoints } from '../geometry/pathUtils.js';
 
 const SLIDE_SNAP_MM = 5; // the dragged end lands on a 5 mm step along its stringer line (same step as the grid snap)
 
@@ -84,32 +84,63 @@ export function pivotEdgeDrag({ endpoint, raw, pivot, innerPath, outerPath, nomi
   if (!pivot || !nominal || !own?.length || !other?.length || own.length < 2 || other.length < 2) return null;
   const nominalOwn = nominal[endpoint === 'inner' ? 0 : 1];
   const nominalOther = nominal[endpoint === 'inner' ? 1 : 0];
-  // Each end stays on the straight piece of its stringer line its nominal end lies on: a tread's outline owns the
-  // corners of the line between its two edges, so carrying an end past a corner would leave that corner in the wrong
-  // tread and fold both treads (the outline is never re-cut here). An end sitting exactly on a corner stays there.
+  // Each end slides along its WHOLE stringer line, past its corners (the layout re-cuts the two treads' outlines
+  // along the line: edgeOverrides.js applyManualEdgeOverrides), only never past the neighbouring edges' ends.
   const ownCum = cumulativeDistances(own);
   const otherCum = cumulativeDistances(other);
   const otherSide = endpoint === 'inner' ? 'outer' : 'inner';
-  const ownPiece = withinNeighbours(pieceAround(ownCum, closestOnPolyline(own, nominalOwn).along), own, neighbours, endpoint);
-  const otherPiece = withinNeighbours(pieceAround(otherCum, closestOnPolyline(other, nominalOther).along), other, neighbours, otherSide);
+  const whole = (cum) => ({ lo: cum[0], hi: cum[cum.length - 1] });
+  const ownPiece = withinNeighbours(whole(ownCum), own, neighbours, endpoint);
+  const otherPiece = withinNeighbours(whole(otherCum), other, neighbours, otherSide);
   if (!ownPiece || !otherPiece) return null;
 
   const hit = closestOnPolyline(own, raw);
-  const along = clamp(Math.round(hit.along / SLIDE_SNAP_MM) * SLIDE_SNAP_MM, ownPiece);
+  const nominalAlong = closestOnPolyline(own, nominalOwn).along;
+  const along = offCorner(ownCum, clamp(Math.round(hit.along / SLIDE_SNAP_MM) * SLIDE_SNAP_MM, ownPiece), hit.along, nominalAlong, ownPiece);
   let moved = pointAtDistance(own, ownCum, along);
   if (dist(moved, pivot) < 1) return null;
   let opposite = farSideCrossing(moved, pivot, other, otherCum, nominalOther);
   if (!opposite) return null;
-  if (opposite.along < otherPiece.lo || opposite.along > otherPiece.hi) {
-    // the opposite end would pass a corner: the edge turns only as far as that corner, and the dragged end goes to
-    // where the edge through that corner and the pivot meets its own line
-    const stop = pointAtDistance(other, otherCum, clamp(opposite.along, otherPiece));
+  const otherAlong = offCorner(otherCum, clamp(opposite.along, otherPiece), opposite.along, closestOnPolyline(other, nominalOther).along, otherPiece);
+  if (Math.abs(otherAlong - opposite.along) > 1e-6) {
+    // the opposite end would pass a neighbouring edge or sit on a corner of its line: it stops there, and the
+    // dragged end goes to where the edge through that point and the pivot meets its own line
+    const stop = pointAtDistance(other, otherCum, otherAlong);
     const back = farSideCrossing(stop, pivot, own, ownCum, nominalOwn);
     if (!back || back.along < ownPiece.lo - 1e-6 || back.along > ownPiece.hi + 1e-6) return null;
     moved = back.point;
     opposite = { point: stop };
   }
-  return endpoint === 'inner' ? { inner: moved, outer: opposite.point } : { inner: opposite.point, outer: moved };
+  const edge = endpoint === 'inner' ? { inner: moved, outer: opposite.point } : { inner: opposite.point, outer: moved };
+  // an edge turned so far that it cuts through the piece of a line its two treads are bounded by (across the dusza
+  // piece of a 180 degree zone) is not a tread edge
+  const stretch = (path, cum, side) => {
+    const lo = neighbours.before?.[side] ? closestOnPolyline(path, neighbours.before[side]).along : cum[0];
+    const hi = neighbours.after?.[side] ? closestOnPolyline(path, neighbours.after[side]).along : cum[cum.length - 1];
+    return lo < hi ? subPathPoints(path, cum, lo, hi) : [];
+  };
+  const [innerCum, outerCum] = endpoint === 'inner' ? [ownCum, otherCum] : [otherCum, ownCum];
+  if (cutsThrough(edge, stretch(innerPath, innerCum, 'inner'), innerPath, outerPath) || cutsThrough(edge, stretch(outerPath, outerCum, 'outer'), outerPath, innerPath)) return null;
+  return edge;
+}
+
+// Whether the edge crosses a piece of `path` (a stretch of `line`) with the stair on one side only. A piece with the
+// opposite line on its other side than the line's first piece runs BACKWARDS inside the stair (the dusza of a 180 degree zone whose wangi
+// stand on each other): the stair lies on both its sides and an edge may cross it.
+function cutsThrough({ inner, outer }, path, line, opposite) {
+  const sideOf = (a, b) => {
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const q = closestOnPolyline(opposite, mid).point;
+    return Math.sign((b.x - a.x) * (q.y - mid.y) - (b.y - a.y) * (q.x - mid.x));
+  };
+  const first = line.findIndex((p, i) => i > 0 && dist(line[i - 1], p) > 1e-6);
+  if (first < 1) return false;
+  const stairSide = sideOf(line[first - 1], line[first]);
+  for (let i = 1; i < path.length; i++) {
+    if (dist(path[i - 1], path[i]) < 1e-6) continue;
+    if (sideOf(path[i - 1], path[i]) === stairSide && segmentsProperlyIntersect(inner, outer, path[i - 1], path[i])) return true;
+  }
+  return false;
 }
 
 const CORNER_MARGIN_MM = 1; // an end stops this short of a corner of its line (never ON it — a zero-length tread side)
@@ -126,14 +157,17 @@ function withinNeighbours(piece, path, neighbours, side) {
 
 const clamp = (v, { lo, hi }) => Math.min(hi, Math.max(lo, v));
 
-// The arc-length range [lo, hi] of the straight piece of a polyline that contains `along`; null when `along` is on an
-// interior corner itself. The line's own two ends are not corners (an edge may reach them).
-function pieceAround(cum, along) {
-  const n = cum.length;
-  for (let i = 1; i < n - 1; i++) if (Math.abs(cum[i] - along) < 1e-6) return null;
-  let i = 1;
-  while (i < n - 1 && cum[i] < along) i++;
-  return { lo: i - 1 === 0 ? cum[0] : cum[i - 1] + CORNER_MARGIN_MM, hi: i === n - 1 ? cum[n - 1] : cum[i] - CORNER_MARGIN_MM };
+// An end never sits ON an interior corner of its line (the two treads meeting there would each recess it along a
+// different piece): within CORNER_MARGIN_MM of one it goes that far to the side the pointer is on (the nominal side
+// when it is exactly on it), staying inside `piece`.
+function offCorner(cum, along, toward, nominal, piece) {
+  for (let i = 1; i < cum.length - 1; i++) {
+    if (Math.abs(cum[i] - along) >= CORNER_MARGIN_MM) continue;
+    const side = Math.abs(toward - cum[i]) > 1e-6 ? Math.sign(toward - cum[i]) : Math.sign(nominal - cum[i]) || 1;
+    const out = clamp(cum[i] + side * CORNER_MARGIN_MM, piece);
+    return Math.abs(out - cum[i]) >= CORNER_MARGIN_MM - 1e-6 ? out : clamp(cum[i] - side * CORNER_MARGIN_MM, piece);
+  }
+  return along;
 }
 
 // Where the line from `from` through `pivot` meets `path` beyond the pivot (the nearest such crossing to `near`).

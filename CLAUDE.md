@@ -102,7 +102,11 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   they were made on, `manualEdgeOverridesLayout` = `edgeLayoutKey` (counts of treads / winders / turns): edits from
   another layout are NOT applied — WARNING `EDGE-OVERRIDES-OUT-OF-DATE`, replaced by the first new edit
   (`withEdgeOverride`); a rejected edit → WARNING `EDGE-OVERRIDE-SKIPPED`; `planLayout.edgeOverrideStatus
-  {applied, skipped, stale}`, the plan draws and drags only the applied ones (`effectiveEdgeOverrides`)), the automatic housing recess
+  {applied, skipped, stale}`, the plan draws and drags only the applied ones (`effectiveEdgeOverrides`); the two treads
+  of an edited edge get their outlines RE-CUT along `innerFullPath`/`outerFullPath` between their final edges
+  (`outlineRecutter`: corners of a line go to the tread they now lie in; edges crossing each other → triangle up to the
+  crossing; an edge crossing a backwards dusza piece of its own tread ends the side there), `innerSide`/`outerSide`
+  then feed the recess), the automatic housing recess
   (`applyHousingRecess`: a tread ends t − d from a housed wanga's chain line, on a line parallel to it —
   `recessTreadToWangi`), `manualTreadOverhangs` (one tread's own side, `{side, offsetMm}`).
 - **Stairwell fit** (`stairwellFit.js`, "Dopasuj do klatki"): derives going + straight counts from side lengths of the
@@ -270,8 +274,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 
 - `plan2d/plan2dRenderer.js` (pure SVG from model + viewport; screen-constant strokes/handles/labels via `mmPerPx`),
   `planInteractions.js` (zoom/pan/pinch, drags, clicks, opening drawing), `viewport.js`, `edgeEdit.js` (edge edit:
-  dragging an end turns the edge about its walkline point, ends stay on their own stringer line piece and between the
-  neighbouring edges; Alt = free move of one end). Layers: grid, axes, widths, walkline, run/step boundaries, wangi as
+  dragging an end turns the edge about its walkline point; ends slide along their WHOLE stringer line, past its corners
+  (never ON a corner: `CORNER_MARGIN_MM`), between the neighbouring edges, and an edge cutting through a line piece
+  with the stair on one side only (the hole of a 180° zone) is refused; Alt = free move of one end). Layers: grid, axes, widths, walkline, run/step boundaries, wangi as
   board footprints, posts, balustrade, opening, winder widths, stringer spacing, winder blanks.
 - Workspace (`ui/workspace.js`, `style.css` grid): toolbar, left info + lil-gui parameters (`ui/ui.js`), main view
   (Plan 2D | Widok 3D | Profil wangi | Profil poręczy), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
@@ -300,7 +305,6 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 ## Open items / known limitations
 
 - Default L stair still has ceiling collisions and `STRINGER-MIN-SECTION` warnings (cleanup step 5: tune defaults).
-- Moving a stringer-line corner from one tread to another by an edge edit is not supported (edges stop at corners).
 - Winders: one dusza distribution (even); a ~10 mm dusza can flip the housed recess order on the wanga; in a U with a
   0-tread middle flight and a barely fitting arc the two corner posts may overlap.
 - Metal structure: sizes are placeholders, the steel is not checked, no fixings / welds / corner details.

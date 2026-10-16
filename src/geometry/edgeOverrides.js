@@ -1,4 +1,4 @@
-import { pointsEqual, signedPolygonArea, normalizeVector } from './pathUtils.js';
+import { pointsEqual, signedPolygonArea, normalizeVector, cumulativeDistances, subPathPoints } from './pathUtils.js';
 import { CONSTRUCTION_TYPES, constructionTypeForSide, housingDepthMm } from './stringerModel.js';
 
 // Każda z (numTreads + 1) granic między stopniami jest adresowana "indeksem granicy":
@@ -79,6 +79,8 @@ function cloneTread(tread) {
     backEdge: [...tread.backEdge],
     innerChain: [...tread.innerChain],
     outerChain: [...tread.outerChain],
+    ...(tread.innerSide ? { innerSide: [...tread.innerSide] } : {}),
+    ...(tread.outerSide ? { outerSide: [...tread.outerSide] } : {}),
   };
 }
 
@@ -103,11 +105,15 @@ export function edgeOverrideEndpoints(override) {
 // któregoś z dotkniętych stopni wyszedłby zdegenerowany (zerowe/ujemne pole albo odwrócony
 // zwrot), edycja tej granicy jest pomijana (z ostrzeżeniem w konsoli) — reszta nadal się
 // stosuje. Zwraca nową tablicę stopni; nie mutuje `treads` przekazanego na wejściu.
-export function applyManualEdgeOverrides(treads, overrides, report = null) {
+export function applyManualEdgeOverrides(treads, overrides, report = null, paths = null) {
   const keys = overrides ? Object.keys(overrides) : [];
   if (keys.length === 0) return treads;
 
   const result = treads.map(cloneTread);
+  // With the stair's inner/outer lines given, a tread next to an edited edge gets its outline RE-CUT along those lines
+  // between its (final) edges — so an edge end may pass a corner of its line (the winders round a dusza: their ends
+  // sit at or next to the corners); the corner simply goes to the tread it now lies in.
+  const recut = paths ? outlineRecutter(paths) : null;
 
   for (const key of keys) {
     const boundaryIndex = Number(key);
@@ -129,14 +135,19 @@ export function applyManualEdgeOverrides(treads, overrides, report = null) {
     const affected = [before, after].filter(Boolean);
 
     const areasBefore = affected.map(signedArea);
+    // (the raw outline of a winder at a dusza running backwards — a 180 degree zone with a narrow axis gap — crosses
+    // itself by design, the housing recess resolves it; such a tread is only checked by its area)
+    const simpleBefore = affected.map((t) => simpleOutline(t.outline));
+    const saved = affected.map((t) => ({ outline: t.outline, innerSide: t.innerSide, outerSide: t.outerSide }));
     for (const [oldPoint, newPoint] of moves) for (const tread of affected) retargetPoint(tread, oldPoint, newPoint);
+    if (recut) for (const tread of affected) recut(tread, result);
     const areasAfter = affected.map(signedArea);
 
-    const broken = areasAfter.some(
-      (a, i) => Math.abs(a) < 1 || Math.sign(a) !== Math.sign(areasBefore[i])
-    );
+    const broken =
+      areasAfter.some((a, i) => Math.abs(a) < 1 || Math.sign(a) !== Math.sign(areasBefore[i])) || affected.some((t, i) => simpleBefore[i] && !simpleOutline(t.outline));
     if (broken) {
       for (const [oldPoint, newPoint] of [...moves].reverse()) for (const tread of affected) retargetPoint(tread, newPoint, oldPoint);
+      affected.forEach((t, i) => Object.assign(t, saved[i]));
       report?.skipped.push(boundaryIndex);
     } else {
       report?.applied.push(boundaryIndex);
@@ -144,6 +155,112 @@ export function applyManualEdgeOverrides(treads, overrides, report = null) {
   }
 
   return result;
+}
+
+// --- Re-cutting a tread's outline along the stair's lines ------------------------------------------------------------
+
+const ON_LINE_MM = 0.5;
+
+// Every position along `path` of the point p (a point where two pieces of the line overlap, as in a 180 degree zone
+// whose two inner lines coincide, has more than one).
+function alongsOf(path, cum, p) {
+  const out = [];
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const ab = { x: b.x - a.x, y: b.y - a.y };
+    const len2 = ab.x * ab.x + ab.y * ab.y;
+    if (len2 === 0) continue;
+    const t = Math.min(1, Math.max(0, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2));
+    if (Math.hypot(a.x + ab.x * t - p.x, a.y + ab.y * t - p.y) <= ON_LINE_MM) out.push(cum[i - 1] + Math.sqrt(len2) * t);
+  }
+  return out;
+}
+
+// The outline re-cutter: a tread whose four corners lie on the stair's lines gets the pieces of those lines between
+// its edges as its sides (innerSide / outerSide; the outline = innerSide + outerSide reversed, like the layout's own).
+// The edge ends are read in stair order, each at the first position along its line not before the previous edge's
+// end, so where two pieces of a line overlap every end is placed on the right one.
+function outlineRecutter({ innerPath, outerPath }) {
+  const lines = { inner: { path: innerPath, cum: cumulativeDistances(innerPath) }, outer: { path: outerPath, cum: cumulativeDistances(outerPath) } };
+  return (tread, treads) => {
+    if (!(tread.innerChain?.length >= 2) || !(tread.outerChain?.length >= 2)) return; // a landing side without a line
+    const i = treads.indexOf(tread);
+    const sides = {};
+    for (const [side, k] of [['inner', 0], ['outer', 1]]) {
+      const { path, cum } = lines[side];
+      let prev = -Infinity;
+      let from = null;
+      let to = null;
+      for (let j = 0; j <= i + 1 && j <= treads.length; j++) {
+        const p = j < treads.length ? treads[j].frontEdge[k] : treads[treads.length - 1].backEdge[k];
+        const candidates = alongsOf(path, cum, p);
+        if (candidates.length === 0) return; // an end off its line (a free move): keep the outline as moved
+        const after = candidates.filter((a) => a >= prev - ON_LINE_MM);
+        const at = after.length ? Math.min(...after) : Math.max(...candidates);
+        if (j === i) from = at;
+        if (j === i + 1) to = at;
+        prev = at;
+      }
+      if (from === null || to === null || to < from - 1e-6) return;
+      sides[side] = subPathPoints(path, cum, from, to);
+    }
+    // a winder whose two edges cross before they reach the inner line (the narrow middle of a 180 degree zone) is the
+    // triangle up to that crossing, as the layout cuts it
+    const apex = segmentCrossing(tread.frontEdge[0], tread.frontEdge[1], tread.backEdge[0], tread.backEdge[1]);
+    if (apex) {
+      delete tread.innerSide;
+      tread.outerSide = sides.outer;
+      tread.outline = [apex, ...[...sides.outer].reverse()];
+      return;
+    }
+    // an edge crossing a piece of the tread's own inner side (a dusza running backwards inside the stair, where the
+    // wangi stand on each other) ends the side there
+    let inner = sides.inner;
+    for (let k = 1; k < inner.length; k++) {
+      const x = segmentCrossing(inner[k - 1], inner[k], tread.backEdge[0], tread.backEdge[1]);
+      if (x) {
+        inner = [...inner.slice(0, k), x];
+        break;
+      }
+    }
+    for (let k = inner.length - 1; k >= 1; k--) {
+      const x = segmentCrossing(inner[k - 1], inner[k], tread.frontEdge[0], tread.frontEdge[1]);
+      if (x) {
+        inner = [x, ...inner.slice(k)];
+        break;
+      }
+    }
+    tread.innerSide = inner;
+    tread.outerSide = sides.outer;
+    tread.outline = [...inner, ...[...sides.outer].reverse()];
+  };
+}
+
+// The point where segments ab and cd properly cross; null when they do not.
+function segmentCrossing(a, b, c, d) {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const q = { x: d.x - c.x, y: d.y - c.y };
+  const den = r.x * q.y - r.y * q.x;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((c.x - a.x) * q.y - (c.y - a.y) * q.x) / den;
+  const u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / den;
+  if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) return null;
+  return { x: a.x + r.x * t, y: a.y + r.y * t };
+}
+
+// No two non-adjacent sides of the outline cross.
+function simpleOutline(pts) {
+  const n = pts.length;
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const proper = (a, b, c, d) => cross(c, d, a) * cross(c, d, b) < -1e-9 && cross(a, b, c) * cross(a, b, d) < -1e-9;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (proper(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return false;
+    }
+  }
+  return true;
 }
 
 // Which tread layout a set of edge edits was made on: the edits are keyed by boundary number and hold absolute points,
@@ -263,7 +380,8 @@ export function recessTreadToWangi(tread, depthMm) {
   const front = [...tread.frontEdge];
   const back = [...tread.backEdge];
   const interior = [];
-  const chains = { inner: distinctChain(tread.innerChain), outer: distinctChain(tread.outerChain) };
+  // (the sides an edge edit re-cut the outline to, applyManualEdgeOverrides, or the layout's own chains)
+  const chains = { inner: distinctChain(tread.innerSide || tread.innerChain), outer: distinctChain(tread.outerSide || tread.outerChain) };
   for (const [side, idx] of [['inner', 0], ['outer', 1]]) {
     const depth = depthMm[side];
     if (!(depth > 0)) continue;

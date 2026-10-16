@@ -145,3 +145,62 @@ test('grid: turning any edge from either end never folds a tread (L/U, left/righ
     }
   }
 });
+
+test('180-degree winder zone: every winder edge turns from either end, ends pass corners, no tread folds', async () => {
+  const { segmentsProperlyIntersect } = await import('../../geometry/pathUtils.js');
+  const crosses = (o) => o.some((a, i) => o.some((c, j) => j > i + 1 && !(i === 0 && j === o.length - 1) && segmentsProperlyIntersect(a, o[(i + 1) % o.length], c, o[(j + 1) % o.length])));
+  for (const uWindersTotal of [5, 6]) {
+    for (const uAxisGapMm of [0, 150]) {
+      const patch = { stairType: 'U', treadsLegA: 3, treadsLegB: 0, treadsLegC: 3, stairWidth: 965, uSingleWinderZone: true, uWindersTotal, uAxisGapMm, turnType: 'winder', turn2Type: 'winder' };
+      const base = build(patch);
+      const winders = base.planLayout.treads.filter((t) => t.type === 'winder').map((t) => t.index);
+      const at = (i) => boundaryEditPoints(base.planLayout, i, {});
+      // every edge between two winders and the edges bounding the zone
+      for (let i = winders[0]; i <= winders[winders.length - 1] + 1; i++) {
+        const e = at(i);
+        assert.ok(e?.pivot, `edge ${i} has a pivot`);
+        for (const endpoint of ['inner', 'outer']) {
+          let turnedAny = 0;
+          for (const [dx, dy] of [[60, 0], [-60, 0], [0, 60], [0, -60], [200, 200], [-200, -200]]) {
+            const p = e[endpoint];
+            const turned = pivotEdgeDrag({ endpoint, raw: { x: p.x + dx, y: p.y + dy }, pivot: e.pivot, innerPath: base.planLayout.innerFullPath, outerPath: base.planLayout.outerFullPath, nominal: e.nominal, neighbours: { before: at(i - 1), after: at(i + 1) } });
+            if (!turned) continue;
+            const edited = build({ ...patch, manualEdgeOverrides: { [i]: turned } });
+            if (Math.hypot(turned[endpoint].x - p.x, turned[endpoint].y - p.y) > 1) turnedAny++;
+            assert.deepEqual(edited.planLayout.edgeOverrideStatus.skipped, [], `${uWindersTotal}w gap ${uAxisGapMm}, edge ${i} ${endpoint} (${dx},${dy}) applied`);
+            for (const t of edited.planLayout.treads) assert.ok(!crosses(t.outline), `${uWindersTotal}w gap ${uAxisGapMm}, edge ${i} ${endpoint} (${dx},${dy}): tread ${t.index + 1} folds`);
+          }
+          assert.ok(turnedAny > 0, `${uWindersTotal}w gap ${uAxisGapMm}: edge ${i} turns from its ${endpoint} end`);
+        }
+      }
+    }
+  }
+});
+
+test('180-degree winder zone: the inner end of every winder edge slides both ways along its line (past the dusza corners)', async () => {
+  const { cumulativeDistances, pointAtDistance } = await import('../../geometry/pathUtils.js');
+  for (const uWindersTotal of [5, 6]) {
+    for (const uAxisGapMm of [0, 150]) {
+      const L = build({ stairType: 'U', treadsLegA: 3, treadsLegB: 0, treadsLegC: 3, stairWidth: 965, uSingleWinderZone: true, uWindersTotal, uAxisGapMm, turnType: 'winder', turn2Type: 'winder' }).planLayout;
+      const path = L.innerFullPath;
+      const cum = cumulativeDistances(path);
+      const at = (i) => boundaryEditPoints(L, i, {});
+      const winders = L.treads.filter((t) => t.type === 'winder').map((t) => t.index);
+      for (let i = winders[0]; i <= winders[winders.length - 1] + 1; i++) {
+        const e = at(i);
+        const a0 = closestOnPolyline(path, e.inner).along;
+        let lo = 0;
+        let hi = 0;
+        for (let s = -200; s <= 200; s += 2) {
+          const raw = pointAtDistance(path, cum, Math.max(0, a0 + s));
+          const t = pivotEdgeDrag({ endpoint: 'inner', raw, pivot: e.pivot, innerPath: path, outerPath: L.outerFullPath, nominal: e.nominal, neighbours: { before: at(i - 1), after: at(i + 1) } });
+          if (!t) continue;
+          const d = closestOnPolyline(path, t.inner).along - a0;
+          lo = Math.min(lo, d);
+          hi = Math.max(hi, d);
+        }
+        assert.ok(lo < -5 && hi > 5, `${uWindersTotal}w gap ${uAxisGapMm}: edge ${i} inner end slides ${lo.toFixed(0)}..${hi.toFixed(0)} mm`);
+      }
+    }
+  }
+});

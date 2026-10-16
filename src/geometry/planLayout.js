@@ -36,7 +36,7 @@ export function buildPlanLayout(config) {
   if (Object.keys(edits).length > 0) {
     const madeOn = config.manualEdgeOverridesLayout;
     if (madeOn && madeOn !== edgeLayoutKey(config)) status.stale = Object.keys(edits).map(Number);
-    else layout.treads = applyManualEdgeOverrides(layout.treads, edits, status);
+    else layout.treads = applyManualEdgeOverrides(layout.treads, edits, status, { innerPath: layout.innerFullPath, outerPath: layout.outerFullPath });
   }
   layout.edgeOverrideStatus = status;
   // Automatyczne wgłębienie po stronie wpuszczanej — konsekwencja typu konstrukcji wangi, nie

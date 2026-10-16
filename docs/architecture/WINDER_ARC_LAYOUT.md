@@ -54,7 +54,13 @@ połówkami usunięty) i dla skrętu w lewo (odbicie lustrzane).
 
 Korzystają z niej:
 - plan 2D: rysuje `path`, numery stopni stawia między punktami, a `smoothPath.js` został usunięty;
-- edytor krawędzi (`plan2d/edgeEdit.js`): punkt zaczepienia krawędzi to `points[i]`.
+- edytor krawędzi (`plan2d/edgeEdit.js`): punkt zaczepienia krawędzi to `points[i]`. Końce krawędzi zabiegu
+  przesuwają się po CAŁEJ linii (także za narożniki duszy strefy 180°); obrys obu stopni jest wtedy przycinany na nowo
+  wzdłuż linii (`edgeOverrides.js outlineRecutter`) — narożnik linii przechodzi do stopnia, w którym teraz leży,
+  krzyżujące się krawędzie dają trójkąt do punktu przecięcia. Przy wangach na sobie (odstęp osi < grubość) odcinek
+  duszy biegnie wstecz WEWNĄTRZ schodów, więc krawędź może go przeciąć; przy szerszym odstępie przecięcie odcinka duszy
+  (przez otwór) jest odrzucane. Zakres ruchu ogranicza nadal obrót wokół punktu na linii biegu i sąsiednie krawędzie
+  (10 mm) — swobodnie: Alt.
 
 ## Pomiar szerokości zabiegu (PL-LEGAL-C-01) — poprawiony
 
