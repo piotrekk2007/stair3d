@@ -147,7 +147,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - `treadSolver.js` `TreadModel`: elevation, direction, widths, nominal/final edges, nosed `outline`, `winderInfo`
   (passthrough), `winderBlank` (`winderBlank.js` — the production blank incl. nosing, used by plan/3D labels/takeoff),
   `notch` (underside groove for the riser overlap: `strip`, `undersides` so the nosing keeps full thickness, `outline`
-  for the DXF). Nosing slides front corners along the tread's FINAL sides (`nosingUtils.sideDirection`).
+  for the DXF). Nosing slides front corners along the tread's FINAL sides (`nosingUtils.sideDirection`); the corners
+  are the OUTLINE's own on the front edge's line (`withOutlineFrontCorners` — a triangular winder's apex, which then
+  slides along its back edge; also the riser groove).
 - `riserSolver.js` `RiserModel`: panels built from the FINAL front edge (winder fan of `WINDER_RISER_FAN_PANELS`,
   ends exactly the edge points), `directionSpreadDeg`, `riserTopOverlapMm` into the tread above; with risers the stair
   ends with a top riser under the "fajkowy" nosing tread (`riser-top`, `topNosingThicknessMm`, DO WERYFIKACJI).

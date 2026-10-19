@@ -107,11 +107,37 @@ function fallbackDirection(tread) {
   return normalizeVector({ x: b.x - a.x, y: b.y - a.y });
 }
 
-function applyNosing(tread, nosing) {
+// The tread's front corners AS ITS OUTLINE HAS THEM. Usually the front edge's own ends; but a winder whose front and
+// back edges cross before the inner line (the narrow middle of a 180° zone) is the triangle up to that crossing
+// (planLayout.js / edgeOverrides.js outlineRecutter), so its outline has the crossing — on the front edge's line —
+// instead of the front edge's inner end. Without it the nosing (and the riser groove) found no inner corner: the
+// front edge only turned about the apex and the nosing vanished (reported 2026-10-19, tread 9 of a 5-winder zone).
+// Returns a tread whose frontEdge is the outline's corners (the same line), ready for shiftFrontEdge.
+function withOutlineFrontCorners(tread) {
   const { outline, frontEdge } = tread;
-  if (nosing <= 0) return outline;
   const [inner0, outer0] = frontEdge;
-  const { newInner0, newOuter0 } = shiftFrontEdge(tread, nosing);
+  const on = (p) => outline.some((q) => pointsEqual(p, q));
+  if (on(inner0) && on(outer0)) return tread;
+  const dir = normalizeVector({ x: outer0.x - inner0.x, y: outer0.y - inner0.y });
+  const offLine = (p) => Math.abs((p.x - inner0.x) * dir.y - (p.y - inner0.y) * dir.x);
+  const along = (p) => (p.x - inner0.x) * dir.x + (p.y - inner0.y) * dir.y;
+  const onLine = outline.filter((p) => offLine(p) < FRONT_CORNER_ON_LINE_MM);
+  if (onLine.length < 2) return tread;
+  // the outline's points on the front edge's line: the one nearest each end of the front edge
+  const nearest = (end) => onLine.reduce((best, p) => (Math.abs(along(p) - along(end)) < Math.abs(along(best) - along(end)) ? p : best));
+  const innerCorner = on(inner0) ? inner0 : nearest(inner0);
+  const outerCorner = on(outer0) ? outer0 : nearest(outer0);
+  if (pointsEqual(innerCorner, outerCorner)) return tread;
+  return { ...tread, frontEdge: [innerCorner, outerCorner] };
+}
+const FRONT_CORNER_ON_LINE_MM = 0.5;
+
+function applyNosing(tread, nosing) {
+  const { outline } = tread;
+  if (nosing <= 0) return outline;
+  const t = withOutlineFrontCorners(tread);
+  const [inner0, outer0] = t.frontEdge;
+  const { newInner0, newOuter0 } = shiftFrontEdge(t, nosing);
   return outline.map((p) => {
     if (pointsEqual(p, inner0)) return newInner0;
     if (pointsEqual(p, outer0)) return newOuter0;
@@ -144,8 +170,9 @@ function buildNotch(tread, config) {
   if (!(riserTopOverlapMm > 0) || !(riserBoardThickness > 0)) return null;
   if (!(tread.innerChain?.length > 1) || !(tread.outerChain?.length > 1)) return null;
 
-  const [inner0, outer0] = tread.frontEdge;
-  const { newInner0, newOuter0 } = shiftFrontEdge(tread, -riserBoardThickness);
+  const t = withOutlineFrontCorners(tread);
+  const [inner0, outer0] = t.frontEdge;
+  const { newInner0, newOuter0 } = shiftFrontEdge(t, -riserBoardThickness);
   const outline = tread.outline.map((p) => {
     if (pointsEqual(p, inner0)) return newInner0;
     if (pointsEqual(p, outer0)) return newOuter0;
