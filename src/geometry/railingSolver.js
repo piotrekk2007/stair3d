@@ -1331,6 +1331,35 @@ function buildOpeningSection(id, path, ctx, closed) {
 }
 
 /**
+ * Where the stair's END NEWEL goes when the opening's balustrade ends at it (user decision 2026-10-19): onto the slab,
+ * its centre on that balustrade's line (`railingOpeningSetbackMm` back from the exit edge), so the opening's handrail
+ * meets its face straight and the stair's handrail and inner wanga run on to it. Null when the opening has no
+ * balustrade on the free part of the exit edge next to the stair's INNER side (the end newel stands there).
+ * Returns { linePoint, outward } — the balustrade's line (a point on it, the unit normal pointing onto the slab) —
+ * and the exit edge { a, b } (the slab's edge, where the wanga's end over the slab starts).
+ * `ctx`: { config, planLayout, openingOutline, wallSegments } — available before any stringer / post is built.
+ */
+export function endNewelOntoSlab(ctx) {
+  const { config, planLayout, openingOutline } = ctx;
+  if (!config.railingOpeningEnabled || !Array.isArray(openingOutline) || openingOutline.length < 3) return null;
+  const last = planLayout.treads[planLayout.treads.length - 1];
+  if (!last) return null;
+  const edges = openingEdgeStates(openingOutline, ctx);
+  const exit = edges.find((e) => e.stair);
+  if (!exit) return null;
+  const pieces = openingPieces(edges).filter((p) => p.edge === exit.index);
+  // the free part of the exit edge on the inner side of the stair (the end newel's side)
+  const tInner = paramOn(last.backEdge[0], exit.a, exit.b);
+  const tOuter = paramOn(last.backEdge[1], exit.a, exit.b);
+  const piece = pieces.find((p) => p.atStairEnd === (tInner < tOuter ? 'b' : 'a'));
+  if (!piece?.enabled) return null;
+  const d = unit({ x: exit.b.x - exit.a.x, y: exit.b.y - exit.a.y });
+  const outward = { x: d.y, y: -d.x }; // outward of a CCW outline = onto the slab
+  const setback = Math.max(0, Number(config.railingOpeningSetbackMm) || 0);
+  return { linePoint: { x: exit.a.x + outward.x * setback, y: exit.a.y + outward.y * setback }, outward, edge: { a: exit.a, b: exit.b } };
+}
+
+/**
  * The balustrade round the ceiling opening: the edge states (for the plan's toggles) and one section per chain of
  * enabled pieces. `ctx`: { config, planLayout, openingOutline (plan, CCW), wallSegments ([{a, b}] plan), stairPosts
  * (the stair's standing posts: structural + its balustrade's) }.

@@ -28,6 +28,9 @@ const POST_COINCIDENCE_MM = 1;
 // Below this (1 + cos of the angle between the two legs' normals) the legs double back on themselves and a mitre
 // point would fly off — the second leg's normal is used instead (same guard as railingSolver.js offsetLookup).
 const MITRE_MIN_DENOM = 0.1;
+// The end newel is moved onto the slab only when the last walking direction leaves the opening's exit edge at least
+// this steeply (cos of the angle to its outward normal) — a stair arriving along an edge does not walk out there.
+const SLAB_WALK_MIN_COS = 0.5;
 
 function unitDir(pFrom, pTo) {
   return normalizeVector({ x: pTo.x - pFrom.x, y: pTo.y - pFrom.y });
@@ -204,7 +207,25 @@ export function buildAllPostModels(planLayout, config) {
     x: startOnAxis.x + startForward.x * (postSize / 2),
     y: startOnAxis.y + startForward.y * (postSize / 2),
   };
-  const endPosition = ontoWangaAxis(endPoint, dirAt(path.length - 2), null, half, handedness);
+  let endPosition = ontoWangaAxis(endPoint, dirAt(path.length - 2), null, half, handedness);
+  let endElevation = { bottom: totalRise - NEWEL_HEIGHT, top: totalRise };
+  // With a balustrade round the ceiling opening ending at it, the end newel stands ON THE SLAB, moved on along the last
+  // walking direction until its centre is on that balustrade's line (railingSolver.js endNewelOntoSlab, set by
+  // buildStaircase.js as `config.endNewelOntoSlab`); the inner wanga runs on to its face (stringerSolver.js) and its end
+  // over the slab is cut at the floor (stringerConstructionGeometry.js).
+  let onSlab = null;
+  const slab = config.endNewelOntoSlab;
+  const lastWalk = dirAt(path.length - 2);
+  if (slab && lastWalk) {
+    const along = lastWalk.x * slab.outward.x + lastWalk.y * slab.outward.y;
+    const shift = -((endPosition.x - slab.linePoint.x) * slab.outward.x + (endPosition.y - slab.linePoint.y) * slab.outward.y) / (along || 1);
+    // only a stair that really walks out onto the slab there, and only forward
+    if (along > SLAB_WALK_MIN_COS && shift > 0) {
+      endPosition = { x: endPosition.x + lastWalk.x * shift, y: endPosition.y + lastWalk.y * shift };
+      endElevation = { bottom: totalRise, top: totalRise + NEWEL_HEIGHT };
+      onSlab = { floorZ: totalRise, shiftMm: shift, edge: slab.edge, outward: slab.outward };
+    }
+  }
   // A flight that starts (or ends) straight away with winders has no inner leg before (after) its corner; the
   // stair's own first (last) walking direction — the outer line's first (last) side — stands in for it.
   const outer = distinctPath(planLayout.outerFullPath);
@@ -222,7 +243,7 @@ export function buildAllPostModels(planLayout, config) {
     { postId: 'post-start', kind: 'start', position: startPosition, anchor: startPoint, elevation: { bottom: 0, top: NEWEL_HEIGHT }, size: postSize },
     // Ostatni stopień nie ma noska na swojej przedniej (górnej) krawędzi — nosek jest tylko
     // na krawędziach czołowych — więc słup końcowy nie koliduje z niczym i zostaje wyśrodkowany.
-    { postId: 'post-end', kind: 'end', position: endPosition, anchor: endPoint, elevation: { bottom: totalRise - NEWEL_HEIGHT, top: totalRise }, size: postSize },
+    { postId: 'post-end', kind: 'end', position: endPosition, anchor: endPoint, elevation: endElevation, size: postSize, ...(onSlab ? { onSlab } : {}) },
   ];
 
   if (hasCornerPost) {

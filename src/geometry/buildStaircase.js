@@ -10,7 +10,7 @@ import { renderStringers } from './stringerRenderer.js';
 import { buildPostModels, buildAllPostModels, raisePostsToHandrail } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
-import { buildRailingModel } from './railingSolver.js';
+import { buildRailingModel, endNewelOntoSlab } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
 import { GLASS_TINTS } from './railingGlass.js';
 import { isCantilever, cantileverConfig, buildCantileverBox } from './cantileverModel.js';
@@ -86,6 +86,16 @@ export function buildStaircase(inputConfig) {
   const noWangi = cantilever || metal;
   const fullConfig = metalConfig(cantileverConfig({ ...config, riserHeight: derived.riserHeight }));
   const planLayout = buildPlanLayout(fullConfig);
+  // the ceiling opening and the stairwell (they depend on the plan only): the balustrade round the opening stands on its
+  // edges and leaves out the ones along the walls; where it ends at the stair's end newel that newel moves onto the slab
+  // (railingSolver.js endNewelOntoSlab) — decided before the posts and wangi are built, both read it from the config
+  const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
+  // the stairwell (stairwell.js): every side measured, a fixed side off its dimension reported; its walls and slab for
+  // the 3D view (presentation only, like the ceiling)
+  const stairwell = stairwellReport(config, planLayout);
+  const walls = stairwellWalls(stairwell, fullConfig, planLayout);
+  const slabNewel = noWangi ? null : endNewelOntoSlab({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
+  if (slabNewel) fullConfig.endNewelOntoSlab = slabNewel;
 
   let treadModels = buildTreadModels(planLayout, fullConfig);
   const cantileverResult = { diagnostics: [] };
@@ -128,13 +138,6 @@ export function buildStaircase(inputConfig) {
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
-  // the ceiling opening and the stairwell come first: the balustrade round the opening stands on its edges and leaves
-  // out the ones along the walls
-  const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
-  // the stairwell (stairwell.js): every side measured, a fixed side off its dimension reported; its walls and slab for
-  // the 3D view (presentation only, like the ceiling)
-  const stairwell = stairwellReport(config, planLayout);
-  const walls = stairwellWalls(stairwell, fullConfig, planLayout);
   const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] }, fullConfig);
   // Legal/reference checks on the solved balustrade (validator/railingChecks.js) join its own findings, which
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.

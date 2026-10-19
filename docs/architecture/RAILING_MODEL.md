@@ -38,6 +38,18 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
 - Połączenie ze schodami: na końcu / narożniku, gdzie stoi słup schodów (słup końcowy wangi, ostatni słupek balustrady
   schodów; ≤ 1,5 × jego przekrój), TEN słup jest słupem balustrady przy otworze — bez drugiego słupka, poręcz dochodzi do
   jego lica, słup dostaje wysokość do góry poręczy (`postTopNeeds` → `raisePostsToHandrail`).
+- Słup końcowy NA STROPIE (decyzja użytkownika 2026-10-19 — wcześniej poręcz przy otworze dochodziła do niego z
+  uskokiem w bok, bo stał na osi wangi przy krawędzi stropu, a balustrada 60 mm dalej): gdy wolny kawałek krawędzi
+  wyjścia po stronie DUSZY ma balustradę, `endNewelOntoSlab` (liczone w `buildStaircase` zaraz po planie, przed
+  słupami i wangami) podaje linię balustrady → `fullConfig.endNewelOntoSlab` → `postSolver.js` przesuwa `post-end`
+  wzdłuż ostatniego kierunku wejścia, aż jego środek leży na tej linii (tylko do przodu, tylko gdy schody wychodzą
+  na strop pod kątem ≥ 60° do krawędzi), słup stoi na posadzce (`onSlab`, dół = totalRise, nominalnie 1000 mm, potem
+  podniesiony do poręczy). Wanga wewn. dochodzi do jego lica + wręg (`stringerSolver.js boardEndPosts` →
+  `endPost.onSlab {floorZ, edgeU}`), jej kawałek za krawędzią stropu jest ścięty poniżej posadzki
+  (`stringerConstructionGeometry.js cutBelowFloorPast`) — przy krawędzi stropu cięcie pionowe, na stropie leży na
+  posadzce. Poręcz schodów i poręcz przy otworze kończą się na licach tego słupa. Nad posadzką zostaje tylko kilka cm
+  wangi — śruby złącza zwykle dają WARNING `JOINT-CONNECTOR-EDGE` (do decyzji w warsztacie). Słup balustrady schodów
+  po stronie zewnętrznej NIE jest przesuwany.
 - Sąsiednie włączone kawałki = jeden odcinek `opening-e<krawędź>` / `opening-e<krawędź>-b` (gdy zaczyna się za schodami) (`kind: 'opening'`, `side: null`):
   krawędzie odsunięte, w narożnikach przecięte (ucios), wolne końce prostopadle; wszystkie krawędzie = pętla
   zamknięta (słupek startowy ją zamyka). Słupki na narożnikach i końcach, ręczne słupki i wyłączanie narożników jak

@@ -172,6 +172,9 @@ function boardEndPosts(segment, posts) {
     faceU: centreU(p) + (faceSign * p.size) / 2,
     sizeMm: p.size,
     elevation: { ...p.elevation },
+    // an end newel standing on the slab (postSolver.js): the board's u where the slab's edge crosses its reference
+    // line and the floor's height — its piece over the slab is cut at the floor (stringerConstructionGeometry.js)
+    ...(p.onSlab ? { onSlab: { floorZ: p.onSlab.floorZ, edgeU: slabEdgeU(segment.referenceLine, p.onSlab) } } : {}),
   });
   // (the central post of a 180° winder zone belongs to both of the dusza's corners — `anchors`)
   const anchorsOf = (p) => p.anchors || [p.anchor];
@@ -179,6 +182,13 @@ function boardEndPosts(segment, posts) {
   const atStart = withAnchor.find((p) => anchorsOf(p).some((a) => near(a, start)));
   const atEnd = withAnchor.find((p) => anchorsOf(p).some((a) => near(a, end)));
   return { startPost: atStart ? describe(atStart, +1) : null, endPost: atEnd ? describe(atEnd, -1) : null };
+}
+
+// The u along a board's reference line where it crosses the slab's edge (the opening's exit edge), or its end.
+function slabEdgeU({ start, direction, length }, { edge, outward }) {
+  const along = direction.x * outward.x + direction.y * outward.y;
+  if (!(Math.abs(along) > 1e-9)) return length;
+  return ((edge.a.x - start.x) * outward.x + (edge.a.y - start.y) * outward.y) / along;
 }
 
 /**

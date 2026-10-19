@@ -248,7 +248,13 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   the stair balustrade's last post, within 1.5 × its size) IS that post (reused, raised to the handrail's top via
   `postTopNeeds`) —, hand-placed posts / switched-off corners, balusters or glass between posts on the floor; read by 3D, plan, takeoff, DXF, checks like any section (not the side-view
   handrail editor, not end-height corrections). WARNING PL-LEGAL-H-01 below 1.1 m. `ceilingFit` and the stairwell are
-  now built before the balustrade in `buildStaircase`.
+  built right after the plan in `buildStaircase`. **End newel on the slab** (user decision 2026-10-19): when the free
+  part of the exit edge on the stair's INNER side carries the balustrade, `endNewelOntoSlab` (railingSolver.js) gives
+  the balustrade's line → `fullConfig.endNewelOntoSlab` → `post-end` moves on along the last walking direction until
+  its centre is on that line, stands on the floor (`onSlab`, bottom = totalRise); the inner wanga runs on into it
+  (`boardEndPosts` → `endPost.onSlab {floorZ, edgeU}`) and its piece past the slab's edge is cut below the floor
+  (`stringerConstructionGeometry.js cutBelowFloorPast`); both handrails end at its faces. Only a few cm of board stay
+  above the floor there — the joint's bolts usually report `JOINT-CONNECTOR-EDGE`.
 - **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
   `config.railingProfileOverrides = {[section]: {[railingRunKey 'postA>postB']: [{s, dz}]}}`, `applyRunPoints`,
   `RAILING_PROFILE_EDITS` / `applyRailingProfileEdit`), applied in the solver after the end corrections and before

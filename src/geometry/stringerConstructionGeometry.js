@@ -67,7 +67,7 @@
 // the reference is (bearings, lap-joint grouping, riser recess), slices the solved curves per
 // physical board, builds the comb and housings, and reports the diagnostics.
 
-import { pointsEqual, segmentsProperlyIntersect } from './pathUtils.js';
+import { pointsEqual, segmentsProperlyIntersect, signedPolygonArea } from './pathUtils.js';
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm, postHousingDepthMm } from './stringerModel.js';
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
@@ -78,6 +78,7 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { GEOMETRY_EPS } from './tolerances.js';
 import { topRiserElevation } from './riserSolver.js';
 import { vRangeWithin } from './jointSolver.js';
+import { subtractConvex, polygonArea } from './polygonClip.js';
 
 // tan(70 degrees): the steepest end edge that is still continued along its own line to the end face.
 // The ordinary steep dusza of a normal winder is ~58 degrees (slope 1.6) and stays a straight line;
@@ -640,6 +641,32 @@ function hasSelfIntersection(polygon) {
 
 // Builds ONE result for a segment with no tread bearings at all (a real, if unusual, case —
 // see stringerSolver.js) — nothing to solve, nothing to take off.
+// The contour minus the region past `edgeU` below `floorZ` (the largest piece left; the contour unchanged when nothing
+// of it is there).
+function cutBelowFloorPast(contour, { edgeU, floorZ }) {
+  const BIG = 1e6;
+  const pts = contour.map((p) => ({ x: p.u, y: p.v }));
+  if (!pts.some((p) => p.x > edgeU + GEOMETRY_EPS && p.y < floorZ - GEOMETRY_EPS)) return contour;
+  const hole = [
+    { x: edgeU, y: floorZ - BIG },
+    { x: edgeU + BIG, y: floorZ - BIG },
+    { x: edgeU + BIG, y: floorZ },
+    { x: edgeU, y: floorZ },
+  ];
+  const pieces = subtractConvex(pts, hole);
+  if (!pieces.length) return contour;
+  const best = pieces.reduce((a, b) => (polygonArea(b.outer) > polygonArea(a.outer) ? b : a));
+  // keep the contour's own orientation and starting point (the top's first point), as every other contour has it
+  let out = best.outer.map((p) => ({ u: p.x, v: p.y }));
+  if (Math.sign(signedPolygonArea(best.outer)) !== Math.sign(signedPolygonArea(pts))) out.reverse();
+  const first = contour[0];
+  let k = 0;
+  out.forEach((p, i) => {
+    if (Math.hypot(p.u - first.u, p.v - first.v) < Math.hypot(out[k].u - first.u, out[k].v - first.v)) k = i;
+  });
+  return [...out.slice(k), ...out.slice(0, k)];
+}
+
 function emptySegmentGeometry(segment) {
   return {
     segmentId: segment.id,
@@ -759,7 +786,8 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     // post's face (user decision: joint = full-section housing; jointSolver.js builds the matching pocket in the post).
     const intoPost = postHousingDepthMm(config);
     const reachesStartPost = segment.startPost && seatSpanStart <= segment.startPost.faceU + GEOMETRY_EPS;
-    const reachesEndPost = segment.endPost && seatSpanEnd >= segment.endPost.faceU - GEOMETRY_EPS;
+    // (an end newel moved onto the slab stands past the last seat: the board runs on to it all the same)
+    const reachesEndPost = segment.endPost && (seatSpanEnd >= segment.endPost.faceU - GEOMETRY_EPS || !!segment.endPost.onSlab);
     const spanStart = segment.startPost ? (reachesStartPost ? segment.startPost.faceU - intoPost : seatSpanStart) : seatSpanStart;
     const spanEnd = segment.endPost ? (reachesEndPost ? segment.endPost.faceU + intoPost : seatSpanEnd) : seatSpanEnd;
     // A contour is continued along its end tangent to reach an end face only up to this steepness; a
@@ -805,6 +833,11 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
         .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
       diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id, groupOverrides !== null));
     }
+
+    // A board running on to an end newel that stands on the slab (postSolver.js `onSlab`): the piece past the slab's
+    // edge lies on the floor — everything of it below the floor is cut away (the board butts against the slab's edge
+    // below, and only its top part over the floor goes into the post).
+    if (segment.endPost?.onSlab) outerContour = cutBelowFloorPast(outerContour, segment.endPost.onSlab);
 
     // The pockets actually routed into a housed board's inner face (what the 3D board shows as recesses): each
     // housing cut back to the board (its span, and between its lower and upper edge — e.g. the first riser's housing
