@@ -235,6 +235,9 @@ export function createDefaultConfig() {
     // Ręczne punkty na linii poręczy (geometry/railingProfileModel.js, edytor „Profil poręczy”):
     // { [odcinek]: { [bieg 'słupA>słupB']: [{ s: mm wzdłuż biegu od lica słupa, dz: mm w górę (+) / w dół (−) }] } }
     railingProfileOverrides: {},
+    // Hand-placed balustrade posts and automatic corner posts switched off (geometry/railingPostEdits.js):
+    // { [sectionId]: { added: [{ id, s }], suppressed: [s] } }, s = mm along the section's path in plan
+    railingPostEdits: {},
     // Poręcz gięta (etap 4, railingSolver.js smoothRun): załamania pochylenia w biegu zastąpione łukami w pionie,
     // a narożnik w rzucie, przy którym NIE stoi słup, łukiem w rzucie zamiast słupka. Promienie to parametry
     // (wybór programu, do ustalenia z warsztatem — nie wartości z normy).

@@ -228,6 +228,15 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   at least the handrail's top there (`postTopNeeds` → own posts in the solver, structural posts via `postSolver.js
   raisePostsToHandrail`; nominal height, manual `topDeltaMm` on top). The renderer cuts handrail ends PLUMB (sheared
   profile), flush with the post face.
+- **Posts by hand** (`railingPostEdits.js`, user decision 2026-10-19): `config.railingPostEdits[section] = {added:
+  [{id, s}], suppressed: [s]}` (s = plan mm along `section.path`). A hand-placed post (id `railing-post-<s>-m-<id>`,
+  so `manualPostOverrides` size/height apply) cuts its run like any post (skipped + INFO `RAILING-POST-MANUAL-SKIPPED`
+  within 100 mm of another post / off the handrail); an automatic CORNER post switched off merges its two runs into
+  one (mitred corner; not with glass between posts; a step post cannot be). Automatic join ids keep their index among
+  the automatic ones. `section.postSpots` / `suppressedCorners` feed the plan's "▮ Słupki" mode
+  (`plan2dRenderer.js railingPostEditXML`: click the path = add, drag orange = move with snap to tread edges / 10 mm,
+  right-click = remove / switch a corner off, dashed ghost = restore) and the Inspektor (position field, remove /
+  switch off). Not done: a balustrade round the ceiling opening (stage B).
 - **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
   `config.railingProfileOverrides = {[section]: {[railingRunKey 'postA>postB']: [{s, dz}]}}`, `applyRunPoints`,
   `RAILING_PROFILE_EDITS` / `applyRailingProfileEdit`), applied in the solver after the end corrections and before

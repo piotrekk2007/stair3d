@@ -37,7 +37,8 @@ import { renderPlan2DSVG, planSvgBounds } from './plan2d/plan2dRenderer.js';
 import { resolveOpening, openingFrame, sanitizeOpeningPolygon, moveOpeningVertex, insertOpeningVertex, removeOpeningVertex, translateOpening, OPENING_SHAPES } from './geometry/ceilingOpening.js';
 import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
-import { boundaryEditPoints } from './plan2d/edgeEdit.js';
+import { boundaryEditPoints, closestOnPolyline } from './plan2d/edgeEdit.js';
+import { applyRailingPostEdit, manualRailingPostId } from './geometry/railingPostEdits.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
 import { stairwellPlanDrawing } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
@@ -145,6 +146,7 @@ let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; nul
 // Otwór w stropie na planie 2D: 'off' | 'edit' (uchwyty wierzchołków) | 'draw' (klikanie nowego wielokąta).
 // Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
 let openingMode = 'off';
+let railingPostMode = false; // the plan's "▮ Słupki" mode: balustrade posts placed / moved / switched off by hand
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
 let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
@@ -658,6 +660,7 @@ function regeneratePlan2D() {
       : null,
     stairwell: stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout),
     openingEdit: openingMode === 'edit',
+    railingPostEdit: railingPostMode,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -694,8 +697,53 @@ function setOpeningPolygon(points, final) {
     commitHistory();
   }
 }
+// --- balustrade posts by hand (geometry/railingPostEdits.js): every gesture writes config.railingPostEdits only --------
+
+// A plan point → the distance along a section's path (`section.path`): on a tread edge (a path vertex) within 8 px it
+// snaps to it, else to whole 10 mm.
+function railingSAlong(sectionId, raw, mmPerPx) {
+  const section = lastModels?.railingModel?.sections?.find((s) => s.id === sectionId);
+  if (!section?.path?.length) return null;
+  const path = section.path;
+  const along = closestOnPolyline(path, raw).along;
+  let acc = 0;
+  let best = null;
+  for (let i = 0; i < path.length; i++) {
+    if (i > 0) acc += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    const d = Math.abs(acc - along);
+    if (d <= 8 * (mmPerPx || 1) && (!best || d < best.d)) best = { s: acc, d };
+  }
+  return best ? best.s : Math.round(along / 10) * 10;
+}
+function applyRailingPosts(change, { final = true } = {}) {
+  config.railingPostEdits = applyRailingPostEdit(config.railingPostEdits, change);
+  rebuild();
+  if (final) commitHistory();
+}
+function setRailingPostMode(on) {
+  railingPostMode = on && !!lastModels?.railingModel?.enabled;
+  if (railingPostMode && openingMode !== 'off') setOpeningMode('off');
+  plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.toggle('active', railingPostMode);
+  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = !railingPostMode && openingMode === 'off';
+    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij pomarańczowy — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / wyłącz narożny; klik na przerywanym kółku — przywróć.';
+  }
+  if (on && !railingPostMode) {
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = 'Najpierw włącz balustradę i dodaj odcinek (folder „9. Balustrada” / Inspektor stopnia).';
+    }
+  }
+  regeneratePlan2D();
+}
+
 function setOpeningMode(mode) {
   openingMode = mode;
+  if (mode !== 'off' && railingPostMode) {
+    railingPostMode = false;
+    plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.remove('active');
+  }
 
   planApi?.resetDraft();
   const hud = document.querySelector('#plan2d-hud');
@@ -1005,8 +1053,23 @@ inspectorPanel.addEventListener('change', (e) => {
   if (key && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: key, value: Number(e.target.value) });
   const railingEnd = e.target?.dataset?.railingEnd;
   if (railingEnd) applyRailingEndOffset(railingEnd, Number(e.target.value));
+  const railingPostS = e.target?.dataset?.railingPostS;
+  if (railingPostS) {
+    const [sectionId, manualId] = railingPostS.split('|');
+    applyRailingPosts({ action: 'move', sectionId, id: manualId, s: Number(e.target.value) });
+  }
 });
 inspectorPanel.addEventListener('click', (e) => {
+  // a balustrade post by hand (geometry/railingPostEdits.js): remove a hand-placed one / switch an automatic corner off
+  const railPost = e.target?.closest?.('[data-railing-post-action]');
+  if (railPost) {
+    const { railingPostAction, sectionId, manualId, s } = railPost.dataset;
+    if (railingPostAction === 'remove') {
+      applyRailingPosts({ action: 'remove', sectionId, id: manualId });
+      clearSelectionState?.();
+    } else if (railingPostAction === 'suppress') applyRailingPosts({ action: 'suppress', sectionId, s: Number(s) });
+    return;
+  }
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
   if (action && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { action });
   const dxfPostId = e.target?.closest?.('[data-post-dxf]')?.dataset.postDxf;
@@ -1133,6 +1196,7 @@ plan2dHud.innerHTML = `
     <button type="button" data-action="edit" aria-pressed="false" title="Edycja krawędzi stopni: przeciągaj kółka na granicach stopni (narożniki), a po kliknięciu stopnia — romby przy jego bokach. To samo co „Edytuj krawędzie” w folderze Plan 2D.">✎ Edytuj</button>
     <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
     <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
+    <button type="button" data-action="railing-posts" title="Słupki balustrady: dodawaj, przesuwaj, usuwaj; wyłączaj słupki narożne">▮ Słupki</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
     <button type="button" data-action="fit" title="Dopasuj do widoku">⤢</button>
@@ -1160,6 +1224,7 @@ plan2dHud.querySelector('[data-action="edit"]').addEventListener('click', () => 
 syncPlanEditButton();
 plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw' ? 'off' : 'draw'));
 plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
+plan2dHud.querySelector('[data-action="railing-posts"]').addEventListener('click', () => setRailingPostMode(!railingPostMode));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1289,6 +1354,22 @@ planApi = attachPlanInteractions({
   onStepClick: (stepIndex) => setSelection(stepIndex === null ? null : { elementType: 'tread', stepIndex }),
   onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),
   onPostClick: (postId) => setSelection({ elementType: 'post', postId }),
+  getRailingPostMode: () => railingPostMode,
+  onRailingPostAdd: (sectionId, raw, mmPerPx) => {
+    const s = railingSAlong(sectionId, raw, mmPerPx);
+    if (s === null) return;
+    const before = new Set((config.railingPostEdits?.[sectionId]?.added || []).map((p) => p.id));
+    applyRailingPosts({ action: 'add', sectionId, s });
+    const added = (config.railingPostEdits?.[sectionId]?.added || []).find((p) => !before.has(p.id));
+    if (added) setSelection({ elementType: 'post', postId: manualRailingPostId(sectionId, added.id) });
+  },
+  onRailingPostDrag: (sectionId, manualId, raw, final, mmPerPx) => {
+    const s = railingSAlong(sectionId, raw, mmPerPx);
+    if (s !== null) applyRailingPosts({ action: 'move', sectionId, id: manualId, s }, { final });
+  },
+  onRailingPostRemove: (sectionId, manualId) => applyRailingPosts({ action: 'remove', sectionId, id: manualId }),
+  onRailingPostSuppress: (sectionId, s) => applyRailingPosts({ action: 'suppress', sectionId, s }),
+  onRailingPostRestore: (sectionId, s) => applyRailingPosts({ action: 'restore', sectionId, s }),
 });
 
 const gui = createUI({

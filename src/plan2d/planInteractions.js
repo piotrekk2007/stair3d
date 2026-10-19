@@ -185,6 +185,12 @@ export function attachPlanInteractions(opts) {
     onOpeningDrawFinish,
     onOpeningDrawCancel,
     onOpeningEdgeMove,
+    getRailingPostMode = () => false,
+    onRailingPostAdd,
+    onRailingPostDrag,
+    onRailingPostRemove,
+    onRailingPostSuppress,
+    onRailingPostRestore,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -356,6 +362,32 @@ export function attachPlanInteractions(opts) {
       }
     }
 
+    // --- balustrade posts ("▮ Słupki" mode): drag a hand-placed post, click a path / a ghost / a post
+    if (getRailingPostMode() && e.button === 0 && !spacePressed) {
+      const svg = getSvg();
+      const postEl = e.target.closest('.railing-post-handle');
+      if (svg && postEl && postEl.dataset.kind === 'manual' && onRailingPostDrag) {
+        panelEl.setPointerCapture(e.pointerId);
+        dragState = { pointerId: e.pointerId, kind: 'railing-post', sectionId: postEl.dataset.sectionId, manualId: postEl.dataset.manualId, postId: postEl.dataset.postId, svg, moved: false, downX: e.clientX, downY: e.clientY, last: null };
+        e.preventDefault();
+        return;
+      }
+      if (postEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'post', postId: postEl.dataset.postId } };
+        return;
+      }
+      const ghostEl = e.target.closest('.railing-post-ghost');
+      if (ghostEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'railing-ghost', sectionId: ghostEl.dataset.sectionId, s: Number(ghostEl.dataset.s) } };
+        return;
+      }
+      const pathEl = e.target.closest('.railing-path-hit');
+      if (svg && pathEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'railing-path', sectionId: pathEl.dataset.sectionId, raw: screenToPlanPoint(svg, e.clientX, e.clientY) } };
+        return;
+      }
+    }
+
     const handle = e.target.closest('.edge-handle');
     if (handle) {
       const svg = getSvg();
@@ -475,6 +507,14 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'railing-post') {
+      if (!dragState.moved && Math.hypot(e.clientX - dragState.downX, e.clientY - dragState.downY) < 4) return;
+      dragState.moved = true;
+      dragState.last = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      onRailingPostDrag(dragState.sectionId, dragState.manualId, dragState.last, false, mmPerPx());
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-edge') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       const { a, n } = dragState;
@@ -552,6 +592,14 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'railing-post') {
+      const { sectionId, manualId, postId, moved, last } = dragState;
+      dragState = null;
+      if (moved && last) onRailingPostDrag(sectionId, manualId, last, true, mmPerPx());
+      else if (onPostClick) onPostClick(postId); // a click without a drag selects it
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-edge') {
       const { index, shift } = dragState;
       dragState = null;
@@ -587,7 +635,9 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
+        if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
+        else if (hit.kind === 'railing-ghost' && onRailingPostRestore) onRailingPostRestore(hit.sectionId, hit.s);
+        else if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
         else if (hit.kind === 'stringer' && onStringerClick) onStringerClick(hit.side);
         else onStepClick(hit.kind === 'step' ? hit.stepIndex : null);
       }
@@ -612,6 +662,13 @@ export function attachPlanInteractions(opts) {
       e.preventDefault();
       draft.points = draft.points.slice(0, -1);
       showDraft();
+      return;
+    }
+    const railPost = getRailingPostMode() ? e.target.closest('.railing-post-handle') : null;
+    if (railPost) {
+      e.preventDefault();
+      if (railPost.dataset.kind === 'manual') onRailingPostRemove?.(railPost.dataset.sectionId, railPost.dataset.manualId);
+      else if (railPost.dataset.suppressible === '1') onRailingPostSuppress?.(railPost.dataset.sectionId, Number(railPost.dataset.s));
       return;
     }
     const vertexEl = openingMode === 'edit' ? e.target.closest('.opening-vertex') : null;

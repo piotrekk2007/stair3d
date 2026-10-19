@@ -145,7 +145,7 @@ function postEditFormHTML(post, o) {
     thickness +
     field('Wydłuż (+) / skróć (−) od GÓRY', 'topDeltaMm', o.topDeltaMm || 0) +
     field('Wydłuż (+) / skróć (−) od DOŁU', 'bottomDeltaMm', o.bottomDeltaMm || 0) +
-    `<div class="insp-actions"><button type="button" class="insp-btn" data-post-action="reset">Resetuj długość i grubość</button><button type="button" class="insp-btn danger" data-post-action="remove">Usuń słup</button></div>`
+    `<div class="insp-actions"><button type="button" class="insp-btn" data-post-action="reset">Resetuj długość i grubość</button>${post.manual ? '' : '<button type="button" class="insp-btn danger" data-post-action="remove">Usuń słup</button>'}</div>`
   );
 }
 
@@ -174,6 +174,31 @@ function railingEndsHTML(railingModel, postId) {
   );
 }
 
+// Where a balustrade post stands along its section (geometry/railingPostEdits.js): a hand-placed one — its distance
+// from the section's start, editable, and "Usuń"; an automatic corner one — "Wyłącz" (the handrail goes on through
+// the corner). Nothing for a structural post.
+function railingPostPlaceHTML(railingModel, post) {
+  for (const s of railingModel?.sections || []) {
+    const spot = (s.postSpots || []).find((x) => x.postId === post.postId);
+    if (!spot) continue;
+    if (spot.kind === 'manual') {
+      return (
+        section('Słupek balustrady — położenie') +
+        `<label class="insp-field" title="Odległość w rzucie wzdłuż linii balustrady od początku odcinka ${s.id}"><span class="insp-label">Od początku odcinka</span><input type="number" step="10" min="0" value="${Math.round(spot.s)}" data-railing-post-s="${s.id}|${spot.manualId}"> mm</label>` +
+        `<div class="insp-actions"><button type="button" class="insp-btn danger" data-railing-post-action="remove" data-section-id="${s.id}" data-manual-id="${spot.manualId}">Usuń słupek</button></div>` +
+        `<div class="insp-hint">Na planie (tryb „▮ Słupki”): przeciągnij słupek wzdłuż balustrady, prawy klik — usuń.</div>`
+      );
+    }
+    if (spot.suppressible) {
+      return (
+        section('Słupek balustrady — narożny') +
+        `<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="suppress" data-section-id="${s.id}" data-s="${spot.s}">Wyłącz słupek (poręcz ciągła przez narożnik)</button></div>`
+      );
+    }
+  }
+  return '';
+}
+
 function postHTML(ctx) {
   const { selection, config, postModels, diagnostics } = ctx;
   const post = postModels?.find((p) => p.postId === selection.postId) ?? null;
@@ -191,6 +216,7 @@ function postHTML(ctx) {
       if (post.overrideRejected) rows.push(`<div class="insp-diag warning"><b>UWAGA</b><div>Ta zmiana długości została zignorowana — słup byłby krótszy niż ${MIN_POST_HEIGHT_MM} mm.</div></div>`);
       rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-post-dxf="${post.postId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego słupa — prosty prostokąt przekrój × długość, do wycięcia w warsztacie">Eksportuj słup (DXF 1:1)</button></div>`);
     }
+    rows.push(railingPostPlaceHTML(ctx.railingModel, post));
     rows.push(postEditFormHTML(post, config.manualPostOverrides?.[post.postId] || {}));
     if (!post.removed) rows.push(railingEndsHTML(ctx.railingModel, post.postId));
   }

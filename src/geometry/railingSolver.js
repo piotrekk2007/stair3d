@@ -44,6 +44,8 @@ import { railingEndKey, railingRunKey, sanitizeRailingEndOffsets, sanitizeRailin
 // (the manual-edit layer of a handrail lives in railingProfileModel.js; re-exported for existing importers)
 export { railingEndKey, sanitizeRailingEndOffsets, MAX_RAILING_END_OFFSET_MM } from './railingProfileModel.js';
 import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt, planCornerSplits } from './railingGlass.js';
+import { sanitizeRailingPostEdits, manualRailingPostId, SUPPRESS_MATCH_MM, MANUAL_POST_MIN_FROM_END_MM } from './railingPostEdits.js';
+export { applyRailingPostEdit, sanitizeRailingPostEdits } from './railingPostEdits.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
 
@@ -692,6 +694,66 @@ function buildSection(section, ctx) {
   // and a run longer than one pane gets intermediate posts.
   const split = splitIntoRuns(nodes, infill === RAILING_INFILL.GLASS_POSTS ? { ...config, railingBent: false } : config, (p) => existingNear(p) !== null);
   let { runs, joins } = split;
+
+  // --- the hand-placed posts (railingPostEdits.js): an automatic CORNER post switched off joins its two runs into one
+  // (a mitred corner; glass between posts needs its corner posts), a hand-placed post cuts its run like any post.
+  // `s` = the plan distance along this section's path (`base.path`) from its start.
+  const sCum = [0];
+  for (let k = 1; k < nodes.length; k++) sCum.push(sCum[k - 1] + planDist(nodes[k - 1], nodes[k]));
+  const sOfNode = new Map(nodes.map((n, k) => [n, sCum[k]]));
+  const sOf = (n) => sOfNode.get(n) ?? null;
+  const postEdits = sanitizeRailingPostEdits(config.railingPostEdits)[section.id] || { added: [], suppressed: [] };
+  const suppressedCorners = [];
+  if (postEdits.suppressed.length && infill !== RAILING_INFILL.GLASS_POSTS) {
+    const mRuns = [runs[0]];
+    const mJoins = [];
+    joins.forEach((join, j) => {
+      const corner = runs[j + 1][0];
+      const sc = sOf(corner);
+      if (join.kind === 'corner' && sc !== null && postEdits.suppressed.some((x) => Math.abs(x - sc) < SUPPRESS_MATCH_MM)) {
+        const last = mRuns[mRuns.length - 1];
+        mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
+        suppressedCorners.push({ s: sc, at: { x: corner.x, y: corner.y } });
+        return;
+      }
+      mJoins.push(join);
+      mRuns.push(runs[j + 1]);
+    });
+    runs = mRuns;
+    joins = mJoins;
+  }
+  const skippedManual = [];
+  if (postEdits.added.length) {
+    const sRuns = [];
+    const sJoins = [];
+    runs.forEach((run, j) => {
+      if (j > 0) sJoins.push(joins[j - 1]);
+      const s0 = sOf(run[0]);
+      const s1 = sOf(run[run.length - 1]);
+      const inside = s0 === null || s1 === null ? [] : postEdits.added.filter((p) => p.s > s0 && p.s < s1);
+      const placed = inside.filter((p, k) => {
+        const prev = k === 0 ? s0 : inside[k - 1].s;
+        const ok = p.s - prev >= MANUAL_POST_MIN_FROM_END_MM && s1 - p.s >= MANUAL_POST_MIN_FROM_END_MM;
+        if (!ok) skippedManual.push(p);
+        return ok;
+      });
+      const pieces = splitPathAt(run, placed.map((p) => p.s - s0));
+      pieces.forEach((piece, k) => {
+        if (k > 0) sJoins.push({ kind: 'manual', manualId: placed[k - 1].id, s: placed[k - 1].s });
+        sRuns.push(piece);
+      });
+    });
+    runs = sRuns;
+    joins = sJoins;
+    // a hand-placed post outside every run (past the section's end, on the dusza where no handrail runs) or too close
+    for (const p of postEdits.added) {
+      if (!joins.some((jn) => jn.manualId === p.id) && !skippedManual.includes(p)) skippedManual.push(p);
+    }
+  }
+  if (skippedManual.length) {
+    base.diagnostics.push(diag(section.id, 'RAILING-POST-MANUAL-SKIPPED', `Balustrada ${section.id}: ${skippedManual.length} słupek(i) postawiony ręcznie jest poza poręczą albo bliżej niż ${MANUAL_POST_MIN_FROM_END_MM} mm od innego słupka / narożnika — pominięty. Przesuń go albo usuń.`, 'INFO'));
+  }
+  base.suppressedCorners = suppressedCorners;
   if (infill === RAILING_INFILL.GLASS_POSTS) {
     const subRuns = [];
     const subJoins = [];
@@ -720,19 +782,24 @@ function buildSection(section, ctx) {
   // structural post standing there is reused; a new one is a normal, editable railing post.
   const stairDepth = config.minimumStringerDepthMm || 0;
   const spots = [];
-  spots.push({ id: `railing-post-${section.id}-start`, at: runs[0][0], zs: [runs[0][0].z] });
+  spots.push({ id: `railing-post-${section.id}-start`, at: runs[0][0], zs: [runs[0][0].z], kind: 'start', s: sOf(runs[0][0]) ?? 0 });
+  // (an automatic join keeps the index it has among the automatic ones — the ids of the posts an override names stay
+  // put when a post is added by hand; a hand-placed post is named by its own id)
+  let autoJoin = 0;
   joins.forEach((join, j) => {
     const endOfPrev = runs[j][runs[j].length - 1];
     const startOfNext = runs[j + 1][0];
     spots.push({
-      id: `railing-post-${section.id}-join-${j}`,
+      id: join.kind === 'manual' ? manualRailingPostId(section.id, join.manualId) : `railing-post-${section.id}-join-${autoJoin++}`,
       at: { x: (endOfPrev.x + startOfNext.x) / 2, y: (endOfPrev.y + startOfNext.y) / 2 },
       zs: [endOfPrev.z, startOfNext.z],
       kind: join.kind,
+      manualId: join.manualId,
+      s: join.kind === 'manual' ? join.s : sOf(startOfNext) ?? sOf(endOfPrev),
     });
   });
   const lastRun = runs[runs.length - 1];
-  spots.push({ id: `railing-post-${section.id}-end`, at: lastRun[lastRun.length - 1], zs: [lastRun[lastRun.length - 1].z] });
+  spots.push({ id: `railing-post-${section.id}-end`, at: lastRun[lastRun.length - 1], zs: [lastRun[lastRun.length - 1].z], kind: 'end', s: sOf(lastRun[lastRun.length - 1]) ?? sCum[sCum.length - 1] });
 
   const halves = new Map(); // post id -> half width the spacing must leave free
   // The post that really stands at each spot: a reused structural post keeps ITS id, so a run's start/end post id
@@ -751,6 +818,7 @@ function buildSection(section, ctx) {
     nominalPosts.push({
       postId: spot.id,
       kind: 'railing',
+      ...(spot.kind === 'manual' ? { manual: true, sectionId: section.id, manualId: spot.manualId, s: spot.s } : {}),
       position: { x: spot.at.x, y: spot.at.y },
       elevation: { bottom: Math.max(0, Math.min(...spot.zs) - stairDepth), top: railTop(Math.max(...spot.zs)) + (config.railingPostTopAboveHandrailMm || 0) },
       size: config.railingPostSizeMm,
@@ -758,6 +826,18 @@ function buildSection(section, ctx) {
   }
   base.posts = applyPostOverrides(nominalPosts, config.manualPostOverrides);
   for (const post of base.posts) halves.set(post.postId, post.removed ? 0 : post.size / 2);
+  // for the plan's post editor: every post spot of this section along its path — which can be moved (a hand-placed
+  // one), switched off (an automatic corner; not with glass between posts) or only edited (an end, a step, a glass split)
+  base.postSpots = spots.map((spot) => ({
+    postId: postIdAt.get(spot.id),
+    spotId: spot.id,
+    kind: spot.kind,
+    s: spot.s,
+    at: { x: spot.at.x, y: spot.at.y },
+    manualId: spot.manualId ?? null,
+    reused: postIdAt.get(spot.id) !== spot.id,
+    suppressible: spot.kind === 'corner' && infill !== RAILING_INFILL.GLASS_POSTS,
+  }));
   const halfAt = (spot) => halves.get(spot.id) ?? 0;
   const postClearances = [
     ...base.posts.filter((p) => !p.removed).map((p) => ({ position: p.position, half: p.size / 2 })),

@@ -3,6 +3,28 @@
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
 panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 (poręcz gięta, podporęcz) zrobiony. Decyzje z użytkownikiem są na końcu.
 
+## Słupki ręczne (decyzja użytkownika 2026-10-19) — `railingPostEdits.js`
+
+`config.railingPostEdits = { [sectionId]: { added: [{ id, s }], suppressed: [s] } }`; `s` = mm w rzucie wzdłuż
+`section.path` od początku odcinka (ta sama ścieżka, co rysuje plan).
+- **Słupek ręczny** (`added`): id `railing-post-<odcinek>-m-<id>` — działają na niego `manualPostOverrides` (przekrój,
+  wydłuż/skróć); bieg poręczy jest przecinany w jego miejscu (`splitPathAt`) jak przy każdym słupku, tralki / szkło
+  układają się między słupkami. Bliżej niż 100 mm od innego słupka / narożnika albo poza poręczą → pominięty, INFO
+  `RAILING-POST-MANUAL-SKIPPED`.
+- **Wyłączony słupek narożny** (`suppressed`, dopasowanie ±50 mm): dwa biegi spotykające się w narożniku łączą się w
+  jeden — poręcz przechodzi przez narożnik z cięciem pod kątem (`annotateCuts`, `planDeg`). Nie przy szkle między
+  słupkami (tafla nie skręca) i nie na uskoku wysokości (poręcz musi się tam skończyć).
+- Id słupków automatycznych na złączach: numer wśród automatycznych — dodanie ręcznego nie zmienia id (edycje
+  słupków zostają przy swoich słupkach). Wyłączenie narożnika przesuwa numery dalszych złączy.
+- Model dla edytora: `section.postSpots` (`postId`, `kind` start|end|corner|step|glass-post|manual, `s`, `at`,
+  `suppressible`), `section.suppressedCorners`.
+- UI: plan 2D, tryb „▮ Słupki” (`plan2dRenderer.js railingPostEditXML`, `planInteractions.js`): klik na linii = nowy
+  słupek (przyciąga do krawędzi stopni w 8 px, inaczej co 10 mm), przeciąganie pomarańczowego = przesuń, prawy klik =
+  usuń ręczny / wyłącz narożny, klik w przerywane kółko = przywróć; Inspektor: „Od początku odcinka [mm]”, „Usuń
+  słupek”, „Wyłącz słupek (poręcz ciągła przez narożnik)”. Każdy gest = jeden krok cofania.
+- Testy: `geometry/__tests__/railingPosts.test.js`.
+- Etap B (nie zrobiony): balustrada wokół otworu w stropie na piętrze.
+
 ## Etap 4: poręcz gięta i podporęcz
 
 **Poręcz gięta** (`config.railingBent`, domyślnie wyłączona; `railingBendRadiusMm` 300, `railingPlanBendRadiusMm` 150 —

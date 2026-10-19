@@ -265,6 +265,33 @@ export function stairwellXML(drawing) {
   return `<g id="stairwell-layer" pointer-events="none">${xml}</g>`;
 }
 
+// "▮ Słupki" mode (geometry/railingPostEdits.js, railingSolver.js section.postSpots): every balustrade section's path
+// as a wide click target (a click adds a post), every post spot as a handle — a hand-placed one orange (drag = move,
+// right-click = remove), an automatic one white (right-click on a corner = switch it off) — and every switched-off
+// corner as a dashed ghost (click = back on). On top of everything; ids from the model only.
+export function railingPostEditXML(railingModel, selection = null) {
+  if (!railingModel?.enabled) return '';
+  let xml = '';
+  for (const s of railingModel.sections || []) {
+    if (!s.valid || !(s.path?.length >= 2)) continue;
+    xml += `<polyline class="railing-path-hit" data-section-id="${s.id}" points="${s.path.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ')}" fill="none" stroke="#1a5fb4" stroke-opacity="0.12" stroke-width="${px(18)}" stroke-linecap="round" pointer-events="stroke"><title>Kliknij, żeby dodać słupek</title></polyline>`;
+    for (const g of s.suppressedCorners || []) {
+      xml += `<circle class="railing-post-ghost" data-section-id="${s.id}" data-s="${g.s}" cx="${fmt(g.at.x)}" cy="${fmt(-g.at.y)}" r="${px(8)}" fill="#fff" fill-opacity="0.6" stroke="#888" stroke-width="1.5" stroke-dasharray="3 2" ${HAIR} pointer-events="all"><title>Słupek narożny wyłączony — kliknij, żeby go przywrócić</title></circle>`;
+    }
+    for (const spot of s.postSpots || []) {
+      const manual = spot.kind === 'manual';
+      const selected = selection?.elementType === 'post' && selection.postId === spot.postId;
+      const tip = manual
+        ? 'Słupek ręczny: przeciągnij wzdłuż balustrady, prawy klik — usuń'
+        : spot.suppressible
+          ? 'Słupek narożny (automatyczny): prawy klik — wyłącz (poręcz przejdzie przez narożnik)'
+          : 'Słupek automatyczny (koniec / uskok poręczy) — kliknij, żeby edytować w Inspektorze';
+      xml += `<circle class="railing-post-handle${manual ? ' manual' : ''}" data-section-id="${s.id}" data-post-id="${spot.postId}" data-kind="${spot.kind}" data-s="${spot.s ?? ''}" data-manual-id="${spot.manualId ?? ''}" data-suppressible="${spot.suppressible ? 1 : 0}" cx="${fmt(spot.at.x)}" cy="${fmt(-spot.at.y)}" r="${px(selected ? 9 : 7)}" fill="${manual ? '#e07b00' : '#fff'}" stroke="${selected ? '#1a5fb4' : '#5a3d24'}" stroke-width="${selected ? 3 : 2}" ${HAIR} pointer-events="all"><title>${tip}</title></circle>`;
+    }
+  }
+  return `<g id="railing-post-edit-layer">${xml}</g>`;
+}
+
 // Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).
 // Poza trybem edycji to tylko rysunek (pointer-events none — nie zasłania kliknięć w stopnie). W trybie edycji:
 // kółka na wierzchołkach (.opening-vertex, przeciągnij; prawy klik usuwa), kropki w połowie boków (.opening-mid,
@@ -394,7 +421,7 @@ function stringerSpacingXML(planLayout, config) {
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -546,6 +573,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const editXML = editMode ? editHandlesXML(planLayout, liveEdits, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
+  const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
     <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
     ${gridXMLStr}
@@ -568,6 +597,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${editXML}
     ${overhangXML}
     ${openingEdit ? openingXMLStr : ''}
+    ${railingPostEditXMLStr}
   </svg>`;
 }
 
