@@ -112,7 +112,12 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - **Stairwell** (`stairwell.js` model v3 + `designer/stairwellVariants.js`, user decisions 2026-10-16; docs
   [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): no drawn room — the side lengths A/B/C of the outer line
   (`stairwellSide{A,B,C}Mm`, measured like `outerSideLengths`), each FIXED (exact) or FREE (follows from the counts,
-  no limit — the entry floats), each optionally along a WALL (`stairwellWall*`, `stairwellWallGapMm`).
+  no limit — the entry floats), each optionally along a WALL (`stairwellWall*`, `stairwellWallGapMm`) — the whole
+  side or only part of it (`stairwellWall{S}Extent` full | start | end + `…LengthMm`, `wallInterval`: A 'start' = from
+  the first front edge, 'end' = back from the corner; corners close only where both walls reach them; a partial wall
+  is capped + labelled on the plan). The opening balustrade skips only the walled part of an edge; "Balustrada zewn.
+  tam, gdzie nie ma ściany" (folder 9) sets the outer sections from `treadsOpenOnOuterSide` (built returns
+  `stairwellWalls`).
   `wellFrame` = the WALL frame (x from wall A, y from the end wall; a mirror of the plan for a right turn) — the
   opening is given in it whenever the stairwell is on, so it stays put when a free side changes. `stairwellReport` →
   `built.stairwell` (gate): WARNING `STAIRWELL-SIDE-FIXED` for a fixed side off > 1 mm. Plan 2D layer `stairwell`

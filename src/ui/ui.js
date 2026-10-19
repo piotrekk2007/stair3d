@@ -72,6 +72,7 @@ export function createUI({
   onStartOpeningDraw,
   onFindStairwellVariants,
   onFreezeDerivedOpening,
+  onRailingOuterFromWalls,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -127,6 +128,11 @@ export function createUI({
     live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);
     live(well.add(config, `stairwellSide${s}Fixed`)).name(`Bok ${s}: sztywny (inaczej swobodny)`);
     live(well.add(config, `stairwellWall${s}`)).name(`Bok ${s}: wzdłuż ściany`);
+    // how far the wall reaches (stairwell.js wallInterval): the whole side, or a length from its start / its end
+    const fromEnd = s === 'A' ? 'od narożnika (bok B)' : s === 'B' ? 'od końca boku' : 'od krawędzi stropu';
+    const fromStart = s === 'A' ? 'od początku schodów' : 'od narożnika';
+    live(well.add(config, `stairwellWall${s}Extent`, { 'cała długość boku': 'full', [`${fromStart}, na długości`]: 'start', [`${fromEnd}, na długości`]: 'end' })).name(`Bok ${s}: zasięg ściany`);
+    live(well.add(config, `stairwellWall${s}LengthMm`, 0, 12000, 1)).name(`Bok ${s}: długość ściany [mm]`);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
   // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
@@ -389,6 +395,16 @@ export function createUI({
       renderSections();
     });
     sectionsBox.appendChild(add);
+    // the outer side's sections set from the stairwell's walls: a balustrade on every stretch with no wall beside it
+    // (stairwell.js treadsOpenOnOuterSide) — the inner side's sections are kept; editable afterwards as usual
+    if (onRailingOuterFromWalls) {
+      const fromWalls = document.createElement('button');
+      fromWalls.type = 'button';
+      fromWalls.textContent = 'Balustrada zewn. tam, gdzie nie ma ściany';
+      fromWalls.title = 'Zastępuje odcinki po stronie zewnętrznej odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)';
+      fromWalls.addEventListener('click', () => onRailingOuterFromWalls());
+      sectionsBox.appendChild(fromWalls);
+    }
   }
   renderSections();
   rail.$children.appendChild(sectionsBox);

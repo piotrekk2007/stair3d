@@ -12,6 +12,7 @@ a real stairwell is described by the dimensions that are RIGID.
 | `stairwellSide{A,B,C}Mm` | the side lengths of the stair's OUTER line (outer face of the outer wanga = the wall line), measured like `stairwellFit.js outerSideLengths`: A from the first front edge (no nosing) to the corner, B along flight B (L: to the last back edge; U: corner to corner, wall to wall), C from the corner to the last back edge (U) |
 | `stairwellSide{A,B,C}Fixed` | FIXED = must come out exactly; FREE = follows from the tread counts (no limit) |
 | `stairwellWall{A,B,C}` | the side runs along a wall (drawn in 2D / 3D, what the opening is measured from) |
+| `stairwellWall{A,B,C}Extent` + `…LengthMm` | how far the wall reaches (user decision 2026-10-19): `full` (the whole side), `start` (from the side's start — A: the first front edge, B/C: the corner — that long, at most the side), `end` (back from the side's end — A: the corner / side B, C: the slab edge — that long; longer than the side = the wall goes on past its start, e.g. behind the entry) — `wallInterval` |
 | `stairwellWallGapMm` | wall → wanga face |
 
 The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U C). Example (the user's U): B = 1885
@@ -52,8 +53,16 @@ Every side measured (`sides: {side, achieved, target, fixed, deviation}`); a fix
 
 ## Walls
 
-`stairwellWalls` (3D, presentation only): one piece per side along a wall, the outer side moved `gap` outward,
-extended at a corner shared with another wall (by the gap, and by the drawn thickness 120 mm in 3D), up to the slab's
+A partial wall is drawn on the plan with a cap at its free end(s) and "ściana A: 1300" beside it. What depends on the
+walls follows their real stretch: the opening's balustrade leaves out only the part of an edge a wall runs along
+(railingSolver.js `cuts` — see RAILING_MODEL.md), and `treadsOpenOnOuterSide` (a tread with < 50 % of its outer
+side along a wall is open) + `openOuterRailingRanges` drive the button "Balustrada zewn. tam, gdzie nie ma ściany"
+(folder 9: replaces the OUTER balustrade sections by one per run of open treads, the inner ones kept, editable after).
+The wall frame's `wallLines` (opening snapping) still take a wall as a whole line.
+
+`stairwellWalls` (3D, presentation only): one piece per side along a wall — only its `wallInterval` stretch — the
+outer side moved `gap` outward, extended at a corner shared with another wall (only when both walls reach that corner;
+a partial wall's free end is square, `partial: true`) (by the gap, and by the drawn thickness 120 mm in 3D), up to the slab's
 underside; `slab` = the box round the stair and the walls (wall frame) grown by 120 — `buildCeiling(…, slab)`.
 `stairwellWallsRenderer.js` draws them translucent ("Pokaż ściany klatki"). `stairwellPlanDrawing` → plan 2D layer
 `stairwell`: the walls (thick grey on the wall side) and every side's dimension outside them — a fixed one "B: 1885 🔒"

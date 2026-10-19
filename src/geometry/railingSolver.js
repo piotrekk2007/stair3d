@@ -1130,32 +1130,68 @@ function openingEdgeStates(outline, ctx) {
       const pad = wangi / len;
       stair = [Math.max(0, Math.min(...ts) - pad), Math.min(1, Math.max(...ts) + pad)];
     }
-    const wall = wallSegments.some((w) => {
+    // the stretches of the edge a stairwell wall runs along (a wall may cover only part of its side —
+    // stairwell.js wallInterval), as [t0, t1] of the edge
+    const wallCuts = [];
+    for (const w of wallSegments) {
       const wd = unit({ x: w.b.x - w.a.x, y: w.b.y - w.a.y });
-      return Math.abs(dir.x * wd.y - dir.y * wd.x) < 0.02 && distToLine(mid, w.a, w.b) <= wallTol;
-    });
-    const free = exit ? stair[0] * len + (1 - stair[1]) * len : len;
+      if (!(Math.abs(dir.x * wd.y - dir.y * wd.x) < 0.02 && distToLine(mid, w.a, w.b) <= wallTol)) continue;
+      const u0 = paramOn(w.a, a, b);
+      const u1 = paramOn(w.b, a, b);
+      const lo = Math.max(0, Math.min(u0, u1));
+      const hi = Math.min(1, Math.max(u0, u1));
+      if (hi > lo) wallCuts.push([lo, hi]);
+    }
+    const cuts = mergeIntervals([...wallCuts.map(([t0, t1]) => ({ t0, t1, kind: 'wall' })), ...(stair ? [{ t0: stair[0], t1: stair[1], kind: 'stair' }] : [])]);
+    const coveredMm = cuts.reduce((sum, c) => sum + (c.t1 - c.t0) * len, 0);
+    const wallMm = mergeIntervals(wallCuts.map(([t0, t1]) => ({ t0, t1, kind: 'wall' }))).reduce((sum, c) => sum + (c.t1 - c.t0) * len, 0);
+    const wall = wallMm >= len - 1; // the whole edge along a wall
+    const free = len - coveredMm;
     const auto = !wall && free >= RAILING_OPENING_MIN_PIECE_MM;
     const enabled = typeof overrides[i] === 'boolean' ? overrides[i] : auto;
-    return { index: i, a, b, length: len, exit, stair, wall, auto, enabled, overridden: typeof overrides[i] === 'boolean' };
+    return { index: i, a, b, length: len, exit, stair, wall, wallPartial: !wall && wallMm > 1, cuts, auto, enabled, overridden: typeof overrides[i] === 'boolean' };
   });
 }
 
-// The outline cut into PIECES that do or do not carry the balustrade: every edge one piece, the exit edge up to three
-// (before the stair, the stair — never —, after it); a free part shorter than RAILING_OPENING_MIN_PIECE_MM never.
+// Sorted, overlapping / touching intervals {t0, t1, kind} merged (a merged one is 'stair' when any part of it is).
+function mergeIntervals(list) {
+  const sorted = [...list].sort((x, y) => x.t0 - y.t0);
+  const out = [];
+  for (const c of sorted) {
+    const last = out[out.length - 1];
+    if (last && c.t0 <= last.t1 + 1e-9) {
+      last.t1 = Math.max(last.t1, c.t1);
+      if (c.kind === 'stair') last.kind = 'stair';
+    } else out.push({ ...c });
+  }
+  return out;
+}
+
+// The outline cut into PIECES that do or do not carry the balustrade: every edge cut where the stair stands on it (the
+// exit edge) and where a wall runs along it; the parts between carry it (when the edge is on and the part is at least
+// RAILING_OPENING_MIN_PIECE_MM), the cut parts never. A free part is named by the number of cuts before it ('' for
+// none, then 'b', 'c', … — the exit edge's part after the stair stays '-b').
 function openingPieces(states) {
   const out = [];
   for (const e of states) {
-    if (!e.stair) {
-      out.push({ edge: e.index, part: '', a: e.a, b: e.b, enabled: e.enabled });
-      continue;
-    }
-    const [t0, t1] = e.stair;
-    const pa = lerp(e.a, e.b, t0);
-    const pb = lerp(e.a, e.b, t1);
-    if (t0 > 1e-9) out.push({ edge: e.index, part: '', a: e.a, b: pa, enabled: e.enabled && t0 * e.length >= RAILING_OPENING_MIN_PIECE_MM, atStairEnd: 'b' });
-    out.push({ edge: e.index, part: 'stair', a: pa, b: pb, enabled: false });
-    if (t1 < 1 - 1e-9) out.push({ edge: e.index, part: 'b', a: pb, b: e.b, enabled: e.enabled && (1 - t1) * e.length >= RAILING_OPENING_MIN_PIECE_MM, atStairEnd: 'a' });
+    const cuts = e.cuts || [];
+    let t = 0;
+    let before = 0;
+    const freePart = (t0, t1, prev, next) => {
+      if (t1 - t0 <= 1e-9) return;
+      const part = before === 0 ? '' : String.fromCharCode(97 + before); // 'b', 'c', …
+      const piece = { edge: e.index, part, a: lerp(e.a, e.b, t0), b: lerp(e.a, e.b, t1), enabled: e.enabled && (t1 - t0) * e.length >= RAILING_OPENING_MIN_PIECE_MM };
+      if (next?.kind === 'stair') piece.atStairEnd = 'b';
+      if (prev?.kind === 'stair') piece.atStairEnd = 'a';
+      out.push(piece);
+    };
+    cuts.forEach((c, k) => {
+      freePart(t, c.t0, cuts[k - 1], c);
+      out.push({ edge: e.index, part: c.kind, a: lerp(e.a, e.b, c.t0), b: lerp(e.a, e.b, c.t1), enabled: false });
+      before++;
+      t = c.t1;
+    });
+    freePart(t, 1, cuts[cuts.length - 1], null);
   }
   return out;
 }

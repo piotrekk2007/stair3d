@@ -243,6 +243,18 @@ export function stairwellXML(drawing) {
     // the line is the wall's inner face; the stroke is drawn on the wall side
     const o = { x: w.outward.x * px(3), y: w.outward.y * px(3) };
     xml += `<line x1="${fmt(w.a.x + o.x)}" y1="${fmt(-(w.a.y + o.y))}" x2="${fmt(w.b.x + o.x)}" y2="${fmt(-(w.b.y + o.y))}" stroke="${wall}" stroke-width="6" stroke-linecap="butt" ${HAIR}/>`;
+    // a wall along part of its side only: a cap at each free end and its length beside it (inside the stair's side)
+    if (w.partial) {
+      const cap = { x: w.outward.x * px(10), y: w.outward.y * px(10) };
+      for (const [p, free] of [[w.a, !w.prevWall], [w.b, !w.nextWall]]) {
+        if (free) xml += `<line x1="${fmt(p.x)}" y1="${fmt(-p.y)}" x2="${fmt(p.x + cap.x)}" y2="${fmt(-(p.y + cap.y))}" stroke="${wall}" stroke-width="2" ${HAIR}/>`;
+      }
+      const dir = { x: w.b.x - w.a.x, y: w.b.y - w.a.y };
+      const m = { x: (w.a.x + w.b.x) / 2 - w.outward.x * px(10), y: (w.a.y + w.b.y) / 2 - w.outward.y * px(10) };
+      const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
+      const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+      xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(10)}" fill="${wall}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">ściana ${w.side}: ${Math.round(w.lengthMm)}</text>`;
+    }
   }
   for (const d of drawing.dims || []) {
     const w = (drawing.walls || []).find((x) => x.side === d.side);
@@ -275,7 +287,7 @@ export function railingPostEditXML(railingModel, selection = null) {
   // the ceiling opening's edges: a click switches an edge's balustrade on / off (green = on, grey dashed = off)
   for (const e of railingModel.openingEdges || []) {
     const color = e.enabled ? '#2e7d32' : '#9e9e9e';
-    const why = e.exit ? ' (wyjście schodów)' : e.wall ? ' (przy ścianie)' : '';
+    const why = e.exit ? ' (wyjście schodów)' : e.wall ? ' (przy ścianie)' : e.wallPartial ? ' (częściowo przy ścianie — tam bez balustrady)' : '';
     xml += `<line class="railing-opening-edge${e.enabled ? ' on' : ''}" data-opening-edge="${e.index}" x1="${fmt(e.a.x)}" y1="${fmt(-e.a.y)}" x2="${fmt(e.b.x)}" y2="${fmt(-e.b.y)}" stroke="${color}" stroke-opacity="${e.enabled ? 0.45 : 0.35}" stroke-width="${px(12)}" ${e.enabled ? '' : 'stroke-dasharray="6 4"'} ${HAIR} pointer-events="stroke"><title>Krawędź otworu ${e.index + 1}${why}: balustrada ${e.enabled ? 'TAK' : 'NIE'}${e.overridden ? ' (ręcznie)' : ''} — kliknij, żeby przełączyć</title></line>`;
   }
   for (const s of railingModel.sections || []) {

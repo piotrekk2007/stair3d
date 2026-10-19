@@ -70,6 +70,14 @@ export function createDefaultConfig() {
     stairwellWallB: true,
     stairwellWallC: true,
     stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
+    // How far each wall reaches (stairwell.js wallInterval): 'full' | 'start' (from the side's start, this long) | 'end'
+    // (back from the side's end — side A: from the corner — this long)
+    stairwellWallAExtent: 'full',
+    stairwellWallBExtent: 'full',
+    stairwellWallCExtent: 'full',
+    stairwellWallALengthMm: 1200, // mm
+    stairwellWallBLengthMm: 1200,
+    stairwellWallCLengthMm: 1200,
     // Internal to the per-variant solver (geometry/stairwellFit.js — no longer in the panel): when on, the going and
     // the straight counts are derived from stairwellSide*Mm, the key side exact.
     stairwellFitEnabled: false,

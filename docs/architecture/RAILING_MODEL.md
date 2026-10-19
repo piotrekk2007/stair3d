@@ -38,6 +38,12 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
 - Połączenie ze schodami: na końcu / narożniku, gdzie stoi słup schodów (słup końcowy wangi, ostatni słupek balustrady
   schodów; ≤ 1,5 × jego przekrój), TEN słup jest słupem balustrady przy otworze — bez drugiego słupka, poręcz dochodzi do
   jego lica, słup dostaje wysokość do góry poręczy (`postTopNeeds` → `raisePostsToHandrail`).
+- Ściany częściowe (decyzja użytkownika 2026-10-19, `stairwellWall{S}Extent/LengthMm`): krawędź otworu jest cięta
+  na kawałki tam, gdzie stoją schody (krawędź wyjścia) ORAZ tam, gdzie wzdłuż niej biegnie ściana (`openingEdgeStates`
+  → `cuts`, `wallPartial`); balustrada tylko na wolnych kawałkach (≥ 100 mm), nazwy odcinków wg liczby cięć przed
+  kawałkiem (`''`, `-b`, `-c`, …). Przycisk „Balustrada zewn. tam, gdzie nie ma ściany” (folder 9, `main.js
+  railingOuterFromWalls` ← `stairwell.js treadsOpenOnOuterSide / openOuterRailingRanges`) zastępuje odcinki po
+  stronie zewnętrznej odcinkami na stopniach bez ściany obok.
 - Słup końcowy NA STROPIE (decyzja użytkownika 2026-10-19 — wcześniej poręcz przy otworze dochodziła do niego z
   uskokiem w bok, bo stał na osi wangi przy krawędzi stropu, a balustrada 60 mm dalej): gdy wolny kawałek krawędzi
   wyjścia po stronie DUSZY ma balustradę, `endNewelOntoSlab` (liczone w `buildStaircase` zaraz po planie, przed

@@ -66,6 +66,22 @@ export function sideHasWall(config, s) {
   return config[`stairwellWall${s}`] !== false;
 }
 
+// How far a side's wall reaches (user decision 2026-10-19): `stairwellWall{S}Extent` = 'full' (the whole side),
+// 'start' (from the side's start — side A: the first front edge — `stairwellWall{S}LengthMm` along it, at most the
+// whole side) or 'end' (back from the side's end — side A: the corner / end wall — that length; longer than the side
+// = the wall goes on past its start, e.g. behind the entry).
+export const WALL_EXTENTS = Object.freeze(['full', 'start', 'end']);
+const WALL_EXTENT_EPS_MM = 0.5;
+
+/** The wall's stretch along side `s` of length `sideLength`: [from, to] in mm from the side's start. */
+export function wallInterval(config, s, sideLength) {
+  const extent = config[`stairwellWall${s}Extent`];
+  const len = Math.max(0, Number(config[`stairwellWall${s}LengthMm`]) || 0);
+  if (extent === 'start') return [0, Math.min(len, sideLength)];
+  if (extent === 'end') return [sideLength - len, sideLength];
+  return [0, sideLength];
+}
+
 // The straight sides of the outer line, merged like outerSideLengths: [{a, b, length, dir}].
 function outerSides(planLayout) {
   const path = planLayout?.outerFullPath || [];
@@ -158,19 +174,30 @@ function wallSegments(config, planLayout, frame) {
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
   const inner = planLayout.innerFullPath || [];
   const centre = inner.length ? mul(inner.reduce((acc, p) => add(acc, p), { x: 0, y: 0 }), 1 / inner.length) : frame.origin;
+  // each wall's stretch along its side, and whether it reaches the side's start / end (only there does it meet the
+  // neighbouring side's wall in a closed corner)
+  const spans = letters.map((s) => {
+    const side = frame.sides[s];
+    if (!side || !sideHasWall(config, s)) return null;
+    const [t0, t1] = wallInterval(config, s, side.length);
+    if (!(t1 - t0 > WALL_EXTENT_EPS_MM)) return null;
+    return { t0, t1, atStart: t0 <= WALL_EXTENT_EPS_MM, atEnd: t1 >= side.length - WALL_EXTENT_EPS_MM };
+  });
   const out = [];
   letters.forEach((s, i) => {
     const side = frame.sides[s];
-    if (!side || !sideHasWall(config, s)) return;
+    const span = spans[i];
+    if (!span) return;
     let n = { x: -side.dir.y, y: side.dir.x };
     if (dot(n, sub(centre, side.a)) > 0) n = mul(n, -1); // outward = away from the stair
-    let a = add(side.a, mul(n, gap));
-    let b = add(side.b, mul(n, gap));
-    const prevWall = i > 0 && sideHasWall(config, letters[i - 1]);
-    const nextWall = i < letters.length - 1 && sideHasWall(config, letters[i + 1]);
+    let a = add(add(side.a, mul(side.dir, span.t0)), mul(n, gap));
+    let b = add(add(side.a, mul(side.dir, span.t1)), mul(n, gap));
+    const prevWall = i > 0 && span.atStart && !!spans[i - 1]?.atEnd;
+    const nextWall = i < letters.length - 1 && span.atEnd && !!spans[i + 1]?.atStart;
     if (prevWall) a = sub(a, mul(side.dir, gap));
     if (nextWall) b = add(b, mul(side.dir, gap));
-    out.push({ side: s, a, b, outward: n, prevWall, nextWall });
+    const partial = !(span.atStart && span.atEnd);
+    out.push({ side: s, a, b, outward: n, prevWall, nextWall, partial, lengthMm: span.t1 - span.t0, dir: side.dir });
   });
   return out;
 }
@@ -187,7 +214,7 @@ export function stairwellWalls(report, config, planLayout) {
   const height = Math.max(0, (Number(config.totalRise) || 0) - (Number(config.ceilingThickness) || 0));
   const pieces = wallSegments(config, planLayout, frame).map((w) => {
     const dir = unit(sub(w.b, w.a));
-    return { side: w.side, a: w.prevWall ? sub(w.a, mul(dir, T)) : w.a, b: w.nextWall ? add(w.b, mul(dir, T)) : w.b, outward: w.outward, thickness: T, height };
+    return { side: w.side, a: w.prevWall ? sub(w.a, mul(dir, T)) : w.a, b: w.nextWall ? add(w.b, mul(dir, T)) : w.b, outward: w.outward, thickness: T, height, partial: w.partial };
   });
   const pts = [...(planLayout.outerFullPath || []), ...(planLayout.innerFullPath || []), ...pieces.flatMap((p) => [p.a, p.b])].map(frame.toRelative);
   const xs = pts.map((p) => p.x);
@@ -202,6 +229,68 @@ export function stairwellWalls(report, config, planLayout) {
   return { pieces, slab };
 }
 
+// A tread's outer side counts as along a wall when at least this share of it is (the rest is open).
+const OPEN_SIDE_COVERED_SHARE = 0.5;
+// A wall piece this close (+ the wanga-to-wall gap) to a parallel piece of the outer line runs along it (mm).
+const WALL_ALONG_TOL_MM = 30;
+
+/**
+ * Which treads stand along an OPEN stretch of the outer line (no wall beside them): one flag per plan tread, from its
+ * `outerChain` and the walls' pieces (`stairwellWalls(...).pieces`). A tread with less than half its outer side along
+ * a wall is open. Without walls (stairwell off) → null.
+ */
+export function treadsOpenOnOuterSide(planLayout, wallPieces, config) {
+  if (!Array.isArray(wallPieces)) return null;
+  const tol = WALL_ALONG_TOL_MM + Math.max(0, Number(config.stairwellWallGapMm) || 0);
+  return (planLayout.treads || []).map((t) => {
+    const chain = t.outerChain || [];
+    let total = 0;
+    let covered = 0;
+    for (let k = 1; k < chain.length; k++) {
+      const p = chain[k - 1];
+      const q = chain[k];
+      const len = Math.hypot(q.x - p.x, q.y - p.y);
+      if (len < 1e-9) continue;
+      total += len;
+      const d = mul(sub(q, p), 1 / len);
+      const spans = [];
+      for (const w of wallPieces) {
+        const wl = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
+        if (wl < 1e-9) continue;
+        const wd = mul(sub(w.b, w.a), 1 / wl);
+        if (Math.abs(d.x * wd.y - d.y * wd.x) > 0.02) continue; // not parallel
+        const off = Math.abs((p.x - w.a.x) * wd.y - (p.y - w.a.y) * wd.x);
+        if (off > tol) continue;
+        const u0 = dot(sub(w.a, p), d);
+        const u1 = dot(sub(w.b, p), d);
+        const lo = Math.max(0, Math.min(u0, u1));
+        const hi = Math.min(len, Math.max(u0, u1));
+        if (hi > lo) spans.push([lo, hi]);
+      }
+      spans.sort((x, y) => x[0] - y[0]);
+      let end = -Infinity;
+      for (const [lo, hi] of spans) {
+        const from = Math.max(lo, end);
+        if (hi > from) covered += hi - from;
+        end = Math.max(end, hi);
+      }
+    }
+    return total > 0 && covered < OPEN_SIDE_COVERED_SHARE * total;
+  });
+}
+
+/** Runs of consecutive open treads → balustrade sections on the outer side ({fromStep, toStep}, 0-based). */
+export function openOuterRailingRanges(openFlags) {
+  const out = [];
+  (openFlags || []).forEach((open, i) => {
+    if (!open) return;
+    const last = out[out.length - 1];
+    if (last && last.toStep === i - 1) last.toStep = i;
+    else out.push({ fromStep: i, toStep: i });
+  });
+  return out;
+}
+
 /**
  * What the plan 2D draws of the stairwell (PLAN frame): the walls, and each side's dimension with its state.
  * @returns {{walls:{side,a,b,outward}[], dims:{side,a,b,value,fixed,target,ok}[]}|null}
@@ -209,7 +298,7 @@ export function stairwellWalls(report, config, planLayout) {
 export function stairwellPlanDrawing(report, config, planLayout) {
   const frame = report?.frame;
   if (!frame || !planLayout) return null;
-  const walls = wallSegments(config, planLayout, frame).map(({ side, a, b, outward }) => ({ side, a, b, outward }));
+  const walls = wallSegments(config, planLayout, frame).map(({ side, a, b, outward, partial, lengthMm, prevWall, nextWall }) => ({ side, a, b, outward, partial, lengthMm, prevWall, nextWall }));
   const dims = report.sides
     .filter((s) => frame.sides[s.side])
     .map((s) => {

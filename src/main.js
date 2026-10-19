@@ -40,7 +40,7 @@ import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d
 import { boundaryEditPoints, closestOnPolyline } from './plan2d/edgeEdit.js';
 import { applyRailingPostEdit, manualRailingPostId } from './geometry/railingPostEdits.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
-import { stairwellPlanDrawing } from './geometry/stairwell.js';
+import { stairwellPlanDrawing, treadsOpenOnOuterSide, openOuterRailingRanges } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
 import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stairwellVariantsPanel.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
@@ -867,6 +867,24 @@ function applyRailingEdit(action, sectionId, stepIndex, side) {
   commitHistory();
 }
 
+// The outer side's balustrade sections from the stairwell's walls (stairwell.js treadsOpenOnOuterSide): one section
+// per run of treads with no wall beside them; the inner side's sections stay. Without the stairwell's walls: a hint.
+function railingOuterFromWalls() {
+  const flags = treadsOpenOnOuterSide(lastModels?.planLayout, lastModels?.stairwellWalls?.pieces, config);
+  if (!flags) {
+    ws.setStatus({ selection: 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”) i zaznacz boki ze ścianą.' });
+    return;
+  }
+  const ranges = openOuterRailingRanges(flags);
+  const stamp = Date.now().toString(36);
+  config.railingSections = [...(config.railingSections || []).filter((s) => s.side !== 'outer'), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${k}`, side: 'outer', ...r }))];
+  if (ranges.length) config.railingEnabled = true;
+  ws.setStatus({ selection: ranges.length ? `Balustrada zewn.: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
+  refreshUI(gui);
+  rebuild();
+  commitHistory();
+}
+
 // Writes one edge edit, stamped with the tread layout it is made on (edgeOverrides.js edgeLayoutKey). Edits made on
 // another layout are out of date (not applied, reported): the first edit on the new layout replaces them.
 function setEdgeOverride(boundaryIndex, override) {
@@ -1404,6 +1422,7 @@ const gui = createUI({
   },
   onStartOpeningDraw: () => startOpeningDraw(),
   onFindStairwellVariants: () => searchStairwellVariants(),
+  onRailingOuterFromWalls: () => railingOuterFromWalls(),
   onFreezeDerivedOpening: () => {
     const rel = lastModels?.ceilingFit?.openingMode === 'derived' ? lastModels.ceilingFit.openingRelativeOutline : null;
     if (!rel) return;
