@@ -39,6 +39,16 @@ export function buildTreadMesh(treadModel, cut = null) {
   return mergeGeometries([upperSlab, ...lowerSlabs]);
 }
 
+// The final front edge's direction in the world frame (plan (x, y) → world (x, 0, −y), geometryUtils.js planToWorld).
+function frontEdgeDirection(model) {
+  const [a, b] = model.frontEdge?.final || [];
+  if (!a || !b) return null;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  return len > 1e-6 ? [dx / len, 0, -dy / len] : null;
+}
+
 export function renderTreads(treadModels, material, treadCuts = {}) {
   const group = new THREE.Group();
   group.name = 'Treads';
@@ -46,6 +56,10 @@ export function renderTreads(treadModels, material, treadCuts = {}) {
     const mesh = new THREE.Mesh(buildTreadMesh(model, treadCuts[model.stepId] || null), material);
     mesh.name = `Tread_${model.index}_${model.type}`;
     mesh.userData = traceability({ elementType: 'tread', stepId: model.stepId, geometrySourceId: `tread:${model.stepId}` });
+    // the wood grain runs along the tread's FRONT edge (czoło) — on a winder the longest axis of the shape is a diagonal
+    // (scene/woodGrain.js reads it; presentation only)
+    const grain = frontEdgeDirection(model);
+    if (grain) mesh.userData.grainDirection = grain;
     group.add(mesh);
   }
   return group;

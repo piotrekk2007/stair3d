@@ -2,8 +2,9 @@
 // Czysto prezentacyjne: nie zmienia pozycji żadnego wierzchołka ani żadnej liczby w modelu — dokłada tylko
 // atrybut `uv` do gotowej geometrii (renderery i solvery o tym nie wiedzą, patrz buildStaircase.js).
 //
-// Kierunek włókien = najdłuższa oś elementu (główna składowa PCA jego wierzchołków): stopień i podstopień —
-// wzdłuż szerokości biegu, wanga — wzdłuż pochylenia deski, słup i tralka — pionowo, poręcz — wzdłuż kawałka.
+// Kierunek włókien = najdłuższa oś elementu (główna składowa PCA jego wierzchołków), chyba że element sam go podaje
+// (`userData.grainDirection` — stopień: wzdłuż swojej krawędzi czołowej, bo na zabiegowym najdłuższa jest przekątna):
+// stopień i podstopień — wzdłuż szerokości biegu, wanga — wzdłuż pochylenia deski, słup i tralka — pionowo, poręcz — wzdłuż kawałka.
 // Każda ściana dostaje rzut płaski: u = wzdłuż włókien (rzut osi na płaszczyznę ściany), v = w poprzek; ściany
 // prostopadłe do włókien (czoła, „drewno czołowe") dostają dowolną parę osi w swojej płaszczyźnie.
 
@@ -123,7 +124,9 @@ export function applyWoodGrainToTree(root) {
     obj.receiveShadow = true;
     if (obj.geometry?.userData?.woodGrainUV) return;
     const old = obj.geometry;
-    obj.geometry = withWoodGrainUVs(old, { offset: textureOffsetFor(obj.userData?.geometrySourceId ?? obj.name) });
+    const g = obj.userData?.grainDirection;
+    const grain = Array.isArray(g) && g.length === 3 ? new THREE.Vector3(g[0], g[1], g[2]) : undefined;
+    obj.geometry = withWoodGrainUVs(old, { grain, offset: textureOffsetFor(obj.userData?.geometrySourceId ?? obj.name) });
     old.dispose();
   });
 }

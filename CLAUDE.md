@@ -313,7 +313,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   (`debugOverlay.js`); selection highlight; standard views + ortho (`sceneSetup.js`); HUD layers.
 - Presentation state (NOT config, not in undo): `scene/appearance.js` colours + finish per element (oak photo texture
   default — `src/assets/textures/oak-natural.jpg`, generated oak, solid; metal fixings), client mode, photo export with
-  company logo (`presentationImage.js`, logo in `localStorage`). Lighting/texture are presentation only.
+  company logo (`presentationImage.js`, logo in `localStorage`). Lighting/texture are presentation only. Wood grain
+  (`woodGrain.js`): UVs along the element's longest axis, or along `mesh.userData.grainDirection` when the renderer
+  gives one — a tread's FINAL front edge (`treadRenderer.js`), so a winder's grain is parallel to its czoło.
 
 ## Export and project file
 
