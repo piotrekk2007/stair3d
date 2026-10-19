@@ -238,6 +238,14 @@ export function createDefaultConfig() {
     // Hand-placed balustrade posts and automatic corner posts switched off (geometry/railingPostEdits.js):
     // { [sectionId]: { added: [{ id, s }], suppressed: [s] } }, s = mm along the section's path in plan
     railingPostEdits: {},
+    // Balustrade round the ceiling opening on the upper floor (railingSolver.js buildOpeningRailing): on the floor,
+    // the posts' axis this far back from the edge; the handrail top this high above the floor (§ 298: 1.1 m — DO
+    // WERYFIKACJI, a single-family house may differ); which edges: auto (all but the exit edge and the edges along
+    // stairwell walls) or railingOpeningEdges[i] = true / false.
+    railingOpeningEnabled: false,
+    railingOpeningHeightMm: 1100,
+    railingOpeningSetbackMm: 60, // mm — ASSUMPTION (a 90 mm post 15 mm off the edge)
+    railingOpeningEdges: {},
     // Poręcz gięta (etap 4, railingSolver.js smoothRun): załamania pochylenia w biegu zastąpione łukami w pionie,
     // a narożnik w rzucie, przy którym NIE stoi słup, łukiem w rzucie zamiast słupka. Promienie to parametry
     // (wybór programu, do ustalenia z warsztatem — nie wartości z normy).

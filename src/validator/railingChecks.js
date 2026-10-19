@@ -88,7 +88,7 @@ export function evaluateRailingChecks(railingModel, config, postModels = []) {
   const legalOpening = legalClearOpeningMm(config);
   const anySection = validSections[0].id;
 
-  if (config.railingHeightMm < PL_BALUSTRADE_MIN_HEIGHT_MM) {
+  if (config.railingEnabled && config.railingHeightMm < PL_BALUSTRADE_MIN_HEIGHT_MM) {
     diagnostics.push(
       createDiagnostic({
         ruleId: 'PL-LEGAL-H-01',
@@ -100,6 +100,22 @@ export function evaluateRailingChecks(railingModel, config, postModels = []) {
         expected: `>= ${PL_BALUSTRADE_MIN_HEIGHT_MM}`,
         unit: 'mm',
         message: `Poręcz jest ${config.railingHeightMm} mm nad linią nosków — reguła katalogu wymaga wysokości balustrady >= ${PL_BALUSTRADE_MIN_HEIGHT_MM} mm (Warunki techniczne § 298; dotyczy zwłaszcza wolnej krawędzi, np. podestu). Sprawdź wymaganie dla tego budynku.`,
+      })
+    );
+  }
+  const openingSection = validSections.find((s) => s.kind === 'opening');
+  if (openingSection && config.railingOpeningHeightMm < PL_BALUSTRADE_MIN_HEIGHT_MM) {
+    diagnostics.push(
+      createDiagnostic({
+        ruleId: 'PL-LEGAL-H-01',
+        severity: 'WARNING',
+        elementType: 'railing',
+        elementId: openingSection.id,
+        parameter: 'railingOpeningHeightMm',
+        value: config.railingOpeningHeightMm,
+        expected: `>= ${PL_BALUSTRADE_MIN_HEIGHT_MM}`,
+        unit: 'mm',
+        message: `Balustrada przy otworze w stropie ma ${config.railingOpeningHeightMm} mm nad posadzką — reguła katalogu wymaga >= ${PL_BALUSTRADE_MIN_HEIGHT_MM} mm (Warunki techniczne § 298). Sprawdź wymaganie dla tego budynku.`,
       })
     );
   }

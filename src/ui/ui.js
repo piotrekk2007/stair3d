@@ -272,6 +272,11 @@ export function createUI({
   // (cofanie i plik projektu działają), więc zmiana idzie normalną drogą live -> rebuild -> commit.
   const rail = gui.addFolder('9. Balustrada');
   live(rail.add(config, 'railingEnabled')).name('Balustrada włączona');
+  // the balustrade round the ceiling opening on the upper floor (railingSolver.js buildOpeningRailing): its edges are
+  // switched on / off on the plan ("▮ Słupki" mode)
+  live(rail.add(config, 'railingOpeningEnabled')).name('Balustrada przy otworze w stropie (piętro)');
+  live(rail.add(config, 'railingOpeningHeightMm', 700, 1500, 1)).name('Przy otworze: wysokość nad posadzką [mm]');
+  live(rail.add(config, 'railingOpeningSetbackMm', 0, 300, 1)).name('Przy otworze: oś słupków od krawędzi [mm]');
   const handrailOptions = { '— własny —': '', ...Object.fromEntries(HANDRAIL_PRESETS.map((p) => [p.label, p.id])) };
   const handrailProxy = { preset: HANDRAIL_PRESETS.find((p) => p.shape === config.railingHandrailShape && p.width === config.railingHandrailWidthMm && p.height === config.railingHandrailHeightMm)?.id ?? '' };
   rail

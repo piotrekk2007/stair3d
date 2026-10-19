@@ -642,6 +642,70 @@ function splitIntoRuns(nodes, config, isPostAt = () => false) {
   return { runs: keptRuns, joins: keptJoins };
 }
 
+// The hand-placed posts of a section (railingPostEdits.js) applied to its runs: an automatic CORNER post switched off
+// joins its two runs into one (a mitred corner; glass between posts needs its corner posts), a hand-placed post cuts its
+// run like any post. `s` = the plan distance along the section's path (its `nodes`) from its start. Writes
+// `base.suppressedCorners` and the INFO for a post it cannot place.
+function applyPostEditsToRuns(sectionId, nodes, runs, joins, infill, config, base) {
+  const sCum = [0];
+  for (let k = 1; k < nodes.length; k++) sCum.push(sCum[k - 1] + planDist(nodes[k - 1], nodes[k]));
+  const sOfNode = new Map(nodes.map((n, k) => [n, sCum[k]]));
+  const sOf = (n) => sOfNode.get(n) ?? null;
+  const postEdits = sanitizeRailingPostEdits(config.railingPostEdits)[sectionId] || { added: [], suppressed: [] };
+  const suppressedCorners = [];
+  if (postEdits.suppressed.length && infill !== RAILING_INFILL.GLASS_POSTS) {
+    const mRuns = [runs[0]];
+    const mJoins = [];
+    joins.forEach((join, j) => {
+      const corner = runs[j + 1][0];
+      const sc = sOf(corner);
+      if (join.kind === 'corner' && sc !== null && postEdits.suppressed.some((x) => Math.abs(x - sc) < SUPPRESS_MATCH_MM)) {
+        const last = mRuns[mRuns.length - 1];
+        mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
+        suppressedCorners.push({ s: sc, at: { x: corner.x, y: corner.y } });
+        return;
+      }
+      mJoins.push(join);
+      mRuns.push(runs[j + 1]);
+    });
+    runs = mRuns;
+    joins = mJoins;
+  }
+  const skippedManual = [];
+  if (postEdits.added.length) {
+    const sRuns = [];
+    const sJoins = [];
+    runs.forEach((run, j) => {
+      if (j > 0) sJoins.push(joins[j - 1]);
+      const s0 = sOf(run[0]);
+      const s1 = sOf(run[run.length - 1]);
+      const inside = s0 === null || s1 === null ? [] : postEdits.added.filter((p) => p.s > s0 && p.s < s1);
+      const placed = inside.filter((p, k) => {
+        const prev = k === 0 ? s0 : inside[k - 1].s;
+        const ok = p.s - prev >= MANUAL_POST_MIN_FROM_END_MM && s1 - p.s >= MANUAL_POST_MIN_FROM_END_MM;
+        if (!ok) skippedManual.push(p);
+        return ok;
+      });
+      const pieces = splitPathAt(run, placed.map((p) => p.s - s0));
+      pieces.forEach((piece, k) => {
+        if (k > 0) sJoins.push({ kind: 'manual', manualId: placed[k - 1].id, s: placed[k - 1].s });
+        sRuns.push(piece);
+      });
+    });
+    runs = sRuns;
+    joins = sJoins;
+    // a hand-placed post outside every run (past the section's end, on the dusza where no handrail runs) or too close
+    for (const p of postEdits.added) {
+      if (!joins.some((jn) => jn.manualId === p.id) && !skippedManual.includes(p)) skippedManual.push(p);
+    }
+  }
+  if (skippedManual.length) {
+    base.diagnostics.push(diag(sectionId, 'RAILING-POST-MANUAL-SKIPPED', `Balustrada ${sectionId}: ${skippedManual.length} słupek(i) postawiony ręcznie jest poza poręczą albo bliżej niż ${MANUAL_POST_MIN_FROM_END_MM} mm od innego słupka / narożnika — pominięty. Przesuń go albo usuń.`, 'INFO'));
+  }
+  base.suppressedCorners = suppressedCorners;
+  return { runs, joins, sOf, sCum };
+}
+
 function buildSection(section, ctx) {
   const { config, planLayout, stringerModels, stringerConstruction, postModels, riserHeight } = ctx;
   const treadCount = planLayout.treads.length;
@@ -695,65 +759,10 @@ function buildSection(section, ctx) {
   const split = splitIntoRuns(nodes, infill === RAILING_INFILL.GLASS_POSTS ? { ...config, railingBent: false } : config, (p) => existingNear(p) !== null);
   let { runs, joins } = split;
 
-  // --- the hand-placed posts (railingPostEdits.js): an automatic CORNER post switched off joins its two runs into one
-  // (a mitred corner; glass between posts needs its corner posts), a hand-placed post cuts its run like any post.
-  // `s` = the plan distance along this section's path (`base.path`) from its start.
-  const sCum = [0];
-  for (let k = 1; k < nodes.length; k++) sCum.push(sCum[k - 1] + planDist(nodes[k - 1], nodes[k]));
-  const sOfNode = new Map(nodes.map((n, k) => [n, sCum[k]]));
-  const sOf = (n) => sOfNode.get(n) ?? null;
-  const postEdits = sanitizeRailingPostEdits(config.railingPostEdits)[section.id] || { added: [], suppressed: [] };
-  const suppressedCorners = [];
-  if (postEdits.suppressed.length && infill !== RAILING_INFILL.GLASS_POSTS) {
-    const mRuns = [runs[0]];
-    const mJoins = [];
-    joins.forEach((join, j) => {
-      const corner = runs[j + 1][0];
-      const sc = sOf(corner);
-      if (join.kind === 'corner' && sc !== null && postEdits.suppressed.some((x) => Math.abs(x - sc) < SUPPRESS_MATCH_MM)) {
-        const last = mRuns[mRuns.length - 1];
-        mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
-        suppressedCorners.push({ s: sc, at: { x: corner.x, y: corner.y } });
-        return;
-      }
-      mJoins.push(join);
-      mRuns.push(runs[j + 1]);
-    });
-    runs = mRuns;
-    joins = mJoins;
-  }
-  const skippedManual = [];
-  if (postEdits.added.length) {
-    const sRuns = [];
-    const sJoins = [];
-    runs.forEach((run, j) => {
-      if (j > 0) sJoins.push(joins[j - 1]);
-      const s0 = sOf(run[0]);
-      const s1 = sOf(run[run.length - 1]);
-      const inside = s0 === null || s1 === null ? [] : postEdits.added.filter((p) => p.s > s0 && p.s < s1);
-      const placed = inside.filter((p, k) => {
-        const prev = k === 0 ? s0 : inside[k - 1].s;
-        const ok = p.s - prev >= MANUAL_POST_MIN_FROM_END_MM && s1 - p.s >= MANUAL_POST_MIN_FROM_END_MM;
-        if (!ok) skippedManual.push(p);
-        return ok;
-      });
-      const pieces = splitPathAt(run, placed.map((p) => p.s - s0));
-      pieces.forEach((piece, k) => {
-        if (k > 0) sJoins.push({ kind: 'manual', manualId: placed[k - 1].id, s: placed[k - 1].s });
-        sRuns.push(piece);
-      });
-    });
-    runs = sRuns;
-    joins = sJoins;
-    // a hand-placed post outside every run (past the section's end, on the dusza where no handrail runs) or too close
-    for (const p of postEdits.added) {
-      if (!joins.some((jn) => jn.manualId === p.id) && !skippedManual.includes(p)) skippedManual.push(p);
-    }
-  }
-  if (skippedManual.length) {
-    base.diagnostics.push(diag(section.id, 'RAILING-POST-MANUAL-SKIPPED', `Balustrada ${section.id}: ${skippedManual.length} słupek(i) postawiony ręcznie jest poza poręczą albo bliżej niż ${MANUAL_POST_MIN_FROM_END_MM} mm od innego słupka / narożnika — pominięty. Przesuń go albo usuń.`, 'INFO'));
-  }
-  base.suppressedCorners = suppressedCorners;
+  // --- the hand-placed posts (railingPostEdits.js)
+  const withEdits = applyPostEditsToRuns(section.id, nodes, runs, joins, infill, config, base);
+  ({ runs, joins } = withEdits);
+  const { sOf, sCum } = withEdits;
   if (infill === RAILING_INFILL.GLASS_POSTS) {
     const subRuns = [];
     const subJoins = [];
@@ -1070,6 +1079,214 @@ function buildSection(section, ctx) {
   return base;
 }
 
+// --- The balustrade round the CEILING OPENING on the upper floor (user decisions 2026-10-19) ----------------------------
+//
+// The opening's edges (`ceilingFit.openingOutline`, plan, CCW) carry a balustrade standing ON THE FLOOR, the posts'
+// axis `railingOpeningSetbackMm` back from the edge onto the slab, the handrail's top `railingOpeningHeightMm` above
+// the floor (z = totalRise). Which edges: by default every edge but the one the stair arrives at (the last tread's back
+// edge lies on it) and those along a stairwell wall; `railingOpeningEdges[i]` (true / false) overrides edge i. Adjacent
+// edges that carry it form ONE section (`opening-e<first edge>`), corner posts at their corners, end posts at their
+// ends — the same runs / posts / hand-placed posts (railingPostEdits.js) / balusters / glass as a stair section, only
+// level and on the floor.
+
+export const RAILING_OPENING_EXIT_MATCH_MM = 30; // the stair's last back edge this close to an edge = the exit edge
+const RAILING_OPENING_WALL_MATCH_MM = 30; // an edge this close (+ wanga + gap) to a parallel wall = along the wall
+
+function openingEdgeStates(outline, ctx) {
+  const { planLayout, wallSegments = [], config } = ctx;
+  const last = planLayout.treads[planLayout.treads.length - 1];
+  const exitMid = last ? { x: (last.backEdge[0].x + last.backEdge[1].x) / 2, y: (last.backEdge[0].y + last.backEdge[1].y) / 2 } : null;
+  const overrides = config.railingOpeningEdges && typeof config.railingOpeningEdges === 'object' ? config.railingOpeningEdges : {};
+  const wallTol = RAILING_OPENING_WALL_MATCH_MM + (config.stringerThickness || 0) + Math.max(0, config.stairwellWallGapMm || 0);
+  const distToLine = (p, a, b) => {
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return Math.abs(((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / len);
+  };
+  const onSegment = (p, a, b, tol) => {
+    const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
+    const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len2;
+    return t > -0.01 && t < 1.01 && distToLine(p, a, b) <= tol;
+  };
+  return outline.map((a, i) => {
+    const b = outline[(i + 1) % outline.length];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const dir = unit({ x: b.x - a.x, y: b.y - a.y });
+    const exit = !!exitMid && onSegment(exitMid, a, b, RAILING_OPENING_EXIT_MATCH_MM);
+    const wall = wallSegments.some((w) => {
+      const wd = unit({ x: w.b.x - w.a.x, y: w.b.y - w.a.y });
+      return Math.abs(dir.x * wd.y - dir.y * wd.x) < 0.02 && distToLine(mid, w.a, w.b) <= wallTol;
+    });
+    const auto = !exit && !wall;
+    const enabled = typeof overrides[i] === 'boolean' ? overrides[i] : auto;
+    return { index: i, a, b, exit, wall, auto, enabled, overridden: typeof overrides[i] === 'boolean' };
+  });
+}
+
+// Runs of consecutive enabled edges, cyclically: [[i, i+1, …], …]; all edges enabled → one closed chain.
+function openingChains(states) {
+  const n = states.length;
+  if (states.every((s) => s.enabled)) return [{ edges: states.map((s) => s.index), closed: true }];
+  const start = states.findIndex((s, i) => !s.enabled && states[(i + 1) % n].enabled);
+  if (start < 0) return [];
+  const chains = [];
+  let current = null;
+  for (let k = 1; k <= n; k++) {
+    const s = states[(start + k) % n];
+    if (s.enabled) {
+      if (!current) current = { edges: [], closed: false };
+      current.edges.push(s.index);
+    } else if (current) {
+      chains.push(current);
+      current = null;
+    }
+  }
+  if (current) chains.push(current);
+  return chains;
+}
+
+function lineIntersection(p, d, q, e) {
+  const den = d.x * e.y - d.y * e.x;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((q.x - p.x) * e.y - (q.y - p.y) * e.x) / den;
+  return { x: p.x + d.x * t, y: p.y + d.y * t };
+}
+
+// The chain's path: every edge moved `setback` outward (onto the slab, away from the opening), mitred at its inner
+// corners; the free ends square to their own edge.
+function openingChainPath(outline, chain, setback) {
+  const n = outline.length;
+  const off = chain.edges.map((i) => {
+    const a = outline[i];
+    const b = outline[(i + 1) % n];
+    const d = unit({ x: b.x - a.x, y: b.y - a.y });
+    const out = { x: d.y, y: -d.x }; // outward of a CCW outline
+    return { a: { x: a.x + out.x * setback, y: a.y + out.y * setback }, b: { x: b.x + out.x * setback, y: b.y + out.y * setback }, d };
+  });
+  const pts = [off[0].a];
+  for (let k = 1; k < off.length; k++) pts.push(lineIntersection(off[k - 1].a, off[k - 1].d, off[k].a, off[k].d) ?? off[k].a);
+  if (chain.closed) {
+    const corner = lineIntersection(off[off.length - 1].a, off[off.length - 1].d, off[0].a, off[0].d) ?? off[0].a;
+    pts[0] = corner;
+    pts.push(corner);
+  } else pts.push(off[off.length - 1].b);
+  return pts;
+}
+
+function buildOpeningSection(id, path, ctx, closed) {
+  const { config } = ctx;
+  const z = config.totalRise || 0;
+  const height = config.railingOpeningHeightMm || 1100;
+  const handrailHeight = config.railingHandrailHeightMm;
+  const balusterSize = config.railingBalusterSizeMm;
+  // floor balustrades: balusters or glass between posts (glass on the side of a wanga does not apply to a floor edge)
+  const infill = isGlassInfill(config) ? RAILING_INFILL.GLASS_POSTS : RAILING_INFILL.BALUSTERS;
+  const glass = infill === RAILING_INFILL.GLASS_POSTS;
+  const base = { id, kind: 'opening', side: null, fromStep: null, toStep: null, valid: false, infill, handrail: null, runs: [], path: [], uncoveredSteps: [], balusters: [], glassPanes: [], glass: glass ? glassType(config) : null, posts: [], diagnostics: [], postSpots: [], suppressedCorners: [], baseRail: null };
+  const nodes = path.map((p) => ({ x: p.x, y: p.y, z, treadIndex: null }));
+  if (nodes.length < 2) return base;
+  base.path = nodes.map((n) => ({ x: n.x, y: n.y }));
+  let { runs, joins } = splitIntoRuns(nodes, { ...config, railingBent: false });
+  if (glass) {
+    const subRuns = [];
+    const subJoins = [];
+    runs.forEach((run, j) => {
+      if (j > 0) subJoins.push(joins[j - 1]);
+      splitPathAt(run, intermediatePostSplits(run, config)).forEach((piece, k) => {
+        if (k > 0) subJoins.push({ kind: 'glass-post' });
+        subRuns.push(piece);
+      });
+    });
+    runs = subRuns;
+    joins = subJoins;
+  }
+  const withEdits = applyPostEditsToRuns(id, nodes, runs, joins, infill, config, base);
+  ({ runs, joins } = withEdits);
+  const { sOf, sCum } = withEdits;
+
+  // posts: the ends (one shared post when the chain closes on itself) and every join
+  const spots = [{ id: `railing-post-${id}-start`, at: runs[0][0], kind: 'start', s: 0 }];
+  let autoJoin = 0;
+  joins.forEach((join, j) => {
+    const at = runs[j + 1][0];
+    spots.push({ id: join.kind === 'manual' ? manualRailingPostId(id, join.manualId) : `railing-post-${id}-join-${autoJoin++}`, at, kind: join.kind, manualId: join.manualId, s: join.kind === 'manual' ? join.s : sOf(at) });
+  });
+  const lastRun = runs[runs.length - 1];
+  spots.push(closed ? { ...spots[0], kind: 'end', s: sCum[sCum.length - 1] } : { id: `railing-post-${id}-end`, at: lastRun[lastRun.length - 1], kind: 'end', s: sCum[sCum.length - 1] });
+  const railTop = z + height;
+  const topOfPost = railTop + (config.railingPostTopAboveHandrailMm || 0);
+  const unique = [...new Map(spots.map((sp) => [sp.id, sp])).values()];
+  const nominal = unique.map((sp) => ({
+    postId: sp.id,
+    kind: 'railing',
+    ...(sp.kind === 'manual' ? { manual: true, sectionId: id, manualId: sp.manualId, s: sp.s } : {}),
+    position: { x: sp.at.x, y: sp.at.y },
+    elevation: { bottom: z, top: topOfPost },
+    size: config.railingPostSizeMm,
+  }));
+  base.posts = applyPostOverrides(nominal, config.manualPostOverrides);
+  const postOf = (sp) => base.posts.find((p) => p.postId === sp.id && !p.removed) ?? null;
+  const halfOf = (sp) => (postOf(sp)?.size ?? 0) / 2;
+  base.postSpots = spots.slice(0, closed ? -1 : undefined).map((sp) => ({ postId: sp.id, spotId: sp.id, kind: sp.kind, s: sp.s, at: { x: sp.at.x, y: sp.at.y }, manualId: sp.manualId ?? null, reused: false, suppressible: sp.kind === 'corner' && !glass }));
+
+  const centreZ = railTop - handrailHeight / 2;
+  const maxClear = config.railingMaxClearMm;
+  const pitch = maxClear + balusterSize;
+  const pieces = [];
+  const balusters = [];
+  runs.forEach((run, j) => {
+    const startPost = postOf(spots[j]);
+    const endPost = postOf(spots[j + 1]);
+    const fit = fitPathToPosts(simplifyPath(run), startPost, endPost);
+    const runPath = fit.path;
+    const runPieces = [];
+    for (let i = 0; i < runPath.length - 1; i++) {
+      const start = { x: runPath[i].x, y: runPath[i].y, z: centreZ };
+      const end = { x: runPath[i + 1].x, y: runPath[i + 1].y, z: centreZ };
+      runPieces.push({ start, end, lengthMm: Math.hypot(end.x - start.x, end.y - start.y) });
+    }
+    annotateCuts(runPieces, handrailHeight);
+    pieces.push(...runPieces);
+    base.runs.push({ key: railingRunKey(spots[j].id, spots[j + 1].id), startPostId: spots[j].id, endPostId: spots[j + 1].id, pieces: runPieces, bent: false, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
+    if (glass) {
+      const result = panesForRun(run, { config, sectionId: id, runIndex: j, startClearMm: halfOf(spots[j]), endClearMm: halfOf(spots[j + 1]), railBottomAt: () => railTop - handrailHeight, groundAt: () => z });
+      base.glassPanes.push(...result.panes);
+      for (const message of result.diagnostics) base.diagnostics.push(diag(id, 'RAILING-GLASS-PANE-LOW', `Balustrada ${id}: ${message}`));
+    } else {
+      // balusters spread evenly along the run, standing on the floor
+      const cumulative = cumulativeLengths(runPath);
+      const total = cumulative[cumulative.length - 1];
+      const startHalf = fit.startFitted ? 0 : halfOf(spots[j]);
+      const endHalf = fit.endFitted ? 0 : halfOf(spots[j + 1]);
+      const usable = total - startHalf - endHalf;
+      const count = usable > maxClear ? Math.ceil((usable - maxClear) / pitch) : 0;
+      const gap = (usable - count * balusterSize) / (count + 1);
+      for (let b = 0; b < count; b++) {
+        const p = pointAt(runPath, cumulative, startHalf + gap * (b + 1) + balusterSize * b + balusterSize / 2);
+        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: z, zTop: railTop - handrailHeight });
+      }
+    }
+  });
+  base.handrail = { pieces, totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
+  base.balusters = balusters.filter((b) => b.zTop - b.zBottom > 0).map((b, i) => ({ id: `${id}-baluster-${i}`, ...b, heightMm: b.zTop - b.zBottom, topCutDeg: 0, bottomCutDeg: 0, longPointMm: b.zTop - b.zBottom }));
+  base.heightAboveNosing = { minMm: height, maxMm: height };
+  base.postTopNeeds = {};
+  base.valid = pieces.length > 0;
+  return base;
+}
+
+/**
+ * The balustrade round the ceiling opening: the edge states (for the plan's toggles) and one section per chain of
+ * enabled edges. `ctx`: { config, planLayout, openingOutline (plan, CCW), wallSegments ([{a, b}] plan) }.
+ */
+export function buildOpeningRailing(ctx) {
+  const { config, openingOutline } = ctx;
+  if (!config.railingOpeningEnabled || !Array.isArray(openingOutline) || openingOutline.length < 3) return { edges: [], sections: [] };
+  const edges = openingEdgeStates(openingOutline, ctx);
+  const setback = Math.max(0, Number(config.railingOpeningSetbackMm) || 0);
+  const sections = openingChains(edges).map((chain) => buildOpeningSection(`opening-e${chain.edges[0]}`, openingChainPath(openingOutline, chain, setback), ctx, chain.closed));
+  return { edges, sections };
+}
+
 /**
  * @param {Object} models
  * @param {import('./planLayout.js').PlanLayout} models.planLayout
@@ -1079,16 +1296,20 @@ function buildSection(section, ctx) {
  * @param {Object[]} [models.postModels]  the posts that exist (postSolver.js buildPostModels)
  * @param {Object} config  full config incl. `riserHeight`
  */
-export function buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels }, config) {
-  const empty = { enabled: false, sections: [], posts: [], diagnostics: [] };
-  if (!config.railingEnabled) return empty;
+export function buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels, openingOutline = null, wallSegments = [] }, config) {
+  const empty = { enabled: false, sections: [], posts: [], diagnostics: [], openingEdges: [] };
+  if (!config.railingEnabled && !config.railingOpeningEnabled) return empty;
   const ctx = { config, planLayout, treadModels, stringerModels, stringerConstruction, postModels, riserHeight: config.riserHeight };
-  const sections = sanitizeRailingSections(config.railingSections).map((s) => buildSection(s, ctx));
+  const stairSections = config.railingEnabled ? sanitizeRailingSections(config.railingSections).map((s) => buildSection(s, ctx)) : [];
+  // the balustrade round the ceiling opening on the upper floor (buildOpeningRailing above)
+  const opening = buildOpeningRailing({ config, planLayout, openingOutline, wallSegments });
+  const sections = [...stairSections, ...opening.sections];
   const postTopNeeds = {};
   for (const s of sections) for (const [postId, need] of Object.entries(s.postTopNeeds || {})) postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);
   return {
     enabled: true,
     sections,
+    openingEdges: opening.edges,
     postTopNeeds,
     posts: sections.flatMap((s) => s.posts),
     diagnostics: sections.flatMap((s) => s.diagnostics),

@@ -236,7 +236,17 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   the automatic ones. `section.postSpots` / `suppressedCorners` feed the plan's "▮ Słupki" mode
   (`plan2dRenderer.js railingPostEditXML`: click the path = add, drag orange = move with snap to tread edges / 10 mm,
   right-click = remove / switch a corner off, dashed ghost = restore) and the Inspektor (position field, remove /
-  switch off). Not done: a balustrade round the ceiling opening (stage B).
+  switch off).
+- **Balustrade round the ceiling opening** (`railingSolver.js buildOpeningRailing`, user decisions 2026-10-19):
+  `railingOpeningEnabled` (independent of the stair balustrade), on the FLOOR (z = totalRise), posts' axis
+  `railingOpeningSetbackMm` (60, ASSUMPTION) back from the edge, handrail top `railingOpeningHeightMm` (1100 — § 298,
+  DO WERYFIKACJI) above it. Edges (`ceilingFit.openingOutline`): auto = all but the exit edge (the last back edge on it)
+  and those along a stairwell wall; `railingOpeningEdges[i]` overrides, toggled by a click in the "▮ Słupki" mode
+  (`railingModel.openingEdges`). Adjacent enabled edges = one section `opening-e<first edge>` (`kind: 'opening'`,
+  `side: null`; all edges = a closed loop): corner + end posts, hand-placed posts / switched-off corners, balusters or
+  glass between posts on the floor; read by 3D, plan, takeoff, DXF, checks like any section (not the side-view
+  handrail editor, not end-height corrections). WARNING PL-LEGAL-H-01 below 1.1 m. `ceilingFit` and the stairwell are
+  now built before the balustrade in `buildStaircase`.
 - **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
   `config.railingProfileOverrides = {[section]: {[railingRunKey 'postA>postB']: [{s, dz}]}}`, `applyRunPoints`,
   `RAILING_PROFILE_EDITS` / `applyRailingProfileEdit`), applied in the solver after the end corrections and before

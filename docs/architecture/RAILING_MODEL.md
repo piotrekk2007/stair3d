@@ -23,7 +23,24 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
   usuń ręczny / wyłącz narożny, klik w przerywane kółko = przywróć; Inspektor: „Od początku odcinka [mm]”, „Usuń
   słupek”, „Wyłącz słupek (poręcz ciągła przez narożnik)”. Każdy gest = jeden krok cofania.
 - Testy: `geometry/__tests__/railingPosts.test.js`.
-- Etap B (nie zrobiony): balustrada wokół otworu w stropie na piętrze.
+
+## Balustrada przy otworze w stropie (etap B, decyzje użytkownika 2026-10-19) — `buildOpeningRailing`
+
+- `railingOpeningEnabled` (niezależnie od balustrady schodów), na POSADZCE piętra (z = totalRise), oś słupków
+  `railingOpeningSetbackMm` (60 mm, ZAŁOŻENIE) od krawędzi otworu w stronę stropu, góra poręczy
+  `railingOpeningHeightMm` (1100 mm, § 298 — DO WERYFIKACJI) nad posadzką; poziomo, bez uskoków.
+- Krawędzie: obrys otworu (`ceilingFit.openingOutline`, CCW). Domyślnie każda poza krawędzią wyjścia (leży na niej
+  tylna krawędź ostatniego stopnia, ±30 mm) i poza krawędziami przy ścianach klatki (równoległe do ściany w odległości
+  ≤ wanga + odstęp + 30 mm); `railingOpeningEdges[i] = true/false` nadpisuje (klik na planie w trybie „▮ Słupki”,
+  zielona = z balustradą, szara przerywana = bez; powrót do AUTO, gdy klik da to samo, co automat).
+- Sąsiednie włączone krawędzie = jeden odcinek `opening-e<pierwsza krawędź>` (`kind: 'opening'`, `side: null`):
+  krawędzie odsunięte, w narożnikach przecięte (ucios), wolne końce prostopadle; wszystkie krawędzie = pętla
+  zamknięta (słupek startowy ją zamyka). Słupki na narożnikach i końcach, ręczne słupki i wyłączanie narożników jak
+  przy schodach (`applyPostEditsToRuns`), tralki rozłożone równo na posadzce albo szkło między słupkami (przy
+  `glass-side` też między słupkami — szkło z boku wangi nie dotyczy krawędzi stropu).
+- Czytają go 3D, plan, kosztorys, DXF, kontrola konstrukcji i walidacja jak każdy odcinek; NIE edytor „Profil
+  poręczy” i nie korekty wysokości końców (poręcz pozioma). WARNING PL-LEGAL-H-01 poniżej 1,1 m.
+- Testy: `geometry/__tests__/railingOpening.test.js`.
 
 ## Etap 4: poręcz gięta i podporęcz
 

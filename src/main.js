@@ -727,12 +727,12 @@ function setRailingPostMode(on) {
   const hint = plan2dHud.querySelector('#plan2d-opening-hint');
   if (hint) {
     hint.hidden = !railingPostMode && openingMode === 'off';
-    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij pomarańczowy — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / wyłącz narożny; klik na przerywanym kółku — przywróć.';
+    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij pomarańczowy — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / wyłącz narożny; klik na przerywanym kółku — przywróć. Krawędzie otworu (zielone = z balustradą): klik — włącz / wyłącz.';
   }
   if (on && !railingPostMode) {
     if (hint) {
       hint.hidden = false;
-      hint.textContent = 'Najpierw włącz balustradę i dodaj odcinek (folder „9. Balustrada” / Inspektor stopnia).';
+      hint.textContent = 'Najpierw włącz balustradę (odcinek przy schodach albo „Balustrada przy otworze w stropie” w folderze „9. Balustrada”).';
     }
   }
   regeneratePlan2D();
@@ -1370,6 +1370,17 @@ planApi = attachPlanInteractions({
   onRailingPostRemove: (sectionId, manualId) => applyRailingPosts({ action: 'remove', sectionId, id: manualId }),
   onRailingPostSuppress: (sectionId, s) => applyRailingPosts({ action: 'suppress', sectionId, s }),
   onRailingPostRestore: (sectionId, s) => applyRailingPosts({ action: 'restore', sectionId, s }),
+  // an edge of the ceiling opening: its balustrade on / off (back to AUTO when it equals the automatic choice)
+  onRailingOpeningEdgeToggle: (index) => {
+    const edge = lastModels?.railingModel?.openingEdges?.find((e) => e.index === index);
+    if (!edge) return;
+    const next = { ...(config.railingOpeningEdges || {}) };
+    if (!edge.enabled === edge.auto) delete next[index];
+    else next[index] = !edge.enabled;
+    config.railingOpeningEdges = next;
+    rebuild();
+    commitHistory();
+  },
 });
 
 const gui = createUI({

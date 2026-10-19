@@ -272,6 +272,12 @@ export function stairwellXML(drawing) {
 export function railingPostEditXML(railingModel, selection = null) {
   if (!railingModel?.enabled) return '';
   let xml = '';
+  // the ceiling opening's edges: a click switches an edge's balustrade on / off (green = on, grey dashed = off)
+  for (const e of railingModel.openingEdges || []) {
+    const color = e.enabled ? '#2e7d32' : '#9e9e9e';
+    const why = e.exit ? ' (wyjście schodów)' : e.wall ? ' (przy ścianie)' : '';
+    xml += `<line class="railing-opening-edge${e.enabled ? ' on' : ''}" data-opening-edge="${e.index}" x1="${fmt(e.a.x)}" y1="${fmt(-e.a.y)}" x2="${fmt(e.b.x)}" y2="${fmt(-e.b.y)}" stroke="${color}" stroke-opacity="${e.enabled ? 0.45 : 0.35}" stroke-width="${px(12)}" ${e.enabled ? '' : 'stroke-dasharray="6 4"'} ${HAIR} pointer-events="stroke"><title>Krawędź otworu ${e.index + 1}${why}: balustrada ${e.enabled ? 'TAK' : 'NIE'}${e.overridden ? ' (ręcznie)' : ''} — kliknij, żeby przełączyć</title></line>`;
+  }
   for (const s of railingModel.sections || []) {
     if (!s.valid || !(s.path?.length >= 2)) continue;
     xml += `<polyline class="railing-path-hit" data-section-id="${s.id}" points="${s.path.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ')}" fill="none" stroke="#1a5fb4" stroke-opacity="0.12" stroke-width="${px(18)}" stroke-linecap="round" pointer-events="stroke"><title>Kliknij, żeby dodać słupek</title></polyline>`;

@@ -191,6 +191,7 @@ export function attachPlanInteractions(opts) {
     onRailingPostRemove,
     onRailingPostSuppress,
     onRailingPostRestore,
+    onRailingOpeningEdgeToggle,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -379,6 +380,11 @@ export function attachPlanInteractions(opts) {
       const ghostEl = e.target.closest('.railing-post-ghost');
       if (ghostEl) {
         clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'railing-ghost', sectionId: ghostEl.dataset.sectionId, s: Number(ghostEl.dataset.s) } };
+        return;
+      }
+      const edgeEl = e.target.closest('.railing-opening-edge');
+      if (edgeEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'railing-opening-edge', index: Number(edgeEl.dataset.openingEdge) } };
         return;
       }
       const pathEl = e.target.closest('.railing-path-hit');
@@ -637,6 +643,7 @@ export function attachPlanInteractions(opts) {
         const { hit } = clickCandidate;
         if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
         else if (hit.kind === 'railing-ghost' && onRailingPostRestore) onRailingPostRestore(hit.sectionId, hit.s);
+        else if (hit.kind === 'railing-opening-edge' && onRailingOpeningEdgeToggle) onRailingOpeningEdgeToggle(hit.index);
         else if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
         else if (hit.kind === 'stringer' && onStringerClick) onStringerClick(hit.side);
         else onStepClick(hit.kind === 'step' ? hit.stepIndex : null);

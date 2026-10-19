@@ -128,7 +128,14 @@ export function buildStaircase(inputConfig) {
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
-  const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels }, fullConfig);
+  // the ceiling opening and the stairwell come first: the balustrade round the opening stands on its edges and leaves
+  // out the ones along the walls
+  const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
+  // the stairwell (stairwell.js): every side measured, a fixed side off its dimension reported; its walls and slab for
+  // the 3D view (presentation only, like the ceiling)
+  const stairwell = stairwellReport(config, planLayout);
+  const walls = stairwellWalls(stairwell, fullConfig, planLayout);
+  const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] }, fullConfig);
   // Legal/reference checks on the solved balustrade (validator/railingChecks.js) join its own findings, which
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
@@ -181,11 +188,6 @@ export function buildStaircase(inputConfig) {
   // Nie zmienia żadnego wierzchołka — tylko dokłada `uv` (scene/woodGrain.js).
   applyWoodGrainToTree(root);
 
-  const ceilingFit = deriveCeilingFit(config, planLayout, derived.riserHeight);
-  // the stairwell (stairwell.js): every side measured, a fixed side off its dimension reported; its walls and slab for
-  // the 3D view (presentation only, like the ceiling)
-  const stairwell = stairwellReport(config, planLayout);
-  const walls = stairwellWalls(stairwell, fullConfig, planLayout);
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig, walls?.slab);
   const wallsMesh = buildStairwellWalls(walls);
   // strop przyjmuje cień, ale go nie rzuca — inaczej słońce z góry zostawiłoby schody w cieniu płyty

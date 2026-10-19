@@ -155,7 +155,7 @@ function postEditFormHTML(post, o) {
 function railingEndsHTML(railingModel, postId) {
   const fields = [];
   for (const s of railingModel?.sections || []) {
-    if (!s.valid) continue;
+    if (!s.valid || s.kind === 'opening') continue; // a level balustrade on the floor has no end heights to correct
     s.runs.forEach((run) => {
       if (run.endPostId === postId) fields.push(['Poręcz dochodząca do słupa', railingEndKey(s.id, postId, 'end'), run.endOffsetMm || 0, s.id]);
       if (run.startPostId === postId) fields.push(['Poręcz odchodząca od słupa', railingEndKey(s.id, postId, 'start'), run.startOffsetMm || 0, s.id]);

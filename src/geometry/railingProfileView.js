@@ -52,7 +52,7 @@ export function valueAt(line, u) {
 export function listRailingRuns(railingModel) {
   const out = [];
   for (const s of railingModel?.sections || []) {
-    if (!s.valid) continue;
+    if (!s.valid || s.kind === 'opening') continue;
     s.runs.forEach((run, i) => out.push({ sectionId: s.id, runKey: run.key, label: `${s.id} · bieg ${i + 1}: ${run.startPostId} → ${run.endPostId}` }));
   }
   return out;
