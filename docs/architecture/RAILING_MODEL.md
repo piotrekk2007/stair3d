@@ -29,11 +29,16 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
 - `railingOpeningEnabled` (niezależnie od balustrady schodów), na POSADZCE piętra (z = totalRise), oś słupków
   `railingOpeningSetbackMm` (60 mm, ZAŁOŻENIE) od krawędzi otworu w stronę stropu, góra poręczy
   `railingOpeningHeightMm` (1100 mm, § 298 — DO WERYFIKACJI) nad posadzką; poziomo, bez uskoków.
-- Krawędzie: obrys otworu (`ceilingFit.openingOutline`, CCW). Domyślnie każda poza krawędzią wyjścia (leży na niej
-  tylna krawędź ostatniego stopnia, ±30 mm) i poza krawędziami przy ścianach klatki (równoległe do ściany w odległości
-  ≤ wanga + odstęp + 30 mm); `railingOpeningEdges[i] = true/false` nadpisuje (klik na planie w trybie „▮ Słupki”,
-  zielona = z balustradą, szara przerywana = bez; powrót do AUTO, gdy klik da to samo, co automat).
-- Sąsiednie włączone krawędzie = jeden odcinek `opening-e<pierwsza krawędź>` (`kind: 'opening'`, `side: null`):
+- Krawędzie: obrys otworu (`ceilingFit.openingOutline`, CCW). Domyślnie każda poza krawędziami przy ścianach klatki
+  (równoległe do ściany w odległości ≤ wanga + odstęp + 30 mm). Krawędź WYJŚCIA (leży na niej tylna krawędź ostatniego
+  stopnia, ±30 mm) tylko na wolnych kawałkach: odcinek zajęty przez ostatni stopień i obie wangi jest wycięty
+  (`openingPieces`; wolny kawałek < 100 mm — bez balustrady) — poprawka po uwadze użytkownika 2026-10-19 (balustrada
+  szła po całej krawędzi, także nad wejściem na piętro). `railingOpeningEdges[i] = true/false` nadpisuje (klik na planie
+  w trybie „▮ Słupki”, zielona = z balustradą, szara przerywana = bez; powrót do AUTO, gdy klik da to samo, co automat).
+- Połączenie ze schodami: na końcu / narożniku, gdzie stoi słup schodów (słup końcowy wangi, ostatni słupek balustrady
+  schodów; ≤ 1,5 × jego przekrój), TEN słup jest słupem balustrady przy otworze — bez drugiego słupka, poręcz dochodzi do
+  jego lica, słup dostaje wysokość do góry poręczy (`postTopNeeds` → `raisePostsToHandrail`).
+- Sąsiednie włączone kawałki = jeden odcinek `opening-e<krawędź>` / `opening-e<krawędź>-b` (gdy zaczyna się za schodami) (`kind: 'opening'`, `side: null`):
   krawędzie odsunięte, w narożnikach przecięte (ucios), wolne końce prostopadle; wszystkie krawędzie = pętla
   zamknięta (słupek startowy ją zamyka). Słupki na narożnikach i końcach, ręczne słupki i wyłączanie narożników jak
   przy schodach (`applyPostEditsToRuns`), tralki rozłożone równo na posadzce albo szkło między słupkami (przy

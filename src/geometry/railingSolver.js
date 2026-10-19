@@ -1083,58 +1083,96 @@ function buildSection(section, ctx) {
 //
 // The opening's edges (`ceilingFit.openingOutline`, plan, CCW) carry a balustrade standing ON THE FLOOR, the posts'
 // axis `railingOpeningSetbackMm` back from the edge onto the slab, the handrail's top `railingOpeningHeightMm` above
-// the floor (z = totalRise). Which edges: by default every edge but the one the stair arrives at (the last tread's back
-// edge lies on it) and those along a stairwell wall; `railingOpeningEdges[i]` (true / false) overrides edge i. Adjacent
-// edges that carry it form ONE section (`opening-e<first edge>`), corner posts at their corners, end posts at their
-// ends — the same runs / posts / hand-placed posts (railingPostEdits.js) / balusters / glass as a stair section, only
-// level and on the floor.
+// the floor (z = totalRise). Which edges: by default every edge but those along a stairwell wall; the edge the stair
+// arrives at (its last back edge lies on it — the EXIT edge) only where the stair does not stand: the stretch the last
+// tread and its two wangi take is cut out, the rest of that edge is a free edge over the drop like any other (a U's
+// exit edge over its flight A). `railingOpeningEdges[i]` (true / false) overrides edge i (for the exit edge: its free
+// parts). Adjacent pieces that carry it form ONE section (`opening-e<edge>` / `opening-e<edge>-b` when it starts after
+// the stair), corner posts at their corners, end posts at their ends — the same runs / posts / hand-placed posts
+// (railingPostEdits.js) / balusters / glass as a stair section, only level and on the floor. An end or corner where a
+// post of the stair already stands (its end newel, its balustrade's last post) uses THAT post: the opening's handrail
+// meets it at its face, no second post.
 
 export const RAILING_OPENING_EXIT_MATCH_MM = 30; // the stair's last back edge this close to an edge = the exit edge
 const RAILING_OPENING_WALL_MATCH_MM = 30; // an edge this close (+ wanga + gap) to a parallel wall = along the wall
+const RAILING_OPENING_MIN_PIECE_MM = 100; // a free part of the exit edge shorter than this gets no balustrade
+// a stair post this close to an end / corner of the opening's balustrade is THE post there (× its own size)
+const RAILING_OPENING_REUSE_FACTOR = 1.5;
+
+const distToLine = (p, a, b) => {
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return Math.abs(((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / len);
+};
+const paramOn = (p, a, b) => {
+  const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
+  return ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len2;
+};
+const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
 function openingEdgeStates(outline, ctx) {
   const { planLayout, wallSegments = [], config } = ctx;
   const last = planLayout.treads[planLayout.treads.length - 1];
   const exitMid = last ? { x: (last.backEdge[0].x + last.backEdge[1].x) / 2, y: (last.backEdge[0].y + last.backEdge[1].y) / 2 } : null;
   const overrides = config.railingOpeningEdges && typeof config.railingOpeningEdges === 'object' ? config.railingOpeningEdges : {};
-  const wallTol = RAILING_OPENING_WALL_MATCH_MM + (config.stringerThickness || 0) + Math.max(0, config.stairwellWallGapMm || 0);
-  const distToLine = (p, a, b) => {
-    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    return Math.abs(((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / len);
-  };
-  const onSegment = (p, a, b, tol) => {
-    const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
-    const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len2;
-    return t > -0.01 && t < 1.01 && distToLine(p, a, b) <= tol;
-  };
+  const wangi = config.stringerThickness || 0;
+  const wallTol = RAILING_OPENING_WALL_MATCH_MM + wangi + Math.max(0, config.stairwellWallGapMm || 0);
   return outline.map((a, i) => {
     const b = outline[(i + 1) % outline.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const dir = unit({ x: b.x - a.x, y: b.y - a.y });
-    const exit = !!exitMid && onSegment(exitMid, a, b, RAILING_OPENING_EXIT_MATCH_MM);
+    const tMid = exitMid ? paramOn(exitMid, a, b) : -1;
+    const exit = !!exitMid && tMid > -0.01 && tMid < 1.01 && distToLine(exitMid, a, b) <= RAILING_OPENING_EXIT_MATCH_MM;
+    // the stretch of the exit edge the stair stands on: its last back edge, and one wanga thickness past each end
+    let stair = null;
+    if (exit) {
+      const ts = last.backEdge.map((p) => paramOn(p, a, b));
+      const pad = wangi / len;
+      stair = [Math.max(0, Math.min(...ts) - pad), Math.min(1, Math.max(...ts) + pad)];
+    }
     const wall = wallSegments.some((w) => {
       const wd = unit({ x: w.b.x - w.a.x, y: w.b.y - w.a.y });
       return Math.abs(dir.x * wd.y - dir.y * wd.x) < 0.02 && distToLine(mid, w.a, w.b) <= wallTol;
     });
-    const auto = !exit && !wall;
+    const free = exit ? stair[0] * len + (1 - stair[1]) * len : len;
+    const auto = !wall && free >= RAILING_OPENING_MIN_PIECE_MM;
     const enabled = typeof overrides[i] === 'boolean' ? overrides[i] : auto;
-    return { index: i, a, b, exit, wall, auto, enabled, overridden: typeof overrides[i] === 'boolean' };
+    return { index: i, a, b, length: len, exit, stair, wall, auto, enabled, overridden: typeof overrides[i] === 'boolean' };
   });
 }
 
-// Runs of consecutive enabled edges, cyclically: [[i, i+1, …], …]; all edges enabled → one closed chain.
-function openingChains(states) {
-  const n = states.length;
-  if (states.every((s) => s.enabled)) return [{ edges: states.map((s) => s.index), closed: true }];
-  const start = states.findIndex((s, i) => !s.enabled && states[(i + 1) % n].enabled);
+// The outline cut into PIECES that do or do not carry the balustrade: every edge one piece, the exit edge up to three
+// (before the stair, the stair — never —, after it); a free part shorter than RAILING_OPENING_MIN_PIECE_MM never.
+function openingPieces(states) {
+  const out = [];
+  for (const e of states) {
+    if (!e.stair) {
+      out.push({ edge: e.index, part: '', a: e.a, b: e.b, enabled: e.enabled });
+      continue;
+    }
+    const [t0, t1] = e.stair;
+    const pa = lerp(e.a, e.b, t0);
+    const pb = lerp(e.a, e.b, t1);
+    if (t0 > 1e-9) out.push({ edge: e.index, part: '', a: e.a, b: pa, enabled: e.enabled && t0 * e.length >= RAILING_OPENING_MIN_PIECE_MM, atStairEnd: 'b' });
+    out.push({ edge: e.index, part: 'stair', a: pa, b: pb, enabled: false });
+    if (t1 < 1 - 1e-9) out.push({ edge: e.index, part: 'b', a: pb, b: e.b, enabled: e.enabled && (1 - t1) * e.length >= RAILING_OPENING_MIN_PIECE_MM, atStairEnd: 'a' });
+  }
+  return out;
+}
+
+// Runs of consecutive enabled pieces, cyclically; all enabled → one closed chain.
+function openingChains(pieces) {
+  const n = pieces.length;
+  if (pieces.every((p) => p.enabled)) return [{ pieces, closed: true }];
+  const start = pieces.findIndex((p, i) => !p.enabled && pieces[(i + 1) % n].enabled);
   if (start < 0) return [];
   const chains = [];
   let current = null;
   for (let k = 1; k <= n; k++) {
-    const s = states[(start + k) % n];
-    if (s.enabled) {
-      if (!current) current = { edges: [], closed: false };
-      current.edges.push(s.index);
+    const p = pieces[(start + k) % n];
+    if (p.enabled) {
+      if (!current) current = { pieces: [], closed: false };
+      current.pieces.push(p);
     } else if (current) {
       chains.push(current);
       current = null;
@@ -1151,21 +1189,19 @@ function lineIntersection(p, d, q, e) {
   return { x: p.x + d.x * t, y: p.y + d.y * t };
 }
 
-// The chain's path: every edge moved `setback` outward (onto the slab, away from the opening), mitred at its inner
-// corners; the free ends square to their own edge.
-function openingChainPath(outline, chain, setback) {
-  const n = outline.length;
-  const off = chain.edges.map((i) => {
-    const a = outline[i];
-    const b = outline[(i + 1) % n];
-    const d = unit({ x: b.x - a.x, y: b.y - a.y });
+// The chain's path: every piece moved `setback` outward (onto the slab, away from the opening), mitred where two edges
+// meet; the free ends square to their own piece.
+function openingChainPath(chain, setback) {
+  const off = chain.pieces.map((p) => {
+    const d = unit({ x: p.b.x - p.a.x, y: p.b.y - p.a.y });
     const out = { x: d.y, y: -d.x }; // outward of a CCW outline
-    return { a: { x: a.x + out.x * setback, y: a.y + out.y * setback }, b: { x: b.x + out.x * setback, y: b.y + out.y * setback }, d };
+    return { a: { x: p.a.x + out.x * setback, y: p.a.y + out.y * setback }, b: { x: p.b.x + out.x * setback, y: p.b.y + out.y * setback }, d };
   });
+  const join = (u, v) => lineIntersection(u.a, u.d, v.a, v.d) ?? v.a; // (two pieces of one edge: collinear → v.a)
   const pts = [off[0].a];
-  for (let k = 1; k < off.length; k++) pts.push(lineIntersection(off[k - 1].a, off[k - 1].d, off[k].a, off[k].d) ?? off[k].a);
+  for (let k = 1; k < off.length; k++) pts.push(join(off[k - 1], off[k]));
   if (chain.closed) {
-    const corner = lineIntersection(off[off.length - 1].a, off[off.length - 1].d, off[0].a, off[0].d) ?? off[0].a;
+    const corner = join(off[off.length - 1], off[0]);
     pts[0] = corner;
     pts.push(corner);
   } else pts.push(off[off.length - 1].b);
@@ -1173,7 +1209,7 @@ function openingChainPath(outline, chain, setback) {
 }
 
 function buildOpeningSection(id, path, ctx, closed) {
-  const { config } = ctx;
+  const { config, stairPosts = [] } = ctx;
   const z = config.totalRise || 0;
   const height = config.railingOpeningHeightMm || 1100;
   const handrailHeight = config.railingHandrailHeightMm;
@@ -1212,9 +1248,23 @@ function buildOpeningSection(id, path, ctx, closed) {
   });
   const lastRun = runs[runs.length - 1];
   spots.push(closed ? { ...spots[0], kind: 'end', s: sCum[sCum.length - 1] } : { id: `railing-post-${id}-end`, at: lastRun[lastRun.length - 1], kind: 'end', s: sCum[sCum.length - 1] });
+  // a post of the stair standing there (its end newel, the last post of its balustrade) IS the post there
+  const stairPostAt = (at) => {
+    let best = null;
+    for (const p of stairPosts) {
+      const d = Math.hypot(p.position.x - at.x, p.position.y - at.y);
+      if (d <= RAILING_OPENING_REUSE_FACTOR * p.size && (!best || d < best.d)) best = { p, d };
+    }
+    return best?.p ?? null;
+  };
+  for (const sp of spots) {
+    if (sp.kind === 'manual') continue;
+    const existing = stairPostAt(sp.at);
+    if (existing) sp.existing = existing;
+  }
   const railTop = z + height;
   const topOfPost = railTop + (config.railingPostTopAboveHandrailMm || 0);
-  const unique = [...new Map(spots.map((sp) => [sp.id, sp])).values()];
+  const unique = [...new Map(spots.filter((sp) => !sp.existing).map((sp) => [sp.id, sp])).values()];
   const nominal = unique.map((sp) => ({
     postId: sp.id,
     kind: 'railing',
@@ -1224,15 +1274,17 @@ function buildOpeningSection(id, path, ctx, closed) {
     size: config.railingPostSizeMm,
   }));
   base.posts = applyPostOverrides(nominal, config.manualPostOverrides);
-  const postOf = (sp) => base.posts.find((p) => p.postId === sp.id && !p.removed) ?? null;
+  const postIdOf = (sp) => sp.existing?.postId ?? sp.id;
+  const postOf = (sp) => sp.existing ?? base.posts.find((p) => p.postId === sp.id && !p.removed) ?? null;
   const halfOf = (sp) => (postOf(sp)?.size ?? 0) / 2;
-  base.postSpots = spots.slice(0, closed ? -1 : undefined).map((sp) => ({ postId: sp.id, spotId: sp.id, kind: sp.kind, s: sp.s, at: { x: sp.at.x, y: sp.at.y }, manualId: sp.manualId ?? null, reused: false, suppressible: sp.kind === 'corner' && !glass }));
+  base.postSpots = spots.slice(0, closed ? -1 : undefined).map((sp) => ({ postId: postIdOf(sp), spotId: sp.id, kind: sp.kind, s: sp.s, at: { x: sp.at.x, y: sp.at.y }, manualId: sp.manualId ?? null, reused: !!sp.existing, suppressible: sp.kind === 'corner' && !glass && !sp.existing }));
 
   const centreZ = railTop - handrailHeight / 2;
   const maxClear = config.railingMaxClearMm;
   const pitch = maxClear + balusterSize;
   const pieces = [];
   const balusters = [];
+  const postTopNeeds = {};
   runs.forEach((run, j) => {
     const startPost = postOf(spots[j]);
     const endPost = postOf(spots[j + 1]);
@@ -1246,7 +1298,11 @@ function buildOpeningSection(id, path, ctx, closed) {
     }
     annotateCuts(runPieces, handrailHeight);
     pieces.push(...runPieces);
-    base.runs.push({ key: railingRunKey(spots[j].id, spots[j + 1].id), startPostId: spots[j].id, endPostId: spots[j + 1].id, pieces: runPieces, bent: false, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
+    const startPostId = postIdOf(spots[j]);
+    const endPostId = postIdOf(spots[j + 1]);
+    // a stair post the opening's handrail meets reaches at least that handrail's top (postSolver.js raisePostsToHandrail)
+    for (const sp of [spots[j], spots[j + 1]]) if (sp.existing) postTopNeeds[sp.existing.postId] = Math.max(postTopNeeds[sp.existing.postId] ?? -Infinity, topOfPost);
+    base.runs.push({ key: railingRunKey(startPostId, endPostId), startPostId, endPostId, pieces: runPieces, bent: false, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
     if (glass) {
       const result = panesForRun(run, { config, sectionId: id, runIndex: j, startClearMm: halfOf(spots[j]), endClearMm: halfOf(spots[j + 1]), railBottomAt: () => railTop - handrailHeight, groundAt: () => z });
       base.glassPanes.push(...result.panes);
@@ -1269,21 +1325,25 @@ function buildOpeningSection(id, path, ctx, closed) {
   base.handrail = { pieces, totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
   base.balusters = balusters.filter((b) => b.zTop - b.zBottom > 0).map((b, i) => ({ id: `${id}-baluster-${i}`, ...b, heightMm: b.zTop - b.zBottom, topCutDeg: 0, bottomCutDeg: 0, longPointMm: b.zTop - b.zBottom }));
   base.heightAboveNosing = { minMm: height, maxMm: height };
-  base.postTopNeeds = {};
+  base.postTopNeeds = postTopNeeds;
   base.valid = pieces.length > 0;
   return base;
 }
 
 /**
  * The balustrade round the ceiling opening: the edge states (for the plan's toggles) and one section per chain of
- * enabled edges. `ctx`: { config, planLayout, openingOutline (plan, CCW), wallSegments ([{a, b}] plan) }.
+ * enabled pieces. `ctx`: { config, planLayout, openingOutline (plan, CCW), wallSegments ([{a, b}] plan), stairPosts
+ * (the stair's standing posts: structural + its balustrade's) }.
  */
 export function buildOpeningRailing(ctx) {
   const { config, openingOutline } = ctx;
   if (!config.railingOpeningEnabled || !Array.isArray(openingOutline) || openingOutline.length < 3) return { edges: [], sections: [] };
   const edges = openingEdgeStates(openingOutline, ctx);
   const setback = Math.max(0, Number(config.railingOpeningSetbackMm) || 0);
-  const sections = openingChains(edges).map((chain) => buildOpeningSection(`opening-e${chain.edges[0]}`, openingChainPath(openingOutline, chain, setback), ctx, chain.closed));
+  const sections = openingChains(openingPieces(edges)).map((chain) => {
+    const first = chain.pieces[0];
+    return buildOpeningSection(`opening-e${first.edge}${first.part ? `-${first.part}` : ''}`, openingChainPath(chain, setback), ctx, chain.closed);
+  });
   return { edges, sections };
 }
 
@@ -1302,7 +1362,9 @@ export function buildRailingModel({ planLayout, treadModels, stringerModels, str
   const ctx = { config, planLayout, treadModels, stringerModels, stringerConstruction, postModels, riserHeight: config.riserHeight };
   const stairSections = config.railingEnabled ? sanitizeRailingSections(config.railingSections).map((s) => buildSection(s, ctx)) : [];
   // the balustrade round the ceiling opening on the upper floor (buildOpeningRailing above)
-  const opening = buildOpeningRailing({ config, planLayout, openingOutline, wallSegments });
+  // (it ends on the stair's own posts where they stand: the structural ones and the stair balustrade's)
+  const stairPosts = [...(postModels || []), ...stairSections.flatMap((sec) => sec.posts.filter((p) => !p.removed))];
+  const opening = buildOpeningRailing({ config, planLayout, openingOutline, wallSegments, stairPosts });
   const sections = [...stairSections, ...opening.sections];
   const postTopNeeds = {};
   for (const s of sections) for (const [postId, need] of Object.entries(s.postTopNeeds || {})) postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);

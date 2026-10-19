@@ -240,11 +240,13 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
 - **Balustrade round the ceiling opening** (`railingSolver.js buildOpeningRailing`, user decisions 2026-10-19):
   `railingOpeningEnabled` (independent of the stair balustrade), on the FLOOR (z = totalRise), posts' axis
   `railingOpeningSetbackMm` (60, ASSUMPTION) back from the edge, handrail top `railingOpeningHeightMm` (1100 — § 298,
-  DO WERYFIKACJI) above it. Edges (`ceilingFit.openingOutline`): auto = all but the exit edge (the last back edge on it)
-  and those along a stairwell wall; `railingOpeningEdges[i]` overrides, toggled by a click in the "▮ Słupki" mode
-  (`railingModel.openingEdges`). Adjacent enabled edges = one section `opening-e<first edge>` (`kind: 'opening'`,
-  `side: null`; all edges = a closed loop): corner + end posts, hand-placed posts / switched-off corners, balusters or
-  glass between posts on the floor; read by 3D, plan, takeoff, DXF, checks like any section (not the side-view
+  DO WERYFIKACJI) above it. Edges (`ceilingFit.openingOutline`): auto = all but those along a stairwell wall; the EXIT
+  edge (the last back edge on it) only on its free parts — the stretch of the last tread + both wangi is cut out
+  (`openingPieces`, free parts < 100 mm none); `railingOpeningEdges[i]` overrides, toggled by a click in the
+  "▮ Słupki" mode (`railingModel.openingEdges`). Adjacent enabled pieces = one section `opening-e<edge>[-b]`
+  (`kind: 'opening'`, `side: null`; all = a closed loop): corner + end posts — a stair post standing there (end newel,
+  the stair balustrade's last post, within 1.5 × its size) IS that post (reused, raised to the handrail's top via
+  `postTopNeeds`) —, hand-placed posts / switched-off corners, balusters or glass between posts on the floor; read by 3D, plan, takeoff, DXF, checks like any section (not the side-view
   handrail editor, not end-height corrections). WARNING PL-LEGAL-H-01 below 1.1 m. `ceilingFit` and the stairwell are
   now built before the balustrade in `buildStaircase`.
 - **Handrail profile editor** ("Profil poręczy" view tab): `railingProfileModel.js` (pure edit layer:
