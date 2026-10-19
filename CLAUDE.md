@@ -117,7 +117,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   opening is given in it whenever the stairwell is on, so it stays put when a free side changes. `stairwellReport` →
   `built.stairwell` (gate): WARNING `STAIRWELL-SIDE-FIXED` for a fixed side off > 1 mm. Plan 2D layer `stairwell`
   (walls + each side's dimension, fixed 🔒 green/red, free "(swobodny)"); 3D walls (`stairwellWalls` →
-  `stairwellWallsRenderer.js`, `built.wallsMesh`, "Pokaż ściany klatki"; the slab covers the stair + walls).
+  `stairwellWallsRenderer.js`, `built.wallsMesh`, "Pokaż ściany klatki" in the panel's "Widok 3D" folder and "Ściany
+  klatki" in the 3D HUD's Warstwy, kept in sync; the slab covers the stair + walls).
   **Variants** ("🔎 Szukaj wariantów schodów w klatce", folder 5, `ui/stairwellVariantsPanel.js`): the project's type;
   winders n−1..n+1 round round(arc/going)+1 + one landing; U one zone when the axis gap is 0..300 (the width narrows to
   (B + board)/2 for a smaller fixed B), else two turns (width solved for B) + one zone; width < 800 a warning, < 500

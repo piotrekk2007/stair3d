@@ -462,6 +462,10 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
     ws.setStatus({ view: `3D: ${mode === 'orthographic' ? 'ortogonalny' : 'perspektywa'}` });
   },
   onCeilingChange: (visible) => handleViewChange('showCeiling', visible),
+  onWallsChange: (visible) => {
+    handleViewChange('showWalls', visible);
+    uiRefresh?.(); // the same switch in the panel's "Widok 3D" folder
+  },
   onJointsChange: (visible) => handleViewChange('showJoints', visible),
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
   onSnapshot: () => savePresentationSnapshot({ sceneApi, logo, projectName: projectMeta.name }),
@@ -761,6 +765,7 @@ function handleCommitChange() {
 function handleViewChange(key, value) {
   viewState[key] = value;
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
+  if (key === 'showWalls') viewportHudApi.syncWalls(value);
   if (['showCeiling', 'showWalls', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();

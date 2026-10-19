@@ -32,13 +32,14 @@ const VIEWS = [
  * @param {(view: string) => void} opts.onStandardView
  * @param {(mode: 'perspective'|'orthographic') => void} opts.onCameraMode
  * @param {(visible: boolean) => void} opts.onCeilingChange
+ * @param {(visible: boolean) => void} [opts.onWallsChange]  the stairwell's walls (geometry/stairwell.js), when there are any
  * @param {(hex: string) => void} opts.onBackgroundChange
  * @param {() => void} [opts.onSnapshot]                 „Zapisz zdjęcie" (tryb prezentacji)
  * @param {(file: File) => void} [opts.onLogoFile]       wybrany plik logo
  * @param {() => void} [opts.onLogoRemove]
  * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onJointsChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -46,6 +47,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       <div class="vh-title">Warstwy</div>
       ${LAYERS_3D.map(([key, label]) => `<label><input type="checkbox" data-layer="${key}" ${layers[key] ? 'checked' : ''}/> ${label}</label>`).join('')}
       <label><input type="checkbox" data-ceiling ${viewState.showCeiling ? 'checked' : ''}/> Strop</label>
+      <label title="Ściany klatki schodowej (boki zaznaczone „wzdłuż ściany” w folderze 3. Klatka schodowa)"><input type="checkbox" data-walls ${viewState.showWalls ? 'checked' : ''}/> Ściany klatki</label>
       <label title="Gniazda w słupach i wangach oraz otwory na śruby — to, co zaznaczają DXF-y; rysowane przez drewno"><input type="checkbox" data-joints ${viewState.showJoints ? 'checked' : ''}/> Złącza (gniazda, śruby)</label>
       <div class="vh-joint-legend" data-joint-legend ${viewState.showJoints ? '' : 'hidden'}>
         <span><i style="background:#ff8c00"></i>gniazdo w słupie</span>
@@ -95,6 +97,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     });
   }
   hud.querySelector('[data-ceiling]').addEventListener('change', (e) => onCeilingChange(e.target.checked));
+  hud.querySelector('[data-walls]').addEventListener('change', (e) => onWallsChange?.(e.target.checked));
   hud.querySelector('[data-joints]').addEventListener('change', (e) => {
     hud.querySelector('[data-joint-legend]').hidden = !e.target.checked;
     if (onJointsChange) onJointsChange(e.target.checked);
@@ -130,6 +133,9 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     },
     syncCeiling(visible) {
       hud.querySelector('[data-ceiling]').checked = visible;
+    },
+    syncWalls(visible) {
+      hud.querySelector('[data-walls]').checked = visible;
     },
   };
 }
