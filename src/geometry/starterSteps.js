@@ -80,10 +80,12 @@ function localShape({ uL, uR, D, wL, wR, radiusMm, bowMm, grow }) {
     if (r > 0) pts.push(...arcPoints(centre, r + g, a0, a1));
     else pts.push(fallback);
   };
-  const rbl = rb(wL);
   const rfl = rf(wL);
   const rfr = rf(wR);
-  const rbr = rb(wR);
+  // a back corner grown by the nosing ends `grow` further forward on the end: kept short enough not to run past the
+  // front corner's arc (a half-circle end stays one arc)
+  const rbl = Math.min(rb(wL), Math.max(0, D - gL - rfl));
+  const rbr = Math.min(rb(wR), Math.max(0, D - gR - rfr));
   // back-left (from the back edge down the left end), front-left, [front], front-right, back-right (to the back edge)
   // (a back corner grows sideways only: its centre moves forward by the growth, so the arc still ends ON the back edge)
   corner({ u: uL + rbl, v: D - rbl - gL }, rbl, gL, 0.5 * P, P, { u: uL - gL, v: D });
@@ -144,7 +146,10 @@ export function starterGeometry(tread, spec, nosingMm = 0) {
   let face = localShape({ ...params, grow: 0 });
   if (!(wR > 0)) face = face.slice(0, face.length - 1);
   if (!(wL > 0)) face = face.slice(1);
-  return { outline, riserPath: face.map(toPlan), depthMm: D, widthMm: uR - uL, frame: { origin, uDir, vDir } };
+  // which wanga side each widening is on (the inner line is on the left when its u is the smaller)
+  const innerLeft = toLocal(ci).u <= toLocal(co).u;
+  const widened = { inner: (innerLeft ? wL : wR) > 0, outer: (innerLeft ? wR : wL) > 0 };
+  return { outline, riserPath: face.map(toPlan), depthMm: D, widthMm: uR - uL, widened, frame: { origin, uDir, vDir } };
 }
 
 /**
@@ -158,8 +163,23 @@ export function applyStarterSteps(treads, config) {
     const spec = specs[tread.index];
     if (!spec || !canBeStarter(tread)) return tread;
     const g = starterGeometry(tread, spec, Math.max(0, num(config.nosing)));
-    return { ...tread, outline: g.outline, starter: { ...spec, riserPath: g.riserPath, depthMm: g.depthMm, widthMm: g.widthMm } };
+    return { ...tread, outline: g.outline, starter: { ...spec, riserPath: g.riserPath, depthMm: g.depthMm, widthMm: g.widthMm, widened: g.widened } };
   });
+}
+
+/** Whether a starter tread is widened past the wanga on this side ('inner' | 'outer') — it then LIES ON that wanga. */
+export function starterLiesOn(tread, side) {
+  return !!tread?.starter?.widened?.[side];
+}
+
+/**
+ * The start newel on a starter step (user decision 2026-10-20): when the stair STARTS with starter steps widened on
+ * the inner (dusza) side, the newel stands on the last of them — the index of that tread, or -1.
+ */
+export function starterNewelTread(planLayout) {
+  let k = -1;
+  while (starterLiesOn(planLayout?.treads?.[k + 1], 'inner')) k++;
+  return k;
 }
 
 /**

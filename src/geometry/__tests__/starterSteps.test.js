@@ -7,6 +7,8 @@ import { starterGeometry, sanitizeStarterTreads, canBeStarter } from '../starter
 import { signedPolygonArea } from '../pathUtils.js';
 import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
 import { applyRailingPostEdit } from '../railingPostEdits.js';
+import { segmentsProperlyIntersect } from '../pathUtils.js';
+import { runTakeoffValidationGate } from '../../takeoff/validationGate.js';
 
 const straight = (patch = {}) => buildStaircase({ ...createDefaultConfig(), stairType: 'straight', treadsLegA: 15, totalRise: 2800, ...patch });
 // a tread laid out along +y (walking up = +y, so RIGHT = +x): inner line x = 0, outer line x = 900, 270 deep
@@ -54,9 +56,9 @@ test('geometry: widened to the LEFT, bowed front — the middle reaches the sagi
   assert.ok(Math.abs(last.x - 900) < 1e-6 && Math.abs(last.y) < 1e-6);
 });
 
-test('regression (user, 2026-10-20): a starter step is a TREAD (no block): its own bent riser without the stair risers, the wangi and the newel unchanged', () => {
+test('regression (user, 2026-10-20): a starter step is a TREAD (no block): its own bent riser without the stair risers; widened to the outer side the newel stays', () => {
   const plain = straight();
-  const b = straight({ hasRiserBoards: false, manualStarterTreads: { 0: { leftMm: 0, rightMm: 250, radiusMm: 135, bowMm: 40, riser: true } } });
+  const b = straight({ hasRiserBoards: false, manualStarterTreads: { 0: { leftMm: 250, rightMm: 0, radiusMm: 135, bowMm: 40, riser: true } } });
   const t0 = b.treadModels[0];
   assert.ok(t0.starter && !t0.notch);
   const width = (t) => Math.max(...xs(t.outline)) - Math.min(...xs(t.outline));
@@ -100,4 +102,52 @@ test('railing posts: "remove all hand-placed" clears them in one edit', () => {
   e = applyRailingPostEdit(e, { action: 'add', sectionId: 's', s: 500 });
   e = applyRailingPostEdit(e, { action: 'remove-all-manual', sectionId: 's' });
   assert.deepEqual(e, {});
+});
+
+const selfIntersects = (pts) => {
+  const n = pts.length;
+  for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) if ((j + 1) % n !== i && segmentsProperlyIntersect(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+  return false;
+};
+
+test('regression (2026-10-20): a half-circle end with the nosing stays one simple outline (the grown back arc used to run past the front one)', () => {
+  const g = starterGeometry(tread, spec({ leftMm: 250, radiusMm: 135 }), 25);
+  assert.equal(selfIntersects(g.outline), false);
+  const b = straight({ manualStarterTreads: { 0: { leftMm: 250, radiusMm: 135, riser: true } } });
+  const errors = runTakeoffValidationGate(b).diagnostics.filter((d) => d.severity === 'ERROR' && /step-0|riser-0/.test(d.elementId || ''));
+  assert.deepEqual(errors.map((d) => d.ruleId), []);
+});
+
+test('regression (user, 2026-10-20): the starter step LIES ON the wanga it is widened past — the housed board cut down to its underside there, no housing; the other wanga as before', () => {
+  for (const [patch, onSide, other] of [[{ rightMm: 250 }, 'inner', 'outer'], [{ leftMm: 250 }, 'outer', 'inner']]) {
+    const b = straight({ stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', manualStarterTreads: { 0: { ...patch, radiusMm: 135 } } });
+    assert.ok(b.planLayout.treads[0].starter.widened[onSide], `${JSON.stringify(patch)} is widened on the ${onSide} side`);
+    const under = b.treadModels[0].elevation.bottom;
+    const board = (side) => b.stringerConstruction[side].find((g) => g.segmentId === b.stringerModels[side].segments[0].id);
+    const bearing = b.stringerModels[onSide].segments[0].treadBearings.find((x) => x.treadIndex === 0);
+    assert.ok(bearing?.starterOnTop, 'the wanga still carries it');
+    assert.ok(!board(onSide).housings.some((h) => h.treadIndex === 0), 'no housing under the starter');
+    const top = Math.max(...board(onSide).outerContour.filter((p) => p.u > 1 && p.u < bearing.finalUEnd - 1).map((p) => p.v));
+    assert.ok(top <= under + 1e-6, `the board under the starter reaches ${top.toFixed(0)} (tread underside ${under.toFixed(0)})`);
+    assert.ok(board(other).housings.some((h) => h.treadIndex === 0), 'the other wanga houses it as before');
+  }
+});
+
+test('regression (user, 2026-10-20): widened on the dusza side at the start, the newel stands ON the starter tread on the wanga axis, its back face at the tread back edge; the dusza balustrade starts there', () => {
+  const plain = straight();
+  const b = straight({ manualStarterTreads: { 0: { rightMm: 250, radiusMm: 135 } }, railingEnabled: true, railingSections: [{ id: 'r', side: 'inner', fromStep: 0, toStep: null }] });
+  const newel = b.postModels.find((p) => p.postId === 'post-start');
+  const rh = b.fullConfig.riserHeight;
+  assert.ok(Math.abs(newel.elevation.bottom - rh) < 1e-6, 'on the tread');
+  const back = b.planLayout.treads[0].innerChain.at(-1);
+  const d = b.planLayout.treads[0].direction ?? { x: 0, y: 1 };
+  const backFace = (newel.position.y - back.y) * (d.y || 1) + newel.size / 2;
+  assert.ok(Math.abs(backFace) < 1e-6, 'its back face at the back edge');
+  assert.ok(!b.stringerModels.inner.segments[0].startPost, 'the inner board runs on under the tread (no post at its foot)');
+  const r = b.railingModel.sections.find((s) => s.id === 'r');
+  assert.equal(r.fromStep, 1);
+  assert.equal(r.runs[0].startPostId, 'post-start');
+  // widened only to the outer side: the newel stays where it was
+  const outerOnly = straight({ manualStarterTreads: { 0: { leftMm: 250 } } });
+  assert.deepEqual(outerOnly.postModels.find((p) => p.postId === 'post-start').position, plain.postModels.find((p) => p.postId === 'post-start').position);
 });

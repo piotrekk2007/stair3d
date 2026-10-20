@@ -15,6 +15,7 @@
 
 import { normalizeVector } from './pathUtils.js';
 import { inwardNormal } from './planLayout.js';
+import { starterNewelTread } from './starterSteps.js';
 
 // A post shortened below this is treated as a mistake and the length edit is ignored (reported on the
 // model as `overrideRejected`) — a 100 mm stub is not a post.
@@ -203,10 +204,26 @@ export function buildAllPostModels(planLayout, config) {
   // połyka/zasłania nosek pierwszego stopnia, bo oba sięgają w tę samą przestrzeń za linią startu.
   const startForward = dirAt(0) || { x: 0, y: 1 };
   const startOnAxis = ontoWangaAxis(startPoint, null, startForward, half, handedness);
-  const startPosition = {
+  let startPosition = {
     x: startOnAxis.x + startForward.x * (postSize / 2),
     y: startOnAxis.y + startForward.y * (postSize / 2),
   };
+  // Starter steps widened on the dusza side at the stair's start (starterSteps.js starterNewelTread): the newel stands
+  // ON the last of them, on the inner wanga's axis, its back face at that tread's back edge — the wanga above the
+  // tread meets its back face, the wanga under the tread runs on to the floor (it carries the tread)
+  let startAnchor = startPoint;
+  let startElevation = { bottom: 0, top: NEWEL_HEIGHT };
+  const onStarter = starterNewelTread(planLayout);
+  if (onStarter >= 0) {
+    const chain = planLayout.treads[onStarter].innerChain;
+    const at = chain[chain.length - 1];
+    const forward = unitDir(chain[0], at);
+    const onAxis = ontoWangaAxis(at, forward, null, half, handedness);
+    startPosition = { x: onAxis.x - forward.x * (postSize / 2), y: onAxis.y - forward.y * (postSize / 2) };
+    startAnchor = at; // not the board's start: the inner board runs on under the tread, no post at its end
+    const tread = (onStarter + 1) * (config.riserHeight || 0);
+    startElevation = { bottom: tread, top: tread + NEWEL_HEIGHT };
+  }
   let endPosition = ontoWangaAxis(endPoint, dirAt(path.length - 2), null, half, handedness);
   let endElevation = { bottom: totalRise - NEWEL_HEIGHT, top: totalRise };
   // With a balustrade round the ceiling opening ending at it, the end newel stands ON THE SLAB, moved on along the last
@@ -240,7 +257,7 @@ export function buildAllPostModels(planLayout, config) {
   };
 
   const models = [
-    { postId: 'post-start', kind: 'start', position: startPosition, anchor: startPoint, elevation: { bottom: 0, top: NEWEL_HEIGHT }, size: postSize },
+    { postId: 'post-start', kind: 'start', position: startPosition, anchor: startAnchor, elevation: startElevation, size: postSize, ...(onStarter >= 0 ? { onStarter } : {}) },
     // Ostatni stopień nie ma noska na swojej przedniej (górnej) krawędzi — nosek jest tylko
     // na krawędziach czołowych — więc słup końcowy nie koliduje z niczym i zostaje wyśrodkowany.
     { postId: 'post-end', kind: 'end', position: endPosition, anchor: endPoint, elevation: endElevation, size: postSize, ...(onSlab ? { onSlab } : {}) },

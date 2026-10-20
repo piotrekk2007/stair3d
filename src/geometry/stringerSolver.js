@@ -19,6 +19,7 @@ import { cumulativeDistances, goesStraightThrough, projectPointOntoLine, pointsE
 import { COLLINEAR_EPS } from './tolerances.js';
 import { isCornerPostRemoved, buildPostModels } from './postSolver.js';
 import { inwardNormal } from './planLayout.js';
+import { starterLiesOn } from './starterSteps.js';
 import { profileParamsFromConfig } from './stringerProfileModel.js';
 import {
   CONSTRUCTION_TYPES,
@@ -236,6 +237,9 @@ export function buildStringerModel(planLayout, config, side) {
           ...b,
           bearingElevation: (tread.index + 1) * riserHeight - treadThickness,
           riserRecess,
+          // a starter step widened past this wanga LIES ON it (starterSteps.js): no housing, the board's top cut down
+          // to its underside there (stringerConstructionGeometry.js)
+          ...(starterLiesOn(tread, side) ? { starterOnTop: true } : {}),
         };
       });
 

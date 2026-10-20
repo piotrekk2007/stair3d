@@ -118,7 +118,7 @@ function starterHTML(t, config) {
     rows.push(field('radiusMm', 'Zaoblenie boku (promień)', 'Promień zaokrąglenia poszerzonego końca — maks. półkole na głębokość stopnia', 500));
     rows.push(field('bowMm', 'Wygięcie czoła (strzałka łuku)', 'Czoło jako łuk na całej szerokości stopnia: o ile wysunięty jest środek; 0 = proste', 300));
     rows.push(`<label class="insp-field" title="Podstopień gięty wzdłuż czoła i zaoblenia — niezależnie od podstopni reszty schodów"><span class="insp-label">Z podstopniem</span><input type="checkbox" ${spec.riser ? 'checked' : ''} data-starter-field="${t.index}|riser"></label>`);
-    rows.push(`<div class="insp-hint">Wangi i słupy jeszcze nie są dopasowywane do stopnia zapraszającego — to następny etap.</div>`);
+    rows.push(`<div class="insp-hint">Po poszerzonej stronie stopień leży NA wandze (wanga wpuszczana ścięta pod nim do spodu stopnicy, bez gniazda). Poszerzony na stronę duszy na początku schodów — słup startowy stoi na nim.</div>`);
   }
   return rows.join('');
 }

@@ -44,6 +44,7 @@ import { railingEndKey, railingRunKey, sanitizeRailingEndOffsets, sanitizeRailin
 // (the manual-edit layer of a handrail lives in railingProfileModel.js; re-exported for existing importers)
 export { railingEndKey, sanitizeRailingEndOffsets, MAX_RAILING_END_OFFSET_MM } from './railingProfileModel.js';
 import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt, planCornerSplits } from './railingGlass.js';
+import { starterNewelTread } from './starterSteps.js';
 import { sanitizeRailingPostEdits, manualRailingPostId, SUPPRESS_MATCH_MM, MANUAL_POST_MIN_FROM_END_MM } from './railingPostEdits.js';
 export { applyRailingPostEdit, sanitizeRailingPostEdits } from './railingPostEdits.js';
 
@@ -867,7 +868,8 @@ function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight
 function buildSection(section, ctx) {
   const { config, planLayout, stringerModels, stringerConstruction, postModels, riserHeight } = ctx;
   const treadCount = planLayout.treads.length;
-  const fromStep = section.fromStep;
+  // a balustrade on the dusza side starts at the newel standing on a starter step (starterSteps.js) at the earliest
+  const fromStep = section.side === 'inner' ? Math.max(section.fromStep, starterNewelTread(planLayout) + 1) : section.fromStep;
   const toStep = section.toStep === null ? treadCount - 1 : section.toStep;
   const infill = isGlassInfill(config) ? config.railingInfill : RAILING_INFILL.BALUSTERS;
   const glass = infill !== RAILING_INFILL.BALUSTERS;

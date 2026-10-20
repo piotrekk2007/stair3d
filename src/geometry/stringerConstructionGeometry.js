@@ -645,13 +645,26 @@ function hasSelfIntersection(polygon) {
 // of it is there).
 function cutBelowFloorPast(contour, { edgeU, floorZ }) {
   const BIG = 1e6;
+  return cutRect(contour, edgeU, edgeU + BIG, floorZ - BIG, floorZ);
+}
+
+// The contour minus the box u ∈ [u0, u1] × v ∈ [v0, v1] (the largest piece left, in the contour's own orientation and
+// starting at its own first point; unchanged when no point of it lies inside).
+function cutRect(contour, u0, u1, v0, v1) {
   const pts = contour.map((p) => ({ x: p.u, y: p.v }));
-  if (!pts.some((p) => p.x > edgeU + GEOMETRY_EPS && p.y < floorZ - GEOMETRY_EPS)) return contour;
+  if (!pts.some((p) => p.x > u0 + GEOMETRY_EPS && p.x < u1 - GEOMETRY_EPS && p.y > v0 + GEOMETRY_EPS && p.y < v1 - GEOMETRY_EPS)) {
+    // (no vertex inside — the box may still cut an edge through; let the boolean decide)
+    const crosses = pts.some((p, i) => {
+      const q = pts[(i + 1) % pts.length];
+      return Math.min(p.x, q.x) < u1 && Math.max(p.x, q.x) > u0 && Math.min(p.y, q.y) < v1 && Math.max(p.y, q.y) > v0;
+    });
+    if (!crosses) return contour;
+  }
   const hole = [
-    { x: edgeU, y: floorZ - BIG },
-    { x: edgeU + BIG, y: floorZ - BIG },
-    { x: edgeU + BIG, y: floorZ },
-    { x: edgeU, y: floorZ },
+    { x: u0, y: v0 },
+    { x: u1, y: v0 },
+    { x: u1, y: v1 },
+    { x: u0, y: v1 },
   ];
   const pieces = subtractConvex(pts, hole);
   if (!pieces.length) return contour;
@@ -828,16 +841,27 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       // (cut back to the post FACE, not to the board's end inside the post's pocket)
       const clipStart = segment.startPost ? segment.startPost.faceU : -Infinity;
       const clipEnd = segment.endPost ? segment.endPost.faceU : Infinity;
-      housings = [...buildHousings(effective, config), ...buildRiserHousings(effective, config), ...(topRiserHere ? [buildTopRiserHousing(effective[effective.length - 1], config)] : [])]
+      // (a starter step lying on the board has no housing — neither its tread nor its riser)
+      const housed = effective.filter((b) => !b.starterOnTop);
+      housings = [...buildHousings(housed, config), ...buildRiserHousings(housed, config), ...(topRiserHere ? [buildTopRiserHousing(effective[effective.length - 1], config)] : [])]
         .map((h) => ({ ...h, uStart: Math.max(h.uStart, clipStart), uEnd: Math.min(h.uEnd, clipEnd) }))
         .filter((h) => h.uEnd - h.uStart > GEOMETRY_EPS);
-      diagnostics.push(...checkClosedSupportContainment(effective, topPolyline, bottomPolyline, segment.id, groupOverrides !== null));
+      diagnostics.push(...checkClosedSupportContainment(housed, topPolyline, bottomPolyline, segment.id, groupOverrides !== null));
     }
 
     // A board running on to an end newel that stands on the slab (postSolver.js `onSlab`): the piece past the slab's
     // edge lies on the floor — everything of it below the floor is cut away (the board butts against the slab's edge
     // below, and only its top part over the floor goes into the post).
     if (segment.endPost?.onSlab) outerContour = cutBelowFloorPast(outerContour, segment.endPost.onSlab);
+    // A starter step widened past this (housed) wanga LIES ON it (starterSteps.js, user decision 2026-10-20): the
+    // board's top along that tread (its nosing included) is cut down to the tread's underside — no housing there.
+    if (constructionType === CONSTRUCTION_TYPES.CLOSED) {
+      const nosing = config.nosing > 0 ? config.nosing : 0;
+      for (const b of effective.filter((x) => x.starterOnTop)) {
+        const from = (b.ownsStart ? b.uStart - (b.riserRecess || 0) - nosing : b.uStart) - nosing;
+        outerContour = cutRect(outerContour, from, b.uEnd, b.bearingElevation, b.bearingElevation + 1e6);
+      }
+    }
 
     // The pockets actually routed into a housed board's inner face (what the 3D board shows as recesses): each
     // housing cut back to the board (its span, and between its lower and upper edge — e.g. the first riser's housing

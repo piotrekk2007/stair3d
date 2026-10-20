@@ -246,7 +246,8 @@ export function checkRiserFollowsFinalTreadEdge(treadModels, riserModels) {
   for (const riser of riserModels) {
     // the top riser (riserSolver.js buildTopRiserModel) stands on the LAST tread's back edge, every other on its own front edge
     const tread = treadByStep.get(riser.atTop ? riser.belowStepId : riser.stepId);
-    if (!tread || riser.panels.length === 0) continue;
+    // (a starter step's bent riser follows its bowed front and wraps its rounded end — starterSteps.js — not the edge)
+    if (!tread || riser.panels.length === 0 || riser.starter) continue;
     const [innerFinal, outerFinal] = riser.atTop ? tread.backEdge.final : tread.frontEdge.final;
     const first = riser.panels[0];
     const last = riser.panels[riser.panels.length - 1];
