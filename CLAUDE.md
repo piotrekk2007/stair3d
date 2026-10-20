@@ -147,6 +147,12 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `outline` (CCW) + `relativeOutline`; edges dragged on the plan (`.opening-edge`, wall snap); `deriveCeilingFit` →
   collisions/headroom; "Dosuń otwór" alignment.
 
+- **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
+  along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
+  tread tops like `deriveCeilingFit`, none at the exit) = translucent curtains, green ≥ `minHeadroom`, red below; the
+  ceiling check's `violatingTreads` = red blocks over their part under the slab; the tightest spot gets a vertical
+  dimension and a SPRITE label ("Skrajnia … mm ≥/< …", so it is in saved photos). `viewState.showHeadroom` (HUD
+  „Skrajnia”, panel „Pokaż skrajnię pod stropem”), shown in the presentation mode too.
 ## Treads, risers, posts
 
 - `treadSolver.js` `TreadModel`: elevation, direction, widths, nominal/final edges, nosed `outline`, `winderInfo`

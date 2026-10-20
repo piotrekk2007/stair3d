@@ -96,6 +96,20 @@ v4 → v5 turned the old side-length fit into a room; v5 → v6 turns a room int
 fixed, A = L − entry offset free; L: B fixed, A free; straight: A fixed) and moves its opening to the wall frame. The
 old fit (`stairwellFitEnabled`, `stairwellKeySide`, …) is internal to the solver, no longer in the panel.
 
+## Headroom in 3D — `headroomModel.js`, `scene/headroomOverlay.js`
+
+`buildHeadroomModel({planLayout, ceilingFit, config})` (built in `buildStaircase`, `built.headroom`): EDGE pieces —
+every opening edge sampled every 10 mm; the first tread under the point 5 mm past the edge on the slab's side (the
+highest plan outline containing it, top (index + 1) × riser below the soffit — the same as `deriveCeilingFit`, so the
+3D agrees with the validator; none at the exit, where nothing of the stair is under the slab past the edge) → a
+vertical strip a→b from that tread's top to the soffit, `headroomMm`, `ok` (≥ `minHeadroom`). BLOCKS — every tread of
+`ceilingFit.violatingTreads` below the soffit: its outline minus a convex opening (the whole tread otherwise), from
+its top to the soffit, red. `min` = the tightest spot. The overlay (presentation only): translucent quads / prisms
+(green 0x2e7d32 / red 0xc0392b), the meeting line on the treads, a vertical dimension at `min` and a sprite label
+(canvas texture, 200 mm high — drawn into the WebGL image, so saved photos have it). Toggle `viewState.showHeadroom`
+(HUD „Skrajnia” + panel „Widok 3D” „Pokaż skrajnię pod stropem”, kept in sync), default off, also in the presentation
+mode. Tests: `geometry/__tests__/headroom.test.js`.
+
 ## Open
 
 Two fixed sides along the walking line (an L's A and B, a U's A and C) are met only as far as the counts allow — an

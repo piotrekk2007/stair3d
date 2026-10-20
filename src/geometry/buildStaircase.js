@@ -25,6 +25,7 @@ import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { solveStairwellFit, applyStairwellFit, solveFixedSides } from './stairwellFit.js';
 import { stairwellReport, stairwellWalls } from './stairwell.js';
 import { starterWallDiagnostics } from './starterSteps.js';
+import { buildHeadroomModel } from './headroomModel.js';
 import { buildStairwellWalls } from './stairwellWallsRenderer.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
@@ -198,6 +199,8 @@ export function buildStaircase(inputConfig) {
   applyWoodGrainToTree(root);
 
   const ceilingMesh = buildCeiling(ceilingFit, fullConfig, walls?.slab);
+  // the headroom under the opening's edges (headroomModel.js) — drawn by main.js as a 3D overlay
+  const headroom = buildHeadroomModel({ planLayout, ceilingFit, config: fullConfig });
   const wallsMesh = buildStairwellWalls(walls);
   // strop przyjmuje cień, ale go nie rzuca — inaczej słońce z góry zostawiłoby schody w cieniu płyty
   ceilingMesh.receiveShadow = true;
@@ -208,5 +211,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, stairwellWalls: walls, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

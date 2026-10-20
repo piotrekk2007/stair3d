@@ -39,7 +39,7 @@ const VIEWS = [
  * @param {() => void} [opts.onLogoRemove]
  * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onHeadroomChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -48,6 +48,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       ${LAYERS_3D.map(([key, label]) => `<label><input type="checkbox" data-layer="${key}" ${layers[key] ? 'checked' : ''}/> ${label}</label>`).join('')}
       <label><input type="checkbox" data-ceiling ${viewState.showCeiling ? 'checked' : ''}/> Strop</label>
       <label title="Ściany klatki schodowej (boki zaznaczone „wzdłuż ściany” w folderze 3. Klatka schodowa)"><input type="checkbox" data-walls ${viewState.showWalls ? 'checked' : ''}/> Ściany klatki</label>
+      <label title="Minimalna skrajnia: od spodu stropu do pierwszego stopnia pod krawędziami otworu (zielona — wystarcza, czerwona — za mała); widoczna też w trybie Prezentacja"><input type="checkbox" data-headroom ${viewState.showHeadroom ? 'checked' : ''}/> Skrajnia</label>
       <label title="Gniazda w słupach i wangach oraz otwory na śruby — to, co zaznaczają DXF-y; rysowane przez drewno"><input type="checkbox" data-joints ${viewState.showJoints ? 'checked' : ''}/> Złącza (gniazda, śruby)</label>
       <div class="vh-joint-legend" data-joint-legend ${viewState.showJoints ? '' : 'hidden'}>
         <span><i style="background:#ff8c00"></i>gniazdo w słupie</span>
@@ -98,6 +99,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
   }
   hud.querySelector('[data-ceiling]').addEventListener('change', (e) => onCeilingChange(e.target.checked));
   hud.querySelector('[data-walls]').addEventListener('change', (e) => onWallsChange?.(e.target.checked));
+  hud.querySelector('[data-headroom]').addEventListener('change', (e) => onHeadroomChange?.(e.target.checked));
   hud.querySelector('[data-joints]').addEventListener('change', (e) => {
     hud.querySelector('[data-joint-legend]').hidden = !e.target.checked;
     if (onJointsChange) onJointsChange(e.target.checked);
@@ -136,6 +138,9 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     },
     syncWalls(visible) {
       hud.querySelector('[data-walls]').checked = visible;
+    },
+    syncHeadroom(visible) {
+      hud.querySelector('[data-headroom]').checked = visible;
     },
   };
 }

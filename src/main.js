@@ -12,6 +12,7 @@ import { applyRailingProfileEdit } from './geometry/railingProfileModel.js';
 import { planToWorld } from './geometry/geometryUtils.js';
 import { createScene } from './scene/sceneSetup.js';
 import { buildDimensionLabels, buildStringerLengthLabels, buildWinderBlankLabels } from './scene/dimensionLabels.js';
+import { buildHeadroomOverlay } from './scene/headroomOverlay.js';
 import { buildDebugOverlay } from './scene/debugOverlay.js';
 import { buildJointMarkers } from './geometry/jointMarkers.js';
 import { buildJointMarkersOverlay } from './scene/jointMarkersOverlay.js';
@@ -59,6 +60,7 @@ const config = createDefaultConfig();
 const viewState = {
   showCeiling: true,
   showWalls: true, // the stairwell room's walls (stairwell.js stairwellWalls), when there is a room
+  showHeadroom: false, // the headroom curtain under the opening (scene/headroomOverlay.js) — also in the presentation mode
   showDimensions: true,
   showStringerLengths: false,
   showWinderBlanks: false,
@@ -128,6 +130,7 @@ const appearance = defaultAppearance();
 let currentRoot = null;
 let currentCeiling = null;
 let currentWalls = null;
+let currentHeadroom = null;
 let currentDimLabels = null;
 let currentStringerLengthLabels = null;
 let currentWinderBlankLabels = null;
@@ -230,7 +233,14 @@ let uiRefresh = null;
 let fitWasEnabled = false;
 
 function rebuild() {
-  for (const group of [currentRoot, currentCeiling, currentWalls, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
+  if (currentHeadroom) {
+    // its label is a sprite with its own canvas texture
+    currentHeadroom.traverse((o) => {
+      o.material?.map?.dispose();
+      o.material?.dispose();
+    });
+  }
+  for (const group of [currentRoot, currentCeiling, currentWalls, currentHeadroom, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
     if (!group) continue;
     scene.remove(group);
     disposeGroup(group);
@@ -259,6 +269,8 @@ function rebuild() {
   currentCeiling = ceilingMesh;
   currentWalls = wallsMesh;
   if (wallsMesh) scene.add(wallsMesh);
+  currentHeadroom = buildHeadroomOverlay(built.headroom);
+  if (currentHeadroom) scene.add(currentHeadroom);
 
   currentDimLabels = buildDimensionLabels(planLayout, config, derived);
   scene.add(currentDimLabels);
@@ -406,6 +418,8 @@ function applyOverlayVisibility() {
   const technical = !viewState.clientMode;
   if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
   if (currentWalls) currentWalls.visible = viewState.showWalls;
+  // the headroom is meant for the client too: shown in the presentation mode as well
+  if (currentHeadroom) currentHeadroom.visible = viewState.showHeadroom;
   if (currentDimLabels) currentDimLabels.visible = viewState.showDimensions && technical;
   if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical;
   if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical;
@@ -469,6 +483,10 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
     uiRefresh?.(); // the same switch in the panel's "Widok 3D" folder
   },
   onJointsChange: (visible) => handleViewChange('showJoints', visible),
+  onHeadroomChange: (visible) => {
+    handleViewChange('showHeadroom', visible);
+    uiRefresh?.(); // the same switch in the panel's "Widok 3D" folder
+  },
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
   onSnapshot: () => savePresentationSnapshot({ sceneApi, logo, projectName: projectMeta.name }),
   onLogoFile: (file) => logo.loadFile(file),
@@ -814,7 +832,8 @@ function handleViewChange(key, value) {
   viewState[key] = value;
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
   if (key === 'showWalls') viewportHudApi.syncWalls(value);
-  if (['showCeiling', 'showWalls', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
+  if (key === 'showHeadroom') viewportHudApi.syncHeadroom(value);
+  if (['showCeiling', 'showWalls', 'showHeadroom', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();
 }
