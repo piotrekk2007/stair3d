@@ -29,21 +29,9 @@ export function createDefaultConfig() {
 
     treadGoing: 270, // mm, głębokość stopnia (na linii biegu) — stała dla odcinków prostych i celu w zabiegu
     treadsLegA: 5, // liczba stopni prostych przed zabiegiem (lub wszystkich, gdy stairType==='straight')
-    // Starter steps (stopnie zapraszające, geometry/starterSteps.js): the first 0..3 treads of flight A as wider blocks
-    // on the floor — per step the widening past the outer / inner line, the rounded ends' radius, the front's bow (mm)
-    starterStepCount: 0,
-    starterStep1OuterMm: 200,
-    starterStep1InnerMm: 0,
-    starterStep1RadiusMm: 150,
-    starterStep1BowMm: 0,
-    starterStep2OuterMm: 100,
-    starterStep2InnerMm: 0,
-    starterStep2RadiusMm: 100,
-    starterStep2BowMm: 0,
-    starterStep3OuterMm: 50,
-    starterStep3InnerMm: 0,
-    starterStep3RadiusMm: 50,
-    starterStep3BowMm: 0,
+    // Starter steps (stopnie zapraszające, geometry/starterSteps.js): { [treadIndex]: { leftMm, rightMm, radiusMm,
+    // bowMm, riser } } — set in the Inspektor of a straight tread selected on the plan
+    manualStarterTreads: {},
     windersPerTurn: 5, // liczba stopni zabiegowych w skręcie 90° (gdy dany zakręt jest typu 'winder')
     // U bez stopni prostych w biegu B (treadsLegB = 0), oba zakręty zabiegowe: JEDNA klatka zabiegowa 180° wokół
     // jednego słupa środkowego (geometry/winderArc.js halfTurnWinderGeometry; decyzja użytkownika 2026-10-14).

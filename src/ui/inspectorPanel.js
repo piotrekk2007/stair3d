@@ -93,12 +93,33 @@ function treadHTML(ctx) {
     rows.push(row('Krawędzie boczne', 'brak wysunięcia', 'auto'));
   }
 
+  rows.push(starterHTML(t, config));
   rows.push(railingBlockHTML(config, idx));
   rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-tread-dxf="${t.stepId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego stopnia — gotowy kontur z noskiem, do wycięcia w warsztacie">Eksportuj stopień (DXF 1:1)</button></div>`);
 
   rows.push(section('Walidacja'));
   rows.push(diagnosticsHTML(diagnostics));
   rows.push(`<div class="insp-source">ID źródła: <code>tread:${t.stepId}</code></div>`);
+  return rows.join('');
+}
+
+// Starter step (geometry/starterSteps.js): a straight tread marked as one, widened left / right (walking up), its
+// widened end rounded, its front bowed, with or without its own riser.
+function starterHTML(t, config) {
+  if (t.type !== 'straight' || t.winderInfo) return '';
+  const spec = config.manualStarterTreads?.[t.index];
+  const rows = [section('Stopień zapraszający')];
+  rows.push(`<label class="insp-field" title="Szerszy stopień z zaoblonym końcem / wygiętym czołem i własnym podstopniem"><span class="insp-label">Stopień zapraszający</span><input type="checkbox" ${spec ? 'checked' : ''} data-starter-toggle="${t.index}"></label>`);
+  if (spec) {
+    const field = (key, label, title, max) =>
+      `<label class="insp-field" title="${title}"><span class="insp-label">${label}</span><input type="number" min="0" max="${max}" step="5" value="${Math.round(Number(spec[key]) || 0)}" data-starter-field="${t.index}|${key}"> mm</label>`;
+    rows.push(field('leftMm', 'Poszerzenie w lewo', 'Patrząc w kierunku wchodzenia — od linii schodów (lica wangi) po lewej', 1000));
+    rows.push(field('rightMm', 'Poszerzenie w prawo', 'Patrząc w kierunku wchodzenia — od linii schodów (lica wangi) po prawej', 1000));
+    rows.push(field('radiusMm', 'Zaoblenie boku (promień)', 'Promień zaokrąglenia poszerzonego końca — maks. półkole na głębokość stopnia', 500));
+    rows.push(field('bowMm', 'Wygięcie czoła (strzałka łuku)', 'Czoło jako łuk na całej szerokości stopnia: o ile wysunięty jest środek; 0 = proste', 300));
+    rows.push(`<label class="insp-field" title="Podstopień gięty wzdłuż czoła i zaoblenia — niezależnie od podstopni reszty schodów"><span class="insp-label">Z podstopniem</span><input type="checkbox" ${spec.riser ? 'checked' : ''} data-starter-field="${t.index}|riser"></label>`);
+    rows.push(`<div class="insp-hint">Wangi i słupy jeszcze nie są dopasowywane do stopnia zapraszającego — to następny etap.</div>`);
+  }
   return rows.join('');
 }
 
@@ -212,13 +233,15 @@ function railingPostPlaceHTML(railingModel, post) {
         const end = spot.kind;
         const on = !!s.wallRailEnds?.[end];
         const label = end === 'start' ? 'Przed słupkiem: poręcz przyścienna' : 'Za słupkiem: poręcz przyścienna';
-        parts.push(`<label class="insp-field" title="Od tego słupka do ${end === 'start' ? 'początku' : 'końca'} odcinka: sama poręcz na wspornikach ściennych (bez słupków i tralek). Najpierw przesuń słupek tam, gdzie zaczyna się ściana."><span class="insp-label">${label}</span><input type="checkbox" ${on ? 'checked' : ''} ${spot.moved ? '' : 'disabled'} data-railing-wall-rail="${s.id}|${end}"></label>`);
+        parts.push(`<label class="insp-field" title="Od tego słupka do ${end === 'start' ? 'początku' : 'końca'} odcinka: sama poręcz na wspornikach ściennych (bez słupków i tralek). Słupek nieprzesunięty przesuwa się sam na koniec ściany klatki wzdłuż balustrady."><span class="insp-label">${label}</span><input type="checkbox" ${on ? 'checked' : ''} data-railing-wall-rail="${s.id}|${end}"></label>`);
       }
     }
     if (spot.suppressible) {
       parts.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="suppress" data-section-id="${s.id}" data-s="${spot.s}">Wyłącz słupek (poręcz ciągła przez narożnik)</button></div>`);
     }
     parts.push(railingRunsAtPostHTML(s, post.postId));
+    const manualCount = (s.postSpots || []).filter((x) => x.kind === 'manual').length;
+    if (manualCount > 1) parts.push(`<div class="insp-actions"><button type="button" class="insp-btn danger" data-railing-post-action="remove-all-manual" data-section-id="${s.id}">Usuń wszystkie ręczne słupki odcinka (${manualCount})</button></div>`);
     const body = parts.join('');
     if (body) out.push(section(`Balustrada ${escapeHtml(s.id)} — słupek`) + body);
   }

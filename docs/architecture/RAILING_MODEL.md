@@ -19,6 +19,7 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
   koniec, zostaje, a balustrada dostaje WŁASNY słupek); `join-<k>` (automatyczny narożny, nie przy szkle między
   słupkami) — narożnik staje się uciosem, a słupek tnie poręcz w `s` (jak ręczny; za blisko → INFO, poręcz ciągła).
   Uskok wysokości i podział szkła — nieprzesuwalne. Prawy klik na przesuniętym / „Przywróć położenie AUTO” usuwa klucz.
+- „Usuń wszystkie ręczne słupki odcinka” (`remove-all-manual`, Inspektor słupka, gdy jest ich > 1).
 - **Bieg bez wypełnienia** (`bare: [runKey]`): bieg między dwoma słupkami bez tralek / szkła / podporęczy — sama poręcz
   na słupkach (checkbox „Bieg do … : sama poręcz” w Inspektorze słupka); `run.bare`.
 - **Poręcz przyścienna** (`wallRail: {start?, end?}`, tylko strona zewnętrzna): za przesuniętym końcem (przed
@@ -26,7 +27,8 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
   koniec wolny (`buildWallRail`): oś `railingWallRailClearanceMm` (50, ZAŁOŻENIE) + pół szerokości poręczy od ściany
   (ściana = linia zewn. + `stairwellWallGapMm`), ta sama wysokość nad linią nosków, wsporniki co maks.
   `railingWallBracketSpacingMm` (1000, ZAŁOŻENIE), 150 mm od końców. Bieg `{wallRail: true, startPostId: null,
-  endPostId: null, brackets}` — kosztorys: poręcz jak każdy bieg + pozycja „Wspornik poręczy ściennej” (szt., bez
+  endPostId: null, brackets}`; zaznaczenie przy NIEprzesuniętym końcu przesuwa słupek tam, gdzie kończy się ściana
+  klatki wzdłuż ścieżki (`main.js railingWallEnd`; brak ściany → komunikat) — kosztorys: poręcz jak każdy bieg + pozycja „Wspornik poręczy ściennej” (szt., bez
   ceny), 3D: wsporniki (trzpień + ramię do ściany), plan: kreski do ściany, kontrola konstrukcji: belka między
   wspornikami (bez obciążenia słupków); edytor „Profil poręczy” go pomija.
 - Id słupków automatycznych na złączach: nadawane RAZ, przed edycjami (`autoKey` `join-<k>`) — dodanie, przesunięcie

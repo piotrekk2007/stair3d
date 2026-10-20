@@ -206,18 +206,6 @@ export function createUI({
   live(steps.add(config, 'uWindersTotal', 2, 14, 1)).name('Zabiegowe łącznie (klatka 180°)');
   lockable(steps.add(config, 'uAxisGapMm', 0, 800, 1).name('Rozstaw osi wang A–C [mm] (0 = wanga nad wangą)'), 'uAxisGapMm');
 
-  // Starter steps (geometry/starterSteps.js): the first 1–3 treads of flight A wider, rounded at the ends, optionally
-  // with a bowed front — blocks on the floor, the wangi start behind them, the start newel stands on the last one
-  const starter = steps.addFolder('Stopnie zapraszające');
-  live(starter.add(config, 'starterStepCount', 0, 3, 1)).name('Liczba stopni zapraszających');
-  for (const k of [1, 2, 3]) {
-    live(starter.add(config, `starterStep${k}OuterMm`, 0, 800, 1)).name(`Stopień ${k}: poszerzenie zewn. [mm]`);
-    live(starter.add(config, `starterStep${k}InnerMm`, 0, 800, 1)).name(`Stopień ${k}: poszerzenie wewn. [mm]`);
-    live(starter.add(config, `starterStep${k}RadiusMm`, 0, 400, 1)).name(`Stopień ${k}: promień zaokrąglenia [mm]`);
-    live(starter.add(config, `starterStep${k}BowMm`, 0, 200, 1)).name(`Stopień ${k}: łuk czoła (strzałka) [mm]`);
-  }
-  starter.close();
-
   const winder = gui.addFolder('6. Geometria zabiegu');
   lockable(winder.add(config, 'walklineOffset', 250, 500, 10).name('Odsunięcie linii biegu [mm]'), 'walklineOffset');
   lockable(winder.add(config, 'walklineSplitOffset', 0, 2500, 10).name('Zabieg przed narożnikiem (na linii biegu) [mm]'), 'walklineSplitOffset');

@@ -230,7 +230,7 @@ export function checkRiserNormalOrientation(treadModels, riserModels) {
   const diags = [];
   const treadByStep = new Map(treadModels.map((t) => [t.stepId, t]));
   for (const riser of riserModels || []) {
-    if (riser.type === 'winder') continue;
+    if (riser.type === 'winder' || riser.starter) continue; // (a starter's bent riser: every panel faces its own way)
     const tread = treadByStep.get(riser.stepId);
     if (!tread || riser.panels.length === 0) continue;
     const { normal: expectedOutward } = outwardNormalFromOutline({ outline: tread.outline, frontEdge: tread.frontEdge.final });
@@ -259,7 +259,7 @@ export function checkMissingRiserSurfaces(treadModels, riserModels, config) {
   const diags = [];
   const coveredSteps = new Set((riserModels || []).map((r) => r.stepId));
   for (const t of treadModels) {
-    if (t.starter) continue; // a starter step's block has its cladding, no riser board (starterSteps.js)
+    if (t.starter) continue; // a starter step has its own riser choice (starterSteps.js)
     const expectedThickness = t.type === 'landing' ? config.riserBoardThickness : config.nosing;
     if (expectedThickness > 0 && !coveredSteps.has(t.stepId)) {
       diags.push(finding('ERROR', 'VALIDATOR-MISSING-SURFACE', 'riser', t.stepId, 'riser coverage', `Brakuje podstopnia dla stopnia ${t.stepId}, mimo że konfiguracja go wymaga.`, { expected: 'RiserModel obecny' }));
@@ -282,8 +282,7 @@ export function checkMissingStringerSupport(treadModels, stringerModels) {
       for (const b of seg.treadBearings) covered.add(b.treadIndex);
     }
     for (const t of treadModels) {
-      // a starter step is a block on the floor — no wanga runs along it (starterSteps.js)
-      if (!covered.has(t.index) && !t.starter) {
+      if (!covered.has(t.index)) {
         diags.push(finding('ERROR', 'VALIDATOR-MISSING-SURFACE', 'stringer', t.stepId, 'bearing coverage', `${label}: brak wspornika (bearing) dla stopnia ${t.stepId} — wanga ma lukę dokładnie w miejscu tego stopnia.`, {}));
       }
     }

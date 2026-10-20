@@ -77,6 +77,8 @@ export function applyRailingPostEdit(rawEdits, { action, sectionId, id, s, key, 
     if (p) p.s = at;
   } else if (action === 'remove') {
     next.added = next.added.filter((x) => x.id !== id);
+  } else if (action === 'remove-all-manual') {
+    next.added = [];
   } else if (action === 'suppress') {
     if (!next.suppressed.some((x) => Math.abs(x - at) < SUPPRESS_MATCH_MM)) next.suppressed.push(at);
   } else if (action === 'restore') {

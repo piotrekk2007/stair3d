@@ -197,6 +197,39 @@ export function buildRiserModel(tread, config) {
   };
 }
 
+/**
+ * The riser of a STARTER step (starterSteps.js `tread.starter.riserPath`): a bent board along the bowed front and round
+ * the rounded end(s) — one flat panel per piece of the path (like a winder's fan), each thick toward the tread's
+ * inside. Its top meets the tread's underside (a starter tread has no riser groove).
+ */
+export function buildStarterRiserModel(tread, config) {
+  const base = buildRiserModel(tread, config);
+  const path = tread.starter.riserPath || [];
+  const outline = tread.outline || [];
+  const centre = outline.reduce((acc, p) => ({ x: acc.x + p.x / outline.length, y: acc.y + p.y / outline.length }), { x: 0, y: 0 });
+  const panels = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const p0 = path[i];
+    const p1 = path[i + 1];
+    const width = panelWidth(p0, p1);
+    if (!(width > 1e-6)) continue;
+    let direction = { x: -(p1.y - p0.y) / width, y: (p1.x - p0.x) / width };
+    const mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+    if ((centre.x - mid.x) * direction.x + (centre.y - mid.y) * direction.y < 0) direction = { x: -direction.x, y: -direction.y };
+    panels.push({ p0, p1, direction, width });
+  }
+  const top = (tread.index + 1) * config.riserHeight - config.treadThickness;
+  return {
+    ...base,
+    elevation: { bottom: base.elevation.bottom, top },
+    starter: true,
+    panels,
+    directionSpreadDeg: 0,
+    maxPanelWidth: panels.length ? Math.max(...panels.map((p) => p.width)) : 0,
+    lengthMm: panels.reduce((sum, p) => sum + p.width, 0),
+  };
+}
+
 // Zabieg jako ostatni stopień: fan paneli wzdłuż jego TYLNEJ krawędzi (ten sam układ co buildWinderPanels,
 // kierunki konstrukcyjne z winderInfo.backEdge).
 function buildWinderBackPanels(tread, finalEdge) {
@@ -266,10 +299,16 @@ export function buildTopRiserModel(lastTread, config) {
 // (który zawsze opisuje "jak wyglądałby podstopień", niezależnie od tego, czy ma sens go pokazać).
 // Schody z podstopniami kończą się podstopniem (pod stopniem fajkowym na stropie) — buildTopRiserModel.
 export function buildRiserModels(planLayout, config) {
-  if (!config.hasRiserBoards) return [];
-  // a starter step has no riser board: its block's cladding is the front (starterSteps.js)
-  const risers = planLayout.treads.filter((tread) => !tread.starter).map((tread) => buildRiserModel(tread, config));
+  const risers = [];
+  for (const tread of planLayout.treads) {
+    // a starter step (starterSteps.js) has its own riser choice, whatever the stair's riser boards
+    if (tread.starter) {
+      if (tread.starter.riser) risers.push(buildStarterRiserModel(tread, config));
+      continue;
+    }
+    if (config.hasRiserBoards) risers.push(buildRiserModel(tread, config));
+  }
   const last = planLayout.treads[planLayout.treads.length - 1];
-  if (last) risers.push(buildTopRiserModel(last, config));
+  if (last && config.hasRiserBoards) risers.push(buildTopRiserModel(last, config));
   return risers.filter((model) => model.thickness > 0 && model.elevation.top > model.elevation.bottom);
 }

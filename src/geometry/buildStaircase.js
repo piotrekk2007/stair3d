@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildPlanLayout } from './planLayout.js';
 import { buildTreadModels } from './treadSolver.js';
-import { renderTreads, renderStarterBlocks } from './treadRenderer.js';
+import { renderTreads } from './treadRenderer.js';
 import { buildRiserModels } from './riserSolver.js';
 import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
@@ -153,7 +153,8 @@ export function buildStaircase(inputConfig) {
 
   // How the elements are joined (jointSolver.js): stringers into posts (stage 1), treads/risers cut around posts and
   // into them (stage 2). Decided before any rendering — treads, risers and posts are drawn from it.
-  const joints = buildJointModel({ stringerModels, stringerConstruction, postModels, treadModels, riserModels: config.hasRiserBoards ? riserModels : [], config: fullConfig });
+  // (riserModels: the stair's riser boards when it has them, and the starter steps' own — riserSolver.js)
+  const joints = buildJointModel({ stringerModels, stringerConstruction, postModels, treadModels, riserModels, config: fullConfig });
 
   const root = new THREE.Group();
   root.name = 'Staircase';
@@ -173,12 +174,9 @@ export function buildStaircase(inputConfig) {
   root.add(postsGroup);
   if (cantilever) root.add(renderCantileverProfiles(treadModels, steelMaterial));
 
-  if (config.hasRiserBoards) {
+  if (riserModels.length) {
     root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));
   }
-  // the starter steps' blocks (starterSteps.js) — with or without riser boards, in the risers' material
-  const starterBlocks = renderStarterBlocks(treadModels, riserBoardMaterial);
-  if (starterBlocks) root.add(starterBlocks);
 
   if (railingModel.enabled) {
     // glass colour (railingGlass.js GLASS_TINTS): clear / optiwhite / graphite / bronze
@@ -211,5 +209,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels: fullConfig.hasRiserBoards ? riserModels : [], stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

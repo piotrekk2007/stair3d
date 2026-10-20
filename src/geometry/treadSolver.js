@@ -202,7 +202,7 @@ export function notchUndersides(outline, strip) {
 export function buildTreadModel(tread, config) {
   const { riserHeight, treadThickness, nosing } = config;
   const isLanding = tread.type === 'landing';
-  // podest to płaska płyta, bez wysuniętego noska; a starter step is a block (starterSteps.js): its outline is final
+  // podest to płaska płyta, bez wysuniętego noska; a starter step's outline already has its nosing (starterSteps.js)
   const effectiveNosing = isLanding || tread.starter ? 0 : nosing;
 
   const { front: frontNominal, back: backNominal } = nominalEdgesOf(tread, config);
@@ -233,8 +233,8 @@ export function buildTreadModel(tread, config) {
     winderInfo: tread.winderInfo || null,
     winderBlank: tread.type === 'winder' ? computeWinderBlank(tread, nosing) : null,
     overhang: tread.overhang ?? null,
-    // a starter step's block (starterSteps.js): the tread on top of a body standing on the floor
-    starter: tread.starter ? { ...tread.starter, blockBottom: 0 } : null,
+    // a starter step (starterSteps.js): its outline is final (nosing included), no riser groove
+    starter: tread.starter ? { ...tread.starter } : null,
     ...(() => {
       const outline = tread.starter ? tread.outline.map((p) => ({ ...p })) : applyNosing(tread, effectiveNosing);
       const notch = tread.starter ? null : buildNotch(tread, config);

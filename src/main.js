@@ -40,6 +40,7 @@ import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { boundaryEditPoints, closestOnPolyline } from './plan2d/edgeEdit.js';
 import { applyRailingPostEdit, manualRailingPostId } from './geometry/railingPostEdits.js';
+import { defaultStarterSpec } from './geometry/starterSteps.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
 import { stairwellPlanDrawing, treadsOpenOnOuterSide, openOuterRailingRanges } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
@@ -717,6 +718,30 @@ function setOpeningPolygon(points, final) {
 }
 // --- balustrade posts by hand (geometry/railingPostEdits.js): every gesture writes config.railingPostEdits only --------
 
+// Where the stairwell wall along a balustrade's end stops (for the wall handrail past that end): the plan distance
+// along the section's path of the wall's far end, when a wall runs beside the path's start ('start') / end ('end');
+// else null. The wall: stairwellWalls pieces (inner face a→b), near the path within the wanga + gap + 150 mm.
+function railingWallEnd(section, end) {
+  const path = section?.path;
+  const pieces = lastModels?.stairwellWalls?.pieces || [];
+  if (!path?.length || !pieces.length) return null;
+  const tip = end === 'start' ? path[0] : path[path.length - 1];
+  const tol = (Number(config.stringerThickness) || 0) + Math.max(0, Number(config.stairwellWallGapMm) || 0) + 150;
+  let best = null;
+  for (const w of pieces) {
+    const len = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
+    if (!(len > 0)) continue;
+    const d = { x: (w.b.x - w.a.x) / len, y: (w.b.y - w.a.y) / len };
+    const along = (tip.x - w.a.x) * d.x + (tip.y - w.a.y) * d.y;
+    const off = Math.abs((tip.x - w.a.x) * d.y - (tip.y - w.a.y) * d.x);
+    if (off > tol || along < -tol || along > len + tol) continue;
+    const ends = [w.a, w.b].map((p) => closestOnPolyline(path, p).along);
+    const s = end === 'start' ? Math.max(...ends) : Math.min(...ends);
+    if (best === null || (end === 'start' ? s > best : s < best)) best = s;
+  }
+  return best === null ? null : Math.round(best / 10) * 10;
+}
+
 // A plan point → the distance along a section's path (`section.path`): on a tread edge (a path vertex) within 8 px it
 // snaps to it, else to whole 10 mm.
 function railingSAlong(sectionId, raw, mmPerPx) {
@@ -1109,7 +1134,36 @@ inspectorPanel.addEventListener('change', (e) => {
   const wallRail = e.target?.dataset?.railingWallRail;
   if (wallRail) {
     const [sectionId, end] = wallRail.split('|');
+    // a post not moved yet goes to where the stairwell wall along the balustrade ends (railingWallEnd)
+    const section = lastModels?.railingModel?.sections?.find((s) => s.id === sectionId);
+    const spot = section?.postSpots?.find((x) => x.kind === end);
+    if (e.target.checked && spot && !spot.moved) {
+      const s = railingWallEnd(section, end);
+      if (s !== null) config.railingPostEdits = applyRailingPostEdit(config.railingPostEdits, { action: 'move-auto', sectionId, key: end, s });
+      else ws.setStatus({ selection: 'Przy tym końcu balustrady nie ma ściany klatki — przesuń słupek tam, gdzie zaczyna się ściana (tryb „▮ Słupki” albo pole „Od początku odcinka”).' });
+    }
     applyRailingPosts({ action: 'wall-rail', sectionId, end, on: e.target.checked });
+  }
+  // a starter step (geometry/starterSteps.js): marked / unmarked, its parameters
+  const starterToggle = e.target?.dataset?.starterToggle;
+  if (starterToggle !== undefined) {
+    const next = { ...(config.manualStarterTreads || {}) };
+    if (e.target.checked) next[starterToggle] = defaultStarterSpec(config);
+    else delete next[starterToggle];
+    config.manualStarterTreads = next;
+    rebuild();
+    commitHistory();
+  }
+  const starterField = e.target?.dataset?.starterField;
+  if (starterField) {
+    const [index, key] = starterField.split('|');
+    const current = config.manualStarterTreads?.[index];
+    if (current) {
+      const value = key === 'riser' ? e.target.checked : Math.max(0, Number(e.target.value) || 0);
+      config.manualStarterTreads = { ...config.manualStarterTreads, [index]: { ...current, [key]: value } };
+      rebuild();
+      commitHistory();
+    }
   }
 });
 inspectorPanel.addEventListener('click', (e) => {
@@ -1122,6 +1176,10 @@ inspectorPanel.addEventListener('click', (e) => {
       clearSelectionState?.();
     } else if (railingPostAction === 'suppress') applyRailingPosts({ action: 'suppress', sectionId, s: Number(s) });
     else if (railingPostAction === 'reset-auto') applyRailingPosts({ action: 'reset-auto', sectionId, key: railPost.dataset.key });
+    else if (railingPostAction === 'remove-all-manual') {
+      applyRailingPosts({ action: 'remove-all-manual', sectionId });
+      clearSelectionState?.();
+    }
     return;
   }
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
