@@ -191,6 +191,7 @@ export function attachPlanInteractions(opts) {
     onRailingPostRemove,
     onRailingPostSuppress,
     onRailingPostReset,
+    onStarterHandleDrag,
     onRailingPostRestore,
     onRailingOpeningEdgeToggle,
   } = opts;
@@ -316,6 +317,15 @@ export function attachPlanInteractions(opts) {
       panState = null;
       const [p1, p2] = [...activePointers.values()];
       pinchState = { initialDistance: distance(p1, p2), initialViewport: getViewport() };
+      return;
+    }
+
+    // --- a starter step's handles (geometry/starterSteps.js): drag = its widening / bow / rounding
+    const starterEl = e.button === 0 && !spacePressed ? e.target.closest?.('.starter-handle') : null;
+    if (starterEl && onStarterHandleDrag) {
+      panelEl.setPointerCapture(e.pointerId);
+      dragState = { pointerId: e.pointerId, kind: 'starter', index: Number(starterEl.dataset.stepIndex), handleKind: starterEl.dataset.kind, last: null };
+      e.preventDefault();
       return;
     }
 
@@ -507,6 +517,12 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'starter') {
+      dragState.last = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      onStarterHandleDrag(dragState.index, dragState.handleKind, dragState.last, false);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-vertex') {
       const raw = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
       const { point, guideX, guideY } = openingSnap(raw, dragState.start);
@@ -592,6 +608,13 @@ export function attachPlanInteractions(opts) {
     if (panState && e.pointerId === panState.pointerId) {
       panState = null;
       panelEl.classList.remove('panning');
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'starter') {
+      const { index, handleKind, last } = dragState;
+      dragState = null;
+      if (last) onStarterHandleDrag(index, handleKind, last, true);
+      return;
     }
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'opening-vertex') {

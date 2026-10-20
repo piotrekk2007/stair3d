@@ -45,6 +45,7 @@ A new optional field, so no version bump. The first version's `starterStepCount`
 - `starterWallDiagnostics`, added to `built.stairwell.diagnostics`: WARNING `STARTER-INTO-WALL` when the tread
   reaches into a stairwell wall.
 - UI:
+  - the plan's drag handles (below);
   - Inspektor (`inspectorPanel.js starterHTML`) — „Stopień zapraszający” checkbox, then „Poszerzenie w lewo / w prawo”,
     „Zaoblenie boku (promień)”, „Wygięcie czoła (strzałka łuku)” and „Z podstopniem”;
   - `main.js` (`data-starter-toggle`, `data-starter-field`): the first tick writes `defaultStarterSpec` (right 200,
@@ -74,9 +75,24 @@ A new optional field, so no version bump. The first version's `starterStepCount`
 - `localShape` keeps a back corner grown by the nosing short enough not to run past the front corner's arc (a
   half-circle end with the nosing used to self-intersect — regression test).
 
+## Plan handles (user request 2026-10-20)
+
+- When the selected tread is a starter step, the plan draws orange squares (`plan2dRenderer.js starterHandlesXML`,
+  from `starterHandles(tread)`):
+  - `left` / `right` — at the widened end, mid-depth; drag across = the widening;
+  - `bow` — the front's middle; drag forward / back = the bow;
+  - `radius-left` / `radius-right` — where a widened end's front rounding meets the front; drag along the front = the
+    radius.
+- Dashed lines mark the stair lines the widening is measured from.
+- They are not drawn in the opening, railing-post or client modes.
+- `planInteractions.js` (`.starter-handle`, dragState `starter`) → `main.js onStarterHandleDrag` →
+  `starterDragValue(tread, kind, point)`:
+  - the point is read in the tread's local frame (`tread.starter.layout`), with 5 mm steps and never negative;
+  - a widened end carries the nosing, so the handle stays under the pointer;
+  - one undo step per drag (committed on release).
+
 ## Limitations / next
 
-- No drag handles on the plan yet: the shape is edited by numbers in the Inspektor.
 - The riser of a starter is not housed in a wanga.
 
 Tests: `geometry/__tests__/starterSteps.test.js`.

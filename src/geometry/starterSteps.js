@@ -65,6 +65,16 @@ function arcPoints(c, r, a0, a1) {
   return out;
 }
 
+// How far a bowed front is pushed forward at u (a circular arc of sagitta `bowMm` over [uL, uR], 0 at its ends).
+function bowBulge(u, uL, uR, bowMm) {
+  if (!(bowMm > 0)) return 0;
+  const span = uR - uL;
+  const s = Math.min(bowMm, span / 2);
+  const R = (span * span) / 4 / (2 * s) + s / 2;
+  const dx = u - (uL + uR) / 2;
+  return Math.max(0, Math.sqrt(Math.max(0, R * R - dx * dx)) - (R - s));
+}
+
 // The shape in local (u across, LEFT → RIGHT as seen walking up; v back from the front edge), as an ordered point list
 // starting on the back edge at the left end and ending on the back edge at the right end (closing it = the back
 // edge). `grow` moves the front and the widened ends outward (the nosing past the riser line).
@@ -98,17 +108,7 @@ function localShape({ uL, uR, D, wL, wR, radiusMm, bowMm, grow }) {
   corner({ u: uR - rfr, v: rfr }, rfr, grow, 1.5 * P, 2 * P, { u: uR + gR, v: -grow });
   corner({ u: uR - rbr, v: D - rbr - gR }, rbr, gR, 0, 0.5 * P, { u: uR + gR, v: D });
   // the bow: a circular arc of sagitta `bowMm` over the whole width, toward −v, fading linearly to 0 at the back edge
-  if (bowMm > 0) {
-    const span = uR - uL;
-    const s = Math.min(bowMm, span / 2);
-    const R = (span * span) / 4 / (2 * s) + s / 2;
-    const uc = (uL + uR) / 2;
-    for (const p of pts) {
-      const dx = p.u - uc;
-      const bulge = Math.max(0, Math.sqrt(Math.max(0, R * R - dx * dx)) - (R - s));
-      p.v -= bulge * Math.max(0, Math.min(1, 1 - p.v / D));
-    }
-  }
+  for (const p of pts) p.v -= bowBulge(p.u, uL, uR, bowMm) * Math.max(0, Math.min(1, 1 - p.v / D));
   return pts.filter((p, i) => i === 0 || Math.hypot(p.u - pts[i - 1].u, p.v - pts[i - 1].v) > 1e-6);
 }
 
@@ -149,7 +149,9 @@ export function starterGeometry(tread, spec, nosingMm = 0) {
   // which wanga side each widening is on (the inner line is on the left when its u is the smaller)
   const innerLeft = toLocal(ci).u <= toLocal(co).u;
   const widened = { inner: (innerLeft ? wL : wR) > 0, outer: (innerLeft ? wR : wL) > 0 };
-  return { outline, riserPath: face.map(toPlan), depthMm: D, widthMm: uR - uL, widened, frame: { origin, uDir, vDir } };
+  // what the plan's handles need (starterHandles / starterDragValue): the local frame, the two stair lines, the extent
+  const layout = { origin, uDir, vDir, lineLeft: Math.min(...lineU), lineRight: Math.max(...lineU), uL, uR, D, nosingMm };
+  return { outline, riserPath: face.map(toPlan), depthMm: D, widthMm: uR - uL, widened, frame: { origin, uDir, vDir }, layout };
 }
 
 /**
@@ -163,8 +165,57 @@ export function applyStarterSteps(treads, config) {
     const spec = specs[tread.index];
     if (!spec || !canBeStarter(tread)) return tread;
     const g = starterGeometry(tread, spec, Math.max(0, num(config.nosing)));
-    return { ...tread, outline: g.outline, starter: { ...spec, riserPath: g.riserPath, depthMm: g.depthMm, widthMm: g.widthMm, widened: g.widened } };
+    return { ...tread, outline: g.outline, starter: { ...spec, riserPath: g.riserPath, depthMm: g.depthMm, widthMm: g.widthMm, widened: g.widened, layout: g.layout } };
   });
+}
+
+// --- the plan's handles (user request 2026-10-20) -------------------------------------------------------------------
+
+const SNAP_MM = 5;
+const snap = (v) => Math.max(0, Math.round(v / SNAP_MM) * SNAP_MM);
+
+/**
+ * The drag handles of a starter tread on the plan: `left` / `right` (the widened end, at mid-depth — drag across =
+ * the widening), `bow` (the front's middle — drag forward = the bow), `radius-left` / `radius-right` (where a widened
+ * end's front rounding meets the front — drag along the front = the radius). Each: { kind, at (plan), axis (plan unit
+ * vector the drag is read along), title }.
+ */
+export function starterHandles(tread) {
+  const st = tread?.starter;
+  const L = st?.layout;
+  if (!L) return [];
+  const { origin, uDir, vDir, uL, uR, D, nosingMm } = L;
+  const toPlan = (u, v) => ({ x: origin.x + uDir.x * u + vDir.x * v, y: origin.y + uDir.y * u + vDir.y * v });
+  const front = (u) => -nosingMm - bowBulge(u, uL, uR, st.bowMm);
+  const gL = st.leftMm > 0 ? nosingMm : 0;
+  const gR = st.rightMm > 0 ? nosingMm : 0;
+  const rf = (w) => (w > 0 ? Math.min(st.radiusMm, D / 2) : 0);
+  const out = [
+    { kind: 'left', at: toPlan(uL - gL, D / 2), axis: { x: -uDir.x, y: -uDir.y }, title: `Poszerzenie w lewo: ${Math.round(st.leftMm)} mm — przeciągnij w bok` },
+    { kind: 'right', at: toPlan(uR + gR, D / 2), axis: uDir, title: `Poszerzenie w prawo: ${Math.round(st.rightMm)} mm — przeciągnij w bok` },
+    { kind: 'bow', at: toPlan((uL + uR) / 2, front((uL + uR) / 2)), axis: { x: -vDir.x, y: -vDir.y }, title: `Wygięcie czoła: ${Math.round(st.bowMm)} mm — przeciągnij do przodu / do tyłu` },
+  ];
+  if (st.leftMm > 0) out.push({ kind: 'radius-left', at: toPlan(uL + rf(st.leftMm), front(uL + rf(st.leftMm))), axis: uDir, title: `Zaoblenie boku: ${Math.round(st.radiusMm)} mm — przeciągnij wzdłuż czoła` });
+  if (st.rightMm > 0) out.push({ kind: 'radius-right', at: toPlan(uR - rf(st.rightMm), front(uR - rf(st.rightMm))), axis: { x: -uDir.x, y: -uDir.y }, title: `Zaoblenie boku: ${Math.round(st.radiusMm)} mm — przeciągnij wzdłuż czoła` });
+  return out;
+}
+
+/**
+ * A handle dragged to plan point `p` → the patch of the tread's starter spec ({leftMm} / {rightMm} / {bowMm} /
+ * {radiusMm}), on a 5 mm step, never negative.
+ */
+export function starterDragValue(tread, kind, p) {
+  const L = tread?.starter?.layout;
+  if (!L) return null;
+  const d = { x: p.x - L.origin.x, y: p.y - L.origin.y };
+  const u = d.x * L.uDir.x + d.y * L.uDir.y;
+  const v = d.x * L.vDir.x + d.y * L.vDir.y;
+  if (kind === 'left') return { leftMm: snap(L.lineLeft - (u + L.nosingMm)) };
+  if (kind === 'right') return { rightMm: snap(u - L.nosingMm - L.lineRight) };
+  if (kind === 'bow') return { bowMm: snap(-v - L.nosingMm) };
+  if (kind === 'radius-left') return { radiusMm: snap(u - L.uL) };
+  if (kind === 'radius-right') return { radiusMm: snap(L.uR - u) };
+  return null;
 }
 
 /** Whether a starter tread is widened past the wanga on this side ('inner' | 'outer') — it then LIES ON that wanga. */

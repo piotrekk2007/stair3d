@@ -13,6 +13,7 @@ import { getBoundaryPoints, getNominalBoundaryPoints, effectiveEdgeOverrides } f
 import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/walklineModel.js';
 import { boardPlanFootprint } from '../geometry/stringerModel.js';
 import { boundaryEditPoints } from './edgeEdit.js';
+import { starterHandles } from '../geometry/starterSteps.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -445,6 +446,29 @@ function stringerSpacingXML(planLayout, config) {
  * @param {Object[]|null} [options.posts]  Wszystkie słupy (buildStaircase allPostModels, także usunięte) —
  *   rysowane dokładnie tam, gdzie stoją w modelu.
  */
+// The drag handles of the SELECTED starter step (geometry/starterSteps.js starterHandles): orange squares at its
+// widened ends, its front's middle and where its roundings meet the front; a thin dashed line marks the stair's own
+// lines it is widened from. Drawn above everything, pointer-events on.
+export function starterHandlesXML(planLayout, selection) {
+  if (selection?.elementType !== 'tread') return '';
+  const tread = planLayout?.treads?.[selection.stepIndex];
+  const handles = starterHandles(tread);
+  if (!handles.length) return '';
+  const L = tread.starter.layout;
+  const at = (u, v) => ({ x: L.origin.x + L.uDir.x * u + L.vDir.x * v, y: L.origin.y + L.uDir.y * u + L.vDir.y * v });
+  let xml = '';
+  for (const u of [L.lineLeft, L.lineRight]) {
+    const a = at(u, -L.nosingMm - 40);
+    const b = at(u, L.D);
+    xml += `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="#e07b00" stroke-width="1" stroke-dasharray="4 3" ${HAIR} pointer-events="none"/>`;
+  }
+  const s = px(10);
+  for (const h of handles) {
+    xml += `<rect class="starter-handle" data-step-index="${tread.index}" data-kind="${h.kind}" x="${fmt(h.at.x - s / 2)}" y="${fmt(-h.at.y - s / 2)}" width="${fmt(s)}" height="${fmt(s)}" fill="#e07b00" stroke="#fff" stroke-width="1.5" ${HAIR} pointer-events="all" style="cursor:move"><title>${h.title}</title></rect>`;
+  }
+  return `<g id="starter-handles-layer">${xml}</g>`;
+}
+
 export function renderPlan2DSVG(planLayout, config, derived, options) {
   const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
@@ -631,6 +655,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${overhangXML}
     ${openingEdit ? openingXMLStr : ''}
     ${railingPostEditXMLStr}
+    ${openingEdit || railingPostEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
   </svg>`;
 }
 

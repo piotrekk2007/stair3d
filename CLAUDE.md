@@ -168,7 +168,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   with the nosing, `tread.starter.riserPath`); `buildStarterRiserModel` (one panel per path piece); consumers take
   `riserModels` ungated. The tread LIES ON the wanga it is widened past (`starterOnTop`: a housed board cut down to its
   underside, no housing); widened on the dusza side at the start, `post-start` stands ON it (axis, back face at its back
-  edge, the inner board runs on under it), a dusza balustrade starts there. WARNING `STARTER-INTO-WALL`.
+  edge, the inner board runs on under it), a dusza balustrade starts there. WARNING `STARTER-INTO-WALL`. Plan handles on the
+  selected starter (`starterHandles` / `starterDragValue`, `starterHandlesXML`): its ends, the bow, the roundings.
 - `riserSolver.js` `RiserModel`: panels built from the FINAL front edge (winder fan of `WINDER_RISER_FAN_PANELS`,
   ends exactly the edge points), `directionSpreadDeg`, `riserTopOverlapMm` into the tread above; with risers the stair
   ends with a top riser under the "fajkowy" nosing tread (`riser-top`, `topNosingThicknessMm`, DO WERYFIKACJI).

@@ -40,7 +40,7 @@ import { exportPlan2DSVG } from './plan2d/exportPlan2D.js';
 import { fitToBounds, zoomAt, nearestStandardScale, pixelsPerMm } from './plan2d/viewport.js';
 import { boundaryEditPoints, closestOnPolyline } from './plan2d/edgeEdit.js';
 import { applyRailingPostEdit, manualRailingPostId } from './geometry/railingPostEdits.js';
-import { defaultStarterSpec } from './geometry/starterSteps.js';
+import { defaultStarterSpec, starterDragValue } from './geometry/starterSteps.js';
 import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrides.js';
 import { stairwellPlanDrawing, treadsOpenOnOuterSide, openOuterRailingRanges } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
@@ -1482,6 +1482,16 @@ planApi = attachPlanInteractions({
     else if (spotKey) applyRailingPosts({ action: 'move-auto', sectionId, key: spotKey, s }, { final });
   },
   onRailingPostReset: (sectionId, key) => applyRailingPosts({ action: 'reset-auto', sectionId, key }),
+  // a starter step's handle dragged on the plan (geometry/starterSteps.js starterDragValue): one undo step per drag
+  onStarterHandleDrag: (index, kind, point, final) => {
+    const tread = lastModels?.planLayout?.treads?.[index];
+    const current = config.manualStarterTreads?.[index];
+    const patch = tread && current ? starterDragValue(tread, kind, point) : null;
+    if (!patch) return;
+    config.manualStarterTreads = { ...config.manualStarterTreads, [index]: { ...current, ...patch } };
+    rebuild();
+    if (final) commitHistory();
+  },
   onRailingPostRemove: (sectionId, manualId) => applyRailingPosts({ action: 'remove', sectionId, id: manualId }),
   onRailingPostSuppress: (sectionId, s) => applyRailingPosts({ action: 'suppress', sectionId, s }),
   onRailingPostRestore: (sectionId, s) => applyRailingPosts({ action: 'restore', sectionId, s }),

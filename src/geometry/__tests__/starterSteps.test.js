@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import { createDefaultConfig } from '../../config/schema.js';
 import { buildStaircase } from '../buildStaircase.js';
-import { starterGeometry, sanitizeStarterTreads, canBeStarter } from '../starterSteps.js';
+import { starterGeometry, sanitizeStarterTreads, canBeStarter, starterHandles, starterDragValue } from '../starterSteps.js';
+import { starterHandlesXML } from '../../plan2d/plan2dRenderer.js';
 import { signedPolygonArea } from '../pathUtils.js';
 import { computeMaterialTakeoff } from '../../takeoff/materialTakeoff.js';
 import { applyRailingPostEdit } from '../railingPostEdits.js';
@@ -150,4 +151,36 @@ test('regression (user, 2026-10-20): widened on the dusza side at the start, the
   // widened only to the outer side: the newel stays where it was
   const outerOnly = straight({ manualStarterTreads: { 0: { leftMm: 250 } } });
   assert.deepEqual(outerOnly.postModels.find((p) => p.postId === 'post-start').position, plain.postModels.find((p) => p.postId === 'post-start').position);
+});
+
+test('plan handles: one per widened end, the bow, the roundings; dragging a handle to a point gives that value back (5 mm steps)', () => {
+  const b = straight({ manualStarterTreads: { 0: { leftMm: 0, rightMm: 200, radiusMm: 100, bowMm: 30 } } });
+  const t = b.planLayout.treads[0];
+  const hs = starterHandles(t);
+  assert.deepEqual(hs.map((h) => h.kind).sort(), ['bow', 'left', 'radius-right', 'right']);
+  // each handle where its own value puts it: reading it back at its own spot gives the current value
+  const at = (k) => hs.find((h) => h.kind === k).at;
+  assert.deepEqual(starterDragValue(t, 'right', at('right')), { rightMm: 200 });
+  assert.deepEqual(starterDragValue(t, 'bow', at('bow')), { bowMm: 30 });
+  assert.deepEqual(starterDragValue(t, 'radius-right', at('radius-right')), { radiusMm: 100 });
+  assert.deepEqual(starterDragValue(t, 'left', at('left')), { leftMm: 0 });
+  // moved 100 mm further out along their axes
+  const out = (k, mm) => {
+    const h = hs.find((x) => x.kind === k);
+    return { x: h.at.x + h.axis.x * mm, y: h.at.y + h.axis.y * mm };
+  };
+  assert.deepEqual(starterDragValue(t, 'right', out('right', 102)), { rightMm: 300 });
+  // the left end (not widened yet) sits 20 mm in from the stair line (the housing recess); once widened it carries the
+  // nosing (25 mm) — so the handle ends up exactly under the pointer: 150 − 20 − 25
+  assert.deepEqual(starterDragValue(t, 'left', out('left', 150)), { leftMm: 105 });
+  const widened = straight({ manualStarterTreads: { 0: { leftMm: 105, rightMm: 200, radiusMm: 100, bowMm: 30 } } }).planLayout.treads[0];
+  const leftAt = starterHandles(widened).find((h) => h.kind === 'left').at;
+  assert.ok(Math.hypot(leftAt.x - out('left', 150).x, leftAt.y - out('left', 150).y) < 1e-6, 'the handle follows the pointer');
+  assert.deepEqual(starterDragValue(t, 'bow', out('bow', 50)), { bowMm: 80 });
+  assert.deepEqual(starterDragValue(t, 'bow', out('bow', -100)), { bowMm: 0 }, 'never negative');
+  // the plan draws them for the selected starter only
+  const xml = starterHandlesXML(b.planLayout, { elementType: 'tread', stepIndex: 0 });
+  assert.equal((xml.match(/class="starter-handle"/g) || []).length, 4);
+  assert.equal(starterHandlesXML(b.planLayout, { elementType: 'tread', stepIndex: 1 }), '');
+  assert.equal(starterHandlesXML(b.planLayout, null), '');
 });
