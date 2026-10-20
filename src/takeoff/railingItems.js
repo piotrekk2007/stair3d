@@ -12,6 +12,7 @@
 
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
+import { RAILING_WALL_BRACKET_SPACING_MM } from '../geometry/railingSolver.js';
 
 const MM3_TO_M3 = 1 / 1_000_000_000;
 export const RAILING_HANDRAIL_MATERIAL_ID = 'railing-handrail';
@@ -195,7 +196,37 @@ function balusterItems(section, config, wasteFactors) {
  * @param {Object} config  full config (railingBalusterShape/-SizeMm are read from it)
  * @param {Object} [wasteFactors]
  */
+// Wall brackets of the wall handrails (railingSolver.js buildWallRail): one item per section, by the piece — a
+// fitting, not priced by default (like the joint connectors).
+export const RAILING_WALL_BRACKET_MATERIAL_ID = 'railing-wall-bracket';
+function wallBracketItems(section, config) {
+  const count = section.runs.filter((r) => r.wallRail).reduce((n, r) => n + (r.brackets?.length || 0), 0);
+  if (!count) return [];
+  return [
+    createTakeoffItem({
+      itemId: `railing-${section.id}-wall-brackets`,
+      elementType: ELEMENT_TYPES.HANDRAIL,
+      sourceElementId: `railing:${section.id}:wall-brackets`,
+      material: 'Wspornik poręczy ściennej',
+      materialId: RAILING_WALL_BRACKET_MATERIAL_ID,
+      quantity: count,
+      unit: 'szt',
+      nominalDimensions: {},
+      calculatedDimensions: {},
+      catalogStock: null,
+      netVolume: 0,
+      netArea: 0,
+      stockVolume: 0,
+      stockArea: 0,
+      wasteFactor: 0,
+      optional: true,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: [`Wsporniki poręczy przyściennej ${sideLabel(section.side)} (odcinek ${section.id}): ${count} szt., co maks. ${config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM} mm — dobór i mocowanie do ściany DO WERYFIKACJI.`],
+    }),
+  ];
+}
+
 export function buildRailingItems(railingModel, config, wasteFactors = {}) {
   if (!railingModel || !railingModel.enabled) return [];
-  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors), ...glassItems(s, config, wasteFactors)]);
+  return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors), ...glassItems(s, config, wasteFactors), ...wallBracketItems(s, config)]);
 }

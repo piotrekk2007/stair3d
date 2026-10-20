@@ -307,6 +307,9 @@ export function createUI({
   live(rail.add(config, 'railingMaxClearMm', 60, 200, 5)).name('Maks. prześwit między tralkami [mm]');
   live(rail.add(config, 'railingPostSizeMm', 40, 160, 5)).name('Słupki balustrady: grubość [mm]');
   live(rail.add(config, 'railingPostTopAboveHandrailMm', 0, 300, 10)).name('Słupki: wystają ponad poręcz [mm]');
+  // the wall handrail past a moved end post (Inspektor of that post: „poręcz przyścienna”)
+  live(rail.add(config, 'railingWallRailClearanceMm', 30, 120, 1)).name('Poręcz przyścienna: odstęp od ściany [mm]');
+  live(rail.add(config, 'railingWallBracketSpacingMm', 300, 1500, 10)).name('Poręcz przyścienna: wsporniki co maks. [mm]');
   // Poręcz gięta (railingSolver.js smoothRun): łuki w pionie przy zmianie pochylenia i łuk w rzucie w narożniku bez słupa.
   live(rail.add(config, 'railingBent')).name('Poręcz gięta (łuki zamiast załamań)');
   live(rail.add(config, 'railingBendRadiusMm', 0, 2000, 10)).name('Gięcie w pionie: promień [mm]');

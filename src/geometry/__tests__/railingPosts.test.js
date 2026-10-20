@@ -95,7 +95,7 @@ test('plan "▮ Słupki" layer: a click target per section, a handle per post sp
   const xml = railingPostEditXML({ enabled: true, sections: [s] });
   assert.equal((xml.match(/class="railing-path-hit"/g) || []).length, 1);
   assert.equal((xml.match(/class="railing-post-handle/g) || []).length, s.postSpots.length);
-  assert.equal((xml.match(/class="railing-post-handle manual"/g) || []).length, 1);
+  assert.equal((xml.match(/class="railing-post-handle manual[ "]/g) || []).length, 1);
   assert.equal((xml.match(/class="railing-post-ghost"/g) || []).length, 1);
   assert.equal(railingPostEditXML({ enabled: false, sections: [] }), '');
 });

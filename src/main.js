@@ -727,7 +727,7 @@ function setRailingPostMode(on) {
   const hint = plan2dHud.querySelector('#plan2d-opening-hint');
   if (hint) {
     hint.hidden = !railingPostMode && openingMode === 'off';
-    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij pomarańczowy — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / wyłącz narożny; klik na przerywanym kółku — przywróć. Krawędzie otworu (zielone = z balustradą): klik — włącz / wyłącz.';
+    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij słupek (ręczny, narożny albo końcowy) — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / przywróć AUTO przesuniętego / wyłącz narożny; klik na przerywanym kółku — przywróć. Bieg bez tralek i poręcz przyścienna — w Inspektorze słupka. Krawędzie otworu (zielone = z balustradą): klik — włącz / wyłącz.';
   }
   if (on && !railingPostMode) {
     if (hint) {
@@ -1076,6 +1076,22 @@ inspectorPanel.addEventListener('change', (e) => {
     const [sectionId, manualId] = railingPostS.split('|');
     applyRailingPosts({ action: 'move', sectionId, id: manualId, s: Number(e.target.value) });
   }
+  // an automatic post's place / a run without infill / the wall handrail past an end (railingPostEdits.js)
+  const autoS = e.target?.dataset?.railingAutoS;
+  if (autoS) {
+    const [sectionId, key] = autoS.split('|');
+    applyRailingPosts({ action: 'move-auto', sectionId, key, s: Number(e.target.value) });
+  }
+  const bareRun = e.target?.dataset?.railingBareRun;
+  if (bareRun) {
+    const [sectionId, runKey] = bareRun.split('|');
+    applyRailingPosts({ action: 'bare', sectionId, runKey, on: e.target.checked });
+  }
+  const wallRail = e.target?.dataset?.railingWallRail;
+  if (wallRail) {
+    const [sectionId, end] = wallRail.split('|');
+    applyRailingPosts({ action: 'wall-rail', sectionId, end, on: e.target.checked });
+  }
 });
 inspectorPanel.addEventListener('click', (e) => {
   // a balustrade post by hand (geometry/railingPostEdits.js): remove a hand-placed one / switch an automatic corner off
@@ -1086,6 +1102,7 @@ inspectorPanel.addEventListener('click', (e) => {
       applyRailingPosts({ action: 'remove', sectionId, id: manualId });
       clearSelectionState?.();
     } else if (railingPostAction === 'suppress') applyRailingPosts({ action: 'suppress', sectionId, s: Number(s) });
+    else if (railingPostAction === 'reset-auto') applyRailingPosts({ action: 'reset-auto', sectionId, key: railPost.dataset.key });
     return;
   }
   const action = e.target?.closest?.('[data-post-action]')?.dataset.postAction;
@@ -1381,10 +1398,13 @@ planApi = attachPlanInteractions({
     const added = (config.railingPostEdits?.[sectionId]?.added || []).find((p) => !before.has(p.id));
     if (added) setSelection({ elementType: 'post', postId: manualRailingPostId(sectionId, added.id) });
   },
-  onRailingPostDrag: (sectionId, manualId, raw, final, mmPerPx) => {
+  onRailingPostDrag: (sectionId, manualId, raw, final, mmPerPx, spotKey) => {
     const s = railingSAlong(sectionId, raw, mmPerPx);
-    if (s !== null) applyRailingPosts({ action: 'move', sectionId, id: manualId, s }, { final });
+    if (s === null) return;
+    if (manualId) applyRailingPosts({ action: 'move', sectionId, id: manualId, s }, { final });
+    else if (spotKey) applyRailingPosts({ action: 'move-auto', sectionId, key: spotKey, s }, { final });
   },
+  onRailingPostReset: (sectionId, key) => applyRailingPosts({ action: 'reset-auto', sectionId, key }),
   onRailingPostRemove: (sectionId, manualId) => applyRailingPosts({ action: 'remove', sectionId, id: manualId }),
   onRailingPostSuppress: (sectionId, s) => applyRailingPosts({ action: 'suppress', sectionId, s }),
   onRailingPostRestore: (sectionId, s) => applyRailingPosts({ action: 'restore', sectionId, s }),

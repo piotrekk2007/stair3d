@@ -246,6 +246,10 @@ export function createDefaultConfig() {
     // Hand-placed balustrade posts and automatic corner posts switched off (geometry/railingPostEdits.js):
     // { [sectionId]: { added: [{ id, s }], suppressed: [s] } }, s = mm along the section's path in plan
     railingPostEdits: {},
+    // Wall handrail past a moved end post (railingPostEdits.js `wallRail`, railingSolver.js buildWallRail): free space
+    // between the handrail and the wall, the largest spacing of its wall brackets — ASSUMPTION / DO WERYFIKACJI
+    railingWallRailClearanceMm: 50,
+    railingWallBracketSpacingMm: 1000,
     // Balustrade round the ceiling opening on the upper floor (railingSolver.js buildOpeningRailing): on the floor,
     // the posts' axis this far back from the edge; the handrail top this high above the floor (§ 298: 1.1 m — DO
     // WERYFIKACJI, a single-family house may differ); which edges: auto (all but the exit edge and the edges along

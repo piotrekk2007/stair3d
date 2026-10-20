@@ -237,8 +237,13 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   [{id, s}], suppressed: [s]}` (s = plan mm along `section.path`). A hand-placed post (id `railing-post-<s>-m-<id>`,
   so `manualPostOverrides` size/height apply) cuts its run like any post (skipped + INFO `RAILING-POST-MANUAL-SKIPPED`
   within 100 mm of another post / off the handrail); an automatic CORNER post switched off merges its two runs into
-  one (mitred corner; not with glass between posts; a step post cannot be). Automatic join ids keep their index among
-  the automatic ones. `section.postSpots` / `suppressedCorners` feed the plan's "▮ Słupki" mode
+  one (mitred corner; not with glass between posts; a step post cannot be). Every automatic post can be MOVED
+  (user decision 2026-10-20; `moved: {start|end|join-<k>: s}`: a moved end trims the balustrade there with its own post,
+  a moved corner = mitred corner + a post at s); a run can be left BARE (`bare: [runKey]`, handrail only); past a moved
+  end the handrail can go on as a WALL HANDRAIL (`wallRail: {start, end}`, outer side: `buildWallRail` — on brackets
+  `railingWallBracketSpacingMm`, `railingWallRailClearanceMm` off the wall, no posts / infill, a run with
+  `wallRail: true` and null post ids; takeoff bracket item, 3D brackets, plan ticks, structural span between
+  brackets). Automatic join ids are given once before any edit (`autoKey`). `section.postSpots` / `suppressedCorners` feed the plan's "▮ Słupki" mode
   (`plan2dRenderer.js railingPostEditXML`: click the path = add, drag orange = move with snap to tread edges / 10 mm,
   right-click = remove / switch a corner off, dashed ghost = restore) and the Inspektor (position field, remove /
   switch off).

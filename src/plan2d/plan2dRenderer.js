@@ -301,10 +301,17 @@ export function railingPostEditXML(railingModel, selection = null) {
       const selected = selection?.elementType === 'post' && selection.postId === spot.postId;
       const tip = manual
         ? 'Słupek ręczny: przeciągnij wzdłuż balustrady, prawy klik — usuń'
-        : spot.suppressible
-          ? 'Słupek narożny (automatyczny): prawy klik — wyłącz (poręcz przejdzie przez narożnik)'
-          : 'Słupek automatyczny (koniec / uskok poręczy) — kliknij, żeby edytować w Inspektorze';
-      xml += `<circle class="railing-post-handle${manual ? ' manual' : ''}" data-section-id="${s.id}" data-post-id="${spot.postId}" data-kind="${spot.kind}" data-s="${spot.s ?? ''}" data-manual-id="${spot.manualId ?? ''}" data-suppressible="${spot.suppressible ? 1 : 0}" cx="${fmt(spot.at.x)}" cy="${fmt(-spot.at.y)}" r="${px(selected ? 9 : 7)}" fill="${manual ? '#e07b00' : '#fff'}" stroke="${selected ? '#1a5fb4' : '#5a3d24'}" stroke-width="${selected ? 3 : 2}" ${HAIR} pointer-events="all"><title>${tip}</title></circle>`;
+        : spot.moved
+          ? 'Słupek automatyczny PRZESUNIĘTY: przeciągnij dalej, prawy klik — przywróć AUTO'
+          : spot.suppressible
+            ? 'Słupek narożny (automatyczny): przeciągnij — przesuń, prawy klik — wyłącz (poręcz przejdzie przez narożnik)'
+            : spot.movable
+              ? 'Słupek końcowy odcinka (automatyczny): przeciągnij — przesuń (balustrada zaczyna / kończy się tam)'
+              : 'Słupek automatyczny (uskok poręczy / podział szkła) — kliknij, żeby edytować w Inspektorze';
+      // hand-placed: orange; an automatic one moved by hand: orange ring
+      const fill = manual ? '#e07b00' : '#fff';
+      const stroke = selected ? '#1a5fb4' : spot.moved ? '#e07b00' : '#5a3d24';
+      xml += `<circle class="railing-post-handle${manual ? ' manual' : ''}${spot.movable ? ' movable' : ''}" data-section-id="${s.id}" data-post-id="${spot.postId}" data-kind="${spot.kind}" data-s="${spot.s ?? ''}" data-manual-id="${spot.manualId ?? ''}" data-spot-key="${spot.spotKey ?? ''}" data-movable="${spot.movable ? 1 : 0}" data-moved="${spot.moved ? 1 : 0}" data-suppressible="${spot.suppressible ? 1 : 0}" cx="${fmt(spot.at.x)}" cy="${fmt(-spot.at.y)}" r="${px(selected ? 9 : 7)}" fill="${fill}" stroke="${stroke}" stroke-width="${selected || spot.moved ? 3 : 2}" ${HAIR} pointer-events="all"><title>${tip}</title></circle>`;
     }
   }
   return `<g id="railing-post-edit-layer">${xml}</g>`;
@@ -524,6 +531,12 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
         const dashed = s.path?.length >= 2 ? line(s.path, 'stroke="#b07a3a" stroke-width="14" stroke-dasharray="60 50" opacity="0.7"') : '';
         const runs = s.runs.map((run) => line([run.pieces[0].start, ...run.pieces.map((p) => p.end)], 'stroke="#b07a3a" stroke-width="42" stroke-linecap="round"')).join('');
         const dots = s.balusters.map((b) => `<circle cx="${fmt(b.position.x)}" cy="${fmt(-b.position.y)}" r="${fmt(size / 2)}" fill="#5a3d24"/>`).join('');
+        // wall handrail brackets (railingSolver.js buildWallRail): a short bar from the handrail to the wall
+        const brackets = s.runs
+          .filter((r) => r.wallRail)
+          .flatMap((r) => r.brackets || [])
+          .map((b) => `<line x1="${fmt(b.position.x)}" y1="${fmt(-b.position.y)}" x2="${fmt(b.wall.x)}" y2="${fmt(-b.wall.y)}" stroke="#37474f" stroke-width="16"/>`)
+          .join('');
         // glass panes (railingGlass.js): each pane as a thick light-blue bar, its fixings as small dark squares
         const panes = (s.glassPanes || [])
           .map((pane) => {
@@ -535,12 +548,14 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
             return bar + marks;
           })
           .join('');
-        const first = s.runs[0]?.pieces[0]?.start;
-        const lastRun = s.runs[s.runs.length - 1];
+        // (the section's ends are its balustrade's — a wall handrail past them is not marked)
+        const posted = s.runs.filter((r) => !r.wallRail);
+        const first = posted[0]?.pieces[0]?.start;
+        const lastRun = posted[posted.length - 1];
         const last = lastRun?.pieces[lastRun.pieces.length - 1]?.end;
         // the blue rings mark where a balustrade section starts / ends — an editing aid, left out of the client's plan
         const ring = (p) => (p && !clientView ? `<circle class="railing-end-ring" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="70" fill="none" stroke="#1a5fb4" stroke-width="18"/>` : '');
-        return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${panes}${dots}${ring(first)}${ring(last)}</g>`;
+        return `<g class="railing-section" data-section-id="${s.id}" pointer-events="none">${dashed}${runs}${panes}${dots}${brackets}${ring(first)}${ring(last)}</g>`;
       })
       .join('');
   })();

@@ -642,28 +642,70 @@ function splitIntoRuns(nodes, config, isPostAt = () => false) {
   return { runs: keptRuns, joins: keptJoins };
 }
 
-// The hand-placed posts of a section (railingPostEdits.js) applied to its runs: an automatic CORNER post switched off
-// joins its two runs into one (a mitred corner; glass between posts needs its corner posts), a hand-placed post cuts its
-// run like any post. `s` = the plan distance along the section's path (its `nodes`) from its start. Writes
-// `base.suppressedCorners` and the INFO for a post it cannot place.
+// A node of a path at plan distance `s` along it (`cum` = its plan cumulative lengths), z interpolated.
+function nodeAtS(path, cum, s) {
+  for (let i = 0; i < path.length - 1; i++) {
+    if (s <= cum[i + 1] + 1e-9 || i === path.length - 2) {
+      const len = cum[i + 1] - cum[i];
+      const t = len > 0 ? Math.min(1, Math.max(0, (s - cum[i]) / len)) : 0;
+      const a = path[i];
+      const b = path[i + 1];
+      return { ...a, x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+    }
+  }
+  return { ...path[0] };
+}
+
+// The part of a path between plan distances a and b along it (its own nodes inside, interpolated ends).
+function slicePathByS(path, a, b) {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + planDist(path[i - 1], path[i]));
+  const out = [nodeAtS(path, cum, a)];
+  for (let i = 0; i < path.length; i++) if (cum[i] > a + 1e-6 && cum[i] < b - 1e-6) out.push(path[i]);
+  out.push(nodeAtS(path, cum, b));
+  return out;
+}
+
+// The hand edits of a section's posts (railingPostEdits.js) applied to its runs, in this order: every automatic join
+// is named first (`autoKey` 'join-<k>' — its post id never changes with the edits); an automatic CORNER post switched
+// off joins its two runs into one (a mitred corner; glass between posts needs its corner posts), one MOVED likewise and
+// then cuts the handrail at its new place; a moved START / END post trims the balustrade to its new place (the stretch
+// left over may carry a wall handrail — `wallRailPaths`); a hand-placed post cuts its run like any post. `s` = the plan
+// distance along the section's path (its `nodes`) from its start. Writes `base.suppressedCorners` and the INFO for a
+// post it cannot place.
 function applyPostEditsToRuns(sectionId, nodes, runs, joins, infill, config, base) {
   const sCum = [0];
   for (let k = 1; k < nodes.length; k++) sCum.push(sCum[k - 1] + planDist(nodes[k - 1], nodes[k]));
+  const total = sCum[sCum.length - 1];
   const sOfNode = new Map(nodes.map((n, k) => [n, sCum[k]]));
   const sOf = (n) => sOfNode.get(n) ?? null;
   const postEdits = sanitizeRailingPostEdits(config.railingPostEdits)[sectionId] || { added: [], suppressed: [] };
+  const moved = postEdits.moved || {};
+  joins.forEach((join, k) => {
+    join.autoKey = `join-${k}`;
+  });
+  const cornersMovable = infill !== RAILING_INFILL.GLASS_POSTS;
   const suppressedCorners = [];
-  if (postEdits.suppressed.length && infill !== RAILING_INFILL.GLASS_POSTS) {
+  const movedJoins = [];
+  if ((postEdits.suppressed.length || Object.keys(moved).length) && cornersMovable) {
     const mRuns = [runs[0]];
     const mJoins = [];
     joins.forEach((join, j) => {
       const corner = runs[j + 1][0];
       const sc = sOf(corner);
-      if (join.kind === 'corner' && sc !== null && postEdits.suppressed.some((x) => Math.abs(x - sc) < SUPPRESS_MATCH_MM)) {
-        const last = mRuns[mRuns.length - 1];
-        mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
-        suppressedCorners.push({ s: sc, at: { x: corner.x, y: corner.y } });
-        return;
+      if (join.kind === 'corner' && sc !== null) {
+        if (moved[join.autoKey] !== undefined) {
+          const last = mRuns[mRuns.length - 1];
+          mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
+          movedJoins.push({ id: join.autoKey, s: moved[join.autoKey], from: sc, auto: true });
+          return;
+        }
+        if (postEdits.suppressed.some((x) => Math.abs(x - sc) < SUPPRESS_MATCH_MM)) {
+          const last = mRuns[mRuns.length - 1];
+          mRuns[mRuns.length - 1] = [...last, ...runs[j + 1].slice(1)];
+          suppressedCorners.push({ s: sc, at: { x: corner.x, y: corner.y } });
+          return;
+        }
       }
       mJoins.push(join);
       mRuns.push(runs[j + 1]);
@@ -671,39 +713,155 @@ function applyPostEditsToRuns(sectionId, nodes, runs, joins, infill, config, bas
     runs = mRuns;
     joins = mJoins;
   }
+  // a run cut at plan distance s along the section (its own s range [s0, s1]): the two pieces, the new node registered
+  const runRange = (run) => [sOf(run[0]), sOf(run[run.length - 1])];
+  const cutRun = (run, s) => {
+    const [s0] = runRange(run);
+    const pieces = splitPathAt(run, [s - s0]);
+    if (pieces.length === 2) sOfNode.set(pieces[1][0], s);
+    return pieces;
+  };
+
+  // the moved start / end (the balustrade's own extent along the path)
+  const minRun = MANUAL_POST_MIN_FROM_END_MM;
+  let startS = 0;
+  let endS = total;
+  if (moved.start !== undefined) startS = Math.max(0, Math.min(moved.start, total - minRun));
+  if (moved.end !== undefined) endS = Math.min(total, Math.max(moved.end, startS + minRun));
+  if (startS > 1e-6) {
+    const k = runs.findIndex((run) => runRange(run)[1] > startS + 1e-6);
+    if (k >= 0) {
+      runs = runs.slice(k);
+      joins = joins.slice(k);
+      const [s0] = runRange(runs[0]);
+      if (s0 < startS - 1e-6) runs[0] = cutRun(runs[0], startS)[1];
+    }
+  }
+  if (endS < total - 1e-6) {
+    let k = -1;
+    runs.forEach((run, i) => {
+      if (runRange(run)[0] < endS - 1e-6) k = i;
+    });
+    if (k >= 0) {
+      runs = runs.slice(0, k + 1);
+      joins = joins.slice(0, k);
+      const [, s1] = runRange(runs[k]);
+      if (s1 > endS + 1e-6) runs[k] = cutRun(runs[k], endS)[0];
+    }
+  }
+  // the stretches past the moved ends that carry a wall handrail (railingPostEdits.js `wallRail`)
+  const wallRailPaths = [];
+  if (postEdits.wallRail?.start && startS > minRun) wallRailPaths.push({ which: 'start', path: slicePathByS(nodes, 0, startS) });
+  if (postEdits.wallRail?.end && endS < total - minRun) wallRailPaths.push({ which: 'end', path: slicePathByS(nodes, endS, total) });
+
   const skippedManual = [];
-  if (postEdits.added.length) {
+  const skippedMoved = [];
+  const toPlace = [...postEdits.added, ...movedJoins].sort((a, b) => a.s - b.s);
+  if (toPlace.length) {
     const sRuns = [];
     const sJoins = [];
     runs.forEach((run, j) => {
       if (j > 0) sJoins.push(joins[j - 1]);
-      const s0 = sOf(run[0]);
-      const s1 = sOf(run[run.length - 1]);
-      const inside = s0 === null || s1 === null ? [] : postEdits.added.filter((p) => p.s > s0 && p.s < s1);
-      const placed = inside.filter((p, k) => {
-        const prev = k === 0 ? s0 : inside[k - 1].s;
-        const ok = p.s - prev >= MANUAL_POST_MIN_FROM_END_MM && s1 - p.s >= MANUAL_POST_MIN_FROM_END_MM;
-        if (!ok) skippedManual.push(p);
-        return ok;
-      });
+      const [s0, s1] = runRange(run);
+      const inside = s0 === null || s1 === null ? [] : toPlace.filter((p) => p.s > s0 && p.s < s1);
+      const placed = [];
+      for (const p of inside) {
+        const prev = placed.length ? placed[placed.length - 1].s : s0;
+        if (p.s - prev >= MANUAL_POST_MIN_FROM_END_MM && s1 - p.s >= MANUAL_POST_MIN_FROM_END_MM) placed.push(p);
+        else (p.auto ? skippedMoved : skippedManual).push(p);
+      }
       const pieces = splitPathAt(run, placed.map((p) => p.s - s0));
       pieces.forEach((piece, k) => {
-        if (k > 0) sJoins.push({ kind: 'manual', manualId: placed[k - 1].id, s: placed[k - 1].s });
+        if (k > 0) {
+          const p = placed[k - 1];
+          sOfNode.set(piece[0], p.s);
+          sJoins.push(p.auto ? { kind: 'moved', autoKey: p.id, s: p.s } : { kind: 'manual', manualId: p.id, s: p.s });
+        }
         sRuns.push(piece);
       });
     });
     runs = sRuns;
     joins = sJoins;
-    // a hand-placed post outside every run (past the section's end, on the dusza where no handrail runs) or too close
-    for (const p of postEdits.added) {
-      if (!joins.some((jn) => jn.manualId === p.id) && !skippedManual.includes(p)) skippedManual.push(p);
+    // a post outside every run (past the section's end, on the dusza where no handrail runs) or too close
+    for (const p of toPlace) {
+      const placedHere = joins.some((jn) => (p.auto ? jn.kind === 'moved' && jn.autoKey === p.id : jn.manualId === p.id));
+      if (!placedHere && !skippedManual.includes(p) && !skippedMoved.includes(p)) (p.auto ? skippedMoved : skippedManual).push(p);
     }
   }
   if (skippedManual.length) {
     base.diagnostics.push(diag(sectionId, 'RAILING-POST-MANUAL-SKIPPED', `Balustrada ${sectionId}: ${skippedManual.length} słupek(i) postawiony ręcznie jest poza poręczą albo bliżej niż ${MANUAL_POST_MIN_FROM_END_MM} mm od innego słupka / narożnika — pominięty. Przesuń go albo usuń.`, 'INFO'));
   }
+  if (skippedMoved.length) {
+    base.diagnostics.push(diag(sectionId, 'RAILING-POST-MANUAL-SKIPPED', `Balustrada ${sectionId}: ${skippedMoved.length} przesunięty słupek narożny jest poza poręczą albo bliżej niż ${MANUAL_POST_MIN_FROM_END_MM} mm od innego słupka — pominięty (poręcz przechodzi przez narożnik). Przesuń go albo przywróć AUTO.`, 'INFO'));
+  }
   base.suppressedCorners = suppressedCorners;
-  return { runs, joins, sOf, sCum };
+  return { runs, joins, sOf, sCum, wallRailPaths, startMoved: moved.start !== undefined, endMoved: moved.end !== undefined, bare: new Set(postEdits.bare || []) };
+}
+
+// Plan distance from a point to a polyline.
+function distToPolyline(path, p) {
+  let best = Infinity;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+    best = Math.min(best, Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)));
+  }
+  return path.length === 1 ? Math.hypot(p.x - path[0].x, p.y - path[0].y) : best;
+}
+
+// Free space between a wall handrail and the wall, and the largest spacing of its wall brackets (mm) — ASSUMPTION
+// (common practice: ≥ 40–50 mm free behind the handrail, a bracket at least every metre); config overrides.
+export const RAILING_WALL_RAIL_CLEARANCE_MM = 50;
+export const RAILING_WALL_BRACKET_SPACING_MM = 1000;
+const WALL_BRACKET_FROM_END_MM = 150;
+
+// One wall handrail: the stretch's nosing nodes moved from the balustrade's line to the wall rail's line, simplified,
+// at the handrail's height; brackets spread evenly, the first and last WALL_BRACKET_FROM_END_MM from its ends.
+function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight }) {
+  const width = config.railingHandrailWidthMm || 0;
+  const clearance = config.railingWallRailClearanceMm ?? RAILING_WALL_RAIL_CLEARANCE_MM;
+  const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
+  // into the stair from the outer line: the wall is `gap` outside it, the axis clearance + half the width inside the wall
+  const axisInset = clearance + width / 2 - gap;
+  const lookup = offsetLookup(stretch.path, axisInset - offsetMm, sign);
+  const moved = stretch.path.map((p) => {
+    const m = lookup.get(pointKey(p));
+    return m ? { ...p, x: m.x, y: m.y } : { ...p };
+  });
+  const path = simplifyPath(moved);
+  if (path.length < 2) return null;
+  const pieces = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const start = centre(path[i]);
+    const end = centre(path[i + 1]);
+    const lengthMm = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    if (lengthMm > SAME_POINT_MM) pieces.push({ start, end, lengthMm });
+  }
+  if (!pieces.length) return null;
+  annotateCuts(pieces, handrailHeight);
+  // brackets
+  const spacing = Math.max(200, config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM);
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + planDist(path[i - 1], path[i]));
+  const total = cum[cum.length - 1];
+  const usable = total - 2 * WALL_BRACKET_FROM_END_MM;
+  const count = usable <= 0 ? 1 : Math.ceil(usable / spacing) + 1;
+  const brackets = [];
+  for (let k = 0; k < count; k++) {
+    const s = count === 1 ? total / 2 : WALL_BRACKET_FROM_END_MM + (usable * k) / (count - 1);
+    const p = nodeAtS(path, cum, s);
+    const i = Math.min(path.length - 2, cum.findIndex((c, j) => j > 0 && c >= s - 1e-9) - 1 < 0 ? 0 : cum.findIndex((c, j) => j > 0 && c >= s - 1e-9) - 1);
+    const across = rotate90CW(unit({ x: path[i + 1].x - path[i].x, y: path[i + 1].y - path[i].y }));
+    const toWall = { x: -across.x * sign, y: -across.y * sign }; // out of the stair
+    const reach = clearance + width / 2;
+    const c = centre(p);
+    brackets.push({ position: { x: c.x, y: c.y }, z: c.z - handrailHeight / 2, wall: { x: c.x + toWall.x * reach, y: c.y + toWall.y * reach }, reachMm: reach });
+  }
+  return { pieces, brackets };
 }
 
 function buildSection(section, ctx) {
@@ -762,7 +920,7 @@ function buildSection(section, ctx) {
   // --- the hand-placed posts (railingPostEdits.js)
   const withEdits = applyPostEditsToRuns(section.id, nodes, runs, joins, infill, config, base);
   ({ runs, joins } = withEdits);
-  const { sOf, sCum } = withEdits;
+  const { sOf, sCum, wallRailPaths, startMoved, endMoved, bare } = withEdits;
   if (infill === RAILING_INFILL.GLASS_POSTS) {
     const subRuns = [];
     const subJoins = [];
@@ -791,32 +949,39 @@ function buildSection(section, ctx) {
   // structural post standing there is reused; a new one is a normal, editable railing post.
   const stairDepth = config.minimumStringerDepthMm || 0;
   const spots = [];
-  spots.push({ id: `railing-post-${section.id}-start`, at: runs[0][0], zs: [runs[0][0].z], kind: 'start', s: sOf(runs[0][0]) ?? 0 });
-  // (an automatic join keeps the index it has among the automatic ones — the ids of the posts an override names stay
-  // put when a post is added by hand; a hand-placed post is named by its own id)
-  let autoJoin = 0;
+  spots.push({ id: `railing-post-${section.id}-start`, at: runs[0][0], zs: [runs[0][0].z], kind: 'start', s: sOf(runs[0][0]) ?? 0, spotKey: 'start', moved: startMoved });
+  // (an automatic join is named once, before any edit — applyPostEditsToRuns `autoKey` —, so the ids of the posts an
+  // override names stay put whatever is added, moved or switched off by hand; a hand-placed post by its own id; the
+  // joins made after (posts splitting glass panes) number on after the named ones)
+  let autoJoin = joins.reduce((n, jn) => Math.max(n, jn.autoKey ? Number(jn.autoKey.slice(5)) + 1 : 0), 0);
   joins.forEach((join, j) => {
     const endOfPrev = runs[j][runs[j].length - 1];
     const startOfNext = runs[j + 1][0];
+    const key = join.kind === 'manual' ? null : (join.autoKey ?? `join-${autoJoin++}`);
     spots.push({
-      id: join.kind === 'manual' ? manualRailingPostId(section.id, join.manualId) : `railing-post-${section.id}-join-${autoJoin++}`,
+      id: join.kind === 'manual' ? manualRailingPostId(section.id, join.manualId) : `railing-post-${section.id}-${key}`,
       at: { x: (endOfPrev.x + startOfNext.x) / 2, y: (endOfPrev.y + startOfNext.y) / 2 },
       zs: [endOfPrev.z, startOfNext.z],
       kind: join.kind,
       manualId: join.manualId,
-      s: join.kind === 'manual' ? join.s : sOf(startOfNext) ?? sOf(endOfPrev),
+      s: join.kind === 'manual' || join.kind === 'moved' ? join.s : sOf(startOfNext) ?? sOf(endOfPrev),
+      spotKey: key,
+      moved: join.kind === 'moved',
     });
   });
   const lastRun = runs[runs.length - 1];
-  spots.push({ id: `railing-post-${section.id}-end`, at: lastRun[lastRun.length - 1], zs: [lastRun[lastRun.length - 1].z], kind: 'end', s: sOf(lastRun[lastRun.length - 1]) ?? sCum[sCum.length - 1] });
+  spots.push({ id: `railing-post-${section.id}-end`, at: lastRun[lastRun.length - 1], zs: [lastRun[lastRun.length - 1].z], kind: 'end', s: sOf(lastRun[lastRun.length - 1]) ?? sCum[sCum.length - 1], spotKey: 'end', moved: endMoved });
 
   const halves = new Map(); // post id -> half width the spacing must leave free
   // The post that really stands at each spot: a reused structural post keeps ITS id, so a run's start/end post id
   // always names an existing PostModel (the structural check and the Inspektor look posts up by it).
   const postIdAt = new Map();
   const nominalPosts = [];
+  // a post moved by hand stands where it was put: a structural post it was moved away from keeps standing, the
+  // balustrade gets its own post there
+  const existingAt = (spot) => (spot.moved ? null : existingNear(spot.at));
   for (const spot of spots) {
-    const existing = existingNear(spot.at);
+    const existing = existingAt(spot);
     if (existing) {
       halves.set(spot.id, existing.size / 2);
       postIdAt.set(spot.id, existing.postId);
@@ -846,7 +1011,13 @@ function buildSection(section, ctx) {
     manualId: spot.manualId ?? null,
     reused: postIdAt.get(spot.id) !== spot.id,
     suppressible: spot.kind === 'corner' && infill !== RAILING_INFILL.GLASS_POSTS,
+    // what the plan's post editor may drag (railingPostEdits.js `moved`): the section's ends, its automatic corners
+    // (not with glass between posts), the ones already moved; a step post and a pane split stay put
+    spotKey: spot.spotKey ?? null,
+    movable: spot.kind === 'manual' || spot.kind === 'start' || spot.kind === 'end' || spot.kind === 'moved' || (spot.kind === 'corner' && infill !== RAILING_INFILL.GLASS_POSTS),
+    moved: !!spot.moved,
   }));
+  base.wallRailEnds = { start: wallRailPaths.some((w) => w.which === 'start'), end: wallRailPaths.some((w) => w.which === 'end') };
   const halfAt = (spot) => halves.get(spot.id) ?? 0;
   const postClearances = [
     ...base.posts.filter((p) => !p.removed).map((p) => ({ position: p.position, half: p.size / 2 })),
@@ -877,9 +1048,10 @@ function buildSection(section, ctx) {
     return best?.post ?? null;
   };
   const ownRemoved = (spot) => base.posts.some((p) => p.postId === spot.id && p.removed);
-  const postAtSpot = (spot) => existingNear(spot.at) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? (ownRemoved(spot) ? standingNear(spot) : null);
+  const postAtSpot = (spot) => existingAt(spot) ?? base.posts.find((p) => p.postId === spot.id && !p.removed) ?? (ownRemoved(spot) ? standingNear(spot) : null);
   const runPostId = (spot) => (ownRemoved(spot) ? (standingNear(spot)?.postId ?? postIdAt.get(spot.id)) : postIdAt.get(spot.id));
   const runPaths = []; // every run's final path — what a baluster / pane under an adjusted handrail reads its height from
+  const runNodePaths = []; // every run's nosing nodes and whether it carries infill (overlay balusters are kept to them)
   // Base rail (podporęcz): only on a housed wanga — there the balusters stand on the wanga's top edge, and the base
   // rail lies on that edge along each handrail run, the balusters standing in it (on an overlay wanga they stand on
   // the treads: nothing to put a base rail on).
@@ -940,6 +1112,12 @@ function buildSection(section, ctx) {
       // for the side-view editor (railingProfileView.js): all at nosing level, plan x/y + z
       profile: { final: path, auto: cut.path, base: moved, nosing: run, control: shaped.control },
     });
+
+    // a run with no infill (railingPostEdits.js `bare`): the handrail on its two posts only
+    const bareRun = bare.has(runKey);
+    base.runs[base.runs.length - 1].bare = bareRun;
+    runNodePaths.push({ path: run, bare: bareRun });
+    if (bareRun) return;
 
     if (baseRail) {
       const railPieces = baseRailAlong(path, (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]), baseRail.heightMm);
@@ -1003,6 +1181,12 @@ function buildSection(section, ctx) {
         if (onPost) continue;
         // under the handrail's OWN line (bent, corrected at a post, or carried straight to a post) — not the raw nosing
         // line
+        // only along a run that carries infill (a run left bare by hand, or the stretch past a moved end, has none)
+        const nearest = runNodePaths.reduce((best, r) => {
+          const d = distToPolyline(r.path, p);
+          return !best || d < best.d ? { d, bare: r.bare } : best;
+        }, null);
+        if (!nearest || nearest.bare || nearest.d > SAME_POINT_MM * 2) continue;
         const lineZ = zOnPaths(runPaths, p) ?? p.z;
         balusters.push({ treadIndex: chain.index, position: { x: p.x, y: p.y }, zBottom: chain.zFront, zTop: railTop(lineZ) - handrailHeight });
       }
@@ -1013,11 +1197,25 @@ function buildSection(section, ctx) {
   // handrail is a piece between two posts, so a shorter post would leave it hanging beside nothing. This section's own
   // posts are made that tall here; for the structural posts the need is handed to buildStaircase.js (postSolver.js
   // raisePostsToHandrail). A manual length correction of a post still applies on top of this nominal height.
+  // --- the wall handrail past a moved end (railingPostEdits.js `wallRail`): the handrail goes on along the wall on
+  // brackets — no posts, no infill, free ends — at the same height above the nosing line, its axis
+  // `railingWallRailClearanceMm` + half its width off the wall (the wall: `stairwellWallGapMm` past the outer line)
+  for (const w of wallRailPaths) {
+    if (side !== 'outer') {
+      base.diagnostics.push(diag(section.id, 'RAILING-WALL-RAIL-SIDE', `Balustrada ${section.id}: poręcz przyścienna jest tylko po stronie zewnętrznej (przy ścianie klatki) — po stronie duszy pominięta.`, 'INFO'));
+      continue;
+    }
+    const wallRail = buildWallRail(w, { config, sign, offsetMm, centre, handrailHeight });
+    if (!wallRail) continue;
+    pieces.push(...wallRail.pieces);
+    base.runs.push({ key: `wall-${w.which}`, startPostId: null, endPostId: null, pieces: wallRail.pieces, bent: false, wallRail: true, brackets: wallRail.brackets, startAtPostFace: false, endAtPostFace: false, startOffsetMm: 0, endOffsetMm: 0 });
+  }
+
   const postTopNeeds = {};
   for (const run of base.runs) {
     const ends = [[run.startPostId, run.pieces[0]?.start], [run.endPostId, run.pieces[run.pieces.length - 1]?.end]];
     for (const [postId, pt] of ends) {
-      if (!pt) continue;
+      if (!pt || !postId) continue;
       const need = pt.z + handrailHeight / 2 + (config.railingPostTopAboveHandrailMm || 0);
       postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);
     }
@@ -1273,17 +1471,21 @@ function buildOpeningSection(id, path, ctx, closed) {
   }
   const withEdits = applyPostEditsToRuns(id, nodes, runs, joins, infill, config, base);
   ({ runs, joins } = withEdits);
-  const { sOf, sCum } = withEdits;
+  const { sOf, sCum, startMoved, endMoved, bare } = withEdits;
+  // (a closed loop has no ends to move: its start post closes it)
+  const endsMovable = !closed;
 
   // posts: the ends (one shared post when the chain closes on itself) and every join
-  const spots = [{ id: `railing-post-${id}-start`, at: runs[0][0], kind: 'start', s: 0 }];
-  let autoJoin = 0;
+  const spots = [{ id: `railing-post-${id}-start`, at: runs[0][0], kind: 'start', s: sOf(runs[0][0]) ?? 0, spotKey: endsMovable ? 'start' : null, moved: endsMovable && startMoved }];
+  let autoJoin = joins.reduce((n, jn) => Math.max(n, jn.autoKey ? Number(jn.autoKey.slice(5)) + 1 : 0), 0);
   joins.forEach((join, j) => {
     const at = runs[j + 1][0];
-    spots.push({ id: join.kind === 'manual' ? manualRailingPostId(id, join.manualId) : `railing-post-${id}-join-${autoJoin++}`, at, kind: join.kind, manualId: join.manualId, s: join.kind === 'manual' ? join.s : sOf(at) });
+    const key = join.kind === 'manual' ? null : (join.autoKey ?? `join-${autoJoin++}`);
+    spots.push({ id: join.kind === 'manual' ? manualRailingPostId(id, join.manualId) : `railing-post-${id}-${key}`, at, kind: join.kind, manualId: join.manualId, s: join.kind === 'manual' || join.kind === 'moved' ? join.s : sOf(at), spotKey: key, moved: join.kind === 'moved' });
   });
   const lastRun = runs[runs.length - 1];
-  spots.push(closed ? { ...spots[0], kind: 'end', s: sCum[sCum.length - 1] } : { id: `railing-post-${id}-end`, at: lastRun[lastRun.length - 1], kind: 'end', s: sCum[sCum.length - 1] });
+  const lastNode = lastRun[lastRun.length - 1];
+  spots.push(closed ? { ...spots[0], kind: 'end', s: sCum[sCum.length - 1] } : { id: `railing-post-${id}-end`, at: lastNode, kind: 'end', s: sOf(lastNode) ?? sCum[sCum.length - 1], spotKey: 'end', moved: endMoved });
   // a post of the stair standing there (its end newel, the last post of its balustrade) IS the post there
   const stairPostAt = (at) => {
     let best = null;
@@ -1294,7 +1496,7 @@ function buildOpeningSection(id, path, ctx, closed) {
     return best?.p ?? null;
   };
   for (const sp of spots) {
-    if (sp.kind === 'manual') continue;
+    if (sp.kind === 'manual' || sp.moved) continue;
     const existing = stairPostAt(sp.at);
     if (existing) sp.existing = existing;
   }
@@ -1313,7 +1515,8 @@ function buildOpeningSection(id, path, ctx, closed) {
   const postIdOf = (sp) => sp.existing?.postId ?? sp.id;
   const postOf = (sp) => sp.existing ?? base.posts.find((p) => p.postId === sp.id && !p.removed) ?? null;
   const halfOf = (sp) => (postOf(sp)?.size ?? 0) / 2;
-  base.postSpots = spots.slice(0, closed ? -1 : undefined).map((sp) => ({ postId: postIdOf(sp), spotId: sp.id, kind: sp.kind, s: sp.s, at: { x: sp.at.x, y: sp.at.y }, manualId: sp.manualId ?? null, reused: !!sp.existing, suppressible: sp.kind === 'corner' && !glass && !sp.existing }));
+  base.postSpots = spots.slice(0, closed ? -1 : undefined).map((sp) => ({ postId: postIdOf(sp), spotId: sp.id, kind: sp.kind, s: sp.s, at: { x: sp.at.x, y: sp.at.y }, manualId: sp.manualId ?? null, reused: !!sp.existing, suppressible: sp.kind === 'corner' && !glass && !sp.existing, spotKey: sp.spotKey ?? null, movable: sp.kind === 'manual' || sp.kind === 'moved' || (!!sp.spotKey && (sp.kind === 'start' || sp.kind === 'end' || (sp.kind === 'corner' && !glass))), moved: !!sp.moved }));
+  base.wallRailEnds = { start: false, end: false };
 
   const centreZ = railTop - handrailHeight / 2;
   const maxClear = config.railingMaxClearMm;
@@ -1338,7 +1541,10 @@ function buildOpeningSection(id, path, ctx, closed) {
     const endPostId = postIdOf(spots[j + 1]);
     // a stair post the opening's handrail meets reaches at least that handrail's top (postSolver.js raisePostsToHandrail)
     for (const sp of [spots[j], spots[j + 1]]) if (sp.existing) postTopNeeds[sp.existing.postId] = Math.max(postTopNeeds[sp.existing.postId] ?? -Infinity, topOfPost);
-    base.runs.push({ key: railingRunKey(startPostId, endPostId), startPostId, endPostId, pieces: runPieces, bent: false, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
+    const runKey = railingRunKey(startPostId, endPostId);
+    const bareRun = bare.has(runKey);
+    base.runs.push({ key: runKey, startPostId, endPostId, pieces: runPieces, bent: false, bare: bareRun, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
+    if (bareRun) return; // the handrail on its two posts only (railingPostEdits.js `bare`)
     if (glass) {
       const result = panesForRun(run, { config, sectionId: id, runIndex: j, startClearMm: halfOf(spots[j]), endClearMm: halfOf(spots[j + 1]), railBottomAt: () => railTop - handrailHeight, groundAt: () => z });
       base.glassPanes.push(...result.panes);

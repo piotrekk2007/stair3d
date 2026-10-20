@@ -3,6 +3,7 @@
 // już-rozwiązanych modeli (TreadModel/StringerModel/PostModel/Diagnostic) — nie liczy geometrii
 // (jedyna arytmetyka to różnica dwóch punktów modelu do wyświetlenia przesunięcia ręcznej edycji).
 import { stateBadgeHTML } from './valueState.js';
+import { escapeHtml } from '../util/format.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stepIndexFromElementId } from './selection.js';
 import { MIN_POST_HEIGHT_MM } from '../geometry/postSolver.js';
@@ -177,26 +178,51 @@ function railingEndsHTML(railingModel, postId) {
 // Where a balustrade post stands along its section (geometry/railingPostEdits.js): a hand-placed one — its distance
 // from the section's start, editable, and "Usuń"; an automatic corner one — "Wyłącz" (the handrail goes on through
 // the corner). Nothing for a structural post.
+// The runs of a section meeting this post: "sama poręcz" (no infill) toggles (railingPostEdits.js `bare`).
+function railingRunsAtPostHTML(s, postId) {
+  return s.runs
+    .filter((r) => !r.wallRail && (r.startPostId === postId || r.endPostId === postId))
+    .map((r) => {
+      const other = r.startPostId === postId ? r.endPostId : r.startPostId;
+      return `<label class="insp-field" title="Bieg poręczy ${r.key}: bez tralek / szkła — sama poręcz na słupkach"><span class="insp-label">Bieg do ${escapeHtml(other)}: sama poręcz</span><input type="checkbox" ${r.bare ? 'checked' : ''} data-railing-bare-run="${s.id}|${escapeHtml(r.key)}"></label>`;
+    })
+    .join('');
+}
+
 function railingPostPlaceHTML(railingModel, post) {
+  const out = [];
   for (const s of railingModel?.sections || []) {
     const spot = (s.postSpots || []).find((x) => x.postId === post.postId);
     if (!spot) continue;
+    const parts = [];
     if (spot.kind === 'manual') {
-      return (
-        section('Słupek balustrady — położenie') +
+      parts.push(
         `<label class="insp-field" title="Odległość w rzucie wzdłuż linii balustrady od początku odcinka ${s.id}"><span class="insp-label">Od początku odcinka</span><input type="number" step="10" min="0" value="${Math.round(spot.s)}" data-railing-post-s="${s.id}|${spot.manualId}"> mm</label>` +
-        `<div class="insp-actions"><button type="button" class="insp-btn danger" data-railing-post-action="remove" data-section-id="${s.id}" data-manual-id="${spot.manualId}">Usuń słupek</button></div>` +
-        `<div class="insp-hint">Na planie (tryb „▮ Słupki”): przeciągnij słupek wzdłuż balustrady, prawy klik — usuń.</div>`
+          `<div class="insp-actions"><button type="button" class="insp-btn danger" data-railing-post-action="remove" data-section-id="${s.id}" data-manual-id="${spot.manualId}">Usuń słupek</button></div>` +
+          `<div class="insp-hint">Na planie (tryb „▮ Słupki”): przeciągnij słupek wzdłuż balustrady, prawy klik — usuń.</div>`
       );
+    } else if (spot.movable && spot.spotKey) {
+      // an automatic post moved by hand (railingPostEdits.js `moved`)
+      parts.push(
+        `<label class="insp-field" title="Odległość w rzucie wzdłuż linii balustrady od początku odcinka ${s.id}"><span class="insp-label">Od początku odcinka</span><input type="number" step="10" min="0" value="${Math.round(spot.s ?? 0)}" data-railing-auto-s="${s.id}|${spot.spotKey}"> mm ${stateBadgeHTML(spot.moved ? 'manual' : 'auto')}</label>` +
+          (spot.moved ? `<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="reset-auto" data-section-id="${s.id}" data-key="${spot.spotKey}">Przywróć położenie AUTO</button></div>` : '')
+      );
+      // past a moved end: the handrail on along the wall (outer side only)
+      if ((spot.kind === 'start' || spot.kind === 'end') && s.side === 'outer') {
+        const end = spot.kind;
+        const on = !!s.wallRailEnds?.[end];
+        const label = end === 'start' ? 'Przed słupkiem: poręcz przyścienna' : 'Za słupkiem: poręcz przyścienna';
+        parts.push(`<label class="insp-field" title="Od tego słupka do ${end === 'start' ? 'początku' : 'końca'} odcinka: sama poręcz na wspornikach ściennych (bez słupków i tralek). Najpierw przesuń słupek tam, gdzie zaczyna się ściana."><span class="insp-label">${label}</span><input type="checkbox" ${on ? 'checked' : ''} ${spot.moved ? '' : 'disabled'} data-railing-wall-rail="${s.id}|${end}"></label>`);
+      }
     }
     if (spot.suppressible) {
-      return (
-        section('Słupek balustrady — narożny') +
-        `<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="suppress" data-section-id="${s.id}" data-s="${spot.s}">Wyłącz słupek (poręcz ciągła przez narożnik)</button></div>`
-      );
+      parts.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="suppress" data-section-id="${s.id}" data-s="${spot.s}">Wyłącz słupek (poręcz ciągła przez narożnik)</button></div>`);
     }
+    parts.push(railingRunsAtPostHTML(s, post.postId));
+    const body = parts.join('');
+    if (body) out.push(section(`Balustrada ${escapeHtml(s.id)} — słupek`) + body);
   }
-  return '';
+  return out.join('');
 }
 
 function postHTML(ctx) {

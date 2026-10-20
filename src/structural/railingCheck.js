@@ -23,6 +23,13 @@ const mm1 = (v) => v.toFixed(1).replace('.', ',');
 // Post kinds that are free cantilevers under the rail's load; corner/end posts are tied into the structure.
 const CANTILEVER_POST_KINDS = new Set(['railing', 'start']);
 
+// The longest plan distance between two neighbouring wall brackets.
+function bracketSpan(brackets = []) {
+  let max = 0;
+  for (let i = 1; i < brackets.length; i++) max = Math.max(max, Math.hypot(brackets[i].position.x - brackets[i - 1].position.x, brackets[i].position.y - brackets[i - 1].position.y));
+  return max;
+}
+
 function railSection(handrail) {
   if (handrail.shape === 'round') {
     const d = handrail.widthMm;
@@ -73,7 +80,9 @@ export function checkRailing(models) {
     }
     const { W, I, label } = railSection(section.handrail);
     section.runs.forEach((run, r) => {
-      const L = runLength(run);
+      // a wall handrail (railingSolver.js buildWallRail) is a beam between its wall brackets — its longest bracket
+      // span, no post carries it
+      const L = run.wallRail ? bracketSpan(run.brackets) : runLength(run);
       if (!(L > 0)) return;
       const M = (gammaQ * q * L * L) / 8;
       const bendingUtil = M / W / fmd;
@@ -93,8 +102,10 @@ export function checkRailing(models) {
       out.rails.push(check);
       const first = run.pieces[0].start;
       const last = run.pieces[run.pieces.length - 1].end;
-      addPostLoad(run.startPostId, (q * L) / 2, first.z);
-      addPostLoad(run.endPostId, (q * L) / 2, last.z);
+      if (!run.wallRail) {
+        addPostLoad(run.startPostId, (q * L) / 2, first.z);
+        addPostLoad(run.endPostId, (q * L) / 2, last.z);
+      }
 
       if (bendingUtil > 1) {
         out.diagnostics.push(

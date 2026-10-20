@@ -190,6 +190,7 @@ export function attachPlanInteractions(opts) {
     onRailingPostDrag,
     onRailingPostRemove,
     onRailingPostSuppress,
+    onRailingPostReset,
     onRailingPostRestore,
     onRailingOpeningEdgeToggle,
   } = opts;
@@ -367,9 +368,11 @@ export function attachPlanInteractions(opts) {
     if (getRailingPostMode() && e.button === 0 && !spacePressed) {
       const svg = getSvg();
       const postEl = e.target.closest('.railing-post-handle');
-      if (svg && postEl && postEl.dataset.kind === 'manual' && onRailingPostDrag) {
+      // a hand-placed post, or an automatic one that may be moved (railingPostEdits.js `moved`)
+      if (svg && postEl && (postEl.dataset.kind === 'manual' || postEl.dataset.movable === '1') && onRailingPostDrag) {
         panelEl.setPointerCapture(e.pointerId);
-        dragState = { pointerId: e.pointerId, kind: 'railing-post', sectionId: postEl.dataset.sectionId, manualId: postEl.dataset.manualId, postId: postEl.dataset.postId, svg, moved: false, downX: e.clientX, downY: e.clientY, last: null };
+        const manualId = postEl.dataset.kind === 'manual' ? postEl.dataset.manualId : null;
+        dragState = { pointerId: e.pointerId, kind: 'railing-post', sectionId: postEl.dataset.sectionId, manualId, spotKey: postEl.dataset.spotKey || null, postId: postEl.dataset.postId, svg, moved: false, downX: e.clientX, downY: e.clientY, last: null };
         e.preventDefault();
         return;
       }
@@ -517,7 +520,7 @@ export function attachPlanInteractions(opts) {
       if (!dragState.moved && Math.hypot(e.clientX - dragState.downX, e.clientY - dragState.downY) < 4) return;
       dragState.moved = true;
       dragState.last = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
-      onRailingPostDrag(dragState.sectionId, dragState.manualId, dragState.last, false, mmPerPx());
+      onRailingPostDrag(dragState.sectionId, dragState.manualId, dragState.last, false, mmPerPx(), dragState.spotKey);
       return;
     }
 
@@ -599,9 +602,9 @@ export function attachPlanInteractions(opts) {
     }
 
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'railing-post') {
-      const { sectionId, manualId, postId, moved, last } = dragState;
+      const { sectionId, manualId, spotKey, postId, moved, last } = dragState;
       dragState = null;
-      if (moved && last) onRailingPostDrag(sectionId, manualId, last, true, mmPerPx());
+      if (moved && last) onRailingPostDrag(sectionId, manualId, last, true, mmPerPx(), spotKey);
       else if (onPostClick) onPostClick(postId); // a click without a drag selects it
       return;
     }
@@ -675,6 +678,7 @@ export function attachPlanInteractions(opts) {
     if (railPost) {
       e.preventDefault();
       if (railPost.dataset.kind === 'manual') onRailingPostRemove?.(railPost.dataset.sectionId, railPost.dataset.manualId);
+      else if (railPost.dataset.moved === '1') onRailingPostReset?.(railPost.dataset.sectionId, railPost.dataset.spotKey);
       else if (railPost.dataset.suppressible === '1') onRailingPostSuppress?.(railPost.dataset.sectionId, Number(railPost.dataset.s));
       return;
     }

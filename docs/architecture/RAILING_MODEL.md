@@ -14,15 +14,33 @@ panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręt
 - **Wyłączony słupek narożny** (`suppressed`, dopasowanie ±50 mm): dwa biegi spotykające się w narożniku łączą się w
   jeden — poręcz przechodzi przez narożnik z cięciem pod kątem (`annotateCuts`, `planDeg`). Nie przy szkle między
   słupkami (tafla nie skręca) i nie na uskoku wysokości (poręcz musi się tam skończyć).
-- Id słupków automatycznych na złączach: numer wśród automatycznych — dodanie ręcznego nie zmienia id (edycje
-  słupków zostają przy swoich słupkach). Wyłączenie narożnika przesuwa numery dalszych złączy.
-- Model dla edytora: `section.postSpots` (`postId`, `kind` start|end|corner|step|glass-post|manual, `s`, `at`,
-  `suppressible`), `section.suppressedCorners`.
+- **Przesunięty słupek automatyczny** (`moved: {[spotKey]: s}`, decyzja użytkownika 2026-10-20 — „wszystkie”):
+  `start` / `end` — balustrada odcinka zaczyna / kończy się w `s` (bieg przycięty, słup konstrukcyjny, na którym stał
+  koniec, zostaje, a balustrada dostaje WŁASNY słupek); `join-<k>` (automatyczny narożny, nie przy szkle między
+  słupkami) — narożnik staje się uciosem, a słupek tnie poręcz w `s` (jak ręczny; za blisko → INFO, poręcz ciągła).
+  Uskok wysokości i podział szkła — nieprzesuwalne. Prawy klik na przesuniętym / „Przywróć położenie AUTO” usuwa klucz.
+- **Bieg bez wypełnienia** (`bare: [runKey]`): bieg między dwoma słupkami bez tralek / szkła / podporęczy — sama poręcz
+  na słupkach (checkbox „Bieg do … : sama poręcz” w Inspektorze słupka); `run.bare`.
+- **Poręcz przyścienna** (`wallRail: {start?, end?}`, tylko strona zewnętrzna): za przesuniętym końcem (przed
+  przesuniętym początkiem) poręcz idzie dalej do końca ścieżki odcinka na wspornikach ściennych — bez słupków, tralek,
+  koniec wolny (`buildWallRail`): oś `railingWallRailClearanceMm` (50, ZAŁOŻENIE) + pół szerokości poręczy od ściany
+  (ściana = linia zewn. + `stairwellWallGapMm`), ta sama wysokość nad linią nosków, wsporniki co maks.
+  `railingWallBracketSpacingMm` (1000, ZAŁOŻENIE), 150 mm od końców. Bieg `{wallRail: true, startPostId: null,
+  endPostId: null, brackets}` — kosztorys: poręcz jak każdy bieg + pozycja „Wspornik poręczy ściennej” (szt., bez
+  ceny), 3D: wsporniki (trzpień + ramię do ściany), plan: kreski do ściany, kontrola konstrukcji: belka między
+  wspornikami (bez obciążenia słupków); edytor „Profil poręczy” go pomija.
+- Id słupków automatycznych na złączach: nadawane RAZ, przed edycjami (`autoKey` `join-<k>`) — dodanie, przesunięcie
+  ani wyłączenie innego słupka nie zmienia id (edycje słupków zostają przy swoich słupkach); złącza dodane później
+  (podział szkła) numerowane dalej.
+- Model dla edytora: `section.postSpots` (`postId`, `kind` start|end|corner|step|glass-post|manual|moved, `s`, `at`,
+  `suppressible`, `spotKey`, `movable`, `moved`), `section.suppressedCorners`, `section.wallRailEnds`.
 - UI: plan 2D, tryb „▮ Słupki” (`plan2dRenderer.js railingPostEditXML`, `planInteractions.js`): klik na linii = nowy
-  słupek (przyciąga do krawędzi stopni w 8 px, inaczej co 10 mm), przeciąganie pomarańczowego = przesuń, prawy klik =
-  usuń ręczny / wyłącz narożny, klik w przerywane kółko = przywróć; Inspektor: „Od początku odcinka [mm]”, „Usuń
-  słupek”, „Wyłącz słupek (poręcz ciągła przez narożnik)”. Każdy gest = jeden krok cofania.
-- Testy: `geometry/__tests__/railingPosts.test.js`.
+  słupek (przyciąga do krawędzi stopni w 8 px, inaczej co 10 mm), przeciąganie ręcznego / narożnego / końcowego =
+  przesuń (przesunięty automatyczny ma pomarańczową obwódkę), prawy klik = usuń ręczny / przywróć AUTO przesuniętego /
+  wyłącz narożny, klik w przerywane kółko = przywróć; Inspektor: „Od początku odcinka [mm]” (też dla automatycznych,
+  AUTO/RĘCZNA), „Przywróć położenie AUTO”, „Usuń słupek”, „Wyłącz słupek…”, „Bieg do …: sama poręcz”, „Przed / Za
+  słupkiem: poręcz przyścienna” (po przesunięciu końca). Każdy gest = jeden krok cofania.
+- Testy: `geometry/__tests__/railingPosts.test.js`, `railingPostsAuto.test.js`.
 
 ## Balustrada przy otworze w stropie (etap B, decyzje użytkownika 2026-10-19) — `buildOpeningRailing`
 

@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { traceability } from '../scene/traceability.js';
 import { withWoodGrainUVs, textureOffsetFor } from '../scene/woodGrain.js';
-import { buildPrism } from './geometryUtils.js';
+import { buildPrism, planToWorld } from './geometryUtils.js';
 import { ROTULE_DIAMETER_MM } from './railingGlass.js';
 
 const ROUND_SEGMENTS = 16;
@@ -122,6 +122,26 @@ function mergedMesh(geometries, material, name, sourceId, sectionSide) {
   return mesh;
 }
 
+// One wall bracket: a 12 mm stem down from the handrail's underside, then an arm across to the wall (presentation
+// sizes — the real fitting is chosen in the workshop).
+const BRACKET_BAR_MM = 12;
+const BRACKET_DROP_MM = 50;
+function wallBracketGeometries(b) {
+  const low = b.z - BRACKET_DROP_MM;
+  const stem = new THREE.BoxGeometry(BRACKET_BAR_MM, BRACKET_DROP_MM, BRACKET_BAR_MM);
+  stem.translate(0, BRACKET_DROP_MM / 2, 0);
+  const at = planToWorld(b.position.x, b.position.y, low);
+  stem.translate(at.x, at.y, at.z);
+  const dx = b.wall.x - b.position.x;
+  const dy = b.wall.y - b.position.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const arm = new THREE.BoxGeometry(len, BRACKET_BAR_MM, BRACKET_BAR_MM);
+  arm.rotateY(Math.atan2(dy, dx)); // plan (dx, dy) is world (dx, -dy): a turn by atan2(dy, dx) about +Y
+  const mid = planToWorld((b.position.x + b.wall.x) / 2, (b.position.y + b.wall.y) / 2, low);
+  arm.translate(mid.x, mid.y, mid.z);
+  return [stem, arm];
+}
+
 /**
  * @param {import('./railingSolver.js').RailingModel} railingModel
  * @param {{ balusterShape:string, balusterSizeMm:number }} style  from config (a rendering choice, not geometry)
@@ -151,6 +171,15 @@ export function renderRailing(railingModel, style, material, balusterMaterial = 
         section.side
       );
       if (baseRail) group.add(baseRail);
+    }
+    // wall handrail brackets (railingSolver.js buildWallRail): a short stem under the handrail and an arm to the wall
+    const brackets = section.runs.filter((r) => r.wallRail).flatMap((r) => r.brackets || []);
+    if (brackets.length && metalMaterial) {
+      const mesh = new THREE.Mesh(mergeGeometries(brackets.flatMap(wallBracketGeometries)), metalMaterial);
+      mesh.name = `Railing_${section.id}_wallBrackets`;
+      mesh.geometry.userData.woodGrainUV = true;
+      mesh.userData = traceability({ elementType: 'railing', stringerId: section.side, geometrySourceId: `railing:${section.id}:wall-brackets` });
+      group.add(mesh);
     }
     const balusters = mergedMesh(
       section.balusters.map((b) => balusterGeometry(b, style.balusterShape, style.balusterSizeMm)),
