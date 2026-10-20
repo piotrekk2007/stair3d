@@ -203,10 +203,25 @@ export function buildAllPostModels(planLayout, config) {
   // połyka/zasłania nosek pierwszego stopnia, bo oba sięgają w tę samą przestrzeń za linią startu.
   const startForward = dirAt(0) || { x: 0, y: 1 };
   const startOnAxis = ontoWangaAxis(startPoint, null, startForward, half, handedness);
-  const startPosition = {
+  let startPosition = {
     x: startOnAxis.x + startForward.x * (postSize / 2),
     y: startOnAxis.y + startForward.y * (postSize / 2),
   };
+  let startAnchor = startPoint;
+  let startElevation = { bottom: 0, top: NEWEL_HEIGHT };
+  // Starter steps (starterSteps.js): the newel stands ON the last block, its back face where the wangi start (the
+  // first tread past the blocks), on the inner wanga's axis — the inner wanga runs into it from behind
+  const firstCarried = planLayout.treads.findIndex((t) => !t.starter);
+  if (firstCarried > 0) {
+    const chain = planLayout.treads[firstCarried].innerChain;
+    const at = chain[0];
+    const forward = unitDir(chain[0], chain[chain.length - 1]);
+    const onAxis = ontoWangaAxis(at, null, forward, half, handedness);
+    startPosition = { x: onAxis.x - forward.x * (postSize / 2), y: onAxis.y - forward.y * (postSize / 2) };
+    startAnchor = at;
+    const blockTop = firstCarried * (config.riserHeight || 0);
+    startElevation = { bottom: blockTop, top: blockTop + NEWEL_HEIGHT };
+  }
   let endPosition = ontoWangaAxis(endPoint, dirAt(path.length - 2), null, half, handedness);
   let endElevation = { bottom: totalRise - NEWEL_HEIGHT, top: totalRise };
   // With a balustrade round the ceiling opening ending at it, the end newel stands ON THE SLAB, moved on along the last
@@ -240,7 +255,7 @@ export function buildAllPostModels(planLayout, config) {
   };
 
   const models = [
-    { postId: 'post-start', kind: 'start', position: startPosition, anchor: startPoint, elevation: { bottom: 0, top: NEWEL_HEIGHT }, size: postSize },
+    { postId: 'post-start', kind: 'start', position: startPosition, anchor: startAnchor, elevation: startElevation, size: postSize },
     // Ostatni stopień nie ma noska na swojej przedniej (górnej) krawędzi — nosek jest tylko
     // na krawędziach czołowych — więc słup końcowy nie koliduje z niczym i zostaje wyśrodkowany.
     { postId: 'post-end', kind: 'end', position: endPosition, anchor: endPoint, elevation: endElevation, size: postSize, ...(onSlab ? { onSlab } : {}) },

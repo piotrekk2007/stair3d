@@ -1,5 +1,6 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, goesStraightThrough, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs, edgeLayoutKey } from './edgeOverrides.js';
+import { applyStarterSteps } from './starterSteps.js';
 import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
@@ -50,6 +51,9 @@ export function buildPlanLayout(config) {
   if (config.manualTreadOverhangs && Object.keys(config.manualTreadOverhangs).length > 0) {
     layout.treads = applyTreadOverhangs(layout.treads, config.manualTreadOverhangs);
   }
+  // Starter steps (starterSteps.js): the first 1–3 treads of flight A as wider blocks on the floor — LAST, their
+  // outline replaces whatever the layers above made of those treads (no wanga runs along them, so no housing recess)
+  layout.treads = applyStarterSteps(layout.treads, config);
 
   return layout;
 }

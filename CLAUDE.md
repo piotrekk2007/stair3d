@@ -155,6 +155,13 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   for the DXF). Nosing slides front corners along the tread's FINAL sides (`nosingUtils.sideDirection`); the corners
   are the OUTLINE's own on the front edge's line (`withOutlineFrontCorners` — a triangular winder's apex, which then
   slides along its back edge; also the riser groove).
+- **Starter steps** (stopnie zapraszające, `starterSteps.js`, user decisions 2026-10-20; docs
+  [STARTER_STEPS.md](docs/architecture/STARTER_STEPS.md)): `starterStepCount` 0..3 leading straight treads of flight A,
+  per step `starterStep{k}OuterMm/InnerMm` (widening past the raw wanga lines), `RadiusMm` (rounded ends, ≤ half
+  circle), `BowMm` (arched front, fading to the back edge) — the LAST plan layer (`tread.starter`, `tread.outline`).
+  Blocks on the floor: no nosing / groove / riser board, the wangi start behind them (walks from the first carried
+  tread), `post-start` stands on the last block, a balustrade starts there; 3D `renderStarterBlocks`, takeoff cladding
+  item, WARNING `STARTER-INTO-WALL`.
 - `riserSolver.js` `RiserModel`: panels built from the FINAL front edge (winder fan of `WINDER_RISER_FAN_PANELS`,
   ends exactly the edge points), `directionSpreadDeg`, `riserTopOverlapMm` into the tread above; with risers the stair
   ends with a top riser under the "fajkowy" nosing tread (`riser-top`, `topNosingThicknessMm`, DO WERYFIKACJI).

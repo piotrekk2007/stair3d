@@ -39,6 +39,30 @@ export function buildTreadMesh(treadModel, cut = null) {
   return mergeGeometries([upperSlab, ...lowerSlabs]);
 }
 
+// The bodies of the starter steps' blocks (starterSteps.js, TreadModel.starter): the outline from the floor up to the
+// tread's underside, in the cladding's material (the tread board itself is drawn by renderTreads).
+export function renderStarterBlocks(treadModels, material) {
+  const blocks = treadModels.filter((m) => m.starter && m.elevation.bottom > (m.starter.blockBottom ?? 0));
+  if (!blocks.length) return null;
+  const group = new THREE.Group();
+  group.name = 'StarterBlocks';
+  const up = new THREE.Vector3(0, 1, 0);
+  for (const model of blocks) {
+    const bottom = model.starter.blockBottom ?? 0;
+    const geometry = buildPrism(
+      model.outline.map((p) => ({ u: p.x, v: p.y })),
+      (u, v) => planToWorld(u, v, bottom),
+      up,
+      model.elevation.bottom - bottom
+    );
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = `StarterBlock_${model.index}`;
+    mesh.userData = traceability({ elementType: 'tread', stepId: model.stepId, geometrySourceId: `tread:${model.stepId}:block` });
+    group.add(mesh);
+  }
+  return group;
+}
+
 // The final front edge's direction in the world frame (plan (x, y) → world (x, 0, −y), geometryUtils.js planToWorld).
 function frontEdgeDirection(model) {
   const [a, b] = model.frontEdge?.final || [];

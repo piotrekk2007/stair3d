@@ -186,6 +186,40 @@ function buildRiserItem(riser, config, wasteFactors) {
   });
 }
 
+// The starter steps' blocks (geometry/starterSteps.js): the cladding round each block's exposed sides (front, rounded
+// ends, the back past the next step) over the block's full height, in the risers' sheet material, by AREA — bent
+// where the outline is curved. The stretch hidden behind a lower block is counted too (stated in the note).
+function buildStarterBlockItems(treadModels, config, wasteFactors) {
+  return (treadModels || [])
+    .filter((t) => t.starter && t.elevation.bottom > 0)
+    .map((t) => {
+      const heightMm = t.elevation.bottom - (t.starter.blockBottom ?? 0);
+      const areaMm2 = t.starter.exposedMm * heightMm;
+      const curved = t.starter.radiusMm > 0 || t.starter.bowMm > 0;
+      return createTakeoffItem({
+        itemId: `starter-block-${t.stepId}`,
+        elementType: ELEMENT_TYPES.RISER,
+        sourceElementId: `tread:${t.stepId}:block`,
+        material: `${RISER_MATERIAL_LABEL} — okładzina bloku stopnia zapraszającego`,
+        materialId: RISER_MATERIAL_ID,
+        quantity: 1,
+        unit: 'szt',
+        nominalDimensions: { heightMm, lengthMm: t.starter.exposedMm },
+        calculatedDimensions: { heightMm, lengthMm: t.starter.exposedMm, widthMm: t.starter.widthMm, depthMm: t.starter.depthMm },
+        netVolume: areaMm2 * (config.riserBoardThickness || 0) * MM3_TO_M3,
+        netArea: areaMm2 * MM2_TO_M2,
+        stockVolume: null,
+        stockArea: areaMm2 * MM2_TO_M2,
+        wasteFactor: wasteFactorFor(ELEMENT_TYPES.RISER, RISER_MATERIAL_ID, wasteFactors),
+        optional: false,
+        status: TAKEOFF_ITEM_STATUS.OK,
+        notes: [
+          `Blok stopnia zapraszającego ${t.index + 1}: okładzina boków ${Math.round(t.starter.exposedMm)} mm × wys. ${Math.round(heightMm)} mm (od posadzki pod stopnicę)${curved ? ' — GIĘTA / klejona warstwowo na łukach' : ''}; część zakryta niższym blokiem wliczona; korpus bloku (konstrukcja wewnętrzna) DO WERYFIKACJI.`,
+        ],
+      });
+    });
+}
+
 function buildRiserItems(riserModels, config, wasteFactors) {
   if (!config.hasRiserBoards || !riserModels || riserModels.length === 0) return [];
   return riserModels.map((r) => buildRiserItem(r, config, wasteFactors));
@@ -373,6 +407,7 @@ export function computeMaterialTakeoff({ treadModels, riserModels, stringerModel
   return [
     ...buildTreadItems(treadModels, config, wasteFactors),
     ...buildRiserItems(riserModels, config, wasteFactors),
+    ...buildStarterBlockItems(treadModels, config, wasteFactors),
     ...buildStringerSideItems('outer', stringerModels.outer, stringerConstruction.outer, config, wasteFactors),
     ...buildStringerSideItems('inner', stringerModels.inner, stringerConstruction.inner, config, wasteFactors),
     ...buildPostItems(postModels, config, wasteFactors),

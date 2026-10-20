@@ -267,7 +267,8 @@ export function buildTopRiserModel(lastTread, config) {
 // Schody z podstopniami kończą się podstopniem (pod stopniem fajkowym na stropie) — buildTopRiserModel.
 export function buildRiserModels(planLayout, config) {
   if (!config.hasRiserBoards) return [];
-  const risers = planLayout.treads.map((tread) => buildRiserModel(tread, config));
+  // a starter step has no riser board: its block's cladding is the front (starterSteps.js)
+  const risers = planLayout.treads.filter((tread) => !tread.starter).map((tread) => buildRiserModel(tread, config));
   const last = planLayout.treads[planLayout.treads.length - 1];
   if (last) risers.push(buildTopRiserModel(last, config));
   return risers.filter((model) => model.thickness > 0 && model.elevation.top > model.elevation.bottom);

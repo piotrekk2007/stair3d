@@ -208,7 +208,8 @@ export function buildStringerModel(planLayout, config, side) {
   const boardDepth = profileParamsFromConfig(config).nominalDepthMm;
   const constructionType = constructionTypeForSide(config, side);
 
-  const walks = buildRawWalks(planLayout.treads, chainKey);
+  // the wangi start behind the starter steps (starterSteps.js: blocks on the floor, carried by nothing)
+  const walks = buildRawWalks(planLayout.treads.filter((t) => !t.starter), chainKey);
   // Structural posts stand on the inner line only (postSolver.js), so only an inner board can end at one.
   const posts = side === 'inner' ? buildPostModels(planLayout, config) : [];
 

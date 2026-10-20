@@ -867,7 +867,9 @@ function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight
 function buildSection(section, ctx) {
   const { config, planLayout, stringerModels, stringerConstruction, postModels, riserHeight } = ctx;
   const treadCount = planLayout.treads.length;
-  const fromStep = section.fromStep;
+  // a balustrade starts at the newel on the last starter step at the earliest (starterSteps.js: no wanga along them)
+  const firstCarried = Math.max(0, planLayout.treads.findIndex((t) => !t.starter));
+  const fromStep = Math.max(section.fromStep, firstCarried);
   const toStep = section.toStep === null ? treadCount - 1 : section.toStep;
   const infill = isGlassInfill(config) ? config.railingInfill : RAILING_INFILL.BALUSTERS;
   const glass = infill !== RAILING_INFILL.BALUSTERS;

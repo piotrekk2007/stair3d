@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildPlanLayout } from './planLayout.js';
 import { buildTreadModels } from './treadSolver.js';
-import { renderTreads } from './treadRenderer.js';
+import { renderTreads, renderStarterBlocks } from './treadRenderer.js';
 import { buildRiserModels } from './riserSolver.js';
 import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
@@ -24,6 +24,7 @@ import { buildCeiling } from './ceilingGeometry.js';
 import { deriveStairData, deriveCeilingFit } from '../config/schema.js';
 import { solveStairwellFit, applyStairwellFit, solveFixedSides } from './stairwellFit.js';
 import { stairwellReport, stairwellWalls } from './stairwell.js';
+import { starterWallDiagnostics } from './starterSteps.js';
 import { buildStairwellWalls } from './stairwellWallsRenderer.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
@@ -94,6 +95,8 @@ export function buildStaircase(inputConfig) {
   // the 3D view (presentation only, like the ceiling)
   const stairwell = stairwellReport(config, planLayout);
   const walls = stairwellWalls(stairwell, fullConfig, planLayout);
+  // a starter step reaching into a stairwell wall (starterSteps.js) — reported with the stairwell's findings
+  stairwell.diagnostics = [...(stairwell.diagnostics || []), ...starterWallDiagnostics(planLayout, walls?.pieces)];
   const slabNewel = noWangi ? null : endNewelOntoSlab({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
   if (slabNewel) fullConfig.endNewelOntoSlab = slabNewel;
 
@@ -172,6 +175,9 @@ export function buildStaircase(inputConfig) {
   if (config.hasRiserBoards) {
     root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));
   }
+  // the starter steps' blocks (starterSteps.js) — with or without riser boards, in the risers' material
+  const starterBlocks = renderStarterBlocks(treadModels, riserBoardMaterial);
+  if (starterBlocks) root.add(starterBlocks);
 
   if (railingModel.enabled) {
     // glass colour (railingGlass.js GLASS_TINTS): clear / optiwhite / graphite / bronze

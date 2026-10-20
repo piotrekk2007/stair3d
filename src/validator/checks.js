@@ -259,6 +259,7 @@ export function checkMissingRiserSurfaces(treadModels, riserModels, config) {
   const diags = [];
   const coveredSteps = new Set((riserModels || []).map((r) => r.stepId));
   for (const t of treadModels) {
+    if (t.starter) continue; // a starter step's block has its cladding, no riser board (starterSteps.js)
     const expectedThickness = t.type === 'landing' ? config.riserBoardThickness : config.nosing;
     if (expectedThickness > 0 && !coveredSteps.has(t.stepId)) {
       diags.push(finding('ERROR', 'VALIDATOR-MISSING-SURFACE', 'riser', t.stepId, 'riser coverage', `Brakuje podstopnia dla stopnia ${t.stepId}, mimo że konfiguracja go wymaga.`, { expected: 'RiserModel obecny' }));
@@ -281,7 +282,8 @@ export function checkMissingStringerSupport(treadModels, stringerModels) {
       for (const b of seg.treadBearings) covered.add(b.treadIndex);
     }
     for (const t of treadModels) {
-      if (!covered.has(t.index)) {
+      // a starter step is a block on the floor — no wanga runs along it (starterSteps.js)
+      if (!covered.has(t.index) && !t.starter) {
         diags.push(finding('ERROR', 'VALIDATOR-MISSING-SURFACE', 'stringer', t.stepId, 'bearing coverage', `${label}: brak wspornika (bearing) dla stopnia ${t.stepId} — wanga ma lukę dokładnie w miejscu tego stopnia.`, {}));
       }
     }
