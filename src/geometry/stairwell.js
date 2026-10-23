@@ -19,6 +19,8 @@
 // Pure: no Three.js, no config mutation.
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { inwardNormal } from './planLayout.js';
+import { sideHand } from '../util/sideNames.js';
 
 export const WELL_SIDES = Object.freeze(['A', 'B', 'C']);
 // A fixed side within this of its dimension counts as met (mm).
@@ -82,9 +84,20 @@ export function wallInterval(config, s, sideLength) {
   return [0, sideLength];
 }
 
-// The straight sides of the outer line, merged like outerSideLengths: [{a, b, length, dir}].
-function outerSides(planLayout) {
-  const path = planLayout?.outerFullPath || [];
+/**
+ * Which of the plan's lines the stairwell's sides and walls run along: the OUTER line — every stair but an S whose walls
+ * the user put on the other side (`stairwellWallHand` 'left' | 'right', as seen walking up flight A; user request
+ * 2026-10-23: an S has a dusza on each line, its walls may be on either side).
+ * @returns {'outer'|'inner'}
+ */
+export function stairwellWallLine(config) {
+  if (config?.stairType !== 'S' || (config.stairwellWallHand !== 'left' && config.stairwellWallHand !== 'right')) return 'outer';
+  return sideHand('inner', config) === config.stairwellWallHand ? 'inner' : 'outer';
+}
+
+// The straight sides of the stairwell's line (stairwellWallLine), merged like outerSideLengths: [{a, b, length, dir}].
+function outerSides(planLayout, line = 'outer') {
+  const path = (line === 'inner' ? planLayout?.innerFullPath : planLayout?.outerFullPath) || [];
   const sides = [];
   for (let i = 1; i < path.length; i++) {
     const d = sub(path[i], path[i - 1]);
@@ -106,7 +119,8 @@ function outerSides(planLayout) {
  */
 export function wellFrame(config, planLayout) {
   if (!wellEnabled(config) || !planLayout) return null;
-  const list = outerSides(planLayout);
+  const line = stairwellWallLine(config);
+  const list = outerSides(planLayout, line);
   if (list.length === 0) return null;
   const letters = wellSideLetters(config.stairType);
   const sides = {};
@@ -129,15 +143,18 @@ export function wellFrame(config, planLayout) {
     return { x: dot(d, xDir), y: dot(d, yDir) };
   };
   const toPlan = (q) => add(origin, add(mul(xDir, q.x), mul(yDir, q.y)));
-  // the walls as lines of the frame (what the opening snaps to): wall A at x = −gap, the end wall at y = −gap, a U's
-  // wall C at x = B + gap
-  const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
-  const wallLines = [];
-  if (sideHasWall(config, 'A')) wallLines.push({ axis: 'x', value: -gap });
-  if (letters.includes('B') && sideHasWall(config, 'B')) wallLines.push({ axis: 'y', value: -gap });
-  // (a U's wall C is past side B's far end; an S's C runs on the other way, its wall on the near side of that line)
-  if (letters.includes('C') && sides.B && sideHasWall(config, 'C')) wallLines.push({ axis: 'x', value: config.stairType === 'S' ? sides.B.length - gap : sides.B.length + gap });
-  return { wall: true, origin, xDir, yDir, toRelative, toPlan, sides, wallLines };
+  // the walls as lines of the frame (what the opening snaps to): each wall's inner face, as the line x = … (a wall
+  // along y) or y = … (along x) — e.g. wall A at x = −gap, the end wall at y = −gap, a U's wall C at x = B + gap, an S's
+  // at x = B − gap (taken from the walls themselves, so any side of any stair is right)
+  const frame = { wall: true, origin, xDir, yDir, toRelative, toPlan, sides, wallLines: [], line };
+  for (const w of wallSegments(config, planLayout, frame)) {
+    const along = sub(w.b, w.a);
+    const p = toRelative(w.a);
+    const across = Math.abs(dot(along, xDir)) < Math.abs(dot(along, yDir));
+    frame.wallLines.push(across ? { axis: 'x', value: p.x } : { axis: 'y', value: p.y });
+  }
+  return frame;
+
 }
 
 const diag = (ruleId, severity, parameter, message, extra = {}) => createDiagnostic({ ruleId, severity, elementType: 'stair', elementId: null, parameter, message, ...extra });
@@ -149,7 +166,7 @@ const diag = (ruleId, severity, parameter, message, extra = {}) => createDiagnos
 export function stairwellReport(config, planLayout) {
   const frame = wellFrame(config, planLayout);
   if (!frame) return { enabled: false, frame: null, sides: [], diagnostics: [] };
-  const lengths = outerSides(planLayout).map((x) => x.length);
+  const lengths = outerSides(planLayout, stairwellWallLine(config)).map((x) => x.length);
   const targets = wellFixedTargets(config);
   const sides = wellSideLetters(config.stairType).map((s, i) => {
     const achieved = lengths[i] ?? null;
@@ -173,8 +190,8 @@ export function stairwellReport(config, planLayout) {
 function wallSegments(config, planLayout, frame) {
   const letters = wellSideLetters(config.stairType);
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
-  const inner = planLayout.innerFullPath || [];
-  const centre = inner.length ? mul(inner.reduce((acc, p) => add(acc, p), { x: 0, y: 0 }), 1 / inner.length) : frame.origin;
+  const line = stairwellWallLine(config);
+  const handedness = planLayout.handedness ?? 1;
   // each wall's stretch along its side, and whether it reaches the side's start / end (only there does it meet the
   // neighbouring side's wall in a closed corner)
   const spans = letters.map((s) => {
@@ -189,8 +206,8 @@ function wallSegments(config, planLayout, frame) {
     const side = frame.sides[s];
     const span = spans[i];
     if (!span) return;
-    let n = { x: -side.dir.y, y: side.dir.x };
-    if (dot(n, sub(centre, side.a)) > 0) n = mul(n, -1); // outward = away from the stair
+    // outward = away from the stair: the opposite of "into the stair" from this line (planLayout.js inwardNormal)
+    const n = mul(inwardNormal(side.dir, line, handedness), -1);
     let a = add(add(side.a, mul(side.dir, span.t0)), mul(n, gap));
     let b = add(add(side.a, mul(side.dir, span.t1)), mul(n, gap));
     const prevWall = i > 0 && span.atStart && !!spans[i - 1]?.atEnd;
@@ -250,9 +267,10 @@ const WALL_ALONG_TOL_MM = 30;
  */
 export function treadsOpenOnOuterSide(planLayout, wallPieces, config) {
   if (!Array.isArray(wallPieces)) return null;
+  const line = stairwellWallLine(config);
   const tol = WALL_ALONG_TOL_MM + Math.max(0, Number(config.stairwellWallGapMm) || 0);
   return (planLayout.treads || []).map((t) => {
-    const chain = t.outerChain || [];
+    const chain = (line === 'inner' ? t.innerChain : t.outerChain) || [];
     let total = 0;
     let covered = 0;
     for (let k = 1; k < chain.length; k++) {

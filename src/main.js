@@ -52,6 +52,10 @@ import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
 import { sideShort } from './util/sideNames.js';
+import { stairwellWallLine } from './geometry/stairwell.js';
+
+// What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
+const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
 
 // ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
 // a wszystkie panele/widoki są renderowane z już-rozwiązanych modeli. Żaden panel ani interakcja
@@ -59,6 +63,8 @@ import { sideShort } from './util/sideNames.js';
 const app = document.getElementById('app');
 
 const config = createDefaultConfig();
+// the app starts with no stair (user decision 2026-10-23): the stairwell's walls and the opening first, then "Generuj"
+Object.assign(config, NEW_PROJECT_START);
 const viewState = {
   showCeiling: true,
   showWalls: true, // the stairwell room's walls (stairwell.js stairwellWalls), when there is a room
@@ -266,6 +272,8 @@ function rebuild() {
   if (fitOn || fitWasEnabled) uiRefresh?.();
   fitWasEnabled = fitOn;
 
+  // not generated yet (config.stairPending): the stair is built (the walls and the opening follow it) but not shown
+  root.visible = !config.stairPending;
   scene.add(root);
   scene.add(ceilingMesh);
   currentRoot = root;
@@ -313,7 +321,9 @@ function rebuild() {
 
   updateInfoPanel(infoPanel, derived, planLayout, config, ceilingFit, built.stairwellFit);
   if (variantsPanel) showStairwellVariants();
-  const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
+  // (before "Generuj schody" there is no stair to check or price: only the stairwell's own findings)
+  const shownDiagnostics = config.stairPending ? lastDiagnostics.filter((d) => /^(STAIRWELL|STAIR3D-FIT)/.test(d.ruleId)) : lastDiagnostics;
+  const counts = updateValidatorPanel(validatorPanel, shownDiagnostics, { selectedDiagnostic, waivedDiagnostics: config.stairPending ? [] : lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
   updateStructuralPanel(structuralPanel, built.structural, config);
 
@@ -369,6 +379,21 @@ function refreshTakeoff() {
 }
 
 function renderTakeoffPanel() {
+  // before "Generuj schody": a note instead of the takeoff (the panel itself is only hidden — it keeps its elements)
+  let pendingNote = takeoffPanel.parentElement?.querySelector('.takeoff-pending-note');
+  if (!pendingNote && takeoffPanel.parentElement) {
+    pendingNote = document.createElement('div');
+    pendingNote.className = 'insp-hint takeoff-pending-note';
+    pendingNote.textContent = 'Kosztorys pojawi się po wygenerowaniu schodów („▶ Generuj schody” w folderze „1. Schody”).';
+    takeoffPanel.parentElement.insertBefore(pendingNote, takeoffPanel);
+  }
+  if (pendingNote) pendingNote.hidden = !config.stairPending;
+  takeoffPanel.hidden = !!config.stairPending;
+  if (config.stairPending) {
+    ws.setTabBadge('takeoff', '', 'info');
+    offer?.refresh();
+    return;
+  }
   updateTakeoffPanel(takeoffPanel, lastTakeoff, {
     groupBy: takeoffGroupBy,
     selectedItemId: selectedTakeoffItemId,
@@ -386,7 +411,21 @@ function manualEditCount() {
   return Object.keys(config.manualEdgeOverrides || {}).length + Object.keys(config.manualTreadOverhangs || {}).length + Object.keys(config.manualPostOverrides || {}).length;
 }
 
+// "Generuj schody": the stair appears and follows the parameters live from now on (one undo step)
+function generateStair() {
+  if (!config.stairPending) return;
+  config.stairPending = false;
+  refreshUI(gui);
+  rebuild();
+  fitPlanView();
+  commitHistory();
+}
+
 function updateStatus(counts) {
+  if (config.stairPending) {
+    ws.setStatus({ validity: { level: 'warning', html: '● Schody jeszcze nie wygenerowane — ustaw klatkę, otwór i parametry, potem „Generuj schody”' } });
+    return;
+  }
   let level = 'ok';
   let text = '● Geometria poprawna';
   if (counts.ERROR === 0 && counts.WARNING === 0 && lastWaived.length > 0) {
@@ -424,12 +463,13 @@ function applyOverlayVisibility() {
   if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
   if (currentWalls) currentWalls.visible = viewState.showWalls;
   // the headroom is meant for the client too: shown in the presentation mode as well
-  if (currentHeadroom) currentHeadroom.visible = viewState.showHeadroom;
-  if (currentDimLabels) currentDimLabels.visible = viewState.showDimensions && technical;
-  if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical;
-  if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical;
-  if (currentDebugOverlay) currentDebugOverlay.visible = viewState.showDebug && technical;
-  if (currentJointMarkers) currentJointMarkers.visible = viewState.showJoints && technical;
+  if (currentHeadroom) currentHeadroom.visible = viewState.showHeadroom && !config.stairPending;
+  const stair = !config.stairPending; // (nothing of the stair before "Generuj schody")
+  if (currentDimLabels) currentDimLabels.visible = viewState.showDimensions && technical && stair;
+  if (currentStringerLengthLabels) currentStringerLengthLabels.visible = viewState.showStringerLengths && technical && stair;
+  if (currentWinderBlankLabels) currentWinderBlankLabels.visible = viewState.showWinderBlanks && technical && stair;
+  if (currentDebugOverlay) currentDebugOverlay.visible = viewState.showDebug && technical && stair;
+  if (currentJointMarkers) currentJointMarkers.visible = viewState.showJoints && technical && stair;
   sceneApi.helpers.grid.visible = technical;
   sceneApi.helpers.axes.visible = technical;
   sceneApi.helpers.ground.visible = !technical;
@@ -928,9 +968,10 @@ function railingOuterFromWalls() {
   }
   const ranges = openOuterRailingRanges(flags);
   const stamp = Date.now().toString(36);
-  config.railingSections = [...(config.railingSections || []).filter((s) => s.side !== 'outer'), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${k}`, side: 'outer', ...r }))];
+  const wallSide = stairwellWallLine(config); // (the side the walls are on — an S may have them on the inner line)
+  config.railingSections = [...(config.railingSections || []).filter((s) => s.side !== wallSide), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${k}`, side: wallSide, ...r }))];
   if (ranges.length) config.railingEnabled = true;
-  ws.setStatus({ selection: ranges.length ? `Balustrada ${sideShort('outer', config)}: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
+  ws.setStatus({ selection: ranges.length ? `Balustrada ${sideShort(wallSide, config)}: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
   refreshUI(gui);
   rebuild();
   commitHistory();
@@ -978,7 +1019,7 @@ function resetTakeoffSettings() {
 
 function handleNewProject() {
   if (!window.confirm('Rozpocząć nowy projekt? Bieżące parametry i ręczne edycje zostaną zastąpione domyślnymi (można to cofnąć przyciskiem Cofnij).')) return;
-  Object.assign(config, createDefaultConfig());
+  Object.assign(config, createDefaultConfig(), NEW_PROJECT_START);
   resetTakeoffSettings();
   Object.assign(appearance, defaultAppearance());
   setAppearance(appearance);
@@ -1536,6 +1577,7 @@ const gui = createUI({
   },
   onStartOpeningDraw: () => startOpeningDraw(),
   onFindStairwellVariants: () => searchStairwellVariants(),
+  onGenerateStair: () => generateStair(),
   onRailingOuterFromWalls: () => railingOuterFromWalls(),
   onFreezeDerivedOpening: () => {
     const rel = lastModels?.ceilingFit?.openingMode === 'derived' ? lastModels.ceilingFit.openingRelativeOutline : null;

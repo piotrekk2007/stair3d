@@ -9,6 +9,7 @@ import { stepIndexFromElementId } from './selection.js';
 import { MIN_POST_HEIGHT_MM } from '../geometry/postSolver.js';
 import { railingEndKey, MAX_RAILING_END_OFFSET_MM } from '../geometry/railingSolver.js';
 import { sideShort, sideAdjective, wangaName } from '../util/sideNames.js';
+import { stairwellWallLine } from '../geometry/stairwell.js';
 
 const TYPE_LABEL_PL = { straight: 'prosty', winder: 'zabiegowy', landing: 'podest' };
 const SEVERITY_LABEL_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
@@ -230,7 +231,7 @@ function railingPostPlaceHTML(railingModel, post) {
           (spot.moved ? `<div class="insp-actions"><button type="button" class="insp-btn" data-railing-post-action="reset-auto" data-section-id="${s.id}" data-key="${spot.spotKey}">Przywróć położenie AUTO</button></div>` : '')
       );
       // past a moved end: the handrail on along the wall (outer side only)
-      if ((spot.kind === 'start' || spot.kind === 'end') && s.side === 'outer') {
+      if ((spot.kind === 'start' || spot.kind === 'end') && s.side === stairwellWallLine(config)) {
         const end = spot.kind;
         const on = !!s.wallRailEnds?.[end];
         const label = end === 'start' ? 'Przed słupkiem: poręcz przyścienna' : 'Za słupkiem: poręcz przyścienna';

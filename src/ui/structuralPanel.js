@@ -58,7 +58,7 @@ function treadTableHTML(treads) {
     ${skipped}`;
 }
 
-function stringerTableHTML(stringers) {
+function stringerTableHTML(stringers, config) {
   if (!stringers || (stringers.checks.length === 0 && stringers.skipped.length === 0)) return '<div class="st-note">Brak desek wang do sprawdzenia.</div>';
   const worst = stringers.checks.reduce((m, c) => Math.max(m, c.maxUtil), 0);
   const sideLabel = (s) => sideShort(s, config);
@@ -91,7 +91,7 @@ function stringerTableHTML(stringers) {
     ${skipped}`;
 }
 
-function railingTableHTML(railing) {
+function railingTableHTML(railing, config) {
   if (!railing || (railing.rails.length === 0 && railing.posts.length === 0)) return '<div class="st-note">Brak balustrady (albo odcinków) do sprawdzenia.</div>';
   const sideLabel = (s) => sideShort(s, config);
   const worst = [...railing.rails, ...railing.posts].reduce((m, c) => Math.max(m, c.maxUtil), 0);
@@ -168,9 +168,9 @@ export function updateStructuralPanel(panel, report, config = null) {
     <h4>Stopnie — belka między wangami</h4>
     ${treadTableHTML(report.treads)}
     <h4>Wangi — belka pochyła</h4>
-    ${stringerTableHTML(report.stringers)}
+    ${stringerTableHTML(report.stringers, config)}
     <h4>Balustrada — poręcz i słupki (obciążenie poziome)</h4>
-    ${railingTableHTML(report.railing)}
+    ${railingTableHTML(report.railing, config)}
     <div class="st-note">Nośność tralek nie jest liczona — ich ciężar (z poręczą i słupkami) obciąża wangę, na której stoją (kolumna „bal." w tabeli wang).</div>
     <h4>Założenia i źródła</h4>
     <ul class="st-assumptions">${assumptions}</ul>`;

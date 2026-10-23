@@ -10,6 +10,7 @@ import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.j
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
+import { stairwellWallLine } from '../geometry/stairwell.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -74,6 +75,7 @@ export function createUI({
   onFindStairwellVariants,
   onFreezeDerivedOpening,
   onRailingOuterFromWalls,
+  onGenerateStair,
   container,
 }) {
   // `container` — lewy panel workspace'u (patrz workspace.js); bez niego lil-gui przykleiłby się
@@ -109,6 +111,8 @@ export function createUI({
   if (onReset) gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
 
   const stairFolder = gui.addFolder('1. Schody');
+  // a new project waits for its parameters (config.stairPending): the stair appears on this button, live from then on
+  const generateCtrl = onGenerateStair ? stairFolder.add({ generate: onGenerateStair }, 'generate').name('▶ Generuj schody') : null;
   // S: like U, but the second turn goes the other way (planLayout.js reverseSecond) — "Kierunek skrętu" is the FIRST turn
   const stairTypeCtrl = live(stairFolder.add(config, 'stairType', ['straight', 'L', 'U', 'S'])).name('Typ schodów');
   live(stairFolder.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu (S: pierwszego)');
@@ -137,6 +141,8 @@ export function createUI({
     live(well.add(config, `stairwellWall${s}LengthMm`, 0, 12000, 1)).name(`Bok ${s}: długość ściany [mm]`);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
+  // an S has a dusza on each line: its walls may be on either side (stairwell.js stairwellWallLine); shown for an S only
+  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'po stronie zewnętrznej (domyślnie)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: ściany klatki');
   // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
   // the counts are AUTO; with the counts by hand only the going follows the key side (e.g. 4 or 5 straight in C)
   live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie (AUTO tylko głębokość)');
@@ -219,6 +225,8 @@ export function createUI({
   const typeOuterCtrl = live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name(`Typ wangi ${sideShort('outer', config)}`);
   const typeInnerCtrl = live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name(`Typ wangi ${sideShort('inner', config)}`);
   const syncSideNames = () => {
+    wallHandCtrl.show(config.stairType === 'S');
+    generateCtrl?.show(!!config.stairPending);
     typeOuterCtrl.name(`Typ wangi ${sideShort('outer', config)}`);
     typeInnerCtrl.name(`Typ wangi ${sideShort('inner', config)}`);
   };
@@ -410,8 +418,9 @@ export function createUI({
     if (onRailingOuterFromWalls) {
       const fromWalls = document.createElement('button');
       fromWalls.type = 'button';
-      fromWalls.textContent = `Balustrada ${sideShort('outer', config)} tam, gdzie nie ma ściany`;
-      fromWalls.title = `Zastępuje odcinki po stronie ${sideGenitive('outer', config)} odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)`;
+      const wallSide = stairwellWallLine(config);
+      fromWalls.textContent = `Balustrada ${sideShort(wallSide, config)} tam, gdzie nie ma ściany`;
+      fromWalls.title = `Zastępuje odcinki po stronie ${sideGenitive(wallSide, config)} odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)`;
       fromWalls.addEventListener('click', () => onRailingOuterFromWalls());
       sectionsBox.appendChild(fromWalls);
     }
@@ -559,22 +568,28 @@ export function createInfoPanel(container = document.body) {
 }
 
 // Info-panel rows for "Dopasuj do klatki": each side's achieved length against its target (* = key side).
-function stairwellFitRows(fit) {
+function stairwellFitRows(fit, config) {
   if (!fit.values) return `<div class="note error">${fit.message}</div>`;
   const sideRows = fit.sides
     .map((s) => {
-      const achieved = `${s.achieved.toFixed(0)} mm`;
+      // (a side the layout does not have — a flight with no tread there — has no length)
+      const achieved = Number.isFinite(s.achieved) ? `${s.achieved.toFixed(0)} mm` : '—';
       if (s.target === null) return `<div class="row resultant"><span>Klatka: bok ${s.side} (bez wymiaru)</span><b>${achieved}</b></div>`;
-      const dev = Math.round(s.deviation);
+      const dev = Number.isFinite(s.deviation) ? Math.round(s.deviation) : 0;
       const cls = dev === 0 ? 'ok' : 'warn';
       const devText = dev === 0 ? '' : ` (${dev > 0 ? '+' : ''}${dev})`;
       return `<div class="row resultant ${cls}"><span>Klatka: bok ${s.side}${s.key ? ' (kluczowy)' : ''} / ${s.target}</span><b>${achieved}${devText}</b></div>`;
     })
     .join('');
-  return sideRows + `<div class="note">Boki mierzone po licu wangi ${sideGenitive('outer', config)}, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>`;
+  return sideRows + `<div class="note">Boki mierzone po licu wangi ${sideGenitive(stairwellWallLine(config), config)}, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>`;
 }
 
 export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, stairwellFit = null) {
+  // a new project before "Generuj schody" (config.stairPending): no stair figures yet, only how to go on
+  if (config.stairPending) {
+    panel.innerHTML = `<div class="row"><span>Wysokość kondygnacji</span><b>${config.totalRise.toFixed(0)} mm</b></div><div class="note">Schody jeszcze nie wygenerowane. Ustaw klatkę (folder 3), otwór w stropie (folder 4) i parametry schodów, potem kliknij „▶ Generuj schody” w folderze „1. Schody”.</div>`;
+    return;
+  }
   const rows = [];
   const fitted = !!stairwellFit?.values;
   const goingText = Number.isInteger(config.treadGoing) ? config.treadGoing.toFixed(0) : config.treadGoing.toFixed(1);
@@ -589,7 +604,7 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, 
     rows.push(`<div class="row resultant"><span>Rzut klatki (dł. × szer.) ${AUTO_BADGE}</span><b>${footprintY.toFixed(0)} × ${footprintX.toFixed(0)} mm</b></div>`);
   }
 
-  if (stairwellFit?.enabled) rows.push(stairwellFitRows(stairwellFit));
+  if (stairwellFit?.enabled) rows.push(stairwellFitRows(stairwellFit, config));
 
   const blondelClass = derived.blondelOk ? 'ok' : 'warn';
   rows.push(`<div class="row resultant ${blondelClass}"><span>Wzór Blondela (2h+e) ${AUTO_BADGE}</span><b>${derived.blondel.toFixed(0)} mm</b></div>`);

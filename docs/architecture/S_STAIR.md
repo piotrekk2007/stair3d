@@ -66,6 +66,38 @@ User decisions 2026-10-23:
   microns where two rectangles met, a false ceiling collision.
 - The balustrade round the opening finds S's exit edge and the walled edges like any stair.
 
+## Walls on the left or the right (user request 2026-10-23)
+
+- `stairwellWallHand` ('' | 'left' | 'right', an S only; panel „S: ściany klatki”, folder 3) — the side the stairwell's
+  walls are on, as seen walking up flight A (stored as the HAND, so a change of the turn direction keeps them where they
+  are).
+- `stairwell.js stairwellWallLine(config)` turns it into the plan's line ('outer' | 'inner'):
+  - the sides A / B / C are measured along that line — `outerSides(planLayout, line)` and
+    `stairwellFit.js outerSideLengths(planLayout, line)`;
+  - the walls stand outside it: the outward normal is `−inwardNormal(dir, line, handedness)` (no centroid guess
+    any more);
+  - the frame's `wallLines` are taken from the walls themselves (any side of any stair);
+  - `frame.line` says which line it is.
+- What follows the wall line:
+  - the button „Balustrada … tam, gdzie nie ma ściany” (`treadsOpenOnOuterSide` reads that line's chains, the sections
+    go to that side);
+  - the wall handrail (`railingSolver.js`, only on the wall side);
+  - the post rule: a dusza against a wall gets no post — the first turn's too when the walls are on the inner line. A
+    concave corner's walls stop gap × √2 from it — the tolerance (`postSolver.js atWall`).
+
+## A new project waits for „Generuj schody” (user decision 2026-10-23)
+
+- `config.stairPending` (saved with the project; old files lack it = generated). The app's start and „Nowy” set it
+  (`main.js NEW_PROJECT_START`: `stairPending: true`, `stairwellRoomEnabled: true`).
+- While pending, the stair is still built (the walls and the opening follow it) but not shown:
+  - the 3D root is hidden, and so are the labels, the overlays and the headroom;
+  - the plan draws only the grid, the stairwell and the opening (`plan2dRenderer.js`);
+  - the Walidacja tab shows only the stairwell's own findings;
+  - the Kosztorys tab shows a note — the panel is hidden, not replaced;
+  - the info panel and the status bar say how to go on.
+- „▶ Generuj schody” (folder 1, shown only while pending; `main.js generateStair`) clears it — one undo step. From then
+  on everything is live, as always.
+
 ## Names: left / right (stage 3)
 
 - `util/sideNames.js` is THE place that names the two sides:

@@ -154,3 +154,36 @@ test("S stairwell: a fixed B narrower than the stair's own comes out exactly —
   // the other fixed side within one going
   assert.ok(Math.abs(side('A').achieved - 2600) < b.fullConfig.treadGoing);
 });
+
+test("regression (user, 2026-10-23): an S's stairwell walls on the LEFT or the RIGHT (walking up A) — the sides measured along that line, no post at the dusza against them (also with a wall gap)", () => {
+  const sideLine = (b) => b.stairwell.frame.line;
+  // first turn left: the inner line is the left one
+  const left = buildStaircase(S({ stairwellRoomEnabled: true, stairwellWallHand: 'left', stairwellWallGapMm: 10 }));
+  assert.equal(sideLine(left), 'inner');
+  const inner = left.planLayout.innerFullPath;
+  const A = left.stairwell.sides.find((x) => x.side === 'A').achieved;
+  assert.ok(Math.abs(A - Math.hypot(inner[1].x - inner[0].x, inner[1].y - inner[0].y)) < 1, 'side A along the left (inner) line');
+  // the walls stand outside the left line (x smaller than the stair's left line along A)
+  const wallA = left.stairwellWalls.pieces.find((w) => w.side === 'A');
+  assert.ok(wallA.a.x < inner[0].x && wallA.b.x < inner[0].x);
+  assert.ok(!left.postModels.some((p) => p.postId === 'post-corner-0'), "the first turn's dusza is against the wall: no post");
+  assert.ok(left.postModels.some((p) => p.line === 'outer'), 'the open dusza of the second turn keeps its post');
+  // on the right: the outer line, the second turn's dusza against the wall
+  const right = buildStaircase(S({ stairwellRoomEnabled: true, stairwellWallHand: 'right', stairwellWallGapMm: 10 }));
+  assert.equal(sideLine(right), 'outer');
+  assert.ok(!right.postModels.some((p) => p.line === 'outer'), 'no post at the wall even with a 10 mm gap (a concave corner: gap × √2)');
+  assert.ok(right.postModels.some((p) => p.postId === 'post-corner-0'));
+  // the hand is the user's: a first turn to the RIGHT with the walls on the left puts them on the OUTER line
+  assert.equal(sideLine(buildStaircase(S({ turnDirection: 'right', stairwellRoomEnabled: true, stairwellWallHand: 'left' }))), 'outer');
+});
+
+test('a new project before "Generuj schody" (stairPending): the plan shows only the stairwell and the opening', async () => {
+  const { renderPlan2DSVG } = await import('../../plan2d/plan2dRenderer.js');
+  const c = S({ stairwellRoomEnabled: true, stairPending: true });
+  const b = buildStaircase(c);
+  const viewport = { x: -4000, y: -4000, width: 8000, height: 8000 };
+  const pending = renderPlan2DSVG(b.planLayout, b.fullConfig, b.derived, { viewport, stairwell: null });
+  const shown = renderPlan2DSVG(b.planLayout, { ...b.fullConfig, stairPending: false }, b.derived, { viewport, stairwell: null });
+  assert.ok(!pending.includes('step-object'), 'no tread before generating');
+  assert.ok(shown.includes('step-object'));
+});

@@ -73,6 +73,12 @@ export function createDefaultConfig() {
     stairwellWallB: true,
     stairwellWallC: true,
     stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
+    // An S only: the walls on the 'left' / 'right' side (walking up flight A) — '' = along the outer line (stairwell.js
+    // stairwellWallLine)
+    stairwellWallHand: '',
+    // A new project waits for its parameters (user decision 2026-10-23): the walls and the ceiling opening are shown,
+    // the stair itself only after "Generuj schody" — from then on live, as always. Saved with the project.
+    stairPending: false,
     // How far each wall reaches (stairwell.js wallInterval): 'full' | 'start' (from the side's start, this long) | 'end'
     // (back from the side's end — side A: from the corner — this long)
     stairwellWallAExtent: 'full',

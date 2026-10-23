@@ -279,7 +279,8 @@ export function buildAllPostModels(planLayout, config) {
   // a dusza against a stairwell wall gets no post (user decision 2026-10-23): its two wangi lap at the wall
   const wallPieces = stairwellWalls(stairwellReport(config, planLayout), config, planLayout)?.pieces || [];
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
-  const atWall = (p) => wallPieces.some((w) => distanceToSegment(p, w.a, w.b) <= gap + WALL_CORNER_TOL_MM);
+  // (in a concave corner the two walls stop where their faces meet — gap × √2 from the corner)
+  const atWall = (p) => wallPieces.some((w) => distanceToSegment(p, w.a, w.b) <= gap * Math.SQRT2 + WALL_CORNER_TOL_MM);
 
   const models = [
     { postId: 'post-start', kind: 'start', position: startPosition, anchor: startAnchor, elevation: startElevation, size: postSize, ...(onStarter >= 0 ? { onStarter } : {}) },
@@ -308,6 +309,7 @@ export function buildAllPostModels(planLayout, config) {
         models.push({ postId: `post-corner-${i}`, kind: 'corner', line: 'outer', position: outerCornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
         return;
       }
+      if (atWall(turn.innerCorner)) return; // (an S's walls on the inner line: this dusza stands at the wall)
       models.push({ postId: `post-corner-${i}`, kind: 'corner', position: cornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
     });
   }

@@ -46,6 +46,7 @@ export { railingEndKey, sanitizeRailingEndOffsets, MAX_RAILING_END_OFFSET_MM } f
 import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesForRun, intermediatePostSplits, splitPathAt, planCornerSplits } from './railingGlass.js';
 import { starterNewelTread } from './starterSteps.js';
 import { sanitizeRailingPostEdits, manualRailingPostId, SUPPRESS_MATCH_MM, MANUAL_POST_MIN_FROM_END_MM } from './railingPostEdits.js';
+import { stairwellWallLine } from './stairwell.js';
 export { applyRailingPostEdit, sanitizeRailingPostEdits } from './railingPostEdits.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
@@ -1203,7 +1204,8 @@ function buildSection(section, ctx) {
   // brackets — no posts, no infill, free ends — at the same height above the nosing line, its axis
   // `railingWallRailClearanceMm` + half its width off the wall (the wall: `stairwellWallGapMm` past the outer line)
   for (const w of wallRailPaths) {
-    if (side !== 'outer') {
+    // (on the stairwell's wall side — the outer line, or an S's other side, stairwell.js stairwellWallLine)
+    if (side !== stairwellWallLine(config)) {
       base.diagnostics.push(diag(section.id, 'RAILING-WALL-RAIL-SIDE', `Balustrada ${section.id}: poręcz przyścienna jest tylko po stronie zewnętrznej (przy ścianie klatki) — po stronie duszy pominięta.`, 'INFO'));
       continue;
     }

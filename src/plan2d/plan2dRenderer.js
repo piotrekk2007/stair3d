@@ -632,6 +632,15 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
 
   const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
 
+  // a new project not generated yet (config.stairPending): only the stairwell's walls and the ceiling opening
+  if (config.stairPending) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
+    <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
+    ${gridXMLStr}
+    ${stairwellXMLStr}
+    ${openingXMLStr}
+  </svg>`;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
     <rect x="${fmt(viewport.x)}" y="${fmt(viewport.y)}" width="${fmt(viewport.width)}" height="${fmt(viewport.height)}" fill="#ffffff"/>
     ${gridXMLStr}
