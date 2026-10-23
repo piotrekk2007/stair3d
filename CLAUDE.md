@@ -87,9 +87,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `CORNER_POST` where one stands), the walkline (`offsetLinesFromDusza`, `duszaWeights` across flight B, winder width
   from each turn's own dusza; drawn as one straight across flight B), the stairwell (sides A/B/C, concave B–C corner, wall C at x = B − gap), the fit (B
   by the count + ONE width — `widthsInB`) and the variants (`S-w<n>`, `S-landing`). Names: `util/sideNames.js` (an S
-  says lewa / prawa everywhere — panel, HUD, Inspektor, takeoff, DXF, offer; L / U zewn. / wewn.). An S's walls on
-  the left / right: `stairwellWallHand` → `stairwell.js stairwellWallLine` (sides, walls, fit, railing and posts follow
-  that line).
+  says lewa / prawa everywhere — panel, HUD, Inspektor, takeoff, DXF, offer; L / U zewn. / wewn.). An S's sides
+  A / B / C are measured along `stairwell.js stairwellMeasureLine` (`stairwellWallHand` left / right, default the line
+  with most walls).
 - **New project = no stair yet** (user decision 2026-10-23): `config.stairPending` (start + „Nowy”, with the stairwell
   on) — built but not shown (3D root hidden, the plan only stairwell + opening, no stair findings / takeoff) until
   „▶ Generuj schody” (folder 1, `main.js generateStair`); live from then on.
@@ -125,12 +125,16 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - **Stairwell** (`stairwell.js` model v3 + `designer/stairwellVariants.js`, user decisions 2026-10-16; docs
   [STAIRWELL_ROOM.md](docs/architecture/STAIRWELL_ROOM.md)): no drawn room — the side lengths A/B/C of the outer line
   (`stairwellSide{A,B,C}Mm`, measured like `outerSideLengths`), each FIXED (exact) or FREE (follows from the counts,
-  no limit — the entry floats), each optionally along a WALL (`stairwellWall*`, `stairwellWallGapMm`) — the whole
-  side or only part of it (`stairwellWall{S}Extent` full | start | end + `…LengthMm`, `wallInterval`: A 'start' = from
-  the first front edge, 'end' = back from the corner; corners close only where both walls reach them; a partial wall
-  is capped + labelled on the plan). The opening balustrade skips only the walled part of an edge; "Balustrada zewn.
-  tam, gdzie nie ma ściany" (folder 9) sets the outer sections from `treadsOpenOnOuterSide` (built returns
-  `stairwellWalls`).
+  no limit — the entry floats). **Walls** = a list (the wall editor, user request 2026-10-23):
+  `stairwellWallList` `[{id, side, line 'outer'|'inner', from, to}]` (mm from the side's fixed corner — A back from
+  the corner, B/C on from it; `to: null` = to the far end), so walls may stand on both sides of a flight;
+  `stairwellWallList(config, planLayout)` (null → the older per-side fields `stairwellWall{S}`/`…Extent`/`…LengthMm`),
+  edits `stairwellWallEdits.js applyWallEdit`; plan mode "▥ Ściany" (click a dashed side = add, drag an end, right-click
+  = remove) + the list in folder 3. Sides are found BY DIRECTION (`lineSides`: a missing flight = zero-length side, no
+  shifted letters — the S A = 0 bug); corners close only between walls of the same line reaching them; a partial wall
+  is capped + labelled on the plan. The opening balustrade skips only the walled part of an edge; "Balustrada zewn.
+  tam, gdzie nie ma ściany" (folder 9) sets every walled side's sections from `treadsOpenOnOuterSide(…, line)` (built
+  returns `stairwellWalls`); the wall handrail only on a side with a wall (`wallRailAllowed`).
   `wellFrame` = the WALL frame (x from wall A, y from the end wall; a mirror of the plan for a right turn) — the
   opening is given in it whenever the stairwell is on, so it stays put when a free side changes. `stairwellReport` →
   `built.stairwell` (gate): WARNING `STAIRWELL-SIDE-FIXED` for a fixed side off > 1 mm. Plan 2D layer `stairwell`

@@ -72,7 +72,10 @@ User decisions 2026-10-23:
 
 ## Walls on the left or the right (user request 2026-10-23)
 
-- `stairwellWallHand` ('' | 'left' | 'right', an S only; panel „S: ściany klatki”, folder 3) — the side the stairwell's
+- (superseded by the wall editor, STAIRWELL_ROOM.md "Walls": walls are a list on either line; `stairwellWallHand` now
+  only says which line the sides A / B / C are MEASURED along — '' = the line with most walls — and, for a project
+  without a wall list, where its per-side walls stand)
+- `stairwellWallHand` ('' | 'left' | 'right', an S only; panel „S: boki A/B/C mierzone”, folder 3) — the side the stairwell's
   walls are on, as seen walking up flight A (stored as the HAND, so a change of the turn direction keeps them where they
   are).
 - `stairwell.js stairwellWallLine(config)` turns it into the plan's line ('outer' | 'inner'):

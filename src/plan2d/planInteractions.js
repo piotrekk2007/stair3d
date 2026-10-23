@@ -157,6 +157,10 @@ function midpoint(a, b) {
  * @param {(dx:number, dy:number, final:boolean) => void} [opts.onOpeningTranslate]  Whole-opening drag, total delta.
  * @param {(points:{x,y}[]) => void} [opts.onOpeningDrawFinish]  Drawing closed (>= 3 points, plan coords).
  * @param {() => void} [opts.onOpeningDrawCancel]  Esc while drawing.
+ * @param {() => boolean} [opts.getWallMode]  The wall editor ("▭ Ściany") is on (main.js owns it).
+ * @param {(side:string, line:string) => void} [opts.onWallAdd]  Click on a dashed side (`.wall-candidate`).
+ * @param {(wallId:string, end:'a'|'b', point, final:boolean, mmPerPx:number) => void} [opts.onWallDrag]  A wall end dragged.
+ * @param {(wallId:string) => void} [opts.onWallRemove]  Right-click on a wall (`.wall-piece`).
  */
 export function attachPlanInteractions(opts) {
   const {
@@ -194,6 +198,10 @@ export function attachPlanInteractions(opts) {
     onStarterHandleDrag,
     onRailingPostRestore,
     onRailingOpeningEdgeToggle,
+    getWallMode = () => false,
+    onWallAdd,
+    onWallDrag,
+    onWallRemove,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -374,6 +382,24 @@ export function attachPlanInteractions(opts) {
       }
     }
 
+    // --- the wall editor ("▭ Ściany"): drag a wall's end, click a dashed side to add a wall
+    if (getWallMode() && e.button === 0 && !spacePressed) {
+      const svg = getSvg();
+      const handleEl = e.target.closest('.wall-handle');
+      if (svg && handleEl && onWallDrag) {
+        panelEl.setPointerCapture(e.pointerId);
+        dragState = { pointerId: e.pointerId, kind: 'wall-end', wallId: handleEl.dataset.wallId, end: handleEl.dataset.end, last: null };
+        e.preventDefault();
+        return;
+      }
+      const candidateEl = e.target.closest('.wall-candidate');
+      if (candidateEl && !e.target.closest('.wall-piece')) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'wall-candidate', side: candidateEl.dataset.side, line: candidateEl.dataset.line } };
+        return;
+      }
+      if (e.target.closest('.wall-piece')) return;
+    }
+
     // --- balustrade posts ("▮ Słupki" mode): drag a hand-placed post, click a path / a ghost / a post
     if (getRailingPostMode() && e.button === 0 && !spacePressed) {
       const svg = getSvg();
@@ -532,6 +558,12 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'wall-end') {
+      dragState.last = screenToPlanPoint(liveSvg(), e.clientX, e.clientY);
+      onWallDrag(dragState.wallId, dragState.end, dragState.last, false, mmPerPx());
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'railing-post') {
       if (!dragState.moved && Math.hypot(e.clientX - dragState.downX, e.clientY - dragState.downY) < 4) return;
       dragState.moved = true;
@@ -624,6 +656,13 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'wall-end') {
+      const { wallId, end, last } = dragState;
+      dragState = null;
+      if (last) onWallDrag(wallId, end, last, true, mmPerPx());
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'railing-post') {
       const { sectionId, manualId, spotKey, postId, moved, last } = dragState;
       dragState = null;
@@ -667,7 +706,8 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
+        if (hit.kind === 'wall-candidate' && onWallAdd) onWallAdd(hit.side, hit.line);
+        else if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
         else if (hit.kind === 'railing-ghost' && onRailingPostRestore) onRailingPostRestore(hit.sectionId, hit.s);
         else if (hit.kind === 'railing-opening-edge' && onRailingOpeningEdgeToggle) onRailingOpeningEdgeToggle(hit.index);
         else if (hit.kind === 'post' && onPostClick) onPostClick(hit.postId);
@@ -695,6 +735,12 @@ export function attachPlanInteractions(opts) {
       e.preventDefault();
       draft.points = draft.points.slice(0, -1);
       showDraft();
+      return;
+    }
+    const wallEl = getWallMode() ? e.target.closest('.wall-piece, .wall-handle') : null;
+    if (wallEl) {
+      e.preventDefault();
+      onWallRemove?.(wallEl.dataset.wallId);
       return;
     }
     const railPost = getRailingPostMode() ? e.target.closest('.railing-post-handle') : null;

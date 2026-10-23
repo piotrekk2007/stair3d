@@ -52,7 +52,8 @@ import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
 import { sideShort } from './util/sideNames.js';
-import { stairwellWallLine } from './geometry/stairwell.js';
+import { lineHasWall, stairwellWallList } from './geometry/stairwell.js';
+import { applyWallEdit } from './geometry/stairwellWallEdits.js';
 
 // What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
 const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
@@ -158,6 +159,7 @@ let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; nul
 // Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
 let openingMode = 'off';
 let railingPostMode = false; // the plan's "▮ Słupki" mode: balustrade posts placed / moved / switched off by hand
+let wallMode = false; // the plan's "▥ Ściany" mode: the stairwell's walls added / stretched / removed by hand
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
 let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
@@ -727,6 +729,7 @@ function regeneratePlan2D() {
     stairwell: stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout),
     openingEdit: openingMode === 'edit',
     railingPostEdit: railingPostMode,
+    wallEdit: wallMode,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -810,8 +813,50 @@ function applyRailingPosts(change, { final = true } = {}) {
   rebuild();
   if (final) commitHistory();
 }
+// --- the stairwell's walls by hand (geometry/stairwellWallEdits.js): every gesture writes config.stairwellWallList only
+function applyWallChange(change, { final = true } = {}) {
+  config.stairwellWallList = applyWallEdit(stairwellWallList(config, currentPlanLayout), change);
+  rebuild();
+  if (final) {
+    uiRefresh?.();
+    commitHistory();
+  }
+}
+// A wall's end dragged to a plan point: along its side, snapped to the side's ends and the tread edges on that line
+// within 8 px, else to whole 10 mm.
+function wallDrag(wallId, end, raw, final, mmPerPx) {
+  const w = stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout)?.walls?.find((x) => x.id === wallId);
+  if (!w || !raw) return;
+  const start = { x: w.spanA.x - w.dir.x * w.t0, y: w.spanA.y - w.dir.y * w.t0 };
+  const along = (p) => (p.x - start.x) * w.dir.x + (p.y - start.y) * w.dir.y;
+  const across = (p) => Math.abs((p.x - start.x) * w.dir.y - (p.y - start.y) * w.dir.x);
+  const t = along(raw);
+  const tol = 8 * (mmPerPx || 1);
+  const snaps = [0, w.sideLength];
+  for (const tread of currentPlanLayout?.treads || []) {
+    for (const p of (w.line === 'inner' ? tread.innerChain : tread.outerChain) || []) if (across(p) < 1) snaps.push(along(p));
+  }
+  let best = null;
+  for (const s of snaps) if (Math.abs(s - t) <= tol && (best === null || Math.abs(s - t) < Math.abs(best - t))) best = s;
+  const value = best ?? Math.round(t / 10) * 10;
+  applyWallChange({ action: 'set-span', id: wallId, end, t0: end === 'a' ? value : w.t0, t1: end === 'b' ? value : w.t1, sideLength: w.sideLength }, { final });
+}
+function setWallMode(on) {
+  wallMode = on && !!config.stairwellRoomEnabled;
+  if (wallMode && openingMode !== 'off') setOpeningMode('off');
+  if (wallMode && railingPostMode) setRailingPostMode(false);
+  plan2dHud.querySelector('[data-action="walls"]')?.classList.toggle('active', wallMode);
+  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = !wallMode && !on;
+    if (wallMode) hint.textContent = 'Ściany klatki: klik na przerywanej linii przy boku schodów — nowa ściana na całym boku (także po drugiej stronie biegu); przeciągnij kółko na końcu ściany — skróć / wydłuż (przyciąga do końców boku i krawędzi stopni); prawy klik na ścianie — usuń. Lista ścian — folder „3. Klatka schodowa”.';
+    else if (on) hint.textContent = 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”).';
+  }
+  regeneratePlan2D();
+}
 function setRailingPostMode(on) {
   railingPostMode = on && !!lastModels?.railingModel?.enabled;
+  if (railingPostMode && wallMode) setWallMode(false);
   if (railingPostMode && openingMode !== 'off') setOpeningMode('off');
   plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.toggle('active', railingPostMode);
   const hint = plan2dHud.querySelector('#plan2d-opening-hint');
@@ -830,6 +875,10 @@ function setRailingPostMode(on) {
 
 function setOpeningMode(mode) {
   openingMode = mode;
+  if (mode !== 'off' && wallMode) {
+    wallMode = false;
+    plan2dHud.querySelector('[data-action="walls"]')?.classList.remove('active');
+  }
   if (mode !== 'off' && railingPostMode) {
     railingPostMode = false;
     plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.remove('active');
@@ -958,20 +1007,27 @@ function applyRailingEdit(action, sectionId, stepIndex, side) {
   commitHistory();
 }
 
-// The outer side's balustrade sections from the stairwell's walls (stairwell.js treadsOpenOnOuterSide): one section
-// per run of treads with no wall beside them; the inner side's sections stay. Without the stairwell's walls: a hint.
+// The balustrade sections from the stairwell's walls (stairwell.js treadsOpenOnOuterSide): on every side with a wall
+// along it, one section per run of treads with no wall beside them; a side with no wall keeps its sections. Without
+// the stairwell's walls: a hint.
 function railingOuterFromWalls() {
-  const flags = treadsOpenOnOuterSide(lastModels?.planLayout, lastModels?.stairwellWalls?.pieces, config);
-  if (!flags) {
-    ws.setStatus({ selection: 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”) i zaznacz boki ze ścianą.' });
+  const pieces = lastModels?.stairwellWalls?.pieces;
+  const lines = ['outer', 'inner'].filter((line) => lineHasWall(config, line));
+  if (!pieces || !lines.length) {
+    ws.setStatus({ selection: 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”) i dodaj ściany (tryb „▭ Ściany” na planie).' });
     return;
   }
-  const ranges = openOuterRailingRanges(flags);
   const stamp = Date.now().toString(36);
-  const wallSide = stairwellWallLine(config); // (the side the walls are on — an S may have them on the inner line)
-  config.railingSections = [...(config.railingSections || []).filter((s) => s.side !== wallSide), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${k}`, side: wallSide, ...r }))];
-  if (ranges.length) config.railingEnabled = true;
-  ws.setStatus({ selection: ranges.length ? `Balustrada ${sideShort(wallSide, config)}: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
+  let sections = config.railingSections || [];
+  const notes = [];
+  for (const line of lines) {
+    const ranges = openOuterRailingRanges(treadsOpenOnOuterSide(lastModels.planLayout, pieces, config, line));
+    sections = [...sections.filter((s) => s.side !== line), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${line}-${k}`, side: line, ...r }))];
+    notes.push(ranges.length ? `${sideShort(line, config)}: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : `${sideShort(line, config)}: wszędzie ściana — bez balustrady`);
+  }
+  config.railingSections = sections;
+  if (sections.length) config.railingEnabled = true;
+  ws.setStatus({ selection: `Balustrada ${notes.join('; ')}` });
   refreshUI(gui);
   rebuild();
   commitHistory();
@@ -1357,6 +1413,7 @@ plan2dHud.innerHTML = `
     <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
     <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
     <button type="button" data-action="railing-posts" title="Słupki balustrady: dodawaj, przesuwaj, usuwaj; wyłączaj słupki narożne">▮ Słupki</button>
+    <button type="button" data-action="walls" title="Ściany klatki: dodawaj przy każdym boku (po obu stronach biegu), skracaj / wydłużaj, usuwaj">▥ Ściany</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
     <button type="button" data-action="fit" title="Dopasuj do widoku">⤢</button>
@@ -1385,6 +1442,7 @@ syncPlanEditButton();
 plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw' ? 'off' : 'draw'));
 plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
 plan2dHud.querySelector('[data-action="railing-posts"]').addEventListener('click', () => setRailingPostMode(!railingPostMode));
+plan2dHud.querySelector('[data-action="walls"]').addEventListener('click', () => setWallMode(!wallMode));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1515,6 +1573,10 @@ planApi = attachPlanInteractions({
   onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),
   onPostClick: (postId) => setSelection({ elementType: 'post', postId }),
   getRailingPostMode: () => railingPostMode,
+  getWallMode: () => wallMode,
+  onWallAdd: (side, line) => applyWallChange({ action: 'add', side, line }),
+  onWallDrag: (wallId, end, raw, final, mmPerPx) => wallDrag(wallId, end, raw, final, mmPerPx),
+  onWallRemove: (wallId) => applyWallChange({ action: 'remove', id: wallId }),
   onRailingPostAdd: (sectionId, raw, mmPerPx) => {
     const s = railingSAlong(sectionId, raw, mmPerPx);
     if (s === null) return;
@@ -1579,6 +1641,16 @@ const gui = createUI({
   onFindStairwellVariants: () => searchStairwellVariants(),
   onGenerateStair: () => generateStair(),
   onRailingOuterFromWalls: () => railingOuterFromWalls(),
+  // the panel's wall list (folder 3): the walls as they are (with their lengths), and its edits
+  getWalls: () => {
+    const drawn = stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout)?.walls || [];
+    return stairwellWallList(config, currentPlanLayout).map((w) => ({ ...w, lengthMm: drawn.find((d) => d.id === w.id)?.lengthMm ?? null }));
+  },
+  onWallEdit: (change) => applyWallChange(change),
+  onWallMode: () => {
+    if (viewState.view !== '2d') setView('2d');
+    setWallMode(true);
+  },
   onFreezeDerivedOpening: () => {
     const rel = lastModels?.ceilingFit?.openingMode === 'derived' ? lastModels.ceilingFit.openingRelativeOutline : null;
     if (!rel) return;

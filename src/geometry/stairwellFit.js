@@ -31,7 +31,7 @@
 import { buildPlanLayout } from './planLayout.js';
 import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { wellEnabled, wellFixedTargets, wellSideLetters, exitSideLetter, stairwellWallLine } from './stairwell.js';
+import { wellEnabled, wellFixedTargets, wellSideLetters, exitSideLetter, stairwellMeasureLine, lineSides } from './stairwell.js';
 
 const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
@@ -60,7 +60,13 @@ function sideLetters(stairType) {
  * @param {{outerFullPath:{x:number,y:number}[]}} planLayout
  * @returns {number[]}
  */
-export function outerSideLengths(planLayout, line = 'outer') {
+export function outerSideLengths(planLayout, line = 'outer', stairType = null) {
+  // with the stair type: the sides found by direction (stairwell.js lineSides — a flight with no piece on this line is
+  // a zero-length side, the letters do not shift)
+  if (stairType) {
+    const sides = lineSides(planLayout, line, stairType);
+    return sideLetters(stairType).map((s) => sides[s]?.length ?? 0);
+  }
   const path = (line === 'inner' ? planLayout.innerFullPath : planLayout.outerFullPath) || [];
   const sides = [];
   let dir = null;
@@ -93,8 +99,9 @@ export function stairwellTargets(config) {
 function measure(config) {
   const derived = deriveStairData(config);
   const planLayout = buildPlanLayout({ ...config, riserHeight: derived.riserHeight, manualEdgeOverrides: {}, manualTreadOverhangs: {} });
-  // (along the stairwell's line — an S may have its walls on the inner line, stairwell.js stairwellWallLine)
-  return { derived, sides: outerSideLengths(planLayout, stairwellWallLine(config)) };
+  // (along the line the sides are measured on — an S may be measured along its inner line, stairwell.js
+  // stairwellMeasureLine)
+  return { derived, sides: outerSideLengths(planLayout, stairwellMeasureLine(config), config.stairType) };
 }
 
 function sideOf(config, letter) {

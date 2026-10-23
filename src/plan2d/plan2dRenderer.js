@@ -14,6 +14,7 @@ import { buildWalklineModel, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../geometry/
 import { boardPlanFootprint } from '../geometry/stringerModel.js';
 import { boundaryEditPoints } from './edgeEdit.js';
 import { starterHandles } from '../geometry/starterSteps.js';
+import { sideShort } from '../util/sideNames.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -236,6 +237,35 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
 // The stairwell (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls along the sides marked
 // so (thick grey, on the wall side of the outer line) and every side's length outside them — a FIXED side with its
 // dimension (green when met, red when off), a free one as it comes out. Drawing only (pointer-events none).
+// The wall editor (plan mode "▭ Ściany", user request 2026-10-23): every side of both lines where a wall can stand
+// (dashed — a click adds a wall along the whole side), every wall (right-click removes it) with a handle at each end
+// (drag along the side: snaps to the side's ends, the tread edges and 10 mm — main.js) and its length.
+export function wallEditXML(drawing, config) {
+  if (!drawing) return '';
+  const color = '#b36b00';
+  let xml = '';
+  for (const c of drawing.candidates || []) {
+    const o = { x: c.outward.x * px(3), y: c.outward.y * px(3) };
+    xml += `<line class="wall-candidate" data-side="${c.side}" data-line="${c.line}" x1="${fmt(c.a.x + o.x)}" y1="${fmt(-(c.a.y + o.y))}" x2="${fmt(c.b.x + o.x)}" y2="${fmt(-(c.b.y + o.y))}" stroke="#9a9a9a" stroke-opacity="0.55" stroke-width="${px(6)}" stroke-dasharray="${px(10)} ${px(6)}" pointer-events="stroke"><title>Klik — dodaj ścianę: bok ${c.side}, strona ${sideShort(c.line, config)}</title></line>`;
+  }
+  for (const w of drawing.walls || []) {
+    const o = { x: w.outward.x * px(3), y: w.outward.y * px(3) };
+    xml += `<line class="wall-piece" data-wall-id="${w.id}" x1="${fmt(w.a.x + o.x)}" y1="${fmt(-(w.a.y + o.y))}" x2="${fmt(w.b.x + o.x)}" y2="${fmt(-(w.b.y + o.y))}" stroke="${color}" stroke-opacity="0.35" stroke-width="${px(12)}" pointer-events="stroke"><title>Ściana: bok ${w.side}, strona ${sideShort(w.line, config)}, ${Math.round(w.lengthMm)} mm — przeciągnij końce; prawy klik — usuń</title></line>`;
+    // the handles at the wall's own stretch (no corner lengthening), on its face
+    for (const [end, p] of [['a', w.spanA], ['b', w.spanB]]) {
+      const off = (w.a.x - w.spanA.x) * w.outward.x + (w.a.y - w.spanA.y) * w.outward.y;
+      const h = { x: p.x + w.outward.x * off, y: p.y + w.outward.y * off };
+      xml += `<circle class="wall-handle" data-wall-id="${w.id}" data-end="${end}" cx="${fmt(h.x)}" cy="${fmt(-h.y)}" r="${px(6)}" fill="#fff" stroke="${color}" stroke-width="2" ${HAIR}><title>Przeciągnij koniec ściany wzdłuż boku</title></circle>`;
+    }
+    const dir = { x: w.b.x - w.a.x, y: w.b.y - w.a.y };
+    const m = { x: (w.spanA.x + w.spanB.x) / 2 + w.outward.x * px(22), y: (w.spanA.y + w.spanB.y) / 2 + w.outward.y * px(22) };
+    const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
+    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+    xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">ściana ${w.side} ${sideShort(w.line, config)}: ${Math.round(w.lengthMm)}</text>`;
+  }
+  return `<g id="wall-edit-layer">${xml}</g>`;
+}
+
 export function stairwellXML(drawing) {
   if (!drawing) return '';
   const wall = '#6b6b6b';
@@ -488,7 +518,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -649,6 +679,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
+  const wallEditXMLStr = wallEdit ? wallEditXML(stairwell, config) : '';
 
   // a new project not generated yet (config.stairPending): only the stairwell's walls and the ceiling opening
   if (config.stairPending) {
@@ -657,6 +688,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${gridXMLStr}
     ${stairwellXMLStr}
     ${openingXMLStr}
+    ${wallEditXMLStr}
   </svg>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
@@ -682,7 +714,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${overhangXML}
     ${openingEdit ? openingXMLStr : ''}
     ${railingPostEditXMLStr}
-    ${openingEdit || railingPostEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
+    ${wallEditXMLStr}
+    ${openingEdit || railingPostEdit || wallEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
   </svg>`;
 }
 

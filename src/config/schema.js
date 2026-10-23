@@ -69,17 +69,22 @@ export function createDefaultConfig() {
     stairwellSideAFixed: false,
     stairwellSideBFixed: false,
     stairwellSideCFixed: false,
-    stairwellWallA: true, // the side runs along a wall
+    // The walls (the wall editor, user request 2026-10-23 — stairwell.js stairwellWallList): [{id, side 'A'|'B'|'C',
+    // line 'outer'|'inner', from, to}] (mm from the side's corner, to null = to the side's far end). null = from the
+    // per-side fields below (older projects: stairwellWall{A,B,C} / …Extent / …LengthMm on the measured line); the
+    // first edit writes the list.
+    stairwellWallList: null,
+    stairwellWallA: true, // (per-side, read only without stairwellWallList) the side runs along a wall
     stairwellWallB: true,
     stairwellWallC: true,
     stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
-    // An S only: the walls on the 'left' / 'right' side (walking up flight A) — '' = along the outer line (stairwell.js
-    // stairwellWallLine)
+    // An S only: its sides A / B / C measured along the 'left' / 'right' line (walking up flight A) — '' = the line most
+    // of its walls stand along (stairwell.js stairwellMeasureLine; without a wall list also the per-side walls' line)
     stairwellWallHand: '',
     // A new project waits for its parameters (user decision 2026-10-23): the walls and the ceiling opening are shown,
     // the stair itself only after "Generuj schody" — from then on live, as always. Saved with the project.
     stairPending: false,
-    // How far each wall reaches (stairwell.js wallInterval): 'full' | 'start' (from the side's start, this long) | 'end'
+    // (per-side, read only without stairwellWallList) How far each wall reaches (stairwell.js wallInterval): 'full' | 'start' (from the side's start, this long) | 'end'
     // (back from the side's end — side A: from the corner — this long)
     stairwellWallAExtent: 'full',
     stairwellWallBExtent: 'full',

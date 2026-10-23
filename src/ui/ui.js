@@ -10,7 +10,7 @@ import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.j
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
-import { stairwellWallLine } from '../geometry/stairwell.js';
+import { stairwellMeasureLine, wellSideLetters } from '../geometry/stairwell.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -75,6 +75,9 @@ export function createUI({
   onFindStairwellVariants,
   onFreezeDerivedOpening,
   onRailingOuterFromWalls,
+  getWalls,
+  onWallEdit,
+  onWallMode,
   onGenerateStair,
   container,
 }) {
@@ -130,20 +133,81 @@ export function createUI({
   // STAIRWELL-SIDE-FIXED; the opening (folder 4) is then given from the walls.
   const well = gui.addFolder('3. Klatka schodowa');
   live(well.add(config, 'stairwellRoomEnabled')).name('Wymiary klatki: włączone');
-  // an S has a dusza on each line: its walls may be on either side (stairwell.js stairwellWallLine); shown for an S only,
-  // right under the switch (the user missed it further down)
-  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'po stronie zewnętrznej (domyślnie)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: ściany klatki');
+  // an S has a dusza on each line: its sides may be measured along either (stairwell.js stairwellMeasureLine — by
+  // default the line most of its walls stand along); shown for an S only, right under the switch
+  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'tam, gdzie większość ścian (AUTO)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: boki A/B/C mierzone');
   for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana, S: wzdłuż biegu B'], ['C', 'U i S: do krawędzi stropu']]) {
     live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);
     live(well.add(config, `stairwellSide${s}Fixed`)).name(`Bok ${s}: sztywny (inaczej swobodny)`);
-    live(well.add(config, `stairwellWall${s}`)).name(`Bok ${s}: wzdłuż ściany`);
-    // how far the wall reaches (stairwell.js wallInterval): the whole side, or a length from its start / its end
-    const fromEnd = s === 'A' ? 'od narożnika (bok B)' : s === 'B' ? 'od końca boku' : 'od krawędzi stropu';
-    const fromStart = s === 'A' ? 'od początku schodów' : 'od narożnika';
-    live(well.add(config, `stairwellWall${s}Extent`, { 'cała długość boku': 'full', [`${fromStart}, na długości`]: 'start', [`${fromEnd}, na długości`]: 'end' })).name(`Bok ${s}: zasięg ściany`);
-    live(well.add(config, `stairwellWall${s}LengthMm`, 0, 12000, 1)).name(`Bok ${s}: długość ściany [mm]`);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
+  // the walls (the wall editor, stairwell.js stairwellWallList): one row per wall — its side, the side of the stair
+  // it stands on, from / to in mm from the side's corner (A: back from the corner toward the entry; B, C: on from the
+  // corner; empty "do" = to the side's far end); the same walls are drawn / stretched / removed on the plan ("▥ Ściany")
+  const wallsBox = document.createElement('div');
+  wallsBox.className = 'railing-sections stairwell-walls';
+  function renderWalls() {
+    wallsBox.innerHTML = '';
+    if (!getWalls || !onWallEdit) return;
+    const title = document.createElement('div');
+    title.className = 'railing-sections-title';
+    title.textContent = 'Ściany (od–do w mm od narożnika boku; A: od narożnika w stronę wejścia; puste „do” = do końca boku)';
+    wallsBox.appendChild(title);
+    const letters = wellSideLetters(config.stairType);
+    for (const w of getWalls()) {
+      const row = document.createElement('div');
+      row.className = 'railing-section-row';
+      const side = document.createElement('select');
+      side.title = 'bok';
+      letters.forEach((s) => side.add(new Option(s, s, false, w.side === s)));
+      side.addEventListener('change', () => onWallEdit({ action: 'set', id: w.id, side: side.value }));
+      const line = document.createElement('select');
+      line.title = 'po której stronie schodów';
+      ['outer', 'inner'].forEach((value) => line.add(new Option(sideShort(value, config), value, false, w.line === value)));
+      line.addEventListener('change', () => onWallEdit({ action: 'set', id: w.id, line: line.value }));
+      const from = document.createElement('input');
+      from.type = 'number';
+      from.min = '0';
+      from.step = '10';
+      from.title = 'od [mm] (od narożnika boku)';
+      from.value = String(Math.round(w.from));
+      from.addEventListener('change', () => onWallEdit({ action: 'set', id: w.id, from: Number(from.value) }));
+      const to = document.createElement('input');
+      to.type = 'number';
+      to.min = '0';
+      to.step = '10';
+      to.placeholder = 'koniec';
+      to.title = 'do [mm] (puste = do końca boku)';
+      to.value = w.to === null ? '' : String(Math.round(w.to));
+      to.addEventListener('change', () => onWallEdit({ action: 'set', id: w.id, to: to.value === '' ? null : Number(to.value) }));
+      const len = document.createElement('span');
+      len.className = 'wall-length';
+      len.textContent = Number.isFinite(w.lengthMm) ? ` ${Math.round(w.lengthMm)}` : ' —';
+      len.title = 'długość ściany [mm]';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '✕';
+      remove.title = 'Usuń ścianę';
+      remove.addEventListener('click', () => onWallEdit({ action: 'remove', id: w.id }));
+      row.append(side, line, from, document.createTextNode('–'), to, len, remove);
+      wallsBox.appendChild(row);
+    }
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.textContent = '+ Dodaj ścianę';
+    add.title = 'Nowa ściana na całym boku A po stronie zewn. — zmień bok / stronę / zakres w wierszu albo na planie';
+    add.addEventListener('click', () => onWallEdit({ action: 'add', side: letters[0], line: 'outer' }));
+    wallsBox.appendChild(add);
+    if (onWallMode) {
+      const plan = document.createElement('button');
+      plan.type = 'button';
+      plan.textContent = '▥ Edytuj ściany na planie';
+      plan.addEventListener('click', () => onWallMode());
+      wallsBox.appendChild(plan);
+    }
+  }
+  renderWalls();
+  well.$children.appendChild(wallsBox);
   // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
   // the counts are AUTO; with the counts by hand only the going follows the key side (e.g. 4 or 5 straight in C)
   live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie (AUTO tylko głębokość)');
@@ -414,21 +478,20 @@ export function createUI({
       renderSections();
     });
     sectionsBox.appendChild(add);
-    // the outer side's sections set from the stairwell's walls: a balustrade on every stretch with no wall beside it
-    // (stairwell.js treadsOpenOnOuterSide) — the inner side's sections are kept; editable afterwards as usual
+    // the sections set from the stairwell's walls: on every side with a wall, a balustrade on every stretch with no
+    // wall beside it (stairwell.js treadsOpenOnOuterSide) — a side with no wall keeps its sections; editable afterwards
     if (onRailingOuterFromWalls) {
       const fromWalls = document.createElement('button');
       fromWalls.type = 'button';
-      const wallSide = stairwellWallLine(config);
-      fromWalls.textContent = `Balustrada ${sideShort(wallSide, config)} tam, gdzie nie ma ściany`;
-      fromWalls.title = `Zastępuje odcinki po stronie ${sideGenitive(wallSide, config)} odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)`;
+      fromWalls.textContent = 'Balustrada tam, gdzie nie ma ściany';
+      fromWalls.title = 'Po każdej stronie ze ścianą klatki: zastępuje jej odcinki odcinkami na stopniach bez ściany obok (ściany — folder 3)';
       fromWalls.addEventListener('click', () => onRailingOuterFromWalls());
       sectionsBox.appendChild(fromWalls);
     }
   }
   renderSections();
   rail.$children.appendChild(sectionsBox);
-  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync()), syncSideNames];
+  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync()), syncSideNames, renderWalls];
   // (the balustrade sections' side lists too — re-rendered only when the names change, not while typing in them)
   let namesKey = `${config.stairType}|${config.turnDirection}`;
   gui.syncSideNames = () => {
@@ -582,7 +645,7 @@ function stairwellFitRows(fit, config) {
       return `<div class="row resultant ${cls}"><span>Klatka: bok ${s.side}${s.key ? ' (kluczowy)' : ''} / ${s.target}</span><b>${achieved}${devText}</b></div>`;
     })
     .join('');
-  return sideRows + `<div class="note">Boki mierzone po licu wangi ${sideGenitive(stairwellWallLine(config), config)}, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>`;
+  return sideRows + `<div class="note">Boki mierzone po licu wangi ${sideGenitive(stairwellMeasureLine(config), config)}, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>`;
 }
 
 export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, stairwellFit = null) {

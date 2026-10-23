@@ -11,8 +11,9 @@ a real stairwell is described by the dimensions that are RIGID.
 | `stairwellRoomEnabled` | the stairwell dimensions are on |
 | `stairwellSide{A,B,C}Mm` | the side lengths of the stair's OUTER line (outer face of the outer wanga = the wall line), measured like `stairwellFit.js outerSideLengths`: A from the first front edge (no nosing) to the corner, B along flight B (L: to the last back edge; U: corner to corner, wall to wall), C from the corner to the last back edge (U) |
 | `stairwellSide{A,B,C}Fixed` | FIXED = must come out exactly; FREE = follows from the tread counts (no limit) |
-| `stairwellWall{A,B,C}` | the side runs along a wall (drawn in 2D / 3D, what the opening is measured from) |
-| `stairwellWall{A,B,C}Extent` + `…LengthMm` | how far the wall reaches (user decision 2026-10-19): `full` (the whole side), `start` (from the side's start — A: the first front edge, B/C: the corner — that long, at most the side), `end` (back from the side's end — A: the corner / side B, C: the slab edge — that long; longer than the side = the wall goes on past its start, e.g. behind the entry) — `wallInterval` |
+| `stairwellWallList` | THE WALLS (the wall editor, user request 2026-10-23 — see "Walls" below): `[{id, side, line, from, to}]`; `null` = taken from the per-side fields below |
+| `stairwellWall{A,B,C}` | (per-side, older projects; read only without a list) the side runs along a wall |
+| `stairwellWall{A,B,C}Extent` + `…LengthMm` | (per-side, as above) how far the wall reaches (user decision 2026-10-19): `full` (the whole side), `start` (from the side's start — A: the first front edge, B/C: the corner — that long, at most the side), `end` (back from the side's end — A: the corner / side B, C: the slab edge — that long; longer than the side = the wall goes on past its start, e.g. behind the entry) — `wallInterval` |
 | `stairwellWallGapMm` | wall → wanga face |
 
 The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U C). Example (the user's U): B = 1885
@@ -53,11 +54,43 @@ Every side measured (`sides: {side, achieved, target, fixed, deviation}`); a fix
 
 ## Walls
 
+**The wall editor** (user request 2026-10-23: walls on both sides of a flight, e.g. along flight C, which the per-side
+fields could not say). `config.stairwellWallList` = `[{id, side: 'A'|'B'|'C', line: 'outer'|'inner', from, to}]`:
+each wall stands beside one side of one of the plan's lines (`line`: the outer or the inner line — an S's names
+lewa / prawa, util/sideNames.js), the wanga face `stairwellWallGapMm` off it, over `[from, to]` mm measured from the
+side's FIXED corner — side A back from its end (the corner; a straight stair: the exit) toward the entry, B and C on
+from their start corner — so a wall keeps its place when a free side changes; `to: null` = to the side's far end
+(follows the side). `stairwellWallList(config, planLayout)` returns the list, or — for a project without one — the
+per-side fields turned into it (`wall-A` …, on the measured line); the first edit writes the list
+(`stairwellWallEdits.js applyWallEdit`: `add` / `remove` / `set` / `set-span` (a dragged end, min 50 mm) / `clear`).
+
+Sides are found BY DIRECTION (`lineSides(planLayout, line, stairType)`): a line's straight pieces are matched in order
+to the flights' directions (A = the outer line's first piece, B = its second, C = −A for a U, A for an S); a flight
+with no piece on the line gets a zero-length side where it would be. Before, the pieces were numbered in order, so an
+S's inner line starting with winders (A = 0) shifted the letters: its B wall was drawn as "A" and wall C was lost (user
+report 2026-10-23). The fit (`stairwellFit.js outerSideLengths(…, stairType)`) and the report measure the same way.
+
+The sides A / B / C are measured along `stairwellMeasureLine(config)`: the outer line; an S along its left / right
+(`stairwellWallHand`, panel „S: boki A/B/C mierzone”) or, by default, the line most of its walls stand along.
+
+Editing: plan mode "▥ Ściany" (`plan2dRenderer.js wallEditXML`, `planInteractions.js` → `main.js applyWallChange /
+wallDrag`): a dashed place beside every side of both lines (click = a wall on the whole side), every wall with a handle
+at each end (drag along the side; snaps to the side's ends and the tread edges on that line within 8 px, else 10 mm),
+right-click = remove; its length labelled. Folder 3: one row per wall (side, line, from, to — empty = to the end —,
+its length, ✕), "+ Dodaj ścianę", "▥ Edytuj ściany na planie".
+
+Corners: two walls of the SAME line on neighbouring sides, both reaching their shared corner, close it — convex (the
+line turns away from the stair: outer L / U corners) run on past it, concave (toward the stair: an S's B–C corner, a
+dusza's two inner walls) stop short. What reads the walls: posts (no dusza post against a wall — any line), the
+opening's balustrade, the wall handrail (`wallRailAllowed`: a side with a wall; with the stairwell off the outer side,
+as before), "Balustrada tam, gdzie nie ma ściany" (every side with a wall: `treadsOpenOnOuterSide(…, line)`, a side
+with no wall keeps its sections), the opening's snapping (`frame.wallLines`), 3D walls and the slab.
+
 A partial wall is drawn on the plan with a cap at its free end(s) and "ściana A: 1300" beside it. What depends on the
 walls follows their real stretch: the opening's balustrade leaves out only the part of an edge a wall runs along
 (railingSolver.js `cuts` — see RAILING_MODEL.md), and `treadsOpenOnOuterSide` (a tread with < 50 % of its outer
-side along a wall is open) + `openOuterRailingRanges` drive the button "Balustrada zewn. tam, gdzie nie ma ściany"
-(folder 9: replaces the OUTER balustrade sections by one per run of open treads, the inner ones kept, editable after).
+side along a wall is open) + `openOuterRailingRanges` drive the button "Balustrada tam, gdzie nie ma ściany"
+(folder 9: on every side with a wall, its sections replaced by one per run of open treads; a side with no wall keeps its sections; editable after).
 The wall frame's `wallLines` (opening snapping) still take a wall as a whole line.
 
 `stairwellWalls` (3D, presentation only): one piece per side along a wall — only its `wallInterval` stretch — the
