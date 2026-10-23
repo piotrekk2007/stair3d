@@ -90,6 +90,9 @@ patch (type, turns, winders, width, going, counts, axis gap, `stairwellFitEnable
 rounded outward to 0.1 mm, snapped to the walls) of the treads that need headroom; "⇩ Zapisz wyznaczony otwór jako
 zadany" / any hand edit freezes it as a given polygon. Variants show the opening they need.
 
+While the opening is drawn ("Rysuj otwór") and edited, every edge carries its length (`plan2dRenderer.js
+edgeLengthLabelXML`: the drawn edges, the rubber band to the cursor and the closing edge; user request 2026-10-23).
+
 ## Project file
 
 v4 → v5 turned the old side-length fit into a room; v5 → v6 turns a room into sides (U: B = W and C = L − exit inset

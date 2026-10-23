@@ -130,7 +130,10 @@ export function createUI({
   // STAIRWELL-SIDE-FIXED; the opening (folder 4) is then given from the walls.
   const well = gui.addFolder('3. Klatka schodowa');
   live(well.add(config, 'stairwellRoomEnabled')).name('Wymiary klatki: włączone');
-  for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana'], ['C', 'tylko U: do krawędzi stropu']]) {
+  // an S has a dusza on each line: its walls may be on either side (stairwell.js stairwellWallLine); shown for an S only,
+  // right under the switch (the user missed it further down)
+  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'po stronie zewnętrznej (domyślnie)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: ściany klatki');
+  for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana, S: wzdłuż biegu B'], ['C', 'U i S: do krawędzi stropu']]) {
     live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);
     live(well.add(config, `stairwellSide${s}Fixed`)).name(`Bok ${s}: sztywny (inaczej swobodny)`);
     live(well.add(config, `stairwellWall${s}`)).name(`Bok ${s}: wzdłuż ściany`);
@@ -141,8 +144,6 @@ export function createUI({
     live(well.add(config, `stairwellWall${s}LengthMm`, 0, 12000, 1)).name(`Bok ${s}: długość ściany [mm]`);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
-  // an S has a dusza on each line: its walls may be on either side (stairwell.js stairwellWallLine); shown for an S only
-  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'po stronie zewnętrznej (domyślnie)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: ściany klatki');
   // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
   // the counts are AUTO; with the counts by hand only the going follows the key side (e.g. 4 or 5 straight in C)
   live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie (AUTO tylko głębokość)');

@@ -96,6 +96,11 @@ flattenBeyond`), więc lico końca A i początek B mają te same wysokości gór
 dalej się wznosiła i w miejscu styku powstawał uskok — „szpiczaste” końce wang wewnętrznych bez słupa). Opis niżej
 (wręg) dotyczy stanu sprzed tej zmiany.
 
+Seat at the corner (`effectiveBearings`, user report 2026-10-23): the bearing of the tread at a postless corner is
+extended by exactly one board thickness past the CORNER (the segment's end/start), not past the tread's final edge —
+with the housing recess that edge projects past the corner and the board stuck out by the housing depth (20 mm)
+beyond the other one.
+
 `stringerConstructionGeometry.js computeOpenCornerExtensions` (każde złącze `LAP_JOINT`, którego linie łańcucha się
 spotykają) — deska PRZED narożnikiem (A) przechodzi, deska za nim (B) dochodzi do niej:
 - **narożnik wypukły** (zewnętrzna wanga na zakręcie — B odchodzi w stronę wewnętrznej normalnej A): A kończy się

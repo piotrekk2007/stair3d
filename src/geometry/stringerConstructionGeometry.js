@@ -175,8 +175,12 @@ function effectiveBearings(segment, extendStart, extendEnd) {
     let uStart = b.finalUStart;
     let uEnd = b.finalUEnd;
     if (b.ownsStart && b.riserRecess > 0) uStart = Math.min(uEnd, uStart + b.riserRecess);
-    if (i === 0 && extendStart) uStart -= segment.thickness;
-    if (i === bearings.length - 1 && extendEnd) uEnd += segment.thickness;
+    // At a postless lap joint the seat at the corner reaches exactly one board thickness past it — measured from the
+    // CORNER (the segment's end), not from the tread's final edge: that edge is pulled into the stair by the housing
+    // recess, and projected onto this board it lands past the corner (a board sticking out by the housing depth beyond
+    // the other one — user report 2026-10-23, an S's postless dusza against the wall).
+    if (i === 0 && extendStart) uStart = Math.max(uStart, 0) - segment.thickness;
+    if (i === bearings.length - 1 && extendEnd) uEnd = Math.min(uEnd, segment.referenceLine.length) + segment.thickness;
     return { ...b, uStart, uEnd };
   });
 }

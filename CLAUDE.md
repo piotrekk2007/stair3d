@@ -85,7 +85,7 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   inner line (turn 1's dusza) and ONE outer line (turn 2's); turn 2 and its treads carry `duszaSide: 'outer'`. Read by
   posts (turn 2's corner post on the outer axis, `line: 'outer'`, none at a stairwell wall), stringers (posts per side,
   `CORNER_POST` where one stands), the walkline (`offsetLinesFromDusza`, `duszaWeights` across flight B, winder width
-  from each turn's own dusza), the stairwell (sides A/B/C, concave B–C corner, wall C at x = B − gap), the fit (B
+  from each turn's own dusza; drawn as one straight across flight B), the stairwell (sides A/B/C, concave B–C corner, wall C at x = B − gap), the fit (B
   by the count + ONE width — `widthsInB`) and the variants (`S-w<n>`, `S-landing`). Names: `util/sideNames.js` (an S
   says lewa / prawa everywhere — panel, HUD, Inspektor, takeoff, DXF, offer; L / U zewn. / wewn.). An S's walls on
   the left / right: `stairwellWallHand` → `stairwell.js stairwellWallLine` (sides, walls, fit, railing and posts follow
@@ -155,7 +155,7 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   A U laid out as one 180° zone: side B = 2 × width + axis gap − board thickness — given B, the fit derives
   `uAxisGapMm` (exact). Key dimensions (rise, width, stairwell sides, axis gap, ceiling opening) take 1 mm steps.
 - **Ceiling opening** (`ceilingOpening.js`): rectangle (sliders) or drawn polygon (`openingShape`, `openingPolygon`)
-  — or DERIVED from the stair (`openingMode`, above) — in the frame of `openingFrame(config, planLayout)`: relative to
+  — or DERIVED from the stair (`openingMode`, above; edge lengths shown while drawing / editing) — in the frame of `openingFrame(config, planLayout)`: relative to
   `planLayout.bounds` min corner, or the WALL frame with the stairwell on; `resolveOpening(config, frame)` → plan
   `outline` (CCW) + `relativeOutline`; edges dragged on the plan (`.opening-edge`, wall snap); `deriveCeilingFit` →
   collisions/headroom; "Dosuń otwór" alignment.
@@ -209,7 +209,8 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
   lap-jointed boards are solved as one group profile and sliced per board; at a POST each board is independent (user
   decision) and treads standing wholly on the post neither shape the board nor get a housing. Board ends: plumb faces,
   the first board's foot cut along the floor; a board entering a post goes `postHousingDepthMm` past its face; at a
-  postless corner the boards LAP, with no housing (user decision 2026-10-14): convex — B butts flush against A's inner
+  postless corner the boards LAP, with no housing (user decision 2026-10-14; the seat there ends one thickness past
+  the CORNER, not past the recessed tread edge): convex — B butts flush against A's inner
   face; concave — A runs one thickness past the corner LEVEL at the corner's heights (`flattenBeyond`), B starts flush
   against it; bolted (`jointConnectors.js`). An offset contour folding back at a sharp turn of the reference (steep
   dusza winders) is straightened toward more material (`polylineProfile.js unfoldOffsetPolyline`). Cut boards: notched comb with plumb riser cuts. Closed

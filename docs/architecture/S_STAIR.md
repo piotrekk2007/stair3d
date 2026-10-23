@@ -44,6 +44,10 @@ User decisions 2026-10-23:
   - `duszaWeights(treads)` — per edge 0 (inner) → 1 (outer): 0 up to the first turn's last edge, 1 from the second
     turn's first edge on, linear across flight B (½ on the shared edge when B = 0). The walkline crosses B from one
     dusza to the other, continuous;
+  - the DRAWN walkline (`planLayout.walkline`, user report 2026-10-23) is the same line: one straight across flight B
+    from the last edge of turn 1's zone (its walkline point, off the inner line) to the first edge of turn 2's (off the
+    outer line); the straight edges in between get their points (edit pivots) on it — before, two parallel pieces
+    with a jump at turn 2's start;
   - `treadGoingAtOffsetFromInner` uses the same weights, so the legal winder width (`PL-LEGAL-C-01`, 0.4 m) is
     measured from each turn's own dusza.
 - `stairwell.js` (stage 1):

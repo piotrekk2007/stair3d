@@ -318,6 +318,18 @@ export function railingPostEditXML(railingModel, selection = null) {
   return `<g id="railing-post-edit-layer">${xml}</g>`;
 }
 
+// The length of one edge of the ceiling opening, written beside it (upright, on the side of the normal (dy, −dx) —
+// outward for the CCW outline): while drawing and editing the opening (user request 2026-10-23).
+export function edgeLengthLabelXML(a, b, color = '#1a5fb4') {
+  const dir = { x: b.x - a.x, y: b.y - a.y };
+  const len = Math.hypot(dir.x, dir.y);
+  if (len < 1) return '';
+  const m = { x: (a.x + b.x) / 2 + (dir.y / len) * px(10), y: (a.y + b.y) / 2 - (dir.x / len) * px(10) };
+  const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
+  const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+  return `<text class="opening-length" x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${Math.round(len)}</text>`;
+}
+
 // Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).
 // Poza trybem edycji to tylko rysunek (pointer-events none — nie zasłania kliknięć w stopnie). W trybie edycji:
 // kółka na wierzchołkach (.opening-vertex, przeciągnij; prawy klik usuwa), kropki w połowie boków (.opening-mid,
@@ -343,6 +355,9 @@ export function openingXML(opening, editMode = false) {
       const b = pts[(i + 1) % pts.length];
       xml += `<circle class="opening-mid" data-after="${i}" cx="${fmt((a.x + b.x) / 2)}" cy="${fmt(-(a.y + b.y) / 2)}" r="${px(4)}" fill="${color}" fill-opacity="0.55" stroke="#fff" stroke-width="1" ${HAIR}/>`;
     });
+    pts.forEach((a, i) => {
+      xml += edgeLengthLabelXML(a, pts[(i + 1) % pts.length], color);
+    });
     pts.forEach((p, i) => {
       xml += `<circle class="opening-vertex" data-index="${i}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(5)}" fill="#fff" stroke="${color}" stroke-width="1.5" ${HAIR}/>`;
     });
@@ -358,7 +373,10 @@ export function openingDraftXML(points, cursor) {
   const line = all.length >= 2 ? `<polyline points="${polygonPoints(all)}" fill="none" stroke="#1a5fb4" stroke-width="2" ${HAIR}/>` : '';
   const closing = points.length >= 3 && cursor ? `<line x1="${fmt(cursor.x)}" y1="${fmt(-cursor.y)}" x2="${fmt(points[0].x)}" y2="${fmt(-points[0].y)}" stroke="#1a5fb4" stroke-width="1" stroke-dasharray="6 4" ${HAIR}/>` : '';
   const dots = points.map((p, i) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(i === 0 ? 6 : 4)}" fill="${i === 0 ? '#1a5fb4' : '#fff'}" stroke="#1a5fb4" stroke-width="1.5" ${HAIR}/>`).join('');
-  return `<g class="opening-draft" pointer-events="none">${closing}${line}${dots}</g>`;
+  // every drawn edge's length, the rubber band's included (and the closing edge's, once it can close)
+  let lengths = all.slice(1).map((p, i) => edgeLengthLabelXML(all[i], p)).join('');
+  if (points.length >= 3 && cursor) lengths += edgeLengthLabelXML(cursor, points[0], '#5b7fae');
+  return `<g class="opening-draft" pointer-events="none">${closing}${line}${dots}${lengths}</g>`;
 }
 
 // Każdy stopień jako osobny obiekt logiczny (wymaganie 8) — <g data-step-index> pozwala

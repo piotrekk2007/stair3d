@@ -187,3 +187,39 @@ test('a new project before "Generuj schody" (stairPending): the plan shows only 
   assert.ok(!pending.includes('step-object'), 'no tread before generating');
   assert.ok(shown.includes('step-object'));
 });
+
+test("regression (user, 2026-10-23): at a postless lap corner the board reaches exactly one thickness past the corner — not also the housing recess (an S's dusza against the wall stuck out 20 mm past the other board)", () => {
+  const c = S({ stairwellRoomEnabled: true, treadsLegA: 0, treadsLegB: 1, treadsLegC: 7, stairWidth: 760, treadGoing: 159.2, totalRise: 3000 });
+  const b = buildStaircase(c);
+  const seg = b.stringerModels.outer.segments.find((s) => s.id === 'outer-seg-1');
+  const g = b.stringerConstruction.outer.find((x) => x.segmentId === seg.id);
+  assert.ok(seg && g, 'the board exists');
+  assert.equal(b.stringerModels.outer.segmentJoints[0].type, 'lap-joint');
+  assert.ok(Math.abs(g.ends.end.u - (seg.referenceLine.length + seg.thickness)) < 0.5, `end u ${g.ends.end.u.toFixed(1)} vs corner + t ${(seg.referenceLine.length + seg.thickness).toFixed(1)}`);
+});
+
+test("regression (user, 2026-10-23): an S's walkline crosses flight B as one straight from turn 1's dusza to turn 2's — no jump across the stair along an edge", () => {
+  const c = S();
+  const L = layout(c);
+  const { path, points } = L.walkline;
+  const kB0 = c.treadsLegA + c.windersPerTurn;
+  const kBn = kB0 + c.treadsLegB;
+  const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+  // flight B starts at turn 1's walkline (off its dusza, the inner line) and ends at turn 2's (off ITS dusza, the outer
+  // line), each turn's own offset; in between the edges' points lie on the straight between those two
+  const off = (t) => L.turns[t].walklineOffsetMm ?? c.walklineOffset;
+  const toLine = (p, line) => Math.min(...line.slice(1).map((q, i) => {
+    const a = line[i];
+    const len2 = (q.x - a.x) ** 2 + (q.y - a.y) ** 2;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (q.x - a.x) + (p.y - a.y) * (q.y - a.y)) / len2));
+    return dist(p, { x: a.x + t * (q.x - a.x), y: a.y + t * (q.y - a.y) });
+  }));
+  assert.ok(Math.abs(toLine(points[kB0], L.innerFullPath) - off(0)) < 0.5, 'flight B starts on turn 1 walkline');
+  assert.ok(Math.abs(toLine(points[kBn], L.outerFullPath) - off(1)) < 0.5, `flight B ends on turn 2 walkline: ${toLine(points[kBn], L.outerFullPath).toFixed(1)} vs ${off(1)}`);
+  const iB0 = path.findIndex((q) => dist(q, points[kB0]) < 0.01);
+  assert.ok(iB0 >= 0 && dist(path[iB0 + 1], points[kBn]) < 0.01, 'one straight across flight B');
+  // every walkline point (edit pivot) lies on its edge and on the drawn path
+  const onPath = (p) => path.some((q, i) => i > 0 && Math.abs((q.x - path[i - 1].x) * (p.y - path[i - 1].y) - (q.y - path[i - 1].y) * (p.x - path[i - 1].x)) / Math.max(1e-9, Math.hypot(q.x - path[i - 1].x, q.y - path[i - 1].y)) < 0.5
+    && (p.x - path[i - 1].x) * (p.x - q.x) + (p.y - path[i - 1].y) * (p.y - q.y) <= 0.5);
+  points.forEach((p, k) => assert.ok(onPath(p), `walkline point ${k} off the path`));
+});

@@ -876,6 +876,16 @@ function swapTreadSides(t) {
   };
 }
 
+// Where the line through p1-p2 crosses the line through q1-q2 (null when parallel).
+function lineIntersection(p1, p2, q1, q2) {
+  const d = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const e = { x: q2.x - q1.x, y: q2.y - q1.y };
+  const den = d.x * e.y - d.y * e.x;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((q1.x - p1.x) * e.y - (q1.y - p1.y) * e.x) / den;
+  return { x: p1.x + t * d.x, y: p1.y + t * d.y };
+}
+
 function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false } = {}) {
   const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
@@ -918,8 +928,26 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
     outerFullPath = outerFullPath.concat(place(call2.innerPath).slice(1));
     treads = treads.concat(call2.treads.map((t) => swapTreadSides(transformTread(mirrorLocalTread(t), frame2))));
     const walk2 = transformWalkline({ path: call2.walkline.path.map(mirrorX), points: call2.walkline.points.map((p) => (p ? mirrorX(p) : null)) }, frame2);
-    walkPath = walkPath.concat(walk2.path.slice(1));
-    walkPoints = walkPoints.concat(walk2.points.slice(1));
+    // Across flight B the walkline goes over from turn 1's dusza (inner line) to turn 2's (outer line): one straight
+    // from the last edge of turn 1's zone to the first edge of turn 2's — the "S" (user report 2026-10-23: drawn as
+    // two parallel pieces with a jump across the stair). The same line as walklineModel.js duszaWeights.
+    const kB0 = call1.numTreadsUsed - treadsLegB;
+    const pB0 = walkPoints[kB0];
+    const pBn = walk2.points[0];
+    if (treadsLegB > 0 && pB0 && pBn) {
+      walkPath = [...walkPath.slice(0, -1), pB0].filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-6);
+      walkPath = walkPath.concat(walk2.path);
+      // the straight edges in between: their walkline points (edit pivots) on that straight
+      for (let k = kB0 + 1; k < call1.numTreadsUsed; k++) {
+        const [a, b] = treads[k].frontEdge;
+        const hit = lineIntersection(pB0, pBn, a, b);
+        if (hit) walkPoints[k] = hit;
+      }
+      walkPoints = walkPoints.slice(0, -1).concat(walk2.points);
+    } else {
+      walkPath = walkPath.concat(walk2.path.slice(1));
+      walkPoints = walkPoints.concat(walk2.points.slice(1));
+    }
     const at = (p) => (p ? toWorld(mirrorX(p), frame2) : null);
     turns.push({
       type: call2.turnInfo.type,

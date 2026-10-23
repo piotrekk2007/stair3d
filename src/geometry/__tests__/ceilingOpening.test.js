@@ -182,3 +182,11 @@ test('3D ceiling: the slab gets a hole with the drawn polygon\u2019s corners (an
   const closedDup = distinct.length > 1 && Math.hypot(distinct[0].x - distinct[distinct.length - 1].x, distinct[0].y - distinct[distinct.length - 1].y) < 1e-6;
   assert.equal(distinct.length - (closedDup ? 1 : 0), 6);
 });
+
+test('regression (user, 2026-10-23): the opening shows its edge lengths while it is drawn (the rubber band too) and edited', () => {
+  const lengths = (xml) => [...xml.matchAll(/class="opening-length"[^>]*>(\d+)</g)].map((m) => Number(m[1]));
+  const draft = openingDraftXML([{ x: 0, y: 0 }, { x: 1200, y: 0 }, { x: 1200, y: 900 }], { x: 0, y: 900 });
+  assert.deepEqual(lengths(draft), [1200, 900, 1200, 900]);
+  const edit = openingXML({ outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 750 }, { x: 0, y: 750 }], shape: 'polygon' }, true);
+  assert.deepEqual(lengths(edit), [1000, 750, 1000, 750]);
+});
