@@ -46,16 +46,28 @@ User decisions 2026-10-23:
     dusza to the other, continuous;
   - `treadGoingAtOffsetFromInner` uses the same weights, so the legal winder width (`PL-LEGAL-C-01`, 0.4 m) is
     measured from each turn's own dusza.
-- `stairwell.js`:
+- `stairwell.js` (stage 1):
   - sides A / B / C, exit side C;
   - the B–C corner of the outer line is CONCAVE: `wallSegments` / `stairwellWalls` shorten the walls there instead of
     running them on (`prevSign` / `nextSign`);
   - the frame's wall C line is at x = B − gap.
 
-## Not yet (stages 2 and 3)
+## Stairwell fit, variants, opening (stage 2)
 
-- The stairwell fit / variants for S: `stairwellFit.js`, `designer/stairwellVariants.js` still treat C like a U's.
-- The opening (derived, snapping), the balustrade round it, headroom: checked only lightly.
-- Left / right names (wangi, balustrade sides, takeoff, Inspektor) — stage 3.
+- `stairwellFit.js`:
+  - S has the sides A / B / C; B follows flight B's count and the going, like A and C;
+  - `solveFixedSides`, like a U's B: a fixed B is met by narrowing the width — an S's B holds ONE width (a U's two),
+    so `widthsInB` = 1. The width is never widened past the user's;
+  - the key side is the exit side C; the other fixed sides come within one going (as in an L / U).
+- `designer/stairwellVariants.js`: two 90° winder turns of n − 1..n + 1 (`S-w<n>`) and two landings (`S-landing`); no
+  180° zone.
+- Derived opening (`ceilingOpening.js requiredOpeningRelative`): works for S. A margin is added before the outward
+  rounding (`OPENING_MARGIN_MM` 0.01) — regression for U and S: a tread corner on the 0.1 mm grid used to stick out by
+  microns where two rectangles met, a false ceiling collision.
+- The balustrade round the opening finds S's exit edge and the walled edges like any stair.
+
+## Not yet (stage 3)
+
+- Left / right names (wangi, balustrade sides, takeoff, Inspektor).
 
 Tests: `geometry/__tests__/sStair.test.js`.

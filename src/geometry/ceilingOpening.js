@@ -142,6 +142,8 @@ export function resolveOpening(config, frameOrBounds, derivedRelative = null) {
  * → one rectangle round all. null when no tread needs it.
  * @returns {{x,y}[]|null}  CCW
  */
+const OPENING_MARGIN_MM = 0.01;
+
 export function requiredOpeningRelative(config, planLayout, riserHeight, frame) {
   const threshold = config.totalRise - config.ceilingThickness - config.minHeadroom;
   const rects = [];
@@ -151,9 +153,11 @@ export function requiredOpeningRelative(config, planLayout, riserHeight, frame) 
     const xs = pts.map((p) => p.x);
     const ys = pts.map((p) => p.y);
     // rounded OUTWARD to 0.1 mm — the precision a stored polygon keeps (sanitizeOpeningPolygon), so the opening frozen
-    // as a given one still holds every tread
-    const down = (v) => Math.floor(v * 10 + 1e-6) / 10;
-    const up = (v) => Math.ceil(v * 10 - 1e-6) / 10;
+    // as a given one still holds every tread — with at least OPENING_MARGIN_MM to spare: a value already on the
+    // 0.1 mm grid used to get none, and where two treads' rectangles meet the union left a tread's corner a few
+    // microns outside (a ceiling "collision" in a U / S with a derived opening)
+    const down = (v) => Math.floor((v - OPENING_MARGIN_MM) * 10) / 10;
+    const up = (v) => Math.ceil((v + OPENING_MARGIN_MM) * 10) / 10;
     rects.push({ uStart: down(Math.min(...xs)), uEnd: up(Math.max(...xs)), vBottom: down(Math.min(...ys)), vTop: up(Math.max(...ys)) });
   }
   if (rects.length === 0) return null;

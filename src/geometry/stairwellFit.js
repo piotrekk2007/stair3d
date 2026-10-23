@@ -49,8 +49,10 @@ const SIDE_MET_TOLERANCE_MM = 0.5;
 // Two directions closer than this (sin of the angle) are the same side of the outer line.
 const SAME_DIRECTION_SIN = 1e-6;
 
+// (an S has the U's three sides; its B — from the first turn's outer corner to the second turn's dusza — follows
+// flight B's count and the going like A and C, not the width)
 function sideLetters(stairType) {
-  return stairType === 'U' ? ['A', 'B', 'C'] : stairType === 'L' ? ['A', 'B'] : ['A'];
+  return stairType === 'U' || stairType === 'S' ? ['A', 'B', 'C'] : stairType === 'L' ? ['A', 'B'] : ['A'];
 }
 
 /**
@@ -417,10 +419,12 @@ export function solveFixedSides(config) {
       { freeSides: plan.free, allowInfeasible: true },
     );
   let fit = run(width);
-  if (config.stairType === 'U' && !zone && B !== null) {
+  // (a U's B holds two widths, an S's one — the width that meets B is re-solved by that share)
+  const widthsInB = config.stairType === 'U' ? 2 : config.stairType === 'S' ? 1 : 0;
+  if (widthsInB && !zone && B !== null) {
     for (let k = 0; fit.values && k < WIDTH_ROUNDS; k++) {
       const achievedB = fit.sides.find((s) => s.side === 'B')?.achieved;
-      const next = Math.min(given, Math.round((width - (achievedB - B) / 2) * 10) / 10);
+      const next = Math.min(given, Math.round((width - (achievedB - B) / widthsInB) * 10) / 10);
       if (!(next >= VARIANT_WIDTH_FLOOR_MM) || Math.abs(next - width) <= 0.05) break;
       width = next;
       fit = run(width);

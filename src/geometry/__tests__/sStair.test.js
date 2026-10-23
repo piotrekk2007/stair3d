@@ -8,6 +8,7 @@ import { signedPolygonArea } from '../pathUtils.js';
 import { treadGoingAtOffsetFromInner, WINDER_WIDTH_MEASURE_OFFSET_MM } from '../walklineModel.js';
 import { runTakeoffValidationGate } from '../../takeoff/validationGate.js';
 import { stairwellWalls, stairwellReport } from '../stairwell.js';
+import { generateStairwellVariants } from '../../designer/stairwellVariants.js';
 
 // the user's case (2026-10-23): first turn LEFT, then right — the walls along the outer line go up, left, up
 const S = (patch = {}) => ({ ...createDefaultConfig(), stairType: 'S', turnDirection: 'left', turn1Type: 'winder', turn2Type: 'winder', treadsLegA: 4, treadsLegB: 2, treadsLegC: 3, windersPerTurn: 3, totalRise: 2900, ...patch });
@@ -106,4 +107,50 @@ test("S stairwell: sides A/B/C along the outer line, the B–C corner is concave
   const meet = { x: C.a.x, y: B.b.y };
   assert.ok(Math.abs(B.b.x - C.a.x) < 1e-6, 'B ends where C begins (across)');
   assert.ok(Math.hypot(meet.x - corner.x, meet.y - corner.y) - 20 * Math.SQRT2 < 1e-6);
+});
+
+test('S stairwell, fixed sides: A, B and C kept LIVE — from other counts and going the stair comes back to exactly those sides', () => {
+  const ref = buildStaircase(S({ stairwellRoomEnabled: true }));
+  const sides = Object.fromEntries(ref.stairwell.sides.map((x) => [x.side, Math.round(x.achieved)]));
+  const fixed = { stairwellSideAMm: sides.A, stairwellSideBMm: sides.B, stairwellSideCMm: sides.C, stairwellSideAFixed: true, stairwellSideBFixed: true, stairwellSideCFixed: true };
+  const b = buildStaircase(S({ stairwellRoomEnabled: true, ...fixed, treadGoing: 240, treadsLegA: 6, treadsLegB: 0, treadsLegC: 1 }));
+  for (const x of b.stairwell.sides) assert.ok(Math.abs(x.achieved - x.target) <= 1, `side ${x.side}: ${x.achieved.toFixed(1)} instead of ${x.target}`);
+  assert.equal(b.stairwell.diagnostics.filter((d) => d.ruleId === 'STAIRWELL-SIDE-FIXED').length, 0);
+  // the variants: an S's own (two winder turns n − 1..n + 1, two landings), the winder ones meeting every side
+  const v = generateStairwellVariants(S({ stairwellRoomEnabled: true, ...fixed }));
+  assert.ok(v.ok);
+  assert.ok(v.variants.every((x) => x.id.startsWith('S-')), v.variants.map((x) => x.id).join(','));
+  assert.ok(v.variants.some((x) => x.id === 'S-landing'));
+  const winders = v.variants.filter((x) => x.id.startsWith('S-w'));
+  assert.equal(winders.length, 3);
+  assert.ok(winders.every((x) => x.ok), winders.map((x) => x.problems.join(';')).join(' | '));
+});
+
+test('regression (2026-10-23): a DERIVED opening holds every tread that needs headroom — U and S (a corner on the 0.1 mm grid used to stick out by microns)', () => {
+  for (const stairType of ['U', 'S']) {
+    for (const well of [false, true]) {
+      const b = buildStaircase(S({ stairType, openingMode: 'derived', stairwellRoomEnabled: well }));
+      assert.deepEqual(b.ceilingFit.violatingTreads, [], `${stairType}${well ? ' in a stairwell' : ''}`);
+    }
+  }
+});
+
+test("S stairwell frame: wall C's line is on the near side of side B's end (x = B − gap), not past it like a U's", () => {
+  const b = buildStaircase(S({ stairwellRoomEnabled: true, stairwellWallGapMm: 15 }));
+  const B = b.stairwell.sides.find((x) => x.side === 'B').achieved;
+  const lines = b.stairwell.frame.wallLines;
+  assert.ok(lines.some((l) => l.axis === 'x' && Math.abs(l.value - (B - 15)) < 1e-6), JSON.stringify(lines));
+  const u = buildStaircase(S({ stairType: 'U', stairwellRoomEnabled: true, stairwellWallGapMm: 15 }));
+  const Bu = u.stairwell.sides.find((x) => x.side === 'B').achieved;
+  assert.ok(u.stairwell.frame.wallLines.some((l) => l.axis === 'x' && Math.abs(l.value - (Bu + 15)) < 1e-6));
+});
+
+test("S stairwell: a fixed B narrower than the stair's own comes out exactly — the width is narrowed (never widened), as in a U", () => {
+  const b = buildStaircase(S({ stairwellRoomEnabled: true, stairwellSideAMm: 2600, stairwellSideBMm: 1800, stairwellSideCMm: 1500, stairwellSideAFixed: true, stairwellSideBFixed: true, stairwellSideCFixed: true }));
+  const side = (x) => b.stairwell.sides.find((s) => s.side === x);
+  assert.ok(Math.abs(side('B').achieved - 1800) <= 1, `B ${side('B').achieved}`);
+  assert.ok(Math.abs(side('C').achieved - 1500) <= 1, `C ${side('C').achieved}`);
+  assert.ok(b.fullConfig.stairWidth < S().stairWidth, 'narrowed');
+  // the other fixed side within one going
+  assert.ok(Math.abs(side('A').achieved - 2600) < b.fullConfig.treadGoing);
 });

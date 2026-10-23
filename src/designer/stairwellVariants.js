@@ -92,6 +92,11 @@ export function planStairwellVariants(config) {
   } else if (required.stairType === 'L') {
     for (const n of around(naturalWinders(config, false), WINDERS_PER_TURN_RANGE)) push(`L-w${n}`, `L, ${n} zabiegowe`, { turn1Type: 'winder', windersPerTurn: n }, userWidth);
     push('L-landing', 'L, podest', { turn1Type: 'landing' }, userWidth);
+  } else if (required.stairType === 'S') {
+    // S (the second turn the other way): two 90° winder turns n − 1..n + 1, or two landings — its side B follows
+    // flight B's count (no wall-to-wall width, no 180° zone)
+    for (const n of around(naturalWinders(config, false), WINDERS_PER_TURN_RANGE)) push(`S-w${n}`, `S, 2 × ${n} zabiegowe`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: false, windersPerTurn: n }, userWidth);
+    push('S-landing', 'S, podesty', { turn1Type: 'landing', turn2Type: 'landing', uSingleWinderZone: false, mergeLandings: false }, userWidth);
   } else {
     // one 180° zone needs B ≥ 2 × width − board (axis gap ≥ 0): the width narrows to that when B is fixed
     const B = targets.B;
@@ -154,7 +159,7 @@ export function evaluateStairwellVariant(config, plan, cand) {
     winderGoingAt400,
     treadsLegA: patch.treadsLegA,
     treadsLegB: config.stairType === 'straight' ? null : patch.treadsLegB ?? null,
-    treadsLegC: config.stairType === 'U' ? patch.treadsLegC ?? null : null,
+    treadsLegC: config.stairType === 'U' || config.stairType === 'S' ? patch.treadsLegC ?? null : null,
     uAxisGapMm: patch.uSingleWinderZone ? patch.uAxisGapMm ?? null : null,
     ceilingCollisions: ceiling.violatingTreads.length,
     // the opening the variant needs (DERIVED mode): its size along the frame's axes
