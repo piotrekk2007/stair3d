@@ -353,7 +353,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   from its contour as it is, the error on the item + a note; only a board with no contour is INVALID; railing/glass/connector
   items in their own modules; `wasteFactors.js`, `materialCatalog.js`.
 - Pricing: generic per-material list (`pricing.js`) and the DREWEX board price list (`boardPricing.js`: PLN/running
-  metre by depth range × length column × thickness class, waste already inside; CSV import/export) — MATERIAL only;
+  metre by depth range × length column × thickness class, waste already inside; CSV import/export; a board deeper than
+  the largest range = glued pieces of the largest range + the rest, EACH priced in its own range — a rest narrower than
+  every range at the nearest one, user decision 2026-10-23) — MATERIAL only;
   a wanga by `stringerPricingMode` (user decision 2026-10-16): `whole` (its minimal rectangle — default), `strips`
   (400 mm strips, each at its own depth measured at its own slant) or `split` (two straight blanks where they save the
   most) — all with the whole board's length column, ONE price, the note says what was priced (`stockGeometry.js

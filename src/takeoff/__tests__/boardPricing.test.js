@@ -79,14 +79,25 @@ test('a riser-like depth below the smallest range uses the NEAREST range (20 mm:
   assert.equal(r.viaNearestRange, true);
 });
 
-test('depth above the largest range = glued from several boards, summing FULL per-mb prices', () => {
+test('depth above the largest range = glued from several boards, each priced in ITS OWN range (user decision 2026-10-23)', () => {
   const r = ask({ depthMm: 500, lengthMm: 1000 });
-  // 420 -> top range (440) ; remainder 80 mm is below every range -> priced like the top range (440)
+  // 420 -> top range (440); the remaining 80 mm is narrower than every range -> the nearest one, 240-300 (320)
   assert.equal(r.chunks.length, 2);
-  assert.equal(r.pricePerMb, 880);
-  const wide = ask({ depthMm: 1000, lengthMm: 1000 }); // 420 + 420 + 160
+  assert.equal(r.pricePerMb, 760);
+  const wide = ask({ depthMm: 1000, lengthMm: 1000 }); // 420 + 420 + 160 (-> 240-300)
   assert.equal(wide.chunks.length, 3);
-  assert.equal(wide.pricePerMb, 1320);
+  assert.equal(wide.pricePerMb, 1200);
+});
+
+test('regression (user, 2026-10-23): a 1076 x 1040 landing from an imported list (ranges in whole mm up to 1015) = 1015 at 896 + 25 at the smallest range 110 zl/mb — not twice the top price', () => {
+  const csv = ['grubość_mm;głębokość_od_mm;głębokość_do_mm;cena_do_1500mb;cena_1501_2000mb;cena_pow_2000mb', '40;70;105;110;142;154', '40;106;140;139;172;188', '40;946;980;859;1089;1203', '40;981;1015;896;1130;1250'].join(String.fromCharCode(10));
+  const t = { ...table(), boards: parseBoardsCSV(csv).boards };
+  const r = lookupBoardPricePerMb(t, { species: 'Dąb', cls: 'Klasa Natura', thicknessMm: 40, depthMm: 1040, lengthMm: 1076 });
+  assert.deepEqual(r.chunks.map((c) => [Math.round(c.depthMm), c.basePerMb]), [[1015, 896], [25, 110]]);
+  assert.equal(r.pricePerMb, 1006);
+  assert.equal(Math.round(r.pricePerMb * 1.076 * 100) / 100, 1082.46);
+  // a depth on a whole-mm range's upper bound is in that range
+  assert.equal(lookupBoardPricePerMb(t, { species: 'Dąb', cls: 'Klasa Natura', thicknessMm: 40, depthMm: 105, lengthMm: 1000 }).viaNearestRange, false);
 });
 
 test('thickness above 65 mm cannot be priced from the table — reported, never guessed', () => {

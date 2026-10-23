@@ -147,35 +147,39 @@ export function lookupBoardPricePerMb(table, { species, cls, thicknessMm, depthM
   const sorted = [...rows].sort((a, b) => a.depthMin - b.depthMin);
   const maxDepth = Math.max(...sorted.map((r) => r.depthMax));
   const label = (r) => `${r.depthMin}–${r.depthMax} mm`;
-
-  if (depthMm <= maxDepth) {
-    let row = rows.find((r) => depthMm >= r.depthMin && depthMm < r.depthMax);
-    let viaNearestRange = false;
-    if (!row) {
-      // Poza przedziałami (np. podstopień węższy niż najmniejszy przedział albo dokładnie górna
-      // granica) — najbliższy wg środka przedziału, jak w kalkulatorze DREWEX.
-      viaNearestRange = true;
-      let best = Infinity;
-      for (const r of rows) {
-        const diff = Math.abs(depthMm - (r.depthMin + r.depthMax) / 2);
-        if (diff < best) {
-          best = diff;
-          row = r;
-        }
+  // The range a board of `depth` is priced in: the one it falls in (from ≤ depth < to — ranges sharing a bound, 300–360,
+  // 360–420; then with the upper bound included — an imported list in whole mm, 981–1015, 1016–…), else — outside
+  // every range (narrower than the smallest, or between two) — the nearest by its middle, as in the DREWEX calculator.
+  const rowFor = (depth) => {
+    const hit = sorted.find((r) => depth >= r.depthMin && depth < r.depthMax) ?? sorted.find((r) => depth >= r.depthMin && depth <= r.depthMax);
+    if (hit) return { row: hit, nearest: false };
+    let row = sorted[0];
+    let best = Infinity;
+    for (const r of sorted) {
+      const diff = Math.abs(depth - (r.depthMin + r.depthMax) / 2);
+      if (diff < best) {
+        best = diff;
+        row = r;
       }
     }
+    return { row, nearest: true };
+  };
+
+  if (depthMm <= maxDepth) {
+    const { row, nearest: viaNearestRange } = rowFor(depthMm);
     const base = Number(row[tier.key]) || 0;
     return { ok: true, pricePerMb: round4((base * pct) / 100), thicknessClass, multiplierPct: pct, tier, chunks: [{ depthMm, rangeLabel: label(row), basePerMb: base }], viaNearestRange };
   }
 
-  // Głębokość większa niż największy przedział: element sklejany z kilku desek.
+  // Głębokość większa niż największy przedział: element sklejany z kilku desek — każda w SWOIM przedziale (user report
+  // 2026-10-23: a 25 mm rest was priced at the widest range, so a 1040 mm landing cost twice the top price instead of
+  // 896 + 110 zł/mb).
   const chunks = [];
   let remaining = depthMm;
   let total = 0;
-  const top = sorted[sorted.length - 1];
   while (remaining > 1e-9) {
     const chunkDepth = Math.min(remaining, maxDepth);
-    const row = sorted.find((r) => chunkDepth >= r.depthMin && chunkDepth < r.depthMax) ?? top;
+    const { row } = rowFor(chunkDepth);
     const base = Number(row[tier.key]) || 0;
     total += base;
     chunks.push({ depthMm: chunkDepth, rangeLabel: label(row), basePerMb: base });
