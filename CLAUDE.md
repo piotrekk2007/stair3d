@@ -78,8 +78,15 @@ structural check / takeoff / DXF / offer.
 ## Plan layout, winders, walkline — `geometry/planLayout.js`, `winderArc.js`
 
 Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
-- Types `straight` / `L` / `U`; turns `winder` or `landing`; U with two landings can be one big landing
+- Types `straight` / `L` / `U` / `S`; turns `winder` or `landing`; U with two landings can be one big landing
   (`mergeLandings`). Flight counts `treadsLegA/B/C` (A may be 0 for L/U: the flight starts with winders).
+- **S** (user request 2026-10-23, docs [S_STAIR.md](docs/architecture/S_STAIR.md)): the second turn goes the other way
+  (`buildMultiTurnLayout(…, { reverseSecond })`: built natively, mirrored locally, sides swapped) — the plan keeps ONE
+  inner line (turn 1's dusza) and ONE outer line (turn 2's); turn 2 and its treads carry `duszaSide: 'outer'`. Read by
+  posts (turn 2's corner post on the outer axis, `line: 'outer'`, none at a stairwell wall), stringers (posts per side,
+  `CORNER_POST` where one stands), the walkline (`offsetLinesFromDusza`, `duszaWeights` across flight B, winder width
+  from each turn's own dusza) and the stairwell (sides A/B/C, concave B–C corner). Stairwell fit / variants and the
+  left/right names: next stages.
 - **Winders are laid out from the walkline** (every project; user decision 2026-10-02): the walkline is a straight,
   a quarter arc of radius `walklineOffset` round the inner corner, a straight; the zone is `windersPerTurn` equal
   goings ON it, `walklineSplitOffset` of it before the arc's middle (clamped so the arc fits). Each edge runs through

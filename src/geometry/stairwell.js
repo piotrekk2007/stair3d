@@ -38,12 +38,12 @@ const unit = (v) => {
 
 /** The sides a stair type has. */
 export function wellSideLetters(stairType) {
-  return stairType === 'U' ? ['A', 'B', 'C'] : stairType === 'L' ? ['A', 'B'] : ['A'];
+  return stairType === 'U' || stairType === 'S' ? ['A', 'B', 'C'] : stairType === 'L' ? ['A', 'B'] : ['A'];
 }
 
 /** The side the stair ENDS on (its last back edge): the exit side. */
 export function exitSideLetter(stairType) {
-  return stairType === 'U' ? 'C' : stairType === 'L' ? 'B' : 'A';
+  return stairType === 'U' || stairType === 'S' ? 'C' : stairType === 'L' ? 'B' : 'A';
 }
 
 /** Whether the stairwell dimensions are on. */
@@ -135,7 +135,8 @@ export function wellFrame(config, planLayout) {
   const wallLines = [];
   if (sideHasWall(config, 'A')) wallLines.push({ axis: 'x', value: -gap });
   if (letters.includes('B') && sideHasWall(config, 'B')) wallLines.push({ axis: 'y', value: -gap });
-  if (letters.includes('C') && sides.B && sideHasWall(config, 'C')) wallLines.push({ axis: 'x', value: sides.B.length + gap });
+  // (a U's wall C is past side B's far end; an S's C runs on the other way, its wall on the near side of that line)
+  if (letters.includes('C') && sides.B && sideHasWall(config, 'C')) wallLines.push({ axis: 'x', value: config.stairType === 'S' ? sides.B.length - gap : sides.B.length + gap });
   return { wall: true, origin, xDir, yDir, toRelative, toPlan, sides, wallLines };
 }
 
@@ -194,10 +195,16 @@ function wallSegments(config, planLayout, frame) {
     let b = add(add(side.a, mul(side.dir, span.t1)), mul(n, gap));
     const prevWall = i > 0 && span.atStart && !!spans[i - 1]?.atEnd;
     const nextWall = i < letters.length - 1 && span.atEnd && !!spans[i + 1]?.atStart;
-    if (prevWall) a = sub(a, mul(side.dir, gap));
-    if (nextWall) b = add(b, mul(side.dir, gap));
+    // A corner where the outer line turns AWAY from the stair (every corner of an L / U) is convex: the walls run on
+    // past it to meet; one where it turns TOWARD the stair (an S's B–C corner) is concave: they stop short of it.
+    const prevSide = frame.sides[letters[i - 1]];
+    const nextSide = frame.sides[letters[i + 1]];
+    const prevSign = prevWall && prevSide && dot(mul(prevSide.dir, -1), n) > 0 ? -1 : 1;
+    const nextSign = nextWall && nextSide && dot(nextSide.dir, n) > 0 ? -1 : 1;
+    if (prevWall) a = sub(a, mul(side.dir, gap * prevSign));
+    if (nextWall) b = add(b, mul(side.dir, gap * nextSign));
     const partial = !(span.atStart && span.atEnd);
-    out.push({ side: s, a, b, outward: n, prevWall, nextWall, partial, lengthMm: span.t1 - span.t0, dir: side.dir });
+    out.push({ side: s, a, b, outward: n, prevWall, nextWall, prevSign, nextSign, partial, lengthMm: span.t1 - span.t0, dir: side.dir });
   });
   return out;
 }
@@ -214,7 +221,9 @@ export function stairwellWalls(report, config, planLayout) {
   const height = Math.max(0, (Number(config.totalRise) || 0) - (Number(config.ceilingThickness) || 0));
   const pieces = wallSegments(config, planLayout, frame).map((w) => {
     const dir = unit(sub(w.b, w.a));
-    return { side: w.side, a: w.prevWall ? sub(w.a, mul(dir, T)) : w.a, b: w.nextWall ? add(w.b, mul(dir, T)) : w.b, outward: w.outward, thickness: T, height, partial: w.partial };
+    // (at a convex corner the wall runs on by its thickness to close it; at a concave one it ends short — the other
+    // wall's box fills the corner from its own side)
+    return { side: w.side, a: w.prevWall && w.prevSign > 0 ? sub(w.a, mul(dir, T)) : w.a, b: w.nextWall && w.nextSign > 0 ? add(w.b, mul(dir, T)) : w.b, outward: w.outward, thickness: T, height, partial: w.partial };
   });
   const pts = [...(planLayout.outerFullPath || []), ...(planLayout.innerFullPath || []), ...pieces.flatMap((p) => [p.a, p.b])].map(frame.toRelative);
   const xs = pts.map((p) => p.x);

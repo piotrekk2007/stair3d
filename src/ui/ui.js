@@ -108,8 +108,9 @@ export function createUI({
   if (onReset) gui.add({ reset: onReset }, 'reset').name('↺ Resetuj ustawienia');
 
   const stairFolder = gui.addFolder('1. Schody');
-  const stairTypeCtrl = live(stairFolder.add(config, 'stairType', ['straight', 'L', 'U'])).name('Typ schodów');
-  live(stairFolder.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu');
+  // S: like U, but the second turn goes the other way (planLayout.js reverseSecond) — "Kierunek skrętu" is the FIRST turn
+  const stairTypeCtrl = live(stairFolder.add(config, 'stairType', ['straight', 'L', 'U', 'S'])).name('Typ schodów');
+  live(stairFolder.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu (S: pierwszego)');
   live(stairFolder.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever', 'Metalowa: wanga na profilu': 'metal-profile', 'Metalowa: płaskowniki w zęby': 'metal-flat' })).name('Konstrukcja schodów');
 
 
@@ -197,9 +198,9 @@ export function createUI({
   live(steps.add(config, 'turn1Type', ['winder', 'landing'])).name('Zakręt 1: typ');
   lockable(steps.add(config, 'windersPerTurn', 2, 6, 1).name('Zabiegowe (każdy skręt)'), 'windersPerTurn');
   lockable(steps.add(config, 'treadsLegB', 0, 15, 1).name('Proste (odc. B)'), 'treadsLegB');
-  live(steps.add(config, 'turn2Type', ['winder', 'landing'])).name('Zakręt 2: typ (tylko U)');
+  live(steps.add(config, 'turn2Type', ['winder', 'landing'])).name('Zakręt 2: typ (U, S)');
   live(steps.add(config, 'mergeLandings')).name('1 duży podest (oba zakręty = landing)');
-  lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, tylko U)'), 'treadsLegC');
+  lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');
   // U with no straight tread in B and two winder turns: ONE 180° winder zone round one central post (winderArc.js
   // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.
   live(steps.add(config, 'uSingleWinderZone')).name('U, B = 0: jedna klatka zabiegowa 180°');

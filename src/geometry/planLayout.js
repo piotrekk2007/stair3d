@@ -23,6 +23,8 @@ export function buildPlanLayout(config) {
       ? buildStraightLayout(config)
       : config.stairType === 'U'
       ? buildMultiTurnLayout(config)
+      : config.stairType === 'S'
+      ? buildMultiTurnLayout(config, 2, { reverseSecond: true })
       : buildMultiTurnLayout(config, 1);
   layout.handedness = layoutHandedness(config);
 
@@ -839,7 +841,42 @@ function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut,
 }
 
 // numTurns: 1 dla L, 2 dla U. turn1Type/turn2Type: 'winder' | 'landing' niezależnie na każdym zakręcie.
-function buildMultiTurnLayout(config, numTurnsOverride) {
+// An S stair (user request 2026-10-23): the second turn goes the OTHER way. It is built like any turn (in its native
+// right-turn frame), mirrored there into a left turn and placed at the first turn's exit on the INNER line; then its
+// two lines are swapped, so the plan keeps ONE inner line and ONE outer line through the whole stair (the inner line is
+// the first turn's dusza, the outer line the second turn's). Its treads and the turn carry `duszaSide: 'outer'`.
+function mirrorLocalTread(t) {
+  return {
+    ...t,
+    outline: t.outline.map(mirrorX),
+    frontEdge: t.frontEdge.map(mirrorX),
+    backEdge: t.backEdge.map(mirrorX),
+    innerChain: t.innerChain.map(mirrorX),
+    outerChain: t.outerChain.map(mirrorX),
+    ...(t.winderInfo ? { winderInfo: mirrorWinderInfo(t.winderInfo) } : {}),
+  };
+}
+
+function swapWinderEdge(e) {
+  return { inner: e.outer, outer: e.inner, innerDirection: e.outerDirection, outerDirection: e.innerDirection };
+}
+
+// The tread with its inner and outer sides exchanged (every [inner, outer] pair and every inner/outer chain).
+function swapTreadSides(t) {
+  return {
+    ...t,
+    // (the local mirror reversed the outline's winding — put it back, so every tread of the plan winds the same way)
+    outline: [...t.outline].reverse(),
+    frontEdge: [t.frontEdge[1], t.frontEdge[0]],
+    backEdge: [t.backEdge[1], t.backEdge[0]],
+    innerChain: t.outerChain,
+    outerChain: t.innerChain,
+    ...(t.winderInfo ? { winderInfo: { ...t.winderInfo, frontEdge: swapWinderEdge(t.winderInfo.frontEdge), backEdge: swapWinderEdge(t.winderInfo.backEdge) } } : {}),
+    duszaSide: 'outer',
+  };
+}
+
+function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false } = {}) {
   const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
   const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth };
@@ -850,7 +887,8 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
   // mergeLandingPair(). Odcinek B (proste między zakrętami) nie ma tu fizycznego sensu (nie ma
   // czego wstawiać między dwie połówki jednego podestu), więc jest ignorowany. Przy
   // mergeLandings=false zachowanie wraca do 2 osobnych półpodestów na kolejnych wysokościach.
-  const isBigLanding = numTurns === 2 && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
+  // (not in an S: its two landings turn opposite ways, there is no one platform to make of them)
+  const isBigLanding = numTurns === 2 && !reverseSecond && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
 
   // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
   const half = numTurns === 2 && isHalfTurnU(config)
@@ -871,7 +909,31 @@ function buildMultiTurnLayout(config, numTurnsOverride) {
   let walkPath = [...call1.walkline.path];
   let walkPoints = [...call1.walkline.points];
 
-  if (numTurns === 2) {
+  if (numTurns === 2 && reverseSecond) {
+    // S: the second turn mirrored into a left turn, its local outer line starting on the first turn's inner line
+    const frame2 = makeFrame(call1.innerPath[call1.innerPath.length - 1], IDENTITY_FRAME.right);
+    const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
+    const place = (pts) => transformPoints(pts.map(mirrorX), frame2);
+    innerFullPath = innerFullPath.concat(place(call2.outerPath).slice(1));
+    outerFullPath = outerFullPath.concat(place(call2.innerPath).slice(1));
+    treads = treads.concat(call2.treads.map((t) => swapTreadSides(transformTread(mirrorLocalTread(t), frame2))));
+    const walk2 = transformWalkline({ path: call2.walkline.path.map(mirrorX), points: call2.walkline.points.map((p) => (p ? mirrorX(p) : null)) }, frame2);
+    walkPath = walkPath.concat(walk2.path.slice(1));
+    walkPoints = walkPoints.concat(walk2.points.slice(1));
+    const at = (p) => (p ? toWorld(mirrorX(p), frame2) : null);
+    turns.push({
+      type: call2.turnInfo.type,
+      // the dusza corner (its post) lies on the OUTER line of this plan
+      duszaSide: 'outer',
+      innerCorner: at(call2.turnInfo.innerCorner),
+      outerCorner: at(call2.turnInfo.outerCorner),
+      innerTurnSegmentLength: call2.turnInfo.innerTurnSegmentLength,
+      outerBendPoint: at(call2.turnInfo.outerBendPoint),
+      innerBendPoint: at(call2.turnInfo.innerBendPoint),
+      ...(call2.turnInfo.method ? { method: call2.turnInfo.method } : {}),
+      ...(call2.turnInfo.walklineOffsetMm !== undefined ? { walklineOffsetMm: call2.turnInfo.walklineOffsetMm } : {}),
+    });
+  } else if (numTurns === 2) {
     const frame2 = makeFrame(call1.exitOuterPoint, IDENTITY_FRAME.right);
     const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
 

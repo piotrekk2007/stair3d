@@ -370,7 +370,7 @@ function checkHalfTurnFeasibility(config) {
 export function deriveStairData(config) {
   const { stairType, totalRise, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, minRiser, maxRiser, turn1Type, turn2Type, stairWidth, mergeLandings } = config;
 
-  const numTurns = stairType === 'U' ? 2 : stairType === 'L' ? 1 : 0;
+  const numTurns = stairType === 'U' || stairType === 'S' ? 2 : stairType === 'L' ? 1 : 0;
 
   // "1 duży podest": oba zakręty typu 'landing' w U (i włączone mergeLandings) scalają się w
   // JEDNĄ platformę (patrz planLayout.js/mergeLandingPair) — 1 stopień zamiast 2, a odcinek B
@@ -378,7 +378,8 @@ export function deriveStairData(config) {
   // wysokościach. numTreads musi się z tym dokładnie zgadzać, inaczej wysokość podstopnia
   // (totalRise/numRisers) zostałaby policzona dla złej liczby stopni i ostatni stopień nie
   // trafiłby w wysokość kondygnacji.
-  const isBigLanding = numTurns === 2 && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
+  // (an S never merges its two landings — planLayout.js buildMultiTurnLayout)
+  const isBigLanding = numTurns === 2 && stairType !== 'S' && turn1Type === 'landing' && turn2Type === 'landing' && mergeLandings;
 
   const turn1Contribution = numTurns >= 1 ? (turn1Type === 'landing' ? 1 : windersPerTurn) : 0;
   const turn2Contribution = numTurns >= 2 ? (turn2Type === 'landing' ? 1 : windersPerTurn) : 0;
@@ -389,7 +390,7 @@ export function deriveStairData(config) {
     ? treadsLegA + halfTurnWinderCount(config) + treadsLegC
     : stairType === 'straight'
       ? treadsLegA
-      : stairType === 'U'
+      : stairType === 'U' || stairType === 'S'
       ? isBigLanding
         ? treadsLegA + 1 + treadsLegC
         : treadsLegA + turn1Contribution + treadsLegB + turn2Contribution + treadsLegC

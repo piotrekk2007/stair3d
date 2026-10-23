@@ -278,7 +278,7 @@ function postHTML(ctx) {
 function summaryHTML(ctx) {
   const { config, derived, planLayout, manualCount } = ctx;
   if (!derived || !planLayout) return '';
-  const typeLabel = { straight: 'Proste', L: 'Zabiegowe/kątowe L', U: 'Zabiegowe/kątowe U' }[config.stairType] || config.stairType;
+  const typeLabel = { straight: 'Proste', L: 'Zabiegowe/kątowe L', U: 'Zabiegowe/kątowe U', S: 'Zabiegowe/kątowe S (drugi zakręt w przeciwną stronę)' }[config.stairType] || config.stairType;
   const w = planLayout.bounds.maxX - planLayout.bounds.minX;
   const l = planLayout.bounds.maxY - planLayout.bounds.minY;
   const rows = [];

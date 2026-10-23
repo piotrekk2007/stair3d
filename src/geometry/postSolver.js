@@ -16,6 +16,7 @@
 import { normalizeVector } from './pathUtils.js';
 import { inwardNormal } from './planLayout.js';
 import { starterNewelTread } from './starterSteps.js';
+import { stairwellReport, stairwellWalls } from './stairwell.js';
 
 // A post shortened below this is treated as a mistake and the length edit is ignored (reported on the
 // model as `overrideRejected`) — a 100 mm stub is not a post.
@@ -32,6 +33,16 @@ const MITRE_MIN_DENOM = 0.1;
 // The end newel is moved onto the slab only when the last walking direction leaves the opening's exit edge at least
 // this steeply (cos of the angle to its outward normal) — a stair arriving along an edge does not walk out there.
 const SLAB_WALK_MIN_COS = 0.5;
+// A dusza corner this close (+ the wanga-to-wall gap) to a stairwell wall stands against it — no post there (mm).
+const WALL_CORNER_TOL_MM = 2;
+
+function distanceToSegment(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+  return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
+}
 
 function unitDir(pFrom, pTo) {
   return normalizeVector({ x: pTo.x - pFrom.x, y: pTo.y - pFrom.y });
@@ -41,7 +52,9 @@ function unitDir(pFrom, pTo) {
  * @typedef {Object} PostModel
  * @property {string} postId
  * @property {'start'|'end'|'corner'|'railing'} kind  'railing' = an end post of a balustrade section (railingSolver.js)
- * @property {{x:number,y:number}} position  centre of the post — on the inner wanga's axis for structural posts
+ * @property {{x:number,y:number}} position  centre of the post — on the inner wanga's axis for structural posts (on the
+ *   OUTER one for the second turn's post of an S — `line: 'outer'`)
+ * @property {'inner'|'outer'} [line]  the wanga line a structural post stands on (absent = 'inner')
  * @property {{x:number,y:number}} [anchor]  structural posts: the inner-line chain point the post belongs to (start/end of
  *   the inner line, a turn's inner corner) — how a wanga board finds the post it ends at (stringerSolver.js)
  * @property {{bottom:number, top:number}} elevation
@@ -172,9 +185,9 @@ function distinctPath(path) {
 // two legs' axes are offset lines that meet at the mitre point — that is where a corner post's centre belongs, so
 // both wangi run into it on their own axis. `before`/`after` are the legs' walking directions (either may be null
 // at the line's ends).
-function ontoWangaAxis(point, before, after, halfThickness, handedness) {
-  const a = before ? inwardNormal(before, 'inner', handedness) : null;
-  const b = after ? inwardNormal(after, 'inner', handedness) : null;
+function ontoWangaAxis(point, before, after, halfThickness, handedness, side = 'inner') {
+  const a = before ? inwardNormal(before, side, handedness) : null;
+  const b = after ? inwardNormal(after, side, handedness) : null;
   let n;
   if (a && b) {
     const denom = 1 + a.x * b.x + a.y * b.y;
@@ -255,6 +268,18 @@ export function buildAllPostModels(planLayout, config) {
     const after = dirAt(i) ?? (i === path.length - 1 ? lastDir : null);
     return ontoWangaAxis(corner, before, after, half, handedness);
   };
+  // the second turn of an S (planLayout.js `duszaSide: 'outer'`): its dusza corner is on the OUTER line — the post on
+  // the outer wanga's axis there
+  const outerDirAt = (i) => (i >= 0 && i < outer.length - 1 ? unitDir(outer[i], outer[i + 1]) : null);
+  const outerCornerPosition = (corner) => {
+    const i = outer.findIndex((p) => Math.hypot(p.x - corner.x, p.y - corner.y) < POST_COINCIDENCE_MM);
+    if (i < 0) return corner;
+    return ontoWangaAxis(corner, outerDirAt(i - 1), outerDirAt(i), half, handedness, 'outer');
+  };
+  // a dusza against a stairwell wall gets no post (user decision 2026-10-23): its two wangi lap at the wall
+  const wallPieces = stairwellWalls(stairwellReport(config, planLayout), config, planLayout)?.pieces || [];
+  const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
+  const atWall = (p) => wallPieces.some((w) => distanceToSegment(p, w.a, w.b) <= gap + WALL_CORNER_TOL_MM);
 
   const models = [
     { postId: 'post-start', kind: 'start', position: startPosition, anchor: startAnchor, elevation: startElevation, size: postSize, ...(onStarter >= 0 ? { onStarter } : {}) },
@@ -276,6 +301,11 @@ export function buildAllPostModels(planLayout, config) {
       // wangi's axes; both inner boards of the zone (A's end, C's start) butt into it
       if (turn.postSpots) {
         turn.postSpots.forEach((spot, j) => models.push({ postId: `post-corner-${i + j}`, kind: 'corner', position: spot.at, anchor: spot.anchors[0], anchors: spot.anchors, elevation: { bottom: 0, top: totalRise }, size: postSize }));
+        return;
+      }
+      if (turn.duszaSide === 'outer') {
+        if (atWall(turn.innerCorner)) return;
+        models.push({ postId: `post-corner-${i}`, kind: 'corner', line: 'outer', position: outerCornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });
         return;
       }
       models.push({ postId: `post-corner-${i}`, kind: 'corner', position: cornerPosition(turn.innerCorner), anchor: turn.innerCorner, elevation: { bottom: 0, top: totalRise }, size: postSize });

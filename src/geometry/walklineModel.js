@@ -59,14 +59,14 @@ function offsetLineRoundHalfTurn(planLayout, offsetMm, turn) {
   return [...lineA, ...arc, ...lineC];
 }
 
-function offsetLineAlong(planLayout, offsetMm) {
-  const path = (planLayout.innerFullPath || []).filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
+function offsetLineAlong(planLayout, offsetMm, side = 'inner') {
+  const path = ((side === 'outer' ? planLayout.outerFullPath : planLayout.innerFullPath) || []).filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
   if (path.length < 2 || !(offsetMm > 0)) return [];
   const handed = planLayout.handedness || 1;
   const segs = [];
   for (let i = 1; i < path.length; i++) {
     const d = normalize({ x: path[i].x - path[i - 1].x, y: path[i].y - path[i - 1].y });
-    const n = inwardNormal(d, 'inner', handed);
+    const n = inwardNormal(d, side, handed);
     segs.push({ a: path[i - 1], b: path[i], d, n });
   }
   const at = (p, n) => ({ x: p.x + n.x * offsetMm, y: p.y + n.y * offsetMm });
@@ -99,6 +99,15 @@ function offsetLineAlong(planLayout, offsetMm) {
     }
   }
   return out;
+}
+
+/**
+ * The lines `offsetMm` from the DUSZA: `inner` from the inner line (offsetLineFromInner) and, when a turn has its dusza
+ * on the outer line (the second turn of an S — planLayout.js `duszaSide`), `outer` from the outer line.
+ */
+export function offsetLinesFromDusza(planLayout, offsetMm) {
+  const outerDusza = (planLayout.turns || []).some((t) => t.duszaSide === 'outer');
+  return { inner: offsetLineFromInner(planLayout, offsetMm), outer: outerDusza ? offsetLineAlong(planLayout, offsetMm, 'outer') : null };
 }
 
 // Where the edge [inner, outer] first meets the polyline, going from its inner end; null when it does not.
@@ -152,8 +161,9 @@ function fractionAcrossWidth(edge, offsetMm) {
  */
 export function buildWalklineModel(planLayout, config) {
   const offset = config.walklineOffset;
-  const line = offsetLineFromInner(planLayout, offset);
-  const points = planLayout.treads.map((tread) => walklinePointFor(tread, offset, line));
+  const lines = offsetLinesFromDusza(planLayout, offset);
+  const w = duszaWeights(planLayout.treads);
+  const points = planLayout.treads.map((tread, i) => walklinePointFor(tread, offset, lines, w[i], w[i + 1]));
 
   const origin = points.length > 0 ? points[0].front : null;
   const next = points.length > 0 ? points[0].back : null;
@@ -170,12 +180,46 @@ function normalize(v) {
   return { x: v.x / len, y: v.y / len };
 }
 
-function walklinePointFor(tread, offsetMm, line = []) {
-  const onEdge = (edge) => (line.length >= 2 && edgeCrossing(edge, line)) || lerp(edge[0], edge[1], fractionAcrossWidth(edge, offsetMm));
+// The point of an edge `offsetMm` from the dusza on `side` ('inner' | 'outer'): where the edge (read from that end)
+// crosses the dusza's offset line, else that fraction of the edge.
+function pointOnEdge(edge, offsetMm, line, fromOuter) {
+  const e = fromOuter ? [edge[1], edge[0]] : edge;
+  return (line?.length >= 2 && edgeCrossing(e, line)) || lerp(e[0], e[1], fractionAcrossWidth(e, offsetMm));
+}
+
+/**
+ * Per EDGE (0 = the first front edge … N = the last back edge) how far its walkline point has moved from the inner
+ * dusza's offset line (0) to the outer one's (1). Every stair but an S: all 0. An S (planLayout.js `duszaSide`): 0 up to
+ * the first turn's last edge, 1 from the second turn's first edge on, and in between (flight B) linearly — the
+ * walkline crosses the flight from one dusza to the other; with no tread between the turns the shared edge takes ½.
+ */
+export function duszaWeights(treads) {
+  const n = treads.length;
+  const w = new Array(n + 1).fill(0);
+  const kS = treads.findIndex((t) => t.duszaSide === 'outer');
+  if (kS < 0) return w;
+  let last = -1;
+  for (let i = 0; i < kS; i++) if (treads[i].type !== 'straight') last = i;
+  const kE = last + 1; // the first turn's last edge (its back edge)
+  for (let e = 0; e <= n; e++) {
+    if (e >= kS) w[e] = 1;
+    else if (e > kE) w[e] = (e - kE) / (kS - kE);
+  }
+  if (kE >= kS) w[kS] = 0.5;
+  return w;
+}
+
+function walklinePointFor(tread, offsetMm, lines = {}, wFront = 0, wBack = 0) {
+  const at = (edge, w) => {
+    const a = pointOnEdge(edge, offsetMm, lines.inner, false);
+    if (!(w > 0) || !lines.outer) return a;
+    const b = pointOnEdge(edge, offsetMm, lines.outer, true);
+    return lerp(a, b, w);
+  };
   return {
     stepId: `step-${tread.index}`,
-    front: onEdge(tread.frontEdge),
-    back: onEdge(tread.backEdge),
+    front: at(tread.frontEdge, wFront),
+    back: at(tread.backEdge, wBack),
   };
 }
 
@@ -185,7 +229,10 @@ function walklinePointFor(tread, offsetMm, line = []) {
 // of where this project's own configured walkline happens to sit. Used by winder-width
 // validation (see src/validation/facts.js).
 export function treadGoingAtOffsetFromInner(tread, offsetMm, planLayout = null) {
-  const p = walklinePointFor(tread, offsetMm, planLayout ? offsetLineFromInner(planLayout, offsetMm) : []);
+  const lines = planLayout ? offsetLinesFromDusza(planLayout, offsetMm) : {};
+  const i = planLayout ? planLayout.treads.findIndex((t) => t.index === tread.index) : -1;
+  const w = planLayout && i >= 0 ? duszaWeights(planLayout.treads) : [];
+  const p = walklinePointFor(tread, offsetMm, lines, w[i] ?? 0, w[i + 1] ?? 0);
   return Math.hypot(p.back.x - p.front.x, p.back.y - p.front.y);
 }
 

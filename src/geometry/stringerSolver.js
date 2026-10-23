@@ -17,7 +17,7 @@
 
 import { cumulativeDistances, goesStraightThrough, projectPointOntoLine, pointsEqual } from './pathUtils.js';
 import { COLLINEAR_EPS } from './tolerances.js';
-import { isCornerPostRemoved, buildPostModels } from './postSolver.js';
+import { buildPostModels } from './postSolver.js';
 import { inwardNormal } from './planLayout.js';
 import { starterLiesOn } from './starterSteps.js';
 import { profileParamsFromConfig } from './stringerProfileModel.js';
@@ -210,8 +210,10 @@ export function buildStringerModel(planLayout, config, side) {
   const constructionType = constructionTypeForSide(config, side);
 
   const walks = buildRawWalks(planLayout.treads, chainKey);
-  // Structural posts stand on the inner line only (postSolver.js), so only an inner board can end at one.
-  const posts = side === 'inner' ? buildPostModels(planLayout, config) : [];
+  // The structural posts standing on this side's line (postSolver.js: the inner line, and an S's second-turn post on the
+  // outer one — `line`), the only ones a board of this side can end at.
+  const posts = buildPostModels(planLayout, config).filter((p) => p.kind !== 'railing' && (p.line || 'inner') === side);
+  const postAtPoint = (pt) => posts.some((p) => (p.anchors || [p.anchor]).some((a) => a && Math.hypot(a.x - pt.x, a.y - pt.y) < POST_ANCHOR_TOLERANCE_MM));
 
   const segments = [];
   const segmentJoints = [];
@@ -270,7 +272,8 @@ export function buildStringerModel(planLayout, config, side) {
       segmentJoints.push({
         // A corner post the user removed no longer interrupts the board: that turn's two boards
         // meet on a lap joint (and are solved as one continuous profile), like with no posts at all.
-        type: side === 'inner' && config.hasCornerPost && !isCornerPostRemoved(planLayout, config, prev.referenceLine.end) ? CONNECTION_TYPES.CORNER_POST : CONNECTION_TYPES.LAP_JOINT,
+        // (a post standing at this corner on this side's line — none when it is switched off / removed / at a wall)
+        type: postAtPoint(prev.referenceLine.end) ? CONNECTION_TYPES.CORNER_POST : CONNECTION_TYPES.LAP_JOINT,
         position: prev.referenceLine.end,
         beforeSegmentId: walkSegmentIds[k],
         afterSegmentId: walkSegmentIds[k + 1],
@@ -290,9 +293,10 @@ export function buildStringerModel(planLayout, config, side) {
   // bend WITHIN its own reference-line runs (already captured as a segmentJoint above), not a
   // separate post.
   const intermediateSupports = [];
-  if (side === 'inner' && config.hasCornerPost) {
+  if (config.hasCornerPost) {
     for (const turn of planLayout.turns) {
-      if (isCornerPostRemoved(planLayout, config, turn.innerCorner)) continue;
+      // (the turn's dusza on this side — an S's second turn has it on the outer line)
+      if ((turn.duszaSide || 'inner') !== side || !postAtPoint(turn.innerCorner)) continue;
       intermediateSupports.push({ type: CONNECTION_TYPES.CORNER_POST, position: turn.innerCorner });
     }
   }
