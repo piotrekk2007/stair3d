@@ -53,12 +53,54 @@ export function wellEnabled(config) {
   return !!config?.stairwellRoomEnabled;
 }
 
-/** The fixed sides' dimensions: {A: mm|null, ...} for the sides this type has (null = free / not given). */
+// A side's state (user decision 2026-10-23 — "wprowadzone wymiary ścian nie mogą ulegać zmianie"):
+//  - 'free'  (swobodny) — its length follows from the stair;
+//  - 'rigid' (sztywny)  — the stair must come out at its dimension exactly;
+//  - 'main'  (główny)   — rigid, and the going is set by it (at most one; stairwellFit.js solveFixedSides).
+export const SIDE_STATES = Object.freeze(['free', 'rigid', 'main']);
+
+/**
+ * The state of side `s`: `stairwellSide{S}State`, or — for a project without one — from `stairwellSide{S}Fixed`
+ * (fixed → rigid; the side the going followed then — the exit side when fixed, else the first fixed — is main).
+ */
+export function wellSideState(config, s) {
+  const own = config[`stairwellSide${s}State`];
+  if (SIDE_STATES.includes(own)) {
+    // (a second 'main' counts as rigid — the first one rules)
+    if (own === 'main') return wellSideLetters(config.stairType).find((x) => config[`stairwellSide${x}State`] === 'main') === s ? 'main' : 'rigid';
+    return own;
+  }
+  if (!config[`stairwellSide${s}Fixed`]) return 'free';
+  return legacyMainSide(config) === s ? 'main' : 'rigid';
+}
+
+function legacyMainSide(config) {
+  const letters = wellSideLetters(config.stairType);
+  const fixed = letters.filter((x) => !SIDE_STATES.includes(config[`stairwellSide${x}State`]) && config[`stairwellSide${x}Fixed`]);
+  const exit = exitSideLetter(config.stairType);
+  return fixed.includes(exit) ? exit : fixed[0] ?? null;
+}
+
+/**
+ * The main side (the going follows it): the one marked main, else — rigid sides but none main — the exit side when
+ * rigid, else the first rigid one; null without a rigid side.
+ */
+export function wellMainSide(config) {
+  const letters = wellSideLetters(config.stairType);
+  const targets = wellFixedTargets(config);
+  const withTarget = letters.filter((s) => targets[s] !== null);
+  const main = withTarget.find((s) => wellSideState(config, s) === 'main');
+  if (main) return main;
+  const exit = exitSideLetter(config.stairType);
+  return withTarget.includes(exit) ? exit : withTarget[0] ?? null;
+}
+
+/** The rigid (and main) sides' dimensions: {A: mm|null, ...} for the sides this type has (null = free / not given). */
 export function wellFixedTargets(config) {
   const out = {};
   for (const s of wellSideLetters(config.stairType)) {
     const v = Number(config[`stairwellSide${s}Mm`]);
-    out[s] = config[`stairwellSide${s}Fixed`] && v > 0 ? v : null;
+    out[s] = wellSideState(config, s) !== 'free' && v > 0 ? v : null;
   }
   return out;
 }
@@ -265,15 +307,17 @@ export function stairwellReport(config, planLayout) {
   const frame = wellFrame(config, planLayout);
   if (!frame) return { enabled: false, frame: null, sides: [], diagnostics: [] };
   const targets = wellFixedTargets(config);
+  const main = wellMainSide(config);
   const sides = wellSideLetters(config.stairType).map((s) => {
     const achieved = frame.sides[s]?.length ?? null;
     const target = targets[s];
-    return { side: s, achieved, target, fixed: target !== null, deviation: target !== null && achieved !== null ? achieved - target : null };
+    return { side: s, achieved, target, fixed: target !== null, main: s === main, deviation: target !== null && achieved !== null ? achieved - target : null };
   });
   const diagnostics = sides
     .filter((s) => s.fixed && Math.abs(s.deviation) > WELL_TOLERANCE_MM)
     .map((s) =>
-      diag('STAIRWELL-SIDE-FIXED', 'WARNING', `stairwellSide${s.side}Mm`, `Bok ${s.side} (sztywny) wychodzi ${Math.round(s.achieved)} mm zamiast ${s.target} mm (${s.deviation > 0 ? '+' : ''}${Math.round(s.deviation)} mm). Użyj „Szukaj wariantów schodów w klatce” albo zmień parametry.`, {
+      // an ERROR (user decision 2026-10-23: the walls' dimensions never change — a stair that misses one does not fit)
+      diag('STAIRWELL-SIDE-FIXED', 'ERROR', `stairwellSide${s.side}Mm`, `Bok ${s.side} (${s.main ? 'główny' : 'sztywny'}) wychodzi ${Math.round(s.achieved)} mm zamiast ${s.target} mm (${s.deviation > 0 ? '+' : ''}${Math.round(s.deviation)} mm) — przesunięcie zabiegów i zwężenie biegu nie wystarczają. Zmień liczbę stopni zabiegowych, rodzaj zakrętu (zabiegi / spocznik) albo szerokość biegu, ustaw inny bok jako swobodny albo użyj „Szukaj wariantów schodów w klatce”.`, {
         value: Math.round(s.achieved),
         expected: s.target,
         unit: 'mm',
@@ -449,7 +493,7 @@ export function stairwellPlanDrawing(report, config, planLayout) {
     .filter((s) => frame.sides[s.side])
     .map((s) => {
       const seg = frame.sides[s.side];
-      return { side: s.side, a: seg.a, b: seg.b, value: s.achieved, fixed: s.fixed, target: s.target, ok: !s.fixed || Math.abs(s.deviation) <= WELL_TOLERANCE_MM };
+      return { side: s.side, a: seg.a, b: seg.b, value: s.achieved, fixed: s.fixed, main: s.main, target: s.target, ok: !s.fixed || Math.abs(s.deviation) <= WELL_TOLERANCE_MM };
     });
   return { walls, dims, candidates };
 }

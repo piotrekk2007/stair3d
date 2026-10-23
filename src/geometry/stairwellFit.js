@@ -31,7 +31,7 @@
 import { buildPlanLayout } from './planLayout.js';
 import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { wellEnabled, wellFixedTargets, wellSideLetters, exitSideLetter, stairwellMeasureLine, lineSides } from './stairwell.js';
+import { wellEnabled, wellFixedTargets, wellSideLetters, wellMainSide, stairwellMeasureLine, lineSides } from './stairwell.js';
 
 const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
@@ -383,12 +383,11 @@ export function fixedSidesPlan(config) {
   const letters = wellSideLetters(config.stairType);
   const fixed = letters.filter((s) => targets[s] !== null);
   if (fixed.length === 0) return null;
-  const exit = exitSideLetter(config.stairType);
-  return { targets, key: fixed.includes(exit) ? exit : fixed[0], free: letters.filter((s) => targets[s] === null) };
+  // (the main side — stairwell.js wellMainSide: the one marked main, else the exit side when rigid, else the first)
+  return { targets, key: wellMainSide(config), free: letters.filter((s) => targets[s] === null) };
 }
 
 const VARIANT_WIDTH_FLOOR_MM = 500; // no stair below this (designer/stairwellVariants.js VARIANT_ABSOLUTE_MIN_WIDTH_MM)
-const WIDTH_ROUNDS = 4;
 let fixedSidesCache = { key: null, result: null };
 
 /**
@@ -404,6 +403,8 @@ let fixedSidesCache = { key: null, result: null };
 export function solveFixedSides(config) {
   const plan = fixedSidesPlan(config);
   if (!plan) return null;
+  // (the turns' own splits are this solver's OUTPUT — never read back as an input)
+  config = { ...config, turnSplitOffsetsMm: null };
   const { manualEdgeOverrides, manualStringerProfileOverrides, manualPostOverrides, manualTreadOverhangs, railingProfileOverrides, ...inputs } = config;
   const cacheKey = JSON.stringify(inputs);
   if (fixedSidesCache.key === cacheKey) return fixedSidesCache.result;
@@ -412,7 +413,7 @@ export function solveFixedSides(config) {
   const given = Number(config.stairWidth) || 0;
   const zone = isOneZoneU(config);
   const B = plan.targets.B;
-  let width = zone && B !== null && 2 * given - t > B ? (B + t) / 2 : given;
+  const width = zone && B !== null && 2 * given - t > B ? (B + t) / 2 : given;
   const run = (w) =>
     solveStairwellFit(
       {
@@ -426,22 +427,211 @@ export function solveFixedSides(config) {
       },
       { freeSides: plan.free, allowInfeasible: true },
     );
-  let fit = run(width);
-  // (a U's B holds two widths, an S's one — the width that meets B is re-solved by that share)
-  const widthsInB = config.stairType === 'U' ? 2 : config.stairType === 'S' ? 1 : 0;
-  if (widthsInB && !zone && B !== null) {
-    for (let k = 0; fit.values && k < WIDTH_ROUNDS; k++) {
-      const achievedB = fit.sides.find((s) => s.side === 'B')?.achieved;
-      const next = Math.min(given, Math.round((width - (achievedB - B) / widthsInB) * 10) / 10);
-      if (!(next >= VARIANT_WIDTH_FLOOR_MM) || Math.abs(next - width) <= 0.05) break;
-      width = next;
-      fit = run(width);
+  const fit = run(width);
+  let values = fit.values ? { ...fit.values, ...(Math.abs(width - given) > 1e-9 ? { stairWidth: width } : {}) } : null;
+  let sides = fit.sides;
+  // every rigid side exact (user decision 2026-10-23): the counts and the going above make the main side exact and the
+  // others as close as one going allows; the rest is taken up by shifting each turn's winders along the walkline (its
+  // own split, `turnSplitOffsetsMm`) and — only when that is not enough — by narrowing the stair (never wider than
+  // given). What still misses is the stairwell report's ERROR (stairwell.js STAIRWELL-SIDE-FIXED).
+  if (values) {
+    let exact = exactRigidSides({ ...config, ...values }, plan, { maxWidth: given });
+    // the counts were chosen with the winders where the user had them; when the rigid sides still miss, the counts next
+    // to them (±1 on every rigid side's flight) are tried too — the shift / width may meet them there
+    if (exact.worst > EXACT_SIDE_TOL_MM && !config.stairwellManualCounts) {
+      const flights = wellSideLetters(config.stairType).filter((s) => plan.targets[s] !== null && !(zone && s === 'B'));
+      let combos = [{}];
+      for (const s of flights) combos = combos.flatMap((c) => [-1, 0, 1].map((d) => ({ ...c, [COUNT_FIELD[s]]: Math.max(s === 'A' && config.stairType === 'straight' ? 1 : 0, values[COUNT_FIELD[s]] + d) })));
+      // ranked: the sides met first, then the riser inside its range, then the stair narrowed least (the width only
+      // when needed — user decision 2026-10-23), then 2h+s closest to BLONDEL_TARGET_MM
+      const rank = (cfg, e) => {
+        const d = deriveStairData({ ...cfg, ...e.values });
+        const met = e.score <= EXACT_SIDE_TOL_MM * MAIN_SIDE_WEIGHT;
+        const narrowed = Math.round(Math.max(0, given - (e.values.stairWidth ?? cfg.stairWidth)));
+        return [met ? 0 : 1, met ? 0 : e.score, Math.max(0, config.minRiser - d.riserHeight, d.riserHeight - config.maxRiser), narrowed, Math.abs(d.blondel - BLONDEL_TARGET_MM)];
+      };
+      let bestRank = rank({ ...config, ...values }, exact);
+      for (const counts of combos) {
+        if (Object.entries(counts).every(([f, n]) => n === values[f])) continue;
+        const cfg = { ...config, ...values, ...counts };
+        const trial = exactRigidSides(cfg, plan, { maxWidth: given });
+        const r = rank(cfg, trial);
+        if (lexicographicallyLess(r, bestRank)) [exact, bestRank] = [{ ...trial, values: { ...counts, ...trial.values } }, r];
+      }
     }
+    values = { ...values, ...exact.values };
+    sides = sides.map((s) => {
+      const achieved = exact.sides[s.side] ?? s.achieved;
+      return { ...s, achieved, deviation: s.target === null ? null : achieved - s.target };
+    });
   }
-  const values = fit.values ? { ...fit.values, ...(Math.abs(width - given) > 1e-9 ? { stairWidth: width } : {}) } : null;
-  // the user's own values stay when there is no solution: a warning, never a blocked takeoff
-  const diagnostics = fit.diagnostics.map((d) => (d.severity === 'ERROR' ? { ...d, severity: 'WARNING' } : d));
-  const result = { ...fit, values, diagnostics, live: true, key: plan.key };
+  // the user's own values stay when there is no solution: a warning, never a blocked takeoff; a rigid side that still
+  // misses is reported once — by the stairwell report — not again here
+  const diagnostics = fit.diagnostics
+    .filter((d) => !(values && /^stairwellSide[ABC]Mm$/.test(d.parameter || '')))
+    .map((d) => (d.severity === 'ERROR' ? { ...d, severity: 'WARNING' } : d));
+  const missed = sides.filter((s) => s.deviation !== null && Math.abs(s.deviation) > SIDE_MET_TOLERANCE_MM);
+  const status = !values ? fit.status : missed.length ? 'APPROX' : 'OK';
+  const result = { ...fit, values, sides, status, diagnostics, live: true, key: plan.key };
   fixedSidesCache = { key: cacheKey, result };
   return result;
+}
+
+// --- Every rigid side exact: each turn's split, then the width (Gauss–Newton on real layouts) ------------------------
+
+// A rigid side within this of its dimension is met (mm) — below the report's WELL_TOLERANCE_MM.
+const EXACT_SIDE_TOL_MM = 0.1;
+const EXACT_ITERATIONS = 14;
+const DIFF_STEP_MM = 0.5;
+// The main side's weight in the least squares: it stays exact while the rigid ones share what is left.
+const MAIN_SIDE_WEIGHT = 100;
+
+// The turns whose winders can be shifted along the walkline: winder turns laid out from the walkline whose zone is not
+// pinned to the corner (a flight starting / ending with winders) — and not the one 180° zone. [{k, lo, hi}] with the
+// split's range at going `g` (winderArc.js: the arc's half length ≤ before ≤ zone − half the arc).
+function shiftableTurns(config, g) {
+  if (isOneZoneU(config)) return [];
+  const numTurns = config.stairType === 'L' ? 1 : config.stairType === 'U' || config.stairType === 'S' ? 2 : 0;
+  const out = [];
+  for (let k = 0; k < numTurns; k++) {
+    if ((k === 0 ? config.turn1Type : config.turn2Type) !== 'winder') continue;
+    const pinned = k === 0 ? Number(config.treadsLegA) === 0 || (numTurns === 1 && Number(config.treadsLegB) === 0) : Number(config.treadsLegC) === 0;
+    if (pinned) continue;
+    const q = (Math.PI * (Number(config.walklineOffset) || 0)) / 4;
+    const Lw = (Number(config.windersPerTurn) || 0) * g;
+    if (!(Lw - 2 * q > 1)) continue;
+    out.push({ k, lo: q + 0.01, hi: Lw - q - 0.01 });
+  }
+  return out;
+}
+
+// Solves the small linear system A x = b (Gaussian elimination with pivoting); null when singular.
+function solveLinear(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
+/**
+ * With the counts fixed, the going, each shiftable turn's split and (second) the width that bring every rigid side to
+ * its dimension — least squares on real layouts when they cannot all be met. Returns the fields to apply
+ * ({treadGoing, turnSplitOffsetsMm?, stairWidth?}) and the sides achieved ({A: mm, …}).
+ */
+export function exactRigidSides(config, plan, { maxWidth = Number(config.stairWidth) || 0 } = {}) {
+  const letters = wellSideLetters(config.stairType);
+  const rigid = letters.filter((s) => plan.targets[s] !== null);
+  const baseSplit = Number(config.walklineSplitOffset) || 0;
+  const g0 = Number(config.treadGoing) || 0;
+  const turns = shiftableTurns(config, g0);
+  const w0 = Number(config.stairWidth) || 0;
+  // the variables: [going, split of each shiftable turn, (width)]
+  const build = (x, withWidth) => {
+    const cfg = { ...config, treadGoing: x[0] };
+    if (turns.length) {
+      const splits = [baseSplit, baseSplit];
+      turns.forEach((t, i) => (splits[t.k] = x[1 + i]));
+      cfg.turnSplitOffsetsMm = splits;
+    }
+    if (withWidth) cfg.stairWidth = x[1 + turns.length];
+    return cfg;
+  };
+  const sidesAt = (x, withWidth) => {
+    const s = measure(build(x, withWidth)).sides;
+    return Object.fromEntries(letters.map((l, i) => [l, s[i]]));
+  };
+  const residual = (sides) => rigid.map((s) => sides[s] - plan.targets[s]);
+  const worst = (r) => Math.max(0, ...r.map(Math.abs));
+  const clamp = (x, withWidth) => {
+    const out = [...x];
+    out[0] = Math.min(FIT_GOING_RANGE_MM.max, Math.max(FIT_GOING_RANGE_MM.min, out[0]));
+    // (the split's range follows the going)
+    shiftableTurns(config, out[0]).forEach((t, i) => (out[1 + i] = Math.min(t.hi, Math.max(t.lo, out[1 + i]))));
+    if (withWidth) out[1 + turns.length] = Math.min(maxWidth, Math.max(VARIANT_WIDTH_FLOOR_MM, out[1 + turns.length]));
+    return out;
+  };
+
+  const solvePhase = (x, withWidth) => {
+    x = clamp(x, withWidth);
+    let sides = sidesAt(x, withWidth);
+    let r = residual(sides);
+    for (let it = 0; it < EXACT_ITERATIONS && worst(r) > EXACT_SIDE_TOL_MM; it++) {
+      // the Jacobian by finite differences (one layout per variable)
+      const J = rigid.map(() => []);
+      x.forEach((_, j) => {
+        const xp = [...x];
+        xp[j] += DIFF_STEP_MM;
+        const rp = residual(sidesAt(xp, withWidth));
+        rigid.forEach((_, i) => (J[i][j] = (rp[i] - r[i]) / DIFF_STEP_MM));
+      });
+      // the least-norm least-squares step (JᵀWJ + λI) δ = −JᵀWr over the variables not held at a bound they are pushed
+      // against (active set); the main side weighs most — it stays exact while the others take what is left
+      const wt = rigid.map((s) => (s === plan.key ? MAIN_SIDE_WEIGHT : 1));
+      const stepOver = (free) => {
+        const n = free.length;
+        const JtJ = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => rigid.reduce((sum, _, i) => sum + wt[i] * J[i][free[a]] * J[i][free[b]], 0) + (a === b ? 1e-6 : 0)));
+        const Jtr = Array.from({ length: n }, (_, a) => -rigid.reduce((sum, _, i) => sum + wt[i] * J[i][free[a]] * r[i], 0));
+        const d = solveLinear(JtJ, Jtr);
+        if (!d) return null;
+        const full = x.map(() => 0);
+        free.forEach((j, a) => (full[j] = d[a]));
+        return full;
+      };
+      let free = x.map((_, j) => j);
+      let delta = stepOver(free);
+      for (let guard = 0; delta && guard < x.length; guard++) {
+        const atBound = clamp(x.map((v, j) => v + delta[j] * 1e-3), withWidth).map((v, j) => Math.abs(v - (x[j] + delta[j] * 1e-3)) > 1e-9);
+        const blocked = free.filter((j) => atBound[j]);
+        if (!blocked.length) break;
+        free = free.filter((j) => !atBound[j]);
+        delta = free.length ? stepOver(free) : null;
+      }
+      if (!delta) break;
+      // a damped step that makes the worst side better
+      let improved = false;
+      for (let f = 1; f > 1 / 32; f /= 2) {
+        const xn = clamp(x.map((v, j) => v + f * delta[j]), withWidth);
+        const sn = sidesAt(xn, withWidth);
+        const rn = residual(sn);
+        const cost = (res) => res.reduce((sum, v, i) => sum + wt[i] * v * v, 0);
+        if (cost(rn) < cost(r) - 1e-9) {
+          [x, sides, r] = [xn, sn, rn];
+          improved = true;
+          break;
+        }
+      }
+      if (!improved) break;
+    }
+    return { x, sides, r };
+  };
+
+  const start = [g0, ...turns.map(() => baseSplit)];
+  let best = solvePhase(start, false);
+  // the width only when shifting the winders is not enough, and never wider than given
+  if (worst(best.r) > EXACT_SIDE_TOL_MM && w0 > VARIANT_WIDTH_FLOOR_MM) {
+    const withWidth = solvePhase([...best.x, w0], true);
+    if (worst(withWidth.r) < worst(best.r) - EXACT_SIDE_TOL_MM) best = { ...withWidth, withWidth: true };
+  }
+  const { x } = best;
+  const values = { treadGoing: x[0] };
+  if (turns.length) {
+    const splits = [baseSplit, baseSplit];
+    turns.forEach((t, i) => (splits[t.k] = x[1 + i]));
+    if (splits.some((v) => Math.abs(v - baseSplit) > 0.01)) values.turnSplitOffsetsMm = splits.map((v) => Math.round(v * 100) / 100);
+  }
+  if (best.withWidth) values.stairWidth = Math.round(x[1 + turns.length] * 10) / 10;
+  // how good it is: the main side first, then the worst rigid one
+  const mainOff = Math.abs(best.sides[plan.key] - plan.targets[plan.key]);
+  const off = worst(best.r);
+  return { values, sides: best.sides, worst: off, score: Math.max(mainOff * MAIN_SIDE_WEIGHT, off) };
 }

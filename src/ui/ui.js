@@ -10,7 +10,7 @@ import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.j
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
-import { stairwellMeasureLine, wellSideLetters } from '../geometry/stairwell.js';
+import { stairwellMeasureLine, wellSideLetters, wellSideState } from '../geometry/stairwell.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -136,9 +136,24 @@ export function createUI({
   // an S has a dusza on each line: its sides may be measured along either (stairwell.js stairwellMeasureLine — by
   // default the line most of its walls stand along); shown for an S only, right under the switch
   const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'tam, gdzie większość ścian (AUTO)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: boki A/B/C mierzone');
+  const stateCtrls = [];
   for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana, S: wzdłuż biegu B'], ['C', 'U i S: do krawędzi stropu']]) {
     live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);
-    live(well.add(config, `stairwellSide${s}Fixed`)).name(`Bok ${s}: sztywny (inaczej swobodny)`);
+    // the side's state (stairwell.js wellSideState, user decision 2026-10-23): swobodny / sztywny / główny — one main:
+    // choosing it makes any other main side rigid; `…Fixed` kept in step for older readers
+    config[`stairwellSide${s}State`] = wellSideState(config, s);
+    const stateCtrl = well.add(config, `stairwellSide${s}State`, { 'swobodny (wynika ze schodów)': 'free', 'sztywny (dokładnie ten wymiar)': 'rigid', 'główny (dokładny + wyznacza głębokość stopnia)': 'main' }).name(`Bok ${s}: stan`);
+    const onState = () => {
+      const v = config[`stairwellSide${s}State`];
+      if (v === 'main') for (const x of ['A', 'B', 'C']) if (x !== s && config[`stairwellSide${x}State`] === 'main') config[`stairwellSide${x}State`] = 'rigid';
+      for (const x of ['A', 'B', 'C']) config[`stairwellSide${x}Fixed`] = wellSideState(config, x) !== 'free';
+      stateCtrls.forEach((c) => c.updateDisplay());
+    };
+    stateCtrl.onChange(() => {
+      onState();
+      onChange();
+    }).onFinishChange(() => (onCommit || onChange)());
+    stateCtrls.push(stateCtrl);
   }
   live(well.add(config, 'stairwellWallGapMm', 0, 100, 1)).name('Odstęp wangi od ściany [mm]');
   // the walls (the wall editor, stairwell.js stairwellWallList): one row per wall — its side, the side of the stair
@@ -290,6 +305,9 @@ export function createUI({
   const typeOuterCtrl = live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name(`Typ wangi ${sideShort('outer', config)}`);
   const typeInnerCtrl = live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name(`Typ wangi ${sideShort('inner', config)}`);
   const syncSideNames = () => {
+    // (a loaded project without states: shown from its older "sztywny" flags)
+    for (const s of ['A', 'B', 'C']) config[`stairwellSide${s}State`] = wellSideState(config, s);
+    stateCtrls.forEach((c) => c.updateDisplay());
     wallHandCtrl.show(config.stairType === 'S');
     generateCtrl?.show(!!config.stairPending);
     typeOuterCtrl.name(`Typ wangi ${sideShort('outer', config)}`);

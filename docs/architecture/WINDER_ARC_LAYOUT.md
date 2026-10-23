@@ -17,6 +17,7 @@ Układ lokalny jest taki sam jak w `planLayout.js`:
   - **ćwiartka łuku o promieniu off wokół Ic**,
   - prosta y = Yc + off.
 - **Strefa zabiegu** to `windersPerTurn` równych odcinków *mierzonych na linii biegu* (Lw = n·g). Wartość
+  (Per turn: `turnSplitOffsetsMm[k]`, set only by the stairwell fit to make its rigid sides exact — STAIRWELL_ROOM.md.)
   `walklineSplitOffset` (`before`) mówi, ile z nich leży przed środkiem łuku (punktem na przekątnej narożnika). Jest
   ograniczona do [π·off/4, Lw − π·off/4], żeby cały łuk mieścił się w strefie. Połowa Lw daje zabieg symetryczny.
 - **Krawędź k** przechodzi przez dwa punkty:

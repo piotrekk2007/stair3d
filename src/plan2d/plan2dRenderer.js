@@ -297,7 +297,8 @@ export function stairwellXML(drawing) {
     const a = { x: d.a.x + n.x * off, y: d.a.y + n.y * off };
     const b = { x: d.b.x + n.x * off, y: d.b.y + n.y * off };
     const color = !d.fixed ? '#555' : d.ok ? '#2e7d32' : '#c0392b';
-    const text = d.fixed ? `${d.side}: ${Math.round(d.value)}${d.ok ? '' : ` (sztywny ${d.target})`} 🔒` : `${d.side}: ${Math.round(d.value)} (swobodny)`;
+    const state = d.main ? 'główny' : 'sztywny';
+    const text = d.fixed ? `${d.side}: ${Math.round(d.value)}${d.ok ? '' : ` (${state} ${d.target})`} 🔒${d.main ? ' ★' : ''}` : `${d.side}: ${Math.round(d.value)} (swobodny)`;
     xml += `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1" ${HAIR}/>`;
     for (const [p, q] of [[d.a, a], [d.b, b]]) xml += `<line x1="${fmt(p.x)}" y1="${fmt(-p.y)}" x2="${fmt(q.x)}" y2="${fmt(-q.y)}" stroke="${color}" stroke-width="0.8" stroke-dasharray="2 2" ${HAIR}/>`;
     const m = { x: (a.x + b.x) / 2 + n.x * px(8), y: (a.y + b.y) / 2 + n.y * px(8) };

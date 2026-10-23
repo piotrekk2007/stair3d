@@ -268,8 +268,10 @@ function rebuild() {
   // they are copied into config so the sliders, the project file and undo show what the stair really is — like an
   // AUTO value. The fit depends only on the targets and the other parameters, never on these fields, so copying
   // them back changes nothing on the next rebuild.
-  const fitValues = built.stairwellFit?.values;
-  if (fitValues) Object.assign(config, fitValues);
+  // (not the turns' own winder shifts, `turnSplitOffsetsMm`: the solver's output only, re-derived on every build and
+  // gone when the stairwell is off — stairwellFit.js solveFixedSides)
+  const { turnSplitOffsetsMm: _shifts, ...fitValues } = built.stairwellFit?.values || {};
+  if (built.stairwellFit?.values) Object.assign(config, fitValues);
   const fitOn = !!(config.stairwellFitEnabled || built.stairwellFit?.live);
   if (fitOn || fitWasEnabled) uiRefresh?.();
   fitWasEnabled = fitOn;
@@ -1205,7 +1207,8 @@ function searchStairwellVariants() {
 function applyStairwellVariant(id) {
   const v = variantsState.result?.variants.find((x) => x.id === id);
   if (!v?.patch) return;
-  Object.assign(config, v.patch);
+  const { turnSplitOffsetsMm: _shifts, ...patch } = v.patch; // (re-derived live, never stored)
+  Object.assign(config, patch);
   variantsState.appliedId = id;
   rebuild();
   uiRefresh?.();

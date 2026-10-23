@@ -136,8 +136,12 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   tam, gdzie nie ma ściany" (folder 9) sets every walled side's sections from `treadsOpenOnOuterSide(…, line)` (built
   returns `stairwellWalls`); the wall handrail only on a side with a wall (`wallRailAllowed`).
   `wellFrame` = the WALL frame (x from wall A, y from the end wall; a mirror of the plan for a right turn) — the
-  opening is given in it whenever the stairwell is on, so it stays put when a free side changes. `stairwellReport` →
-  `built.stairwell` (gate): WARNING `STAIRWELL-SIDE-FIXED` for a fixed side off > 1 mm. Plan 2D layer `stairwell`
+  opening is given in it whenever the stairwell is on, so it stays put when a free side changes. **Side states**
+  (user decision 2026-10-23): `stairwellSide{S}State` free / rigid / main (`wellSideState`, `wellMainSide`; null = from
+  `…Fixed`); EVERY rigid side is exact: the main side sets the counts + going, then `stairwellFit.js exactRigidSides`
+  shifts each turn's winders along the walkline (`turnSplitOffsetsMm`, the solver's output only — in `fullConfig`,
+  never in `config`) and only then narrows the stair, trying counts ±1 if needed. `stairwellReport` →
+  `built.stairwell` (gate): ERROR `STAIRWELL-SIDE-FIXED` for a rigid side off > 1 mm (what to change). Plan 2D layer `stairwell`
   (walls + each side's dimension, fixed 🔒 green/red, free "(swobodny)"); 3D walls (`stairwellWalls` →
   `stairwellWallsRenderer.js`, `built.wallsMesh`, "Pokaż ściany klatki" in the panel's "Widok 3D" folder and "Ściany
   klatki" in the 3D HUD's Warstwy, kept in sync; the slab covers the stair + walls).

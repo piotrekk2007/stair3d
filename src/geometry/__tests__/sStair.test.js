@@ -145,14 +145,12 @@ test("S stairwell frame: wall C's line is on the near side of side B's end (x = 
   assert.ok(u.stairwell.frame.wallLines.some((l) => l.axis === 'x' && Math.abs(l.value - (Bu + 15)) < 1e-6));
 });
 
-test("S stairwell: a fixed B narrower than the stair's own comes out exactly — the width is narrowed (never widened), as in a U", () => {
+test("S stairwell: three fixed sides all come out exactly (each turn's winders shifted, the width never widened)", () => {
   const b = buildStaircase(S({ stairwellRoomEnabled: true, stairwellSideAMm: 2600, stairwellSideBMm: 1800, stairwellSideCMm: 1500, stairwellSideAFixed: true, stairwellSideBFixed: true, stairwellSideCFixed: true }));
   const side = (x) => b.stairwell.sides.find((s) => s.side === x);
-  assert.ok(Math.abs(side('B').achieved - 1800) <= 1, `B ${side('B').achieved}`);
-  assert.ok(Math.abs(side('C').achieved - 1500) <= 1, `C ${side('C').achieved}`);
-  assert.ok(b.fullConfig.stairWidth < S().stairWidth, 'narrowed');
-  // the other fixed side within one going
-  assert.ok(Math.abs(side('A').achieved - 2600) < b.fullConfig.treadGoing);
+  for (const [x, v] of [['A', 2600], ['B', 1800], ['C', 1500]]) assert.ok(Math.abs(side(x).achieved - v) <= 1, `${x} ${side(x).achieved}`);
+  assert.ok(b.fullConfig.stairWidth <= S().stairWidth, 'never wider');
+  assert.equal(b.stairwell.diagnostics.length, 0);
 });
 
 test("regression (user, 2026-10-23): an S's stairwell walls on the LEFT or the RIGHT (walking up A) — the sides measured along that line, no post at the dusza against them (also with a wall gap)", () => {

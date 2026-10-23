@@ -69,6 +69,11 @@ export function createDefaultConfig() {
     stairwellSideAFixed: false,
     stairwellSideBFixed: false,
     stairwellSideCFixed: false,
+    // Each side's state (stairwell.js wellSideState, user decision 2026-10-23): 'free' | 'rigid' (exactly its
+    // dimension) | 'main' (rigid + the going follows it); null = from stairwellSide{S}Fixed (older projects)
+    stairwellSideAState: null,
+    stairwellSideBState: null,
+    stairwellSideCState: null,
     // The walls (the wall editor, user request 2026-10-23 — stairwell.js stairwellWallList): [{id, side 'A'|'B'|'C',
     // line 'outer'|'inner', from, to}] (mm from the side's corner, to null = to the side's far end). null = from the
     // per-side fields below (older projects: stairwellWall{A,B,C} / …Extent / …LengthMm on the measured line); the
@@ -414,10 +419,12 @@ export function deriveStairData(config) {
 
   const riserRangeOk = riserHeight >= minRiser && riserHeight <= maxRiser;
 
+  // (each turn with its own split when the stairwell fit set one — planLayout.js paramsOfTurn)
+  const splitOf = (k) => (Array.isArray(config.turnSplitOffsetsMm) && Number.isFinite(Number(config.turnSplitOffsetsMm[k])) ? Number(config.turnSplitOffsetsMm[k]) : walklineSplitOffset);
   const turnChecks = [];
   if (halfTurn) turnChecks.push(checkHalfTurnFeasibility(config));
-  else if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
-  if (numTurns >= 2 && !halfTurn) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth, stairWidth));
+  else if (numTurns >= 1) turnChecks.push(checkTurnFeasibility(turn1Type, windersPerTurn, treadGoing, walklineOffset, splitOf(0), minInnerWidth, stairWidth));
+  if (numTurns >= 2 && !halfTurn) turnChecks.push(checkTurnFeasibility(turn2Type, windersPerTurn, treadGoing, walklineOffset, splitOf(1), minInnerWidth, stairWidth));
 
   const turnFeasible = turnChecks.every((t) => t.feasible);
   const turnFeasibleMessage = turnChecks

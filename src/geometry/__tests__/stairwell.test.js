@@ -102,7 +102,7 @@ test('plan: walls and every side dimension, a fixed one marked met / off', () =>
   assert.deepEqual(d.dims.map((x) => [x.side, x.fixed, x.ok]), [['A', false, true], ['B', true, false]]);
   const svg = renderPlan2DSVG(built.planLayout, c, built.derived, { viewport: { x: -500, y: -3000, width: 4000, height: 4000 }, stairwell: d });
   assert.match(svg, /id="stairwell-layer"/);
-  assert.match(svg, /B: \d+ \(sztywny 99999\)/);
+  assert.match(svg, /B: \d+ \((sztywny|główny) 99999\)/);
   assert.match(svg, /A: \d+ \(swobodny\)/);
 });
 

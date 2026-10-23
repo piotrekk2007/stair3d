@@ -890,6 +890,13 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   const { stairWidth, treadGoing, treadsLegA, windersPerTurn, treadsLegB, treadsLegC, walklineOffset, walklineSplitOffset, minInnerWidth, turnDirection, turn1Type, turn2Type, mergeLandings } = config;
   const numTurns = numTurnsOverride || 2;
   const params = { stairWidth, treadGoing, walklineOffset, walklineSplitOffset, minInnerWidth };
+  // each turn's own split (how much of its winder zone lies before the arc's middle): `turnSplitOffsetsMm[k]` — set
+  // only by the stairwell fit (stairwellFit.js solveFixedSides: a turn's winders shifted along the walkline so its two
+  // sides come out exactly, user decision 2026-10-23) — else the one `walklineSplitOffset`
+  const paramsOfTurn = (k) => {
+    const v = Array.isArray(config.turnSplitOffsetsMm) ? Number(config.turnSplitOffsetsMm[k]) : NaN;
+    return Number.isFinite(v) ? { ...params, walklineSplitOffset: v } : params;
+  };
   // (buildTurnLocal lays winders out from the walkline; landings draw it as the same quarter arc)
 
   // "1 duży podest" zamiast 2 półpodestów: gdy OBA zakręty w U są typu 'landing' i mergeLandings
@@ -907,7 +914,7 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   if (half) return finishLayout(config, { outerFullPath: half.outerPath, innerFullPath: half.innerPath, treads: half.treads, turns: [half.turnInfo], walkPath: half.walkline.path, walkPoints: half.walkline.points });
 
   // a flight that starts (ends) with winders starts (ends) at the inner corner — see winderArc.js pins
-  const call1 = buildTurnOrLanding(turn1Type, params, treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0, {
+  const call1 = buildTurnOrLanding(turn1Type, paramsOfTurn(0), treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0, {
     startsFlight: treadsLegA === 0,
     endsFlight: numTurns === 1 && treadsLegB === 0,
   });
@@ -922,7 +929,7 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   if (numTurns === 2 && reverseSecond) {
     // S: the second turn mirrored into a left turn, its local outer line starting on the first turn's inner line
     const frame2 = makeFrame(call1.innerPath[call1.innerPath.length - 1], IDENTITY_FRAME.right);
-    const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
+    const call2 = buildTurnOrLanding(turn2Type, paramsOfTurn(1), 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
     const place = (pts) => transformPoints(pts.map(mirrorX), frame2);
     innerFullPath = innerFullPath.concat(place(call2.outerPath).slice(1));
     outerFullPath = outerFullPath.concat(place(call2.innerPath).slice(1));
@@ -963,7 +970,7 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
     });
   } else if (numTurns === 2) {
     const frame2 = makeFrame(call1.exitOuterPoint, IDENTITY_FRAME.right);
-    const call2 = buildTurnOrLanding(turn2Type, params, 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
+    const call2 = buildTurnOrLanding(turn2Type, paramsOfTurn(1), 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 });
 
     outerFullPath = outerFullPath.concat(transformPoints(call2.outerPath, frame2).slice(1));
     innerFullPath = innerFullPath.concat(transformPoints(call2.innerPath, frame2).slice(1));

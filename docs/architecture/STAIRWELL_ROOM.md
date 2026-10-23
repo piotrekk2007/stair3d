@@ -10,7 +10,8 @@ a real stairwell is described by the dimensions that are RIGID.
 | --- | --- |
 | `stairwellRoomEnabled` | the stairwell dimensions are on |
 | `stairwellSide{A,B,C}Mm` | the side lengths of the stair's OUTER line (outer face of the outer wanga = the wall line), measured like `stairwellFit.js outerSideLengths`: A from the first front edge (no nosing) to the corner, B along flight B (L: to the last back edge; U: corner to corner, wall to wall), C from the corner to the last back edge (U) |
-| `stairwellSide{A,B,C}Fixed` | FIXED = must come out exactly; FREE = follows from the tread counts (no limit) |
+| `stairwellSide{A,B,C}State` | the side's state (user decision 2026-10-23 — the walls' dimensions never change): `free` (swobodny — follows from the stair), `rigid` (sztywny — exactly its dimension), `main` (główny — rigid, and the going follows it; one only) — `wellSideState` / `wellMainSide`; null = from `…Fixed` |
+| `stairwellSide{A,B,C}Fixed` | (older projects) FIXED = rigid; the exit side when fixed, else the first fixed, is then main |
 | `stairwellWallList` | THE WALLS (the wall editor, user request 2026-10-23 — see "Walls" below): `[{id, side, line, from, to}]`; `null` = taken from the per-side fields below |
 | `stairwellWall{A,B,C}` | (per-side, older projects; read only without a list) the side runs along a wall |
 | `stairwellWall{A,B,C}Extent` + `…LengthMm` | (per-side, as above) how far the wall reaches (user decision 2026-10-19): `full` (the whole side), `start` (from the side's start — A: the first front edge, B/C: the corner — that long, at most the side), `end` (back from the side's end — A: the corner / side B, C: the slab edge — that long; longer than the side = the wall goes on past its start, e.g. behind the entry) — `wallInterval` |
@@ -21,6 +22,20 @@ wall to wall and C = 2350 from the end wall to the slab edge fixed, A free — t
 on the counts), so the entry and the exit need not be on one line.
 
 ## Kept LIVE — `stairwellFit.js solveFixedSides`
+
+**Every rigid side exact** (user decision 2026-10-23, "Zabiegi + szerokość"): `solveStairwellFit` picks the counts and
+the going with the MAIN side as the key (exact) and the other rigid ones within a going; then `exactRigidSides`
+(Gauss–Newton on real layouts, finite-difference Jacobian, active set at the bounds, the main side weighted ×100)
+solves — with the counts fixed — the going and each shiftable turn's own split (`turnSplitOffsetsMm[k]`: how much of
+that turn's winder zone lies before the arc's middle, within [π·off/4, zone − π·off/4]; a winder turn laid out from the
+walkline whose zone is not pinned to the corner — not a landing, not the one 180° zone) so that every rigid side is
+met; only when that is not enough the width as well (never wider than given, ≥ 500). When they still miss, the counts
+±1 on every rigid side's flight are tried, ranked: sides met → riser in range → least narrowed → 2h+s. A turn's split
+moves length from the side before it to the side after it (1:1). `turnSplitOffsetsMm` is the solver's OUTPUT only —
+applied in `fullConfig` (planLayout.js `paramsOfTurn`, schema.js turn feasibility), never copied into `config` (nor by
+a variant's "Zastosuj"), never read as an input, so it is gone when the stairwell is off. A rigid side still off by
+more than 1 mm → **ERROR** `STAIRWELL-SIDE-FIXED` (it blocks the takeoff, waivable) naming what to change (winder
+count, turn type, width, another side free, the variant search).
 
 The fixed sides hold on every change, not only when a variant is applied (user, 2026-10-16: "the exit treads must be
 pinned"): `buildStaircase` runs `solveFixedSides(config)` whenever the stairwell is on with a fixed side — the same
