@@ -11,6 +11,7 @@ import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpe
 import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
 import { stairwellMeasureLine, wellSideLetters, wellSideState } from '../geometry/stairwell.js';
+import { applyWallEdit } from '../geometry/stairwellWallEdits.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -135,7 +136,16 @@ export function createUI({
   live(well.add(config, 'stairwellRoomEnabled')).name('Wymiary klatki: włączone');
   // an S has a dusza on each line: its sides may be measured along either (stairwell.js stairwellMeasureLine — by
   // default the line most of its walls stand along); shown for an S only, right under the switch
-  const wallHandCtrl = live(well.add(config, 'stairwellWallHand', { 'tam, gdzie większość ścian (AUTO)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' })).name('S: boki A/B/C mierzone');
+  // (choosing a side also MOVES the walls there — stairwellWallEdits.js 'to-line', user report 2026-10-23: the switch
+  // only changed where the sides were measured, the walls of the wall list stayed on the other side of the stair)
+  const wallHandCtrl = well.add(config, 'stairwellWallHand', { 'tam, gdzie większość ścian (AUTO)': '', 'po lewej (patrząc w górę biegu A)': 'left', 'po prawej (patrząc w górę biegu A)': 'right' }).name('S: ściany klatki i boki A/B/C');
+  wallHandCtrl.onChange(() => {
+    if ((config.stairwellWallHand === 'left' || config.stairwellWallHand === 'right') && Array.isArray(config.stairwellWallList)) {
+      config.stairwellWallList = applyWallEdit(config.stairwellWallList, { action: 'to-line', line: stairwellMeasureLine(config) });
+      renderWalls();
+    }
+    onChange();
+  }).onFinishChange(() => (onCommit || onChange)());
   const stateCtrls = [];
   for (const [s, hint] of [['A', 'od wejścia do narożnika'], ['B', 'L: do wyjścia, U: ściana–ściana, S: wzdłuż biegu B'], ['C', 'U i S: do krawędzi stropu']]) {
     live(well.add(config, `stairwellSide${s}Mm`, 0, 12000, 1)).name(`Bok ${s} [mm] (${hint})`);

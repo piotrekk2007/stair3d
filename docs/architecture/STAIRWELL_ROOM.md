@@ -86,7 +86,11 @@ S's inner line starting with winders (A = 0) shifted the letters: its B wall was
 report 2026-10-23). The fit (`stairwellFit.js outerSideLengths(…, stairType)`) and the report measure the same way.
 
 The sides A / B / C are measured along `stairwellMeasureLine(config)`: the outer line; an S along its left / right
-(`stairwellWallHand`, panel „S: boki A/B/C mierzone”) or, by default, the line most of its walls stand along.
+(`stairwellWallHand`, panel „S: ściany klatki i boki A/B/C”) or, by default, the line most of its walls stand along.
+Choosing left / right there also MOVES the wall list's walls to that side (`applyWallEdit` 'to-line': when most walls
+stand on the other line every wall changes sides — user report 2026-10-23: the switch only changed the measuring, the
+stair stayed on the wrong side of its walls); the opening, given in the wall frame, keeps its place relative to the
+walls.
 
 Editing: plan mode "▥ Ściany" (`plan2dRenderer.js wallEditXML`, `planInteractions.js` → `main.js applyWallChange /
 wallDrag`): a dashed place beside every side of both lines (click = a wall on the whole side), every wall with a handle

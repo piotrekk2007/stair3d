@@ -34,6 +34,9 @@ export function sanitizeWall(w) {
  *  - {action: 'remove', id};
  *  - {action: 'set', id, side?, line?, from?, to?} — the panel's fields (`to: null` = to the far end);
  *  - {action: 'set-span', id, t0, t1, sideLength} — a dragged end: the stretch [t0, t1] mm from the side's start;
+ *  - {action: 'to-line', line} — the stair's walls moved to the side `line` (an S's "ściany po lewej / prawej", user
+ *    report 2026-10-23): when most walls stand on the other line, every wall changes sides (a flight with walls on both
+ *    sides keeps both);
  *  - {action: 'clear'} — no walls at all.
  * @returns {{id, side, line, from, to}[]}
  */
@@ -65,6 +68,13 @@ export function applyWallEdit(list, change) {
       }
       walls[at] = sanitizeWall({ ...walls[at], ...spanToFromTo(walls[at].side, len, t0, t1) });
       return walls;
+    }
+    case 'to-line': {
+      if (!LINES.includes(change.line)) return walls;
+      const on = (line) => walls.filter((w) => w.line === line).length;
+      const other = change.line === 'outer' ? 'inner' : 'outer';
+      if (on(other) <= on(change.line)) return walls;
+      return walls.map((w) => ({ ...w, line: w.line === 'outer' ? 'inner' : 'outer' }));
     }
     case 'clear':
       return [];

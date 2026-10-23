@@ -106,3 +106,19 @@ test('the plan in the wall mode: a dashed place on every side of both lines, two
   // what a dragged end is measured along (main.js wallDrag): the side's direction, its length, the span
   for (const w of drawing.walls) assert.ok(w.dir && Number.isFinite(w.sideLength) && Number.isFinite(w.t0) && Number.isFinite(w.t1), w.id);
 });
+
+test("regression (user, 2026-10-23): an S's switch \"ściany po lewej\" MOVES the wall list's walls to the left — before it only changed where the sides were measured, the walls stayed on the right", () => {
+  const list = [{ id: 'w1', side: 'A', line: 'outer', from: 0, to: null }, { id: 'w2', side: 'B', line: 'outer', from: 0, to: null }, { id: 'w3', side: 'C', line: 'outer', from: 0, to: null }, { id: 'w4', side: 'C', line: 'inner', from: 0, to: null }];
+  const moved = applyWallEdit(list, { action: 'to-line', line: 'inner' });
+  assert.deepEqual(moved.map((w) => w.line), ['inner', 'inner', 'inner', 'outer'], 'every wall changes sides (C keeps one on each)');
+  assert.deepEqual(applyWallEdit(moved, { action: 'to-line', line: 'inner' }), moved, 'already there: nothing changes');
+  // the whole stair: a first-LEFT S with its walls on the left = the inner line (turn 1's dusza side)
+  const c = { ...createDefaultConfig(), stairType: 'S', turnDirection: 'left', stairwellRoomEnabled: true, stairwellWallHand: 'left', treadsLegA: 3, treadsLegB: 1, treadsLegC: 4, windersPerTurn: 3, stairwellWallList: applyWallEdit(list.slice(0, 3), { action: 'to-line', line: 'inner' }) };
+  const { L, pieces } = walls(c);
+  assert.equal(pieces.length, 3);
+  assert.ok(pieces.every((w) => w.line === 'inner'));
+  // wall A runs beside flight A on its LEFT (walking up +y: smaller x than the flight)
+  const A = pieces.find((w) => w.side === 'A');
+  const flightA = L.treads[0];
+  assert.ok(A.a.x < Math.min(...flightA.outline.map((p) => p.x)) + 1, 'wall A on the left of flight A');
+});
