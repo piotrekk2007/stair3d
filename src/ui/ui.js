@@ -9,6 +9,7 @@ import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
 import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 import { escapeHtml } from '../util/format.js';
+import { sideShort, sideGenitive } from '../util/sideNames.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -214,8 +215,13 @@ export function createUI({
 
   const build = gui.addFolder('7. Wangi, słupy, podstopnie');
   const stringerConstructionOptions = Object.fromEntries(Object.entries(CONSTRUCTION_TYPE_LABELS_PL).map(([value, label]) => [label, value]));
-  live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name('Typ wangi zewn.');
-  live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name('Typ wangi wewn.');
+  // (named by util/sideNames.js — an S: lewa / prawa; renamed on every refresh, the stair type may change)
+  const typeOuterCtrl = live(build.add(config, 'stringerConstructionTypeOuter', stringerConstructionOptions)).name(`Typ wangi ${sideShort('outer', config)}`);
+  const typeInnerCtrl = live(build.add(config, 'stringerConstructionTypeInner', stringerConstructionOptions)).name(`Typ wangi ${sideShort('inner', config)}`);
+  const syncSideNames = () => {
+    typeOuterCtrl.name(`Typ wangi ${sideShort('outer', config)}`);
+    typeInnerCtrl.name(`Typ wangi ${sideShort('inner', config)}`);
+  };
   lockable(build.add(config, 'treadThickness', 20, 60, 1).name('Grubość stopnia [mm]'), 'treadThickness');
   lockable(build.add(config, 'nosing', 0, 40, 1).name('Nosek [mm]'), 'nosing');
   lockable(build.add(config, 'minimumStringerDepthMm', 150, 600, 10).name('Min. głębokość wangi [mm]'), 'minimumStringerDepthMm');
@@ -350,7 +356,7 @@ export function createUI({
       const row = document.createElement('div');
       row.className = 'railing-section-row';
       const side = document.createElement('select');
-      [['outer', 'zewn.'], ['inner', 'wewn.']].forEach(([value, label]) => side.add(new Option(label, value, false, s.side === value)));
+      ['outer', 'inner'].forEach((value) => side.add(new Option(sideShort(value, config), value, false, s.side === value)));
       side.addEventListener('change', () => {
         s.side = side.value;
         commitSections();
@@ -404,15 +410,25 @@ export function createUI({
     if (onRailingOuterFromWalls) {
       const fromWalls = document.createElement('button');
       fromWalls.type = 'button';
-      fromWalls.textContent = 'Balustrada zewn. tam, gdzie nie ma ściany';
-      fromWalls.title = 'Zastępuje odcinki po stronie zewnętrznej odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)';
+      fromWalls.textContent = `Balustrada ${sideShort('outer', config)} tam, gdzie nie ma ściany`;
+      fromWalls.title = `Zastępuje odcinki po stronie ${sideGenitive('outer', config)} odcinkami na stopniach bez ściany obok (klatka schodowa, folder 3)`;
       fromWalls.addEventListener('click', () => onRailingOuterFromWalls());
       sectionsBox.appendChild(fromWalls);
     }
   }
   renderSections();
   rail.$children.appendChild(sectionsBox);
-  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync())];
+  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync()), syncSideNames];
+  // (the balustrade sections' side lists too — re-rendered only when the names change, not while typing in them)
+  let namesKey = `${config.stairType}|${config.turnDirection}`;
+  gui.syncSideNames = () => {
+    syncSideNames();
+    const key = `${config.stairType}|${config.turnDirection}`;
+    if (key !== namesKey) {
+      namesKey = key;
+      renderSections();
+    }
+  };
 
   // Orientative structural check (tab "Konstrukcja", src/structural/) — the takeoff keeps using timberGrade.
   // Load defaults are the UK values (UK-GUID-I-01, user decision), labelled as such in the tab.
@@ -555,7 +571,7 @@ function stairwellFitRows(fit) {
       return `<div class="row resultant ${cls}"><span>Klatka: bok ${s.side}${s.key ? ' (kluczowy)' : ''} / ${s.target}</span><b>${achieved}${devText}</b></div>`;
     })
     .join('');
-  return sideRows + '<div class="note">Boki mierzone po licu wangi zewnętrznej, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>';
+  return sideRows + `<div class="note">Boki mierzone po licu wangi ${sideGenitive('outer', config)}, od czoła pierwszego stopnia (nosek wystaje dodatkowo).</div>`;
 }
 
 export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, stairwellFit = null) {

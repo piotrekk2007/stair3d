@@ -35,8 +35,9 @@ import { fitToBounds, zoomAt, panBy, screenToViewportPoint } from '../plan2d/vie
 import { buildStringerBoardDXF, buildStringerAllBoardsDXF } from '../export/dxfExport.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { escapeHtml } from '../util/format.js';
+import { wangaName } from '../util/sideNames.js';
 
-const SIDE_LABELS = { outer: 'Wanga zewnętrzna', inner: 'Wanga wewnętrzna (dusza)' };
+const SIDE_LABELS = { outer: 'Wanga zewnętrzna', inner: 'Wanga wewnętrzna (dusza)' }; // the initial text; refresh() renames for an S
 const OTHER_SIDE = { outer: 'inner', inner: 'outer' };
 const WHEEL_ZOOM_STEP = 1.15;
 // A point closer than this (in u, mm) to the end of an edge is not a place to insert a new control point.
@@ -230,7 +231,11 @@ export function createProfileEditor(container, handlers) {
     });
   }
 
+  // the wangi's names (util/sideNames.js — an S: lewa / prawa)
+  const sideName = (side) => wangaName(side, handlers.getContext()?.config);
+
   function refresh() {
+    for (const opt of sideSelect.options) opt.textContent = sideName(opt.value);
     const got = currentViews();
     if (!got) return;
     state.views = got.views;
@@ -597,8 +602,8 @@ export function createProfileEditor(container, handlers) {
       const skipped = otherGeo.flatMap((g) => g.diagnostics.filter((d) => d.ruleId === 'STRINGER-OVERRIDE-REJECTED' || d.ruleId === 'STRINGER-OVERRIDE-ORPHANED')).length;
       showToast(
         skipped > 0
-          ? `Skopiowano profil na ${SIDE_LABELS[otherSide].toLowerCase()}. ${skipped} ${skipped === 1 ? 'punkt nie pasował' : 'punkty(-ów) nie pasowało'} do jej geometrii w tym miejscu i został(y) pominięte — sprawdź walidację po przełączeniu na tę wangę.`
-          : `Skopiowano profil na ${SIDE_LABELS[otherSide].toLowerCase()}.`
+          ? `Skopiowano profil na ${sideName(otherSide).toLowerCase()}. ${skipped} ${skipped === 1 ? 'punkt nie pasował' : 'punkty(-ów) nie pasowało'} do jej geometrii w tym miejscu i został(y) pominięte — sprawdź walidację po przełączeniu na tę wangę.`
+          : `Skopiowano profil na ${sideName(otherSide).toLowerCase()}.`
       );
     }
   });

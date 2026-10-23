@@ -13,6 +13,7 @@
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
 import { RAILING_WALL_BRACKET_SPACING_MM } from '../geometry/railingSolver.js';
+import { sideShort } from '../util/sideNames.js';
 
 const MM3_TO_M3 = 1 / 1_000_000_000;
 export const RAILING_HANDRAIL_MATERIAL_ID = 'railing-handrail';
@@ -46,7 +47,7 @@ function glassItems(section, config, wasteFactors) {
       optional: true,
       status: TAKEOFF_ITEM_STATUS.OK,
       notes: [
-        `Tafla ${k + 1} (${sideLabel(section.side)}, odcinek ${section.id}): ${label}, prostokąt ${Math.round(pane.blank.widthMm)} × ${Math.round(pane.blank.heightMm)} mm, kształt i otwory w DXF balustrady; ${pane.fixings.length} ${pane.fixings[0]?.kind === 'rotule' ? 'rotul(e)' : 'uchwyt(y)'}.`,
+        `Tafla ${k + 1} (${sideLabel(section.side, config)}, odcinek ${section.id}): ${label}, prostokąt ${Math.round(pane.blank.widthMm)} × ${Math.round(pane.blank.heightMm)} mm, kształt i otwory w DXF balustrady; ${pane.fixings.length} ${pane.fixings[0]?.kind === 'rotule' ? 'rotul(e)' : 'uchwyt(y)'}.`,
       ],
     })
   );
@@ -72,14 +73,15 @@ function glassItems(section, config, wasteFactors) {
         wasteFactor: wasteFactorFor(ELEMENT_TYPES.GLASS_FIXING, RAILING_GLASS_FIXING_MATERIAL_ID, wasteFactors),
         optional: true,
         status: TAKEOFF_ITEM_STATUS.OK,
-        notes: [`Mocowania szkła (${sideLabel(section.side)}, odcinek ${section.id}) — typ i wielkość wg producenta, do weryfikacji.`],
+        notes: [`Mocowania szkła (${sideLabel(section.side, config)}, odcinek ${section.id}) — typ i wielkość wg producenta, do weryfikacji.`],
       })
     );
   }
   return items;
 }
 
-const sideLabel = (side) => (side === 'outer' ? 'zewn.' : 'wewn.');
+// zewn. / wewn. — an S: lewa / prawa (util/sideNames.js)
+const sideLabel = (side, config) => sideShort(side, config);
 
 function sectionArea(shape, a, b) {
   return shape === 'round' ? (Math.PI * a * a) / 4 : a * b;
@@ -116,8 +118,8 @@ function handrailItems(section, config, wasteFactors) {
           status: TAKEOFF_ITEM_STATUS.OK,
           notes: [
             piece.bent
-              ? `Poręcz GIĘTA ${sideLabel(section.side)} (odcinek ${section.id}), bieg ${r + 1} — jeden element wygięty w pionie/rzucie, długość po osi 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm (rozwinięcie w DXF balustrady).`
-              : `Poręcz ${sideLabel(section.side)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`,
+              ? `Poręcz GIĘTA ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1} — jeden element wygięty w pionie/rzucie, długość po osi 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm (rozwinięcie w DXF balustrady).`
+              : `Poręcz ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`,
           ],
         })
       );
@@ -151,7 +153,7 @@ function baseRailItems(section, config, wasteFactors) {
       wasteFactor: wasteFactorFor(ELEMENT_TYPES.BASERAIL, RAILING_BASERAIL_MATERIAL_ID, wasteFactors),
       optional: true,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Podporęcz ${sideLabel(section.side)} (odcinek ${section.id}), element ${p + 1} — na górnej krawędzi wangi wpuszczanej, tralki wchodzą w nią; przekrój ${widthMm} × ${heightMm} mm.`],
+      notes: [`Podporęcz ${sideLabel(section.side, config)} (odcinek ${section.id}), element ${p + 1} — na górnej krawędzi wangi wpuszczanej, tralki wchodzą w nią; przekrój ${widthMm} × ${heightMm} mm.`],
     });
   });
 }
@@ -186,7 +188,7 @@ function balusterItems(section, config, wasteFactors) {
         wasteFactor: wasteFactorFor(ELEMENT_TYPES.BALUSTER, RAILING_BALUSTER_MATERIAL_ID, wasteFactors),
         optional: true,
         status: TAKEOFF_ITEM_STATUS.OK,
-        notes: [`Lista cięcia: tralka ${shape === 'round' ? `okrągła Ø ${size}` : `kwadratowa ${size} × ${size}`} mm, długość ${lengthMm} mm × ${count} szt. — balustrada ${sideLabel(section.side)} (odcinek ${section.id}). Objętości są sumą dla wszystkich sztuk.`],
+        notes: [`Lista cięcia: tralka ${shape === 'round' ? `okrągła Ø ${size}` : `kwadratowa ${size} × ${size}`} mm, długość ${lengthMm} mm × ${count} szt. — balustrada ${sideLabel(section.side, config)} (odcinek ${section.id}). Objętości są sumą dla wszystkich sztuk.`],
       });
     });
 }
@@ -221,7 +223,7 @@ function wallBracketItems(section, config) {
       wasteFactor: 0,
       optional: true,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Wsporniki poręczy przyściennej ${sideLabel(section.side)} (odcinek ${section.id}): ${count} szt., co maks. ${config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM} mm — dobór i mocowanie do ściany DO WERYFIKACJI.`],
+      notes: [`Wsporniki poręczy przyściennej ${sideLabel(section.side, config)} (odcinek ${section.id}): ${count} szt., co maks. ${config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM} mm — dobór i mocowanie do ściany DO WERYFIKACJI.`],
     }),
   ];
 }

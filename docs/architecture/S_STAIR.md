@@ -66,8 +66,21 @@ User decisions 2026-10-23:
   microns where two rectangles met, a false ceiling collision.
 - The balustrade round the opening finds S's exit edge and the walled edges like any stair.
 
-## Not yet (stage 3)
+## Names: left / right (stage 3)
 
-- Left / right names (wangi, balustrade sides, takeoff, Inspektor).
+- `util/sideNames.js` is THE place that names the two sides:
+  - an L / U keeps zewn. / wewn.;
+  - an S is lewa / prawa as seen walking up flight A. The inner line is on the side the first turn goes to
+    (`sideHand`).
+  - Helpers: `sideShort`, `sideAdjective`, `sideGenitive`, `wangaName`, `wangaShortName`. No side (the opening's
+    balustrade) → „przy otworze”.
+- Read by:
+  - the panel („Typ wangi …”, the balustrade sections' side lists, „Balustrada … tam, gdzie nie ma ściany”, the side
+    note) — `gui.syncSideNames` after every rebuild, the section lists re-rendered only when the names change;
+  - the 3D HUD layers (`viewportHud.js syncSideNames`, `main.js afterRebuild`);
+  - the Inspektor (wanga title, edge rows, type summary, status bar), the profile editor's wanga list, the 3D length
+    labels;
+  - the structural check and its panel, the takeoff (railing notes), the balustrade DXF (without diacritics), the
+    offer.
 
 Tests: `geometry/__tests__/sStair.test.js`.

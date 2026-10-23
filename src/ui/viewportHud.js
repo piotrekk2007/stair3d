@@ -4,6 +4,7 @@
 // interakcyjny: woła callbacki, nie dotyka geometrii ani modelu.
 
 import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../scene/presentationImage.js';
+import { wangaShortName } from '../util/sideNames.js';
 
 export const LAYERS_3D = [
   ['Treads', 'Stopnie'],
@@ -135,6 +136,13 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     },
     syncCeiling(visible) {
       hud.querySelector('[data-ceiling]').checked = visible;
+    },
+    // the wangi layers' names (util/sideNames.js — an S: lewa / prawa)
+    syncSideNames(config) {
+      for (const [key, side] of [['StringerOuter', 'outer'], ['StringerInner', 'inner']]) {
+        const label = hud.querySelector(`[data-layer="${key}"]`)?.parentElement;
+        if (label) label.lastChild.textContent = ` ${wangaShortName(side, config)}`;
+      }
     },
     syncWalls(visible) {
       hud.querySelector('[data-walls]').checked = visible;

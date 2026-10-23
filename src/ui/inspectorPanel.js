@@ -8,6 +8,7 @@ import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stepIndexFromElementId } from './selection.js';
 import { MIN_POST_HEIGHT_MM } from '../geometry/postSolver.js';
 import { railingEndKey, MAX_RAILING_END_OFFSET_MM } from '../geometry/railingSolver.js';
+import { sideShort, sideAdjective, wangaName } from '../util/sideNames.js';
 
 const TYPE_LABEL_PL = { straight: 'prosty', winder: 'zabiegowy', landing: 'podest' };
 const SEVERITY_LABEL_PL = { ERROR: 'BŁĄD', WARNING: 'UWAGA', INFO: 'INFO' };
@@ -45,7 +46,7 @@ function offsetOfPoints(nominal, final) {
 // Ustawianie krańców odcinków balustrady ze stopnia zaznaczonego w planie (obsługa w main.js applyRailingEdit).
 function railingBlockHTML(config, stepIndex) {
   if (!config.railingEnabled) return '';
-  const sideLabel = { outer: 'zewn.', inner: 'wewn.' };
+  const sideLabel = { outer: sideShort('outer', config), inner: sideShort('inner', config) };
   const sections = config.railingSections || [];
   const rows = sections.map((s) => {
     const range = `${s.fromStep + 1}–${s.toStep === null ? 'koniec' : s.toStep + 1}`;
@@ -80,7 +81,7 @@ function treadHTML(ctx) {
     const [dIn, dOut] = offsetOfPoints(edge.nominal, edge.final);
     const shift = edge.overridden ? ` <small>(Δ dusza ${dIn.toFixed(0)}, wanga ${dOut.toFixed(0)} mm)</small>` : '';
     const source = edge.overridden && !manualEdge ? ' <small>(z wysunięcia stopnia)</small>' : '';
-    rows.push(row(`${label} — dusza / zewn.`, `${pt(edge.final[0])} / ${pt(edge.final[1])}${shift}${source}`, state));
+    rows.push(row(`${label} — ${config.stairType === 'S' ? `${sideShort('inner', config)} / ${sideShort('outer', config)}` : 'dusza / zewn.'}`, `${pt(edge.final[0])} / ${pt(edge.final[1])}${shift}${source}`, state));
   }
 
   const overhang = overhangs?.[idx];
@@ -131,7 +132,7 @@ function stringerHTML(ctx) {
   const typeLabel = CONSTRUCTION_TYPE_LABELS_PL[config[typeField]] || config[typeField];
   const locked = (f) => (config.lockedFields?.includes(f) ? 'user' : 'auto');
   const rows = [];
-  rows.push(`<div class="insp-title">Wanga ${selection.stringerId === 'outer' ? 'zewnętrzna' : 'wewnętrzna (dusza)'}${segment ? ` <small>${segment.id}</small>` : ''}</div>`);
+  rows.push(`<div class="insp-title">${wangaName(selection.stringerId, config)}${segment ? ` <small>${segment.id}</small>` : ''}</div>`);
   rows.push(row('Typ wangi', typeLabel, 'user'));
   rows.push(row('Min. głębokość wangi', mm(config.minimumStringerDepthMm), locked('minimumStringerDepthMm')));
   rows.push(row('Grubość deski', mm(config.stringerThickness), locked('stringerThickness')));
@@ -296,7 +297,7 @@ function summaryHTML(ctx) {
   } else if (config.stairConstruction === 'metal-flat') {
     rows.push(row('Konstrukcja', 'metalowa — dwa płaskowniki wycinane w zęby', 'user'));
   } else {
-    rows.push(row('Typ wangi', outerType === innerType ? outerType : `zewn.: ${outerType} · wewn.: ${innerType}`, 'user'));
+    rows.push(row('Typ wangi', outerType === innerType ? outerType : `${sideShort('outer', config)}: ${outerType} · ${sideShort('inner', config)}: ${innerType}`, 'user'));
   }
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);
@@ -347,14 +348,14 @@ export function updateInspectorPanel(panel, ctx) {
 }
 
 /** Krótka etykieta zaznaczenia dla paska statusu. */
-export function selectionLabel(selection) {
+export function selectionLabel(selection, config = null) {
   if (!selection) return 'Nic nie zaznaczono';
   switch (selection.elementType) {
     case 'tread':
     case 'riser':
       return `Zaznaczono: stopień ${selection.stepIndex + 1}`;
     case 'stringer':
-      return `Zaznaczono: wanga ${selection.stringerId === 'outer' ? 'zewnętrzna' : 'wewnętrzna'}${selection.segmentId ? ` (${selection.segmentId})` : ''}`;
+      return `Zaznaczono: wanga ${sideAdjective(selection.stringerId, config)}${selection.segmentId ? ` (${selection.segmentId})` : ''}`;
     case 'post':
       return `Zaznaczono: słup ${selection.postId ?? ''}`;
     default:

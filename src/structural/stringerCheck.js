@@ -28,6 +28,7 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { ELEMENT_TYPES } from '../takeoff/takeoffTypes.js';
 import { EC5_FACTORS, GRAVITY_M_S2, LOAD_COMBINATION, designValue, timberClass } from './timberClasses.js';
 import { densityFor } from './selfWeight.js';
+import { wangaShortName } from '../util/sideNames.js';
 
 // Steeper than this, a board (the narrow dusza treads of a tight winder) is not checked as a beam.
 export const STEEP_BOARD_MAX_DEG = 60;
@@ -246,7 +247,7 @@ export function checkStringers(models, items, options = {}) {
         governing,
       });
 
-      const label = `Wanga ${side === 'outer' ? 'zewn.' : 'wewn.'} ${seg.id}`;
+      const label = `${wangaShortName(side, config)} ${seg.id}`;
       const strength = Math.max(bendingUtil, shearUtil);
       if (strength > 1) {
         diagnostics.push(

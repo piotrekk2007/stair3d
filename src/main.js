@@ -51,6 +51,7 @@ import { createPresentationLogo, savePresentationSnapshot } from './app/presenta
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
+import { sideShort } from './util/sideNames.js';
 
 // ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
 // a wszystkie panele/widoki są renderowane z już-rozwiązanych modeli. Żaden panel ani interakcja
@@ -231,6 +232,8 @@ window.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------------------------
 // Set once the parameter panel exists (it is created after rebuild() is defined); see the stairwell fit in rebuild().
 let uiRefresh = null;
+// panels created after rebuild() is defined that follow the stair on every rebuild (the 3D HUD's wangi names)
+const afterRebuild = [];
 let fitWasEnabled = false;
 
 function rebuild() {
@@ -252,6 +255,7 @@ function rebuild() {
   const built = buildStaircase(config);
   const { root, ceilingMesh, wallsMesh, derived, planLayout, ceilingFit, fullConfig, treadModels, riserModels, stringerModels } = built;
   lastModels = built;
+  afterRebuild.forEach((hook) => hook());
   // "Dopasuj do klatki": the stair was built from the fitted going/counts (buildStaircase applies the fit itself);
   // they are copied into config so the sliders, the project file and undo show what the stair really is — like an
   // AUTO value. The fit depends only on the targets and the other parameters, never on these fields, so copying
@@ -311,7 +315,7 @@ function rebuild() {
   if (variantsPanel) showStairwellVariants();
   const counts = updateValidatorPanel(validatorPanel, lastDiagnostics, { selectedDiagnostic, waivedDiagnostics: lastWaived, staleWaivers: lastStaleWaivers });
   renderTakeoffPanel();
-  updateStructuralPanel(structuralPanel, built.structural);
+  updateStructuralPanel(structuralPanel, built.structural, config);
 
   applyOverlayVisibility();
   applyLayerVisibility();
@@ -361,7 +365,7 @@ function refreshTakeoff() {
   lastModels.structural = buildStructuralReport(lastModels, { riserMaterial: takeoffSettings.boardPricing?.riserMaterial });
   lastTakeoff = computeTakeoff();
   renderTakeoffPanel();
-  updateStructuralPanel(structuralPanel, lastModels.structural);
+  updateStructuralPanel(structuralPanel, lastModels.structural, config);
 }
 
 function renderTakeoffPanel() {
@@ -494,6 +498,9 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   onLogoRemove: () => logo.remove(),
   onLogoSettings: (patch) => logo.update(patch),
 });
+// the wangi layers' names follow the stair type (an S: lewa / prawa)
+afterRebuild.push(() => viewportHudApi.syncSideNames(config));
+viewportHudApi.syncSideNames(config);
 
 // ---------------------------------------------------------------------------------------------
 // Tryb prezentacji: logo firmy na ekranie i na zdjęciach, „Zapisz zdjęcie" — app/presentation.js
@@ -581,7 +588,7 @@ function refreshSelectionViews() {
   }
   markValidatorSelection(validatorPanel, selectedDiagnostic);
   markTakeoffSelection(takeoffPanel, selectedTakeoffItemId);
-  ws.setStatus({ selection: selectionLabel(selection) });
+  ws.setStatus({ selection: selectionLabel(selection, config) });
 }
 
 // Diagnostyka -> zaznaczenie. Diagnostic niesie tylko elementType/elementId (bez ID meshów),
@@ -923,7 +930,7 @@ function railingOuterFromWalls() {
   const stamp = Date.now().toString(36);
   config.railingSections = [...(config.railingSections || []).filter((s) => s.side !== 'outer'), ...ranges.map((r, k) => ({ id: `railing-${stamp}-${k}`, side: 'outer', ...r }))];
   if (ranges.length) config.railingEnabled = true;
-  ws.setStatus({ selection: ranges.length ? `Balustrada zewn.: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
+  ws.setStatus({ selection: ranges.length ? `Balustrada ${sideShort('outer', config)}: ${ranges.map((r) => (r.fromStep === r.toStep ? `stopień ${r.fromStep + 1}` : `stopnie ${r.fromStep + 1}–${r.toStep + 1}`)).join(', ')}` : 'Po stronie zewnętrznej wszędzie jest ściana — bez balustrady zewn.' });
   refreshUI(gui);
   rebuild();
   commitHistory();
@@ -1548,6 +1555,8 @@ const gui = createUI({
   },
   onExportPlan2D: () => exportPlan2DSVG(currentPlan2DSVG),
 });
+// the panel's wangi names follow the stair type (an S: lewa / prawa)
+afterRebuild.push(() => gui.syncSideNames?.());
 
 uiRefresh = () => refreshUI(gui);
 setAppearance(appearance); // domyślne wykończenie = dąb (tekstura) — musi być na materiałach od startu

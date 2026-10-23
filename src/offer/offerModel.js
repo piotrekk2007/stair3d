@@ -23,6 +23,7 @@ import { BLONDEL_RANGE_MM } from '../config/schema.js';
 import { isHalfTurnU, halfTurnWinderCount } from '../geometry/winderArc.js';
 import { glassType } from '../geometry/railingGlass.js';
 import { round2 } from '../util/format.js';
+import { sideShort } from '../util/sideNames.js';
 
 export const OFFER_VAT_RATES = Object.freeze([23, 8, 0]);
 const MAIN_LINE_LABEL = 'Schody — materiał wraz z przygotowaniem';
@@ -164,7 +165,7 @@ export function stairFacts(config, derived, extras = {}) {
         ? ['Konstrukcja', `metalowa — stopnie drewniane na ${Number(config.metalBeamCount) >= 2 ? 'dwóch belkach stalowych' : 'centralnej belce stalowej'}`]
         : config.stairConstruction === 'metal-flat'
           ? ['Konstrukcja', 'metalowa — stopnie drewniane na dwóch płaskownikach stalowych wycinanych w zęby']
-          : ['Wangi', `zewn. ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, wewn. ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
+          : ['Wangi', `${sideShort('outer', config)} ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, ${sideShort('inner', config)} ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
     ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);

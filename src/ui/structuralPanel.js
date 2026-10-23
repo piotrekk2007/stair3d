@@ -3,6 +3,7 @@
 
 import { GRAVITY_M_S2 as GRAVITY } from '../structural/timberClasses.js';
 import { escapeHtml as esc } from '../util/format.js';
+import { sideShort } from '../util/sideNames.js';
 
 
 const num = (v, digits) => v.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -60,7 +61,7 @@ function treadTableHTML(treads) {
 function stringerTableHTML(stringers) {
   if (!stringers || (stringers.checks.length === 0 && stringers.skipped.length === 0)) return '<div class="st-note">Brak desek wang do sprawdzenia.</div>';
   const worst = stringers.checks.reduce((m, c) => Math.max(m, c.maxUtil), 0);
-  const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
+  const sideLabel = (s) => sideShort(s, config);
   const rows = stringers.checks
     .map(
       (c) => `<tr class="st-row" data-stringer-side="${esc(c.side)}" title="G ${num(c.permanentKn, 2)} kN (w tym balustrada ${num(c.railingKn, 2)} kN: poręcz ${num(c.railingDetailKn.handrail, 2)}, tralki ${num(c.railingDetailKn.balusters, 2)}, słupki ${num(c.railingDetailKn.posts, 2)}, podporęcz ${num(c.railingDetailKn.baseRail ?? 0, 2)}), Q ${num(c.imposedKn, 2)} kN — kliknij, aby zaznaczyć wangę">
@@ -92,7 +93,7 @@ function stringerTableHTML(stringers) {
 
 function railingTableHTML(railing) {
   if (!railing || (railing.rails.length === 0 && railing.posts.length === 0)) return '<div class="st-note">Brak balustrady (albo odcinków) do sprawdzenia.</div>';
-  const sideLabel = (s) => (s === 'outer' ? 'zewn.' : 'wewn.');
+  const sideLabel = (s) => sideShort(s, config);
   const worst = [...railing.rails, ...railing.posts].reduce((m, c) => Math.max(m, c.maxUtil), 0);
   const railRows = railing.rails
     .map(
@@ -129,7 +130,7 @@ function railingTableHTML(railing) {
     ${skipped}`;
 }
 
-export function updateStructuralPanel(panel, report) {
+export function updateStructuralPanel(panel, report, config = null) {
   if (!report) {
     panel.innerHTML = '';
     return;

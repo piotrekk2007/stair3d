@@ -4,6 +4,7 @@ import { planToWorld } from '../geometry/geometryUtils.js';
 import { pointsEqual } from '../geometry/pathUtils.js';
 import { computeWinderBlank } from '../geometry/winderBlank.js';
 import { profileParamsFromConfig } from '../geometry/stringerProfileModel.js';
+import { sideShort, sideAdjective } from '../util/sideNames.js';
 
 function variantStyle(variant) {
   if (variant === 'red' || variant === true) return { color: 0xc01c1c, className: 'dim-label dim-label-red' };
@@ -247,7 +248,7 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
 
     for (const side of ['outer', 'inner']) {
       const pieces = buildPieces(segment, side, first.type === 'winder' ? cornersFor(side, first) : [], zBottom, zGoing);
-      const sideLabel = side === 'outer' ? 'zewn.' : 'wewn.';
+      const sideLabel = sideShort(side, config);
 
       pieces.forEach((piece, i) => {
         const suffix = pieces.length > 1 ? ` cz.${i + 1}` : '';
@@ -274,7 +275,7 @@ export function buildStringerLengthLabels(planLayout, config, derived) {
       }
 
       const pieces = buildPieces(run, side, corners, zBottom, zGoing);
-      const sideLabel = side === 'outer' ? 'zewnętrzna' : 'wewnętrzna';
+      const sideLabel = sideAdjective(side, config);
       pieces.forEach((piece, i) => {
         const numLabel = pieces.length > 1 ? ` ${i + 1}` : '';
         addPieceLabel(group, piece, `WANGA ${sideLabel.toUpperCase()}${numLabel}: ${piece.worldBottom.distanceTo(piece.worldTop).toFixed(0)} mm`);

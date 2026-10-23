@@ -18,6 +18,7 @@ import { GEOMETRY_EPS } from '../geometry/tolerances.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { POST_FACES, POST_FACE_ORDER, vRangeWithin } from '../geometry/jointSolver.js';
 import { ROTULE_DIAMETER_MM } from '../geometry/railingGlass.js';
+import { sideShort } from '../util/sideNames.js';
 
 // Real gap (mm) left between boards when several are laid out on one sheet — same figure as the
 // on-screen editor's own SEGMENT_GAP_MM (profileEditor/profileEditorRenderer.js): a comfortable
@@ -618,7 +619,6 @@ export function buildAllTreadsDXF(treads, jointsByStep = {}) {
 
 const RAIL_TEXT_LINES = 3;
 const RAIL_ROW_GAP_MM = 120;
-const RAIL_SIDE_LABELS = Object.freeze({ outer: 'zewn.', inner: 'wewn.' });
 const ANGLE_DIGITS = 1;
 
 const tanDeg = (d) => Math.tan((d * Math.PI) / 180);
@@ -673,7 +673,9 @@ function railCutText(cut) {
  * @param {import('../geometry/railingSolver.js').RailingModel} railingModel
  * @param {{balusterSizeMm?:number}} [options]
  */
-export function buildRailingDXF(railingModel, { balusterSizeMm } = {}) {
+export function buildRailingDXF(railingModel, { balusterSizeMm, config = null } = {}) {
+  // (zewn. / wewn. — an S: lewa / prawa, without diacritics in the DXF; util/sideNames.js)
+  const RAIL_SIDE_LABELS = { outer: stripDiacritics(sideShort('outer', config)), inner: stripDiacritics(sideShort('inner', config)) };
   const sections = (railingModel?.sections || []).filter((s) => s.valid && s.handrail?.pieces?.length > 0);
   if (!railingModel?.enabled || sections.length === 0) return null;
   const entities = [];

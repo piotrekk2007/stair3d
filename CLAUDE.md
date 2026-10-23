@@ -86,7 +86,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   posts (turn 2's corner post on the outer axis, `line: 'outer'`, none at a stairwell wall), stringers (posts per side,
   `CORNER_POST` where one stands), the walkline (`offsetLinesFromDusza`, `duszaWeights` across flight B, winder width
   from each turn's own dusza), the stairwell (sides A/B/C, concave B–C corner, wall C at x = B − gap), the fit (B
-  by the count + ONE width — `widthsInB`) and the variants (`S-w<n>`, `S-landing`). Left/right names: next stage.
+  by the count + ONE width — `widthsInB`) and the variants (`S-w<n>`, `S-landing`). Names: `util/sideNames.js` (an S
+  says lewa / prawa everywhere — panel, HUD, Inspektor, takeoff, DXF, offer; L / U zewn. / wewn.).
 - **Winders are laid out from the walkline** (every project; user decision 2026-10-02): the walkline is a straight,
   a quarter arc of radius `walklineOffset` round the inner corner, a straight; the zone is `windersPerTurn` equal
   goings ON it, `walklineSplitOffset` of it before the arc's middle (clamped so the arc fits). Each edge runs through

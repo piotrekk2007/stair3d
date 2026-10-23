@@ -62,7 +62,7 @@ export function createExports(opts) {
     // (no balustrade / no valid section) -> a message instead of an empty file.
     railingDXF() {
       const m = opts.getModels();
-      const text = m?.railingModel ? buildRailingDXF(m.railingModel, { balusterSizeMm: m.fullConfig.railingBalusterSizeMm }) : null;
+      const text = m?.railingModel ? buildRailingDXF(m.railingModel, { balusterSizeMm: m.fullConfig.railingBalusterSizeMm, config: m.fullConfig }) : null;
       if (text) dxf(text, 'balustrada');
       else window.alert('Brak balustrady do narysowania — włącz balustradę i dodaj odcinek.');
     },
