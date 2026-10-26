@@ -643,6 +643,24 @@ function hasSelfIntersection(polygon) {
   return false;
 }
 
+// A polyline (u increasing) with its part from `uFrom` on brought down to at most `vMax` — a plumb step at `uFrom`.
+function notchPolylineEnd(points, uFrom, vMax) {
+  const out = [];
+  let stepped = false;
+  points.forEach((p, i) => {
+    const q = points[i - 1];
+    if (!stepped && q && q.u < uFrom && p.u >= uFrom) {
+      const t = (uFrom - q.u) / (p.u - q.u || 1);
+      const v = q.v + t * (p.v - q.v);
+      out.push({ u: uFrom, v });
+      if (v > vMax) out.push({ u: uFrom, v: vMax });
+      stepped = true;
+    }
+    out.push(p.u >= uFrom ? { u: p.u, v: Math.min(p.v, vMax) } : p);
+  });
+  return out.filter((p, i) => i === 0 || Math.hypot(p.u - out[i - 1].u, p.v - out[i - 1].v) > 1e-9);
+}
+
 // A polyline (u increasing) with every part above `vMax` brought down to it — the crossings kept exactly.
 function clampPolylineTop(points, vMax) {
   const out = [];
@@ -850,6 +868,18 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     if (topLimit !== null && topPolyline && topPolyline.some((p) => p.v > topLimit + GEOMETRY_EPS)) {
       topPolyline = clampPolylineTop(topPolyline, topLimit);
       topClamped = true;
+    }
+    // ...and with the opening's trim at the exit (openingTrimModel.js, the nosing tread on the slab) its end is notched
+    // under the trim's nose: the last `exitTrimNoseWidthMm` of its top down to the nose's underside (user report
+    // 2026-10-26: the trim runs over the wangi to join the trim beside the stair)
+    const noseBottom = Number(config.exitTrimNoseBottomZ);
+    const noseWidth = Number(config.exitTrimNoseWidthMm);
+    if (endsAtSlab && topPolyline && Number.isFinite(noseBottom) && noseWidth > 0) {
+      const uEnd = topPolyline[topPolyline.length - 1].u;
+      if (topPolyline.some((p) => p.u > uEnd - noseWidth - GEOMETRY_EPS && p.v > noseBottom + GEOMETRY_EPS)) {
+        topPolyline = notchPolylineEnd(topPolyline, uEnd - noseWidth, noseBottom);
+        topClamped = true;
+      }
     }
 
     const diagnostics = i === 0 ? [...profileDiagnostics] : [];

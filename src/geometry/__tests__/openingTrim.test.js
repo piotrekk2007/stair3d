@@ -126,15 +126,31 @@ test('regression (user, 2026-10-26): the trim has a hole for every post and balu
   assert.ok(/otwory na wylot: \d+ x slupek \d+ x \d+, \d+ x tralka/.test(buildOpeningTrimDXF(b.openingTrim)));
 });
 
-test('regression (user, 2026-10-26): the trim at the stair EXIT — its own piece between the wangi, on by default, its own switch; the top riser ends under its nose', () => {
+test('regression (user, 2026-10-26): the trim at the stair EXIT — its own piece over the whole stretch the stair arrives at, on by default, its own switch, JOINED to the trim on either side (no gap at the wangi, mitred at a corner); the top riser ends under its nose, the wangi are notched under it', () => {
   // (the opening derived from the stair: its exit edge where the stair arrives)
   const b = stair({ hasRiserBoards: true, riserBoardThickness: 16, openingMode: 'derived' });
   const exit = b.openingTrim.pieces.find((p) => p.exit);
   assert.ok(exit, 'the exit piece');
   assert.equal(exit.id, 'opening-trim-exit');
-  // between the wangi's inner faces: the stair's width less two boards
-  const t = b.fullConfig.stringerThickness;
-  assert.ok(Math.abs(Math.hypot(exit.b.x - exit.a.x, exit.b.y - exit.a.y) - (b.fullConfig.stairWidth - 2 * t)) < 0.5);
+  // every piece of the loop meets a piece at both ends
+  const pcs = b.openingTrim.pieces;
+  const meets = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 0.5;
+  for (const p of pcs) assert.ok(pcs.some((q) => q !== p && meets(q.b, p.a)) && pcs.some((q) => q !== p && meets(q.a, p.b)), `${p.id} joined at both ends`);
+  // the housed wangi ending at the slab (no end newel): their tops under the nose at most its underside; a board
+  // running into the end newel is inside that post there (the post goes through the trim — a hole)
+  const noseBottom = b.openingTrim.exitNoseBottomZ;
+  let checked = 0;
+  for (const side of ['outer', 'inner']) {
+    const list = b.stringerConstruction[side];
+    const g = list[list.length - 1];
+    if (b.stringerModels[side].segments.find((x) => x.id === g.segmentId)?.endPost) continue;
+    checked++;
+    const uEnd = Math.max(...g.outerContour.map((q) => q.u));
+    const top = Math.max(...g.outerContour.filter((q) => q.u > uEnd - b.fullConfig.openingTrimNoseWidthMm + 0.01).map((q) => q.v));
+    assert.ok(top <= noseBottom + 0.01, `${side}: ${top} under the nose ${noseBottom}`);
+  }
+  assert.ok(checked >= 1);
+  assert.ok(b.openingTrim.pieces.flatMap((p) => p.holes).some((h) => h.kind === 'post'), 'the end newel through the trim');
   const top = b.riserModels.find((r) => r.riserId === 'riser-top');
   assert.equal(top.elevation.top, 2615 - 40 + b.fullConfig.riserTopOverlapMm, 'under the nose (+ the overlap into it)');
   const off = stair({ hasRiserBoards: true, riserBoardThickness: 16, openingMode: 'derived', openingTrimExit: false });

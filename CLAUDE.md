@@ -178,8 +178,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   (`openingTrimRenderer.js`), plan, takeoff `OPENING_TRIM` (board price list), gate, DXF (`buildOpeningTrimDXF`,
   „Fajka (DXF 1:1)”); the opening's balustrade stands IN it — a hole through it for every post / baluster
   (`withTrimHoles`, 3D / plan / DXF), the handrail from its top (`railingSolver.js openingGroundAt`); at the stair's EXIT
-  its own piece between the wangi (`openingTrimExit`, its own toggle) = the nosing tread on the slab: the top riser ends
-  under its nose (`exitTrimNoseBottomZ` → `topRiserElevation`).
+  its own piece (`openingTrimExit`, its own toggle) = the nosing tread on the slab: the top riser ends
+  under its nose (`exitTrimNoseBottomZ` → `topRiserElevation`); the exit piece spans the whole stretch (wangi included)
+  and joins the trim beside it / at the corner, the wangi ending at the slab notched under its nose.
 
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and

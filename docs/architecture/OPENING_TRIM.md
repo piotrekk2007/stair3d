@@ -26,10 +26,15 @@ edge along a wall is off by default, but switched on it gets the trim along its 
 
 ## At the stair's exit
 
-The stretch of the exit edge the stair arrives at is its own piece `opening-trim-exit` (user request 2026-10-26):
-between the wangi's inner faces (the last tread's RAW back edge — its chain lines' ends, the boards' outer faces —
-projected onto the exit edge, one board in from each end), square ends, `openingTrimExit` (default on), toggled on its
-own in the "▬ Fajka" mode (orange line). It is the stair's nosing tread on the slab ("stopień fajkowy"): the top
+The stretch of the exit edge the stair arrives at is its own piece `opening-trim-exit` (user request 2026-10-26): the
+whole stretch cut out for the stair (the last back edge and one wanga past each end), so it BUTTS against the trim on
+either side of it on its edge and is MITRED at a corner like any piece (user report 2026-10-26: stopped at the wangi's
+inner faces it left a gap each side and never met the next edge); `openingTrimExit` (default on), toggled on its own in
+the "▬ Fajka" mode (orange line). The housed wangi ending at the slab are NOTCHED under its nose (the last
+`noseWidth` of their top down to the nose's underside — `stringerConstructionGeometry.js notchPolylineEnd`,
+`fullConfig.exitTrimNoseWidthMm`); a post standing in the trim (an end newel at the exit) gets a hole like the
+balustrade's posts. Every free part of an edge that is on gets the trim however short (the balustrade drops a stub
+under 100 mm). It is the stair's nosing tread on the slab ("stopień fajkowy"): the top
 riser ends under its nose (`exitNoseBottomZ` → `fullConfig.exitTrimNoseBottomZ` → `riserSolver.js
 topRiserElevation`: its underside + `riserTopOverlapMm`; the wanga's top-riser housing follows the same function).
 

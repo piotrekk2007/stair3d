@@ -17,8 +17,8 @@
 // free end (at the stair, at a wall, next to an edge without trim) is cut square to its edge.
 //
 // At the stair's EXIT (the stretch of the exit edge the stair arrives at, user request 2026-10-26) the trim is its own
-// piece `opening-trim-exit`, between the wangi's inner faces, switched on / off on its own (`openingTrimExit`, default
-// on): it is the stair's nosing tread on the slab ("stopień fajkowy") — the top riser ends under its nose
+// piece `opening-trim-exit`, the whole stretch (wangi included — it joins the trim beside it), switched on / off on its
+// own (`openingTrimExit`, default on): it is the stair's nosing tread on the slab ("stopień fajkowy") — the top riser ends under its nose
 // (`exitTrimNoseBottomZ` → riserSolver.js topRiserElevation).
 //
 // HOLES (withTrimHoles, after the balustrade is solved): every post and baluster of the opening's balustrade standing
@@ -75,36 +75,24 @@ export function buildOpeningTrim(ctx) {
   if (dims.noseHeight > (Number(config.ceilingThickness) || Infinity)) {
     diagnostics.push(createDiagnostic({ ruleId: 'OPENING-TRIM-NOSE-HEIGHT', severity: 'WARNING', elementType: 'stair', elementId: null, parameter: 'openingTrimNoseHeightMm', value: dims.noseHeight, expected: `≤ ${config.ceilingThickness}`, unit: 'mm', message: `Obróbka otworu: nosek ${dims.noseHeight} mm jest wyższy niż grubość stropu (${config.ceilingThickness} mm) — wystaje poniżej stropu.` }));
   }
-  const pieces = all.filter((p) => p.enabled && Math.hypot(p.b.x - p.a.x, p.b.y - p.a.y) > JOIN_MM);
-  // the exit: on the exit edge (the one with the stretch cut out for the stair), the last tread's RAW back edge (the ends
-  // of its stringer chain lines = the boards' outer faces — its own back edge is recessed into the housings) projected
-  // onto it and narrowed by one board each side, to the wangi's inner faces
+  // every free part of an edge that is on (however short: the trim closes up to the stair's stretch and the corners —
+  // unlike the balustrade, which drops a stub)
+  const edgeOn = new Map(edges.map((e) => [e.index, e.enabled]));
+  const pieces = all.filter((p) => p.part !== 'stair' && edgeOn.get(p.edge) && Math.hypot(p.b.x - p.a.x, p.b.y - p.a.y) > JOIN_MM);
+  // the exit: the whole stretch of the exit edge cut out for the stair (the last back edge and one wanga past each end)
+  // — so it butts against the trim on either side of it on its edge and is mitred at a corner like any piece (user
+  // report 2026-10-26: stopped at the wangi's inner faces, it left a gap each side and never met the next edge); the
+  // wangi's ends are notched under its nose (stringerConstructionGeometry.js), a post standing there gets a hole
   const stairCut = all.find((p) => p.part === 'stair');
-  const lastTread = ctx.planLayout?.treads?.[ctx.planLayout.treads.length - 1];
-  let exit = null;
-  if (stairCut && lastTread?.backEdge) {
-    const e = edges.find((x) => x.index === stairCut.edge);
-    const dd = unit({ x: e.b.x - e.a.x, y: e.b.y - e.a.y });
-    const along = (q) => (q.x - e.a.x) * dd.x + (q.y - e.a.y) * dd.y;
-    const raw = [lastTread.innerChain?.[lastTread.innerChain.length - 1], lastTread.outerChain?.[lastTread.outerChain.length - 1]];
-    const ts = (raw.every(Boolean) ? raw : lastTread.backEdge).map(along);
-    const t = (config.stairConstruction || 'stringers') === 'stringers' ? Number(config.stringerThickness) || 0 : 0;
-    const elen = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y);
-    const u0 = Math.max(0, Math.min(...ts) + t);
-    const u1 = Math.min(elen, Math.max(...ts) - t);
-    if (u1 - u0 > JOIN_MM) {
-      const pt = (u) => ({ x: e.a.x + dd.x * u, y: e.a.y + dd.y * u });
-      exit = { edge: stairCut.edge, part: 'exit', a: pt(u0), b: pt(u1), enabled: config.openingTrimExit !== false, isExit: true };
-    }
-  }
+  const exit = stairCut && Math.hypot(stairCut.b.x - stairCut.a.x, stairCut.b.y - stairCut.a.y) > JOIN_MM ? { edge: stairCut.edge, part: 'exit', a: stairCut.a, b: stairCut.b, enabled: config.openingTrimExit !== false, isExit: true } : null;
   if (exit?.enabled) pieces.push(exit);
   const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) <= JOIN_MM;
   const out = pieces.map((p) => {
     const d = unit({ x: p.b.x - p.a.x, y: p.b.y - p.a.y });
     // the opening's outline is CCW: the slab is on the right of each edge
     const n = { x: d.y, y: -d.x };
-    const prev = p.isExit ? null : pieces.find((q) => q !== p && !q.isExit && same(q.b, p.a));
-    const next = p.isExit ? null : pieces.find((q) => q !== p && !q.isExit && same(q.a, p.b));
+    const prev = pieces.find((q) => q !== p && same(q.b, p.a));
+    const next = pieces.find((q) => q !== p && same(q.a, p.b));
     // the band's two corners at offset `off` at each end: mitred with the neighbour, else square
     const at = (end, off) => {
       const base = end === 'a' ? p.a : p.b;
@@ -132,6 +120,7 @@ export function buildOpeningTrim(ctx) {
     exit: exit ? { a: exit.a, b: exit.b, enabled: exit.enabled } : null,
     // where the top riser ends when the trim at the exit is the stair's nosing tread (riserSolver.js topRiserElevation)
     exitNoseBottomZ: exit?.enabled ? T - dims.noseHeight : null,
+    exitNoseWidthMm: exit?.enabled ? dims.noseWidth : null,
     pieces: out,
     dims,
     diagnostics,
@@ -162,7 +151,7 @@ export function trimSolidAt(trim, p) {
  * The trim with the HOLES of the opening balustrade's posts and balusters standing on it: on the piece / solid under
  * each one, its own section (`shape` square | round, `sizeMm`), through the solid (`depthMm`).
  */
-export function withTrimHoles(trim, railingModel, config) {
+export function withTrimHoles(trim, railingModel, config, stairPosts = []) {
   if (!trim?.enabled) return trim;
   const pieces = trim.pieces.map((p) => ({ ...p, holes: [] }));
   const add = (at, kind, shape, sizeMm) => {
@@ -177,9 +166,16 @@ export function withTrimHoles(trim, railingModel, config) {
       }
     }
   };
+  // a post of the stair standing where the trim lies (an end newel at the exit, a stair balustrade's post): through it too
+  const seen = new Set();
+  for (const post of stairPosts) {
+    if (post.removed || seen.has(post.postId)) continue;
+    seen.add(post.postId);
+    add(post.position, 'post', 'square', post.size);
+  }
   for (const section of railingModel?.sections || []) {
     if (section.kind !== 'opening') continue;
-    for (const post of section.posts || []) if (!post.removed) add(post.position, 'post', 'square', post.size);
+    for (const post of section.posts || []) if (!post.removed && !seen.has(post.postId)) add(post.position, 'post', 'square', post.size);
     for (const b of section.balusters || []) add(b.position, 'baluster', config.railingBalusterShape === 'round' ? 'round' : 'square', config.railingBalusterSizeMm);
   }
   return { ...trim, pieces };
