@@ -371,9 +371,43 @@ function buildPostItems(postModels, config, wasteFactors) {
  * @param {{wasteFactors?: Object}} [options]
  * @returns {import('./takeoffTypes.js').MaterialTakeoffItem[]}  Cost fields are all null — see pricing.js.
  */
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure }, config, options = {}) {
+// --- The ceiling opening's trim ("fajka", openingTrimModel.js): one item per piece -------------------------------
+// NET = the two solids' volumes; STOCK = one board of the nose's height, the piece's longest side × its full width
+// (nose + board) — milled to the profile.
+function buildOpeningTrimItems(trim, config, wasteFactors) {
+  if (!trim?.enabled) return [];
+  const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
+  const elementType = ELEMENT_TYPES.OPENING_TRIM;
+  return trim.pieces.map((p) => {
+    const netVolumeMm3 = p.solids.reduce((sum, s) => sum + Math.abs(signedPolygonArea(s.outline)) * (s.zTop - s.zBottom), 0);
+    const thicknessMm = trim.dims.noseHeight;
+    const stockAreaMm2 = p.lengthMm * p.widthMm;
+    return createTakeoffItem({
+      itemId: p.id,
+      elementType,
+      sourceElementId: `opening-trim:${p.id}`,
+      material: config.timberGrade,
+      materialId,
+      quantity: 1,
+      unit: 'szt',
+      nominalDimensions: { lengthMm: p.lengthMm, noseWidthMm: trim.dims.noseWidth, noseHeightMm: trim.dims.noseHeight, boardThicknessMm: trim.dims.boardThickness, boardDepthMm: trim.dims.boardDepth },
+      calculatedDimensions: { lengthMm: p.lengthMm, widthMm: p.widthMm, thicknessMm },
+      netVolume: netVolumeMm3 * MM3_TO_M3,
+      netArea: stockAreaMm2 * MM2_TO_M2,
+      stockVolume: stockAreaMm2 * thicknessMm * MM3_TO_M3,
+      stockArea: stockAreaMm2 * MM2_TO_M2,
+      wasteFactor: wasteFactorFor(elementType, materialId, wasteFactors),
+      optional: false,
+      status: TAKEOFF_ITEM_STATUS.OK,
+      notes: [`Obróbka otworu w stropie („fajka”): nosek ${trim.dims.noseWidth} × ${trim.dims.noseHeight} mm, deska ${trim.dims.boardThickness} mm na ${trim.dims.boardDepth} mm w głąb stropu; formatka z deski grub. ${thicknessMm} mm.`],
+    });
+  });
+}
+
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure, openingTrim }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
+    ...buildOpeningTrimItems(openingTrim, config, wasteFactors),
     ...buildTreadItems(treadModels, config, wasteFactors),
     ...buildRiserItems(riserModels, config, wasteFactors),
     ...buildStringerSideItems('outer', stringerModels.outer, stringerConstruction.outer, config, wasteFactors),

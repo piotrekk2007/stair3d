@@ -166,7 +166,14 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   — or DERIVED from the stair (`openingMode`, above; edge lengths shown while drawing / editing) — in the frame of `openingFrame(config, planLayout)`: relative to
   `planLayout.bounds` min corner, or the WALL frame with the stairwell on; `resolveOpening(config, frame)` → plan
   `outline` (CCW) + `relativeOutline`; edges dragged on the plan (`.opening-edge`, wall snap); `deriveCeilingFit` →
-  collisions/headroom; "Dosuń otwór" alignment.
+  collisions/headroom (the treads above the headroom line AND the top riser's footprint — its thickness past the last
+  back edge, `topRiserFootprint`, `violatingRisers`); "Dosuń otwór" alignment.
+- **Opening trim "fajka"** (`openingTrimModel.js`, user request 2026-10-26, docs
+  [OPENING_TRIM.md](docs/architecture/OPENING_TRIM.md)): `openingTrimEnabled`; along the opening balustrade's free
+  pieces (`railingSolver.js openingEdgePieces` — one rule), per edge `openingTrimEdges` (plan mode "▬ Fajka"); a nose
+  (`openingTrimNoseWidthMm` into the opening × `openingTrimNoseHeightMm`, default the tread thickness) + a board on the
+  slab (`…BoardThicknessMm` × `…BoardDepthMm`), top flush with the floor, mitred at corners → `built.openingTrim`, 3D
+  (`openingTrimRenderer.js`), plan, takeoff `OPENING_TRIM` (board price list), gate. No DXF yet.
 
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
@@ -217,6 +224,8 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
   lap-jointed boards are solved as one group profile and sliced per board; at a POST each board is independent (user
   decision) and treads standing wholly on the post neither shape the board nor get a housing. Board ends: plumb faces,
   the first board's foot cut along the floor; a board entering a post goes `postHousingDepthMm` past its face; at a
+  last board at the slab with no post at its top end: top cut LEVEL at the floor + `stringerTopEndAboveFloorMm`
+  (`endsAtSlab`, user report 2026-10-26 — no spike); at a
   postless corner the boards LAP, with no housing (user decision 2026-10-14; the seat there ends one thickness past
   the CORNER, not past the recessed tread edge): convex — B butts flush against A's inner
   face; concave — A runs one thickness past the corner LEVEL at the corner's heights (`flattenBeyond`), B starts flush
@@ -268,8 +277,10 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   (`config.railingEndOffsets`, `railingEndKey`, edited in the Inspektor's post view) → smoothing for a bent handrail.
   Balusters and glass read their height under the handrail's own line (`zOnPaths`). A post a handrail ends at reaches
   at least the handrail's top there (`postTopNeeds` → own posts in the solver, structural posts via `postSolver.js
-  raisePostsToHandrail`; nominal height, manual `topDeltaMm` on top). The renderer cuts handrail ends PLUMB (sheared
-  profile), flush with the post face.
+  raisePostsToHandrail`; nominal height, manual `topDeltaMm` on top). The renderer makes the model's cuts: a handrail
+  piece's end PLUMB at a post (flush with its face), MITRED at a join with the next piece (the plane bisecting the two
+  axes — `railingRenderer.js handrailPieceSolid`, user report 2026-10-26); a baluster's ends cut to `topCutDeg` /
+  `bottomCutDeg` (the bottom = the housed wanga's own slope under it).
 - **Posts by hand** (`railingPostEdits.js`, user decision 2026-10-19): `config.railingPostEdits[section] = {added:
   [{id, s}], suppressed: [s]}` (s = plan mm along `section.path`). A hand-placed post (id `railing-post-<s>-m-<id>`,
   so `manualPostOverrides` size/height apply) cuts its run like any post (skipped + INFO `RAILING-POST-MANUAL-SKIPPED`

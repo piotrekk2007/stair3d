@@ -144,12 +144,34 @@ export function resolveOpening(config, frameOrBounds, derivedRelative = null) {
  */
 const OPENING_MARGIN_MM = 0.01;
 
+/**
+ * The top riser's plan footprint (riserSolver.js buildTopRiserModel: its face on the last back edge, its thickness on
+ * past it, under the floor's nosing tread, up to the floor) — so it must stand inside the opening like a tread (user
+ * report 2026-10-26: it went into the slab). Square to the last back edge, away from the last tread; null without
+ * riser boards.
+ * @returns {{x,y}[]|null}
+ */
+export function topRiserFootprint(config, planLayout) {
+  const t = Number(config.riserBoardThickness) || 0;
+  const last = planLayout?.treads?.[planLayout.treads.length - 1];
+  if (!config.hasRiserBoards || !(t > 0) || !last?.backEdge || !(last.outline?.length >= 3)) return null;
+  const [p, q] = last.backEdge;
+  const len = Math.hypot(q.x - p.x, q.y - p.y);
+  if (!(len > 1e-9)) return null;
+  let n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+  const c = last.outline.reduce((acc, v) => ({ x: acc.x + v.x / last.outline.length, y: acc.y + v.y / last.outline.length }), { x: 0, y: 0 });
+  if (n.x * (c.x - p.x) + n.y * (c.y - p.y) > 0) n = { x: -n.x, y: -n.y };
+  return [p, q, { x: q.x + n.x * t, y: q.y + n.y * t }, { x: p.x + n.x * t, y: p.y + n.y * t }];
+}
+
 export function requiredOpeningRelative(config, planLayout, riserHeight, frame) {
   const threshold = config.totalRise - config.ceilingThickness - config.minHeadroom;
   const rects = [];
-  for (const tread of planLayout.treads) {
-    if ((tread.index + 1) * riserHeight <= threshold || !(tread.outline?.length >= 3)) continue;
-    const pts = tread.outline.map(frame.toRelative);
+  // every tread above the headroom line — and the top riser (it reaches the floor)
+  const riser = topRiserFootprint(config, planLayout);
+  const outlines = [...planLayout.treads.filter((tread) => (tread.index + 1) * riserHeight > threshold && tread.outline?.length >= 3).map((t) => t.outline), ...(riser ? [riser] : [])];
+  for (const outline of outlines) {
+    const pts = outline.map(frame.toRelative);
     const xs = pts.map((p) => p.x);
     const ys = pts.map((p) => p.y);
     // rounded OUTWARD to 0.1 mm — the precision a stored polygon keeps (sanitizeOpeningPolygon), so the opening frozen

@@ -128,7 +128,13 @@ Testy: `geometry/__tests__/railingSolver.test.js` (etap 4).
     składowe podane osobno (cięcie złożone do dopracowania w warsztacie);
   - `cutLengthMm` = dłuższa z krawędzi (górna / dolna) — długość do cięcia;
   - tralka: góra pod nachyleniem poręczy nad nią; dół — na stopniu (wanga nakładana) poziomo, na wandze wpuszczanej
-    równolegle do poręczy (przybliżenie: górna krawędź wangi biegnie równolegle do linii poręczy).
+    pod nachyleniem jej własnej górnej krawędzi (mierzonej na obu licach tralki; user report 2026-10-26 — wcześniej
+    równolegle do poręczy), `cutDir` / `bottomCutDir` = kierunek w rzucie, w którym cięcia rosną.
+- **3D (railingRenderer.js) wykonuje te same cięcia** (user report 2026-10-26): element poręczy = profil prostopadły do
+  osi przeciągnięty wzdłuż niej i ucięty płaszczyzną na każdym końcu — przy słupku pionowo, na łączeniu (`join`)
+  na UKOS: płaszczyzna dwusieczna dwóch osi (normalna d₁ + d₂), więc dwa elementy o różnym nachyleniu / kierunku
+  stykają się licami (wcześniej oba końce pionowe — na każdej zmianie nachylenia wystawał „schodek”); `handrailPieceSolid`.
+  Tralka: górny i dolny koniec ucięte pod `topCutDeg` / `bottomCutDeg` (bez rogu w powietrzu nad wangą).
 - **`dxfExport.js` `buildRailingDXF(railingModel, {balusterSizeMm})`** — jeden arkusz 1:1: nagłówek z objaśnieniem
   kątów, każdy element poręczy w widoku z boku (oś, oba cięcia narysowane) z opisem (bieg, element, przekrój, oś,
   długość do cięcia, nachylenie, oba cięcia), potem lista cięcia tralek zgrupowana po (odcinek, długość osi co 1 mm,

@@ -272,6 +272,21 @@ export function createUI({
   };
   ceiling.add(alignProxy, 'target', Object.fromEntries(OPENING_ALIGN_TARGETS.map((t) => [t.label, t.id]))).name('Dosuń otwór do');
   ceiling.add(alignProxy, 'apply').name('⇲ Dosuń otwór');
+  // the opening's wooden trim — "fajka" / nosek (geometry/openingTrimModel.js): on the free edges, each edge on / off
+  // on the plan ("▬ Fajka"); the nose's height defaults to the tread thickness (up to the slab's, to cover its edge)
+  live(ceiling.add(config, 'openingTrimEnabled')).name('Obróbka otworu (fajka): włączona');
+  live(ceiling.add(config, 'openingTrimNoseWidthMm', 0, 100, 1)).name('Fajka: nosek wystaje [mm]');
+  const trimProxy = {
+    get noseHeight() {
+      return config.openingTrimNoseHeightMm ?? config.treadThickness;
+    },
+    set noseHeight(v) {
+      config.openingTrimNoseHeightMm = v;
+    },
+  };
+  live(ceiling.add(trimProxy, 'noseHeight', 10, 600, 1)).name('Fajka: wysokość noska [mm]');
+  live(ceiling.add(config, 'openingTrimBoardThicknessMm', 5, 40, 1)).name('Fajka: grubość deski na stropie [mm]');
+  live(ceiling.add(config, 'openingTrimBoardDepthMm', 0, 400, 5)).name('Fajka: deska w głąb stropu [mm]');
 
   const steps = gui.addFolder('5. Bieg i stopnie');
   // the variant list (designer/stairwellVariants.js) — shown above the parameters, "Zastosuj" per variant
@@ -334,6 +349,8 @@ export function createUI({
   lockable(build.add(config, 'stringerThickness', 20, 60, 1).name('Grubość policzka [mm]'), 'stringerThickness');
   lockable(build.add(config, 'stringerTopMarginMm', 0, 120, 5).name('Zapas nad stopniem (wpuszczana) [mm]'), 'stringerTopMarginMm');
   lockable(build.add(config, 'stringerHousingDepthMm', 5, 40, 1).name('Wpust stopnia w wangę (wpuszczana) [mm]'), 'stringerHousingDepthMm');
+  // the last board at the slab with no end newel: its top cut level this much above the floor (stringerConstructionGeometry.js endsAtSlab)
+  live(build.add(config, 'stringerTopEndAboveFloorMm', 0, 100, 1)).name('Koniec wangi bez słupa: ponad podłogę [mm]');
   lockable(build.add(config, 'postHousingDepthMm', 0, 40, 1).name('Wręg wangi w słupie [mm] (0 = do lica)'), 'postHousingDepthMm');
   lockable(build.add(config, 'postTreadHousingDepthMm', 0, 40, 1).name('Wpust stopnia w słup [mm]'), 'postTreadHousingDepthMm');
   lockable(build.add(config, 'jointConnectorCount', 0, 4, 1).name('Łączniki wang: liczba na złącze'), 'jointConnectorCount');

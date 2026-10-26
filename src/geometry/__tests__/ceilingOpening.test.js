@@ -190,3 +190,25 @@ test('regression (user, 2026-10-23): the opening shows its edge lengths while it
   const edit = openingXML({ outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 750 }, { x: 0, y: 750 }], shape: 'polygon' }, true);
   assert.deepEqual(lengths(edit), [1000, 750, 1000, 750]);
 });
+
+test('regression (user, 2026-10-26): the top riser stands its thickness past the last back edge up to the floor — an opening ending AT that edge collides with it; a derived opening leaves room for it', () => {
+  const base = { stairType: 'straight', treadsLegA: 12, hasRiserBoards: true, riserBoardThickness: 16 };
+  const s = stair(base);
+  const last = s.layout.treads[s.layout.treads.length - 1];
+  const ys = s.layout.treads.flatMap((t) => t.outline.map((p) => p.y));
+  const xs = s.layout.treads.flatMap((t) => t.outline.map((p) => p.x));
+  const yBack = Math.max(...last.backEdge.map((p) => p.y));
+  // a drawn opening round the whole stair in plan, its far edge exactly on the last back edge
+  const rel = (pts) => pts.map((p) => ({ x: p.x - s.layout.bounds.minX, y: p.y - s.layout.bounds.minY }));
+  const polygon = rel([{ x: Math.min(...xs) - 50, y: Math.min(...ys) - 50 }, { x: Math.max(...xs) + 50, y: Math.min(...ys) - 50 }, { x: Math.max(...xs) + 50, y: yBack }, { x: Math.min(...xs) - 50, y: yBack }]);
+  const given = deriveCeilingFit({ ...s.config, openingShape: 'polygon', openingMode: 'given', openingPolygon: polygon }, s.layout, s.riserHeight);
+  assert.deepEqual(given.violatingTreads, []);
+  assert.deepEqual(given.violatingRisers, ['riser-top']);
+  assert.equal(given.fits, false);
+  const diags = checkCollisions({ ...s.config, openingShape: 'polygon', openingMode: 'given', openingPolygon: polygon }, s.layout, s.riserHeight, s.treadModels);
+  assert.ok(diags.some((d) => d.ruleId === 'VALIDATOR-CEILING-COLLISION' && d.elementId === 'riser-top'));
+  // without riser boards: nothing there
+  assert.equal(deriveCeilingFit({ ...s.config, hasRiserBoards: false, openingShape: 'polygon', openingMode: 'given', openingPolygon: polygon }, s.layout, s.riserHeight).fits, true);
+  // derived: the opening reaches past the riser
+  assert.equal(deriveCeilingFit({ ...s.config, openingMode: 'derived' }, s.layout, s.riserHeight).fits, true);
+});

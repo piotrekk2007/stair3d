@@ -142,6 +142,11 @@ patch (type, turns, winders, width, going, counts, axis gap, `stairwellFitEnable
 rounded outward to 0.1 mm, snapped to the walls) of the treads that need headroom; "⇩ Zapisz wyznaczony otwór jako
 zadany" / any hand edit freezes it as a given polygon. Variants show the opening they need.
 
+The top riser (riserSolver.js buildTopRiserModel: its thickness past the last back edge, up to the floor) is checked
+against the opening like a tread (`ceilingOpening.js topRiserFootprint` → `deriveCeilingFit.violatingRisers`, ERROR
+`VALIDATOR-CEILING-COLLISION` on `riser-top`) and the derived opening includes it (user report 2026-10-26: it went into
+the slab). The opening's wooden trim: [OPENING_TRIM.md](OPENING_TRIM.md).
+
 While the opening is drawn ("Rysuj otwór") and edited, every edge carries its length (`plan2dRenderer.js
 edgeLengthLabelXML`: the drawn edges, the rubber band to the cursor and the closing edge; user request 2026-10-23).
 

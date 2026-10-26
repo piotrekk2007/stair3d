@@ -150,3 +150,46 @@ test('a handrail piece is cut PLUMB at its ends: its mesh stops exactly on the p
   const vertical = section.handrail.heightMm * Math.hypot(1, slope);
   assert.ok(Math.abs(Math.max(...tops) - (piece.start.z + vertical / 2)) < 0.01 && Math.abs(Math.min(...tops) - (piece.start.z - vertical / 2)) < 0.01);
 });
+
+test('regression (user, 2026-10-26): two handrail pieces of different pitch meet on a MITRE — the same four corners on both sides of the joint, no step where the steeper piece stood out; with a plan turn too both faces lie on one plane', () => {
+  const V = { x: 1000, y: 0, z: 1500 };
+  const jointVerts = (endPoint) => {
+    const pieces = [
+      { start: { x: 0, y: 0, z: 900 }, end: V, startCut: { kind: 'post' }, endCut: { kind: 'join' } },
+      { start: V, end: endPoint, startCut: { kind: 'join' }, endCut: { kind: 'post' } },
+    ];
+    const model = { sections: [{ id: 'm', side: 'outer', valid: true, runs: [], balusters: [], handrail: { shape: 'rect', widthMm: 40, heightMm: 70, pieces } }] };
+    const mesh = renderRailing(model, { balusterShape: 'square', balusterSizeMm: 30 }, new THREE.MeshBasicMaterial()).getObjectByName('Railing_m_handrail');
+    const pos = mesh.geometry.getAttribute('position');
+    const out = new Map();
+    for (let k = 0; k < pos.count; k++) {
+      // back to plan (x, y, z) from world (x, z, −y)
+      const p = { x: pos.getX(k), y: -pos.getZ(k), z: pos.getY(k) };
+      if (Math.hypot(p.x - V.x, p.y - V.y, p.z - V.z) < 80) out.set([p.x, p.y, p.z].map((v) => Math.round(v * 10) / 10).join(','), p);
+    }
+    return [...out.values()];
+  };
+  // the same plan direction, the pitch 31° -> 18°: one set of four corners
+  const straight = jointVerts({ x: 1600, y: 0, z: 1700 });
+  assert.equal(straight.length, 4, `corners at the joint: ${straight.map((p) => JSON.stringify(p)).join(' | ')}`);
+  // a plan turn as well: every joint corner on the bisector plane (normal d1 + d2 through V)
+  const d1 = { x: 1000, y: 0, z: 600 };
+  const d2 = { x: 600, y: 500, z: 200 };
+  const u = (v) => { const l = Math.hypot(v.x, v.y, v.z); return { x: v.x / l, y: v.y / l, z: v.z / l }; };
+  const [a, b] = [u(d1), u(d2)];
+  const n = u({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+  for (const p of jointVerts({ x: 1600, y: 500, z: 1700 })) assert.ok(Math.abs((p.x - V.x) * n.x + (p.y - V.y) * n.y + (p.z - V.z) * n.z) < 0.5, JSON.stringify(p));
+});
+
+test("regression (user, 2026-10-26): a baluster's ends are cut to the solver's angles — on a sloping wanga its bottom reaches down on the downhill side (no corner left in the air), its top up under the handrail", () => {
+  const baluster = { id: 'b', position: { x: 0, y: 0 }, zBottom: 1000, zTop: 1800, topCutDeg: 30, bottomCutDeg: 30, cutDir: { x: 1, y: 0 }, bottomCutDir: { x: 1, y: 0 } };
+  const model = { sections: [{ id: 'm', side: 'outer', valid: true, runs: [], balusters: [baluster], handrail: { shape: 'rect', widthMm: 40, heightMm: 70, pieces: [] } }] };
+  const mesh = renderRailing(model, { balusterShape: 'square', balusterSizeMm: 30 }, new THREE.MeshBasicMaterial()).getObjectByName('Railing_m_balusters');
+  const box = new THREE.Box3().setFromObject(mesh);
+  const drop = 15 * Math.tan(Math.PI / 6);
+  assert.ok(Math.abs(box.min.y - (1000 - drop)) < 0.5, `bottom ${box.min.y}`);
+  assert.ok(Math.abs(box.max.y - (1800 + drop)) < 0.5, `top ${box.max.y}`);
+  // downhill = −x: the lowest point is on that side
+  const pos = mesh.geometry.getAttribute('position');
+  for (let k = 0; k < pos.count; k++) if (pos.getY(k) < 1000 - drop + 0.5) assert.ok(pos.getX(k) < 0);
+});

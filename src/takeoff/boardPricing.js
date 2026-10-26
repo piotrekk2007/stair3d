@@ -207,7 +207,7 @@ const fmtPln = (v) => v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maxi
 // Formatka elementu → { lengthMm, depthMm, thicknessMm } albo null, gdy element nie jest deską z cennika.
 function boardBlankOf(item, riserMaterial) {
   const c = item.calculatedDimensions || {};
-  if (item.elementType === ELEMENT_TYPES.TREAD || item.elementType === ELEMENT_TYPES.LANDING) {
+  if (item.elementType === ELEMENT_TYPES.TREAD || item.elementType === ELEMENT_TYPES.LANDING || item.elementType === ELEMENT_TYPES.OPENING_TRIM) {
     if (!(c.lengthMm > 0) || !(c.widthMm > 0)) return null;
     // Deska biegnie wzdłuż dłuższego boku formatki (stopień prosty: szerokość biegu; stopień
     // zabiegowy: dłuższy bok jego formatki produkcyjnej), głębokość to krótszy bok.

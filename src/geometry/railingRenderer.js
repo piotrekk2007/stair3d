@@ -19,57 +19,158 @@ function toWorld(p) {
   return new THREE.Vector3(p.x, p.z, -p.y);
 }
 
-function profileGeometry(shape, width, height, length) {
-  if (shape === 'round') {
-    const g = new THREE.CylinderGeometry(width / 2, width / 2, length, ROUND_SEGMENTS);
-    g.rotateZ(-Math.PI / 2); // axis Y -> X
-    return g;
-  }
-  return new THREE.BoxGeometry(length, height, width);
-}
-
-// One handrail piece from start to end, its profile never rolled. Its two END FACES ARE PLUMB (vertical, square to the
-// piece's plan direction): a handrail meets a post on the post's vertical face, and two pieces of one run meet on a
-// plumb cut too (railingSolver.js annotateCuts gives the same cuts to the workshop). So the piece is a profile laid
-// along its PLAN length and sheared up by its slope — its vertical size 1/cos(pitch) of the profile's, so that it is
-// the profile's own height square to its axis. (A box cut square to its own axis left a wedge-shaped gap at a post.)
-// A piece too steep to shear (the near-vertical stub of a winder's dusza) keeps the plain square-ended prism.
+// One handrail piece from start to end: its profile (square to its axis, never rolled — `up` is the vertical tilted
+// into the axis' plane) swept along the axis and cut at each end by a plane given by the solver's cut there
+// (railingSolver.js annotateCuts — the same cuts the workshop gets):
+//  - 'post': PLUMB (vertical, square to the piece's plan direction) — it meets a post on the post's vertical face;
+//  - 'join': the MITRE with the next / previous piece — the plane bisecting the two axes (normal = d₁ + d₂), so two
+//    pieces of different pitch or plan direction meet face to face. (Both used to be plumb: at every pitch change
+//    the steeper piece's taller plumb face stood out as a step — user report 2026-10-26.)
+// A piece too steep for a plumb cut (the near-vertical stub of a winder's dusza) is cut square to its axis there.
 const PLUMB_CUT_MAX_SLOPE = 5; // tan(~79°)
-function handrailPieceGeometry(piece, handrail) {
-  const a = toWorld(piece.start);
-  const b = toWorld(piece.end);
-  const mid = a.clone().add(b).multiplyScalar(0.5);
-  const planLength = Math.hypot(b.x - a.x, b.z - a.z);
-  const rise = b.y - a.y;
-  if (planLength > 1e-6 && Math.abs(rise) / planLength <= PLUMB_CUT_MAX_SLOPE) {
-    const slope = rise / planLength;
-    const along = new THREE.Vector3((b.x - a.x) / planLength, 0, (b.z - a.z) / planLength);
-    const up = new THREE.Vector3(0, 1, 0);
-    const across = new THREE.Vector3().crossVectors(along, up);
-    const geometry = profileGeometry(handrail.shape, handrail.widthMm, handrail.heightMm * Math.hypot(1, slope), planLength);
-    // shear: local y += slope · local x (keeps every x = const face vertical), then into the piece's plan frame
-    const shear = new THREE.Matrix4().set(1, 0, 0, 0, slope, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-    geometry.applyMatrix4(new THREE.Matrix4().makeBasis(along, up, across).setPosition(mid).multiply(shear));
-    geometry.computeVertexNormals();
-    return geometry;
+const MITRE_MIN_BISECTOR = 0.2; // |d₁ + d₂| below this (a near hairpin): square cuts instead
+const JOIN_MATCH_MM = 0.5;
+
+const v3 = (x, y, z) => ({ x, y, z });
+const sub3 = (a, b) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
+const add3 = (a, b) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
+const mul3 = (a, k) => v3(a.x * k, a.y * k, a.z * k);
+const dot3 = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const cross3 = (a, b) => v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+const unit3 = (a) => {
+  const l = Math.hypot(a.x, a.y, a.z) || 1;
+  return v3(a.x / l, a.y / l, a.z / l);
+};
+
+// The plane normal of a piece's end cut (plan coordinates, z up). `dir` = this piece's unit axis, `other` = the
+// neighbour's (null at a post).
+function cutNormal(dir, other) {
+  if (other) {
+    const bis = add3(dir, other);
+    if (Math.hypot(bis.x, bis.y, bis.z) >= MITRE_MIN_BISECTOR) return unit3(bis);
+    return dir;
   }
-  const dir = b.clone().sub(a);
-  const length = dir.length();
-  dir.normalize();
-  const up = new THREE.Vector3(0, 1, 0);
-  const yAxis = up.clone().addScaledVector(dir, -up.dot(dir));
-  if (yAxis.lengthSq() < 1e-9) yAxis.set(1, 0, 0);
-  yAxis.normalize();
-  const zAxis = new THREE.Vector3().crossVectors(dir, yAxis);
-  const geometry = profileGeometry(handrail.shape, handrail.widthMm, handrail.heightMm, length);
-  geometry.applyMatrix4(new THREE.Matrix4().makeBasis(dir, yAxis, zAxis).setPosition(mid));
-  return geometry;
+  const plan = Math.hypot(dir.x, dir.y);
+  if (plan > 1e-9 && Math.abs(dir.z) / plan <= PLUMB_CUT_MAX_SLOPE) return v3(dir.x / plan, dir.y / plan, 0);
+  return dir;
 }
 
+// The profile's outline round the axis: [{u (across), w (up)}], counter-clockwise looking along the axis.
+function profileOutline(shape, width, height) {
+  if (shape === 'round') return Array.from({ length: ROUND_SEGMENTS }, (_, k) => ({ u: (width / 2) * Math.cos((2 * Math.PI * k) / ROUND_SEGMENTS), w: (width / 2) * Math.sin((2 * Math.PI * k) / ROUND_SEGMENTS) }));
+  return [
+    { u: -width / 2, w: -height / 2 },
+    { u: width / 2, w: -height / 2 },
+    { u: width / 2, w: height / 2 },
+    { u: -width / 2, w: height / 2 },
+  ];
+}
+
+/**
+ * The swept, end-cut handrail piece in PLAN coordinates (pure numbers — the renderer turns them into a mesh): the
+ * profile corners at the start and at the end cut, and the two cut normals. Exported for the tests.
+ * @returns {{start:{x,y,z}[], end:{x,y,z}[], startNormal:{x,y,z}, endNormal:{x,y,z}, round:boolean, radial:{x,y,z}[]}|null}
+ */
+export function handrailPieceSolid(piece, handrail, prev = null, next = null) {
+  const a = piece.start;
+  const b = piece.end;
+  const axis = sub3(b, a);
+  if (Math.hypot(axis.x, axis.y, axis.z) < 1e-6) return null;
+  const d = unit3(axis);
+  // the profile's up: the vertical tilted into the axis' plane; across: horizontal
+  let up = sub3(v3(0, 0, 1), mul3(d, d.z));
+  if (Math.hypot(up.x, up.y, up.z) < 1e-9) up = v3(1, 0, 0);
+  up = unit3(up);
+  const across = unit3(cross3(d, up));
+  const dirOf = (p) => unit3(sub3(p.end, p.start));
+  const ns = cutNormal(d, prev ? dirOf(prev) : null);
+  const ne = cutNormal(d, next ? dirOf(next) : null);
+  const outline = profileOutline(handrail.shape, handrail.widthMm, handrail.heightMm);
+  const offsets = outline.map((p) => add3(mul3(across, p.u), mul3(up, p.w)));
+  // each corner's line a + o + t·d, cut by the plane through the piece's end point with that end's normal
+  const onPlane = (origin, o, n) => add3(add3(origin, o), mul3(d, -dot3(o, n) / dot3(d, n)));
+  return {
+    start: offsets.map((o) => onPlane(a, o, ns)),
+    end: offsets.map((o) => onPlane(b, o, ne)),
+    startNormal: mul3(ns, -1),
+    endNormal: ne,
+    round: handrail.shape === 'round',
+    radial: offsets.map(unit3),
+  };
+}
+
+// The neighbours a piece is mitred to: the pieces of the same handrail joined to it (the solver's 'join' cuts — or,
+// without cut data, sharing the end point).
+function joinedNeighbours(pieces, i) {
+  const piece = pieces[i];
+  const meets = (p, q) => p && Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) <= JOIN_MATCH_MM;
+  const prevKind = piece.startCut?.kind;
+  const nextKind = piece.endCut?.kind;
+  const prev = prevKind === 'post' ? null : pieces.find((p, k) => k !== i && meets(p.end, piece.start)) || null;
+  const next = nextKind === 'post' ? null : pieces.find((p, k) => k !== i && meets(p.start, piece.end)) || null;
+  return { prev, next };
+}
+
+// A plan-coordinate solid → a non-indexed BufferGeometry (world mapping x, z, −y), each triangle wound to its normal.
+function solidGeometry(solid) {
+  const pos = [];
+  const nor = [];
+  const W = (p) => [p.x, p.z, -p.y];
+  const tri = (p, q, r, np, nq, nr, face) => {
+    const n = cross3(sub3(q, p), sub3(r, p));
+    if (dot3(n, face) < 0) [q, r, nq, nr] = [r, q, nr, nq];
+    for (const [v, vn] of [[p, np], [q, nq], [r, nr]]) {
+      pos.push(...W(v));
+      nor.push(...W(vn));
+    }
+  };
+  const n = solid.start.length;
+  for (let k = 0; k < n; k++) {
+    const k2 = (k + 1) % n;
+    const [s0, s1, e0, e1] = [solid.start[k], solid.start[k2], solid.end[k], solid.end[k2]];
+    const face = unit3(add3(solid.radial[k], solid.radial[k2]));
+    const [n0, n1] = solid.round ? [solid.radial[k], solid.radial[k2]] : [face, face];
+    tri(s0, s1, e1, n0, n1, n1, face);
+    tri(s0, e1, e0, n0, n1, n0, face);
+  }
+  for (const [ring, normal] of [[solid.start, solid.startNormal], [solid.end, solid.endNormal]]) {
+    for (let k = 1; k < n - 1; k++) tri(ring[0], ring[k], ring[k + 1], normal, normal, normal, normal);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  return g;
+}
+
+function handrailPieceGeometry(pieces, i, handrail) {
+  const { prev, next } = joinedNeighbours(pieces, i);
+  const solid = handrailPieceSolid(pieces[i], handrail, prev, next);
+  return solid ? solidGeometry(solid) : null;
+}
+
+// A baluster: its section from zBottom to zTop at its axis, the two ends cut to the solver's angles (railingSolver.js
+// topCutDeg / bottomCutDeg, rising along `cutDir` / `bottomCutDir`) — the bottom flush with a housed wanga's sloping top edge, the top
+// under the handrail. Without cut data: square ends.
 function balusterGeometry(baluster, shape, size) {
   const height = baluster.zTop - baluster.zBottom;
-  const g = shape === 'round' ? new THREE.CylinderGeometry(size / 2, size / 2, height, ROUND_SEGMENTS) : new THREE.BoxGeometry(size, height, size);
-  g.translate(baluster.position.x, baluster.zBottom + height / 2, -baluster.position.y);
+  const g = shape === 'round' ? new THREE.CylinderGeometry(size / 2, size / 2, height, ROUND_SEGMENTS, 1) : new THREE.BoxGeometry(size, height, size);
+  g.translate(0, height / 2, 0);
+  const dir = baluster.cutDir;
+  const dirB = baluster.bottomCutDir || dir;
+  const tTop = Math.tan(((baluster.topCutDeg || 0) * Math.PI) / 180);
+  const tBottom = Math.tan(((baluster.bottomCutDeg || 0) * Math.PI) / 180);
+  if (dir && (tTop || tBottom)) {
+    // local x / z = plan x / −y offsets from the axis; the end vertices move by tan · (offset along the cut's direction)
+    const pos = g.getAttribute('position');
+    for (let k = 0; k < pos.count; k++) {
+      const y = pos.getY(k);
+      if (y > height - 1e-6) pos.setY(k, y + tTop * (pos.getX(k) * dir.x - pos.getZ(k) * dir.y));
+      else if (y < 1e-6) pos.setY(k, y + tBottom * (pos.getX(k) * dirB.x - pos.getZ(k) * dirB.y));
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+  }
+  g.translate(baluster.position.x, baluster.zBottom, -baluster.position.y);
   return g;
 }
 
@@ -155,7 +256,7 @@ export function renderRailing(railingModel, style, material, balusterMaterial = 
   for (const section of railingModel.sections) {
     if (!section.valid) continue;
     const handrail = mergedMesh(
-      section.handrail.pieces.map((piece) => handrailPieceGeometry(piece, section.handrail)),
+      section.handrail.pieces.map((_, i, all) => handrailPieceGeometry(all, i, section.handrail)).filter(Boolean),
       material,
       `Railing_${section.id}_handrail`,
       `railing:${section.id}:handrail`,
@@ -164,7 +265,7 @@ export function renderRailing(railingModel, style, material, balusterMaterial = 
     if (handrail) group.add(handrail);
     if (section.baseRail?.pieces?.length) {
       const baseRail = mergedMesh(
-        section.baseRail.pieces.map((piece) => handrailPieceGeometry(piece, section.baseRail)),
+        section.baseRail.pieces.map((_, i, all) => handrailPieceGeometry(all, i, section.baseRail)).filter(Boolean),
         material,
         `Railing_${section.id}_baserail`,
         `railing:${section.id}:baserail`,

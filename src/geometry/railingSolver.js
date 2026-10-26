@@ -163,8 +163,9 @@ function annotateCuts(runPieces, handrailHeight) {
   });
 }
 
-// Pitch of the handrail piece above a plan point (the nearest piece in plan).
-function pitchUnder(pieces, point) {
+// Pitch of the handrail piece above a plan point (the nearest piece in plan); with `withDir` also the plan direction
+// the handrail rises in there ({deg, dir}).
+function pitchUnder(pieces, point, withDir = false) {
   let best = null;
   let bestDist = Infinity;
   for (const p of pieces) {
@@ -177,7 +178,8 @@ function pitchUnder(pieces, point) {
       best = p;
     }
   }
-  return best ? piecePitchDeg(best) : 0;
+  if (!withDir) return best ? piecePitchDeg(best) : 0;
+  return best ? { deg: piecePitchDeg(best), dir: unit({ x: best.end.x - best.start.x, y: best.end.y - best.start.y }) } : { deg: 0, dir: { x: 1, y: 0 } };
 }
 
 function unit(v) {
@@ -1164,7 +1166,14 @@ function buildSection(section, ctx) {
         const s = startHalf + gap * (b + 1) + balusterSize * b + balusterSize / 2;
         const p = pointAt(path, cumulative, s);
         const top = wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
-        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: (top ?? p.z + (config.stringerTopMarginMm || 0)) + baseRailHeight, zTop: railTop(p.z) - handrailHeight });
+        // the wanga's own slope under it (its top at the baluster's two faces along the path): the bottom cut
+        const p0 = pointAt(path, cumulative, Math.max(0, s - balusterSize / 2));
+        const p1 = pointAt(path, cumulative, Math.min(total, s + balusterSize / 2));
+        const t0 = wangaTopAt(p0, stringerModels?.[side], stringerConstruction?.[side]);
+        const t1 = wangaTopAt(p1, stringerModels?.[side], stringerConstruction?.[side]);
+        const run01 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        const wangaSlope = !baseRailHeight && t0 !== null && t1 !== null && run01 > 1e-6 ? { deg: deg(Math.atan2(t1 - t0, run01)), dir: unit({ x: p1.x - p0.x, y: p1.y - p0.y }) } : null;
+        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: (top ?? p.z + (config.stringerTopMarginMm || 0)) + baseRailHeight, zTop: railTop(p.z) - handrailHeight, ...(wangaSlope ? { wangaSlope } : {}) });
       }
     }
   });
@@ -1243,12 +1252,17 @@ function buildSection(section, ctx) {
     .map((b, i) => {
       // Top: cut to the pitch of the handrail piece above it. Bottom: flat on a tread (overlay wanga), or along the
       // wanga's top edge, which runs parallel to the handrail (housed wanga) — an approximation stated in the DXF.
-      const topCutDeg = pitchUnder(pieces, b.position);
-      const bottomCutDeg = constructionType === CONSTRUCTION_TYPES.CUT ? 0 : topCutDeg;
+      const under = pitchUnder(pieces, b.position, true);
+      const topCutDeg = under.deg;
+      // (a housed wanga: its own top's slope where measured, else the handrail's)
+      const { wangaSlope, ...rest } = b;
+      const bottomCutDeg = constructionType === CONSTRUCTION_TYPES.CUT ? 0 : wangaSlope ? wangaSlope.deg : topCutDeg;
       const heightMm = b.zTop - b.zBottom;
       const half = balusterSize / 2;
       const longPointMm = heightMm + half * (Math.tan(rad(topCutDeg)) + Math.tan(rad(bottomCutDeg)));
-      return { id: `${section.id}-baluster-${i}`, ...b, heightMm, topCutDeg, bottomCutDeg, longPointMm };
+      // `cutDir`: the plan direction both cuts rise in (zTop / zBottom are at the baluster's axis) — the 3D view cuts
+      // its ends to them, so it sits on the wanga's slope with no corner in the air (user report 2026-10-26)
+      return { id: `${section.id}-baluster-${i}`, ...rest, heightMm, topCutDeg, bottomCutDeg, longPointMm, cutDir: under.dir, bottomCutDir: wangaSlope ? wangaSlope.dir : under.dir };
     });
   if (uncoveredSteps.length > 0) {
     base.diagnostics.push(
@@ -1311,11 +1325,13 @@ const paramOn = (p, a, b) => {
 };
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
-function openingEdgeStates(outline, ctx) {
+// `overrides`: the per-edge on / off by hand ({[edge]: boolean}) — the balustrade's `railingOpeningEdges`, or another
+// element along the opening's edges (openingTrimModel.js: the trim's `openingTrimEdges`).
+function openingEdgeStates(outline, ctx, overrides = ctx.config.railingOpeningEdges) {
   const { planLayout, wallSegments = [], config } = ctx;
   const last = planLayout.treads[planLayout.treads.length - 1];
   const exitMid = last ? { x: (last.backEdge[0].x + last.backEdge[1].x) / 2, y: (last.backEdge[0].y + last.backEdge[1].y) / 2 } : null;
-  const overrides = config.railingOpeningEdges && typeof config.railingOpeningEdges === 'object' ? config.railingOpeningEdges : {};
+  overrides = overrides && typeof overrides === 'object' ? overrides : {};
   const wangi = config.stringerThickness || 0;
   const wallTol = RAILING_OPENING_WALL_MATCH_MM + wangi + Math.max(0, config.stairwellWallGapMm || 0);
   return outline.map((a, i) => {
@@ -1396,6 +1412,16 @@ function openingPieces(states) {
     freePart(t, 1, cuts[cuts.length - 1], null);
   }
   return out;
+}
+
+/**
+ * The opening's edges and their free PIECES (not along a wall, not where the stair arrives) — the one rule for
+ * everything that runs along the opening's edges (its balustrade, its trim): {edges, pieces}, each edge with `auto` /
+ * `enabled` from `overrides` ({[edge]: boolean}).
+ */
+export function openingEdgePieces(outline, ctx, overrides) {
+  const edges = openingEdgeStates(outline, ctx, overrides);
+  return { edges, pieces: openingPieces(edges) };
 }
 
 // Runs of consecutive enabled pieces, cyclically; all enabled → one closed chain.

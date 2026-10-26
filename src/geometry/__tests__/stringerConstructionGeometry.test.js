@@ -86,7 +86,8 @@ test('A. straight overlay: one continuous polygon, stepped top + single straight
 test('B. straight housed: outer contour is a plain 4-point parallelogram regardless of tread count, housings are separate', () => {
   // At the bottom of the flight the board's foot is cut HORIZONTALLY on the floor line with a vertical
   // start face, so the silhouette is a parallelogram plus that one foot corner (5 points).
-  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300 });
+  // (the top end's level cut at the floor — stringerTopEnd.test.js — kept out of reach: this is about the profile)
+  const { config, planLayout } = build({ ...REALISTIC_STRAIGHT, stringerConstructionTypeOuter: 'closed', stringerConstructionTypeInner: 'closed', stringerThickness: 50, minimumStringerDepthMm: 300, stringerTopEndAboveFloorMm: 5000 });
   const model = buildStringerModel(planLayout, config, 'outer');
   const [geo] = buildStringerConstructionGeometry(model, config);
 

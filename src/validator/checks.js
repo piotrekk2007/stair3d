@@ -129,7 +129,10 @@ export function checkCollisions(config, planLayout, riserHeight, treadModels) {
     ceilingFit.violatingTreads.map((index) => {
       const stepId = treadByIndex.get(index)?.stepId ?? `step-${index}`;
       return finding('ERROR', 'VALIDATOR-CEILING-COLLISION', 'tread', stepId, 'headroom', `Stopień koliduje ze stropem — nie mieści się w otworze i nie ma wymaganej skrajni (minHeadroom) pod stropem.`, { expected: where });
-    })
+    }),
+    (ceilingFit.violatingRisers || []).map((riserId) =>
+      finding('ERROR', 'VALIDATOR-CEILING-COLLISION', 'riser', riserId, 'headroom', `Ostatni podstopień koliduje ze stropem — stoi za tylną krawędzią ostatniego stopnia na swoją grubość (${config.riserBoardThickness} mm) aż do podłogi, więc otwór musi sięgać co najmniej tyle dalej. Przesuń / powiększ otwór przy wyjściu ze schodów.`, { expected: where, value: config.riserBoardThickness, unit: 'mm' })
+    )
   );
 }
 

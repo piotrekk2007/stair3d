@@ -11,6 +11,7 @@
 export const DEFAULT_WASTE_FACTORS = Object.freeze({
   TREAD: 0.1, // cutting treads from wider boards/panels — edge trim, knot avoidance
   LANDING: 0.1, // same panel-cutting logic as a tread
+  OPENING_TRIM: 0.1, // a board milled to the trim's profile — like a tread (ASSUMPTION)
   STRINGER: 0.15, // long structural boards — cutting to length, avoiding defects, housing waste
   RISER: 0.08, // sheet material (plywood/MDF) — panel layout offcuts
   POST: 0.05, // short, simple square-section pieces — least waste-prone

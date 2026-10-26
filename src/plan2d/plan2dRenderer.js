@@ -237,6 +237,26 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
 // The stairwell (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls along the sides marked
 // so (thick grey, on the wall side of the outer line) and every side's length outside them — a FIXED side with its
 // dimension (green when met, red when off), a free one as it comes out. Drawing only (pointer-events none).
+// The ceiling opening's trim ("fajka", openingTrimModel.js): every solid's plan outline (the nose darker); in the plan
+// mode "▬ Fajka" every opening edge is clickable (green = with trim, grey dashed = without).
+export function openingTrimXML(trim, editMode = false) {
+  if (!trim) return '';
+  let xml = '';
+  for (const piece of trim.pieces || []) {
+    for (const s of piece.solids) {
+      xml += `<polygon class="opening-trim" points="${polygonPoints(s.outline)}" fill="${s.kind === 'nose' ? '#8a5a2b' : '#c89a62'}" fill-opacity="${s.kind === 'nose' ? 0.8 : 0.45}" stroke="#6b4423" stroke-width="0.8" ${HAIR} pointer-events="none"/>`;
+    }
+  }
+  if (editMode) {
+    for (const e of trim.edges || []) {
+      const color = e.enabled ? '#2e7d32' : '#888';
+      const why = e.wall ? ' (przy ścianie)' : '';
+      xml += `<line class="trim-opening-edge" data-trim-edge="${e.index}" x1="${fmt(e.a.x)}" y1="${fmt(-e.a.y)}" x2="${fmt(e.b.x)}" y2="${fmt(-e.b.y)}" stroke="${color}" stroke-opacity="${e.enabled ? 0.45 : 0.35}" stroke-width="${px(12)}" ${e.enabled ? '' : 'stroke-dasharray="6 4"'} ${HAIR} pointer-events="stroke"><title>Krawędź otworu ${e.index + 1}${why}: obróbka (fajka) ${e.enabled ? 'TAK' : 'NIE'}${e.overridden ? ' (ręcznie)' : ''} — kliknij, żeby przełączyć</title></line>`;
+    }
+  }
+  return xml ? `<g id="opening-trim-layer">${xml}</g>` : '';
+}
+
 // The wall editor (plan mode "▭ Ściany", user request 2026-10-23): every side of both lines where a wall can stand
 // (dashed — a click adds a wall along the whole side), every wall (right-click removes it) with a handle at each end
 // (drag along the side: snaps to the side's ends, the tread edges and 10 mm — main.js) and its length.
@@ -519,7 +539,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -681,6 +701,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
 
   const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
   const wallEditXMLStr = wallEdit ? wallEditXML(stairwell, config) : '';
+  const openingTrimXMLStr = openingTrimXML(openingTrim, trimEdit);
 
   // a new project not generated yet (config.stairPending): only the stairwell's walls and the ceiling opening
   if (config.stairPending) {
@@ -689,6 +710,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${gridXMLStr}
     ${stairwellXMLStr}
     ${openingXMLStr}
+    ${openingTrimXMLStr}
     ${wallEditXMLStr}
   </svg>`;
   }
@@ -715,8 +737,9 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${overhangXML}
     ${openingEdit ? openingXMLStr : ''}
     ${railingPostEditXMLStr}
+    ${openingTrimXMLStr}
     ${wallEditXMLStr}
-    ${openingEdit || railingPostEdit || wallEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
+    ${openingEdit || railingPostEdit || wallEdit || trimEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
   </svg>`;
 }
 

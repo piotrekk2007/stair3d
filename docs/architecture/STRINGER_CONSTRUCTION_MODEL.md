@@ -100,6 +100,14 @@ diagnostics exist, are fully tested, and are the obvious next integration point,
 stayed scoped to the construction-geometry model itself, per the explicit instruction not to
 begin the next stage yet.
 
+## 5b. The board at the slab (user report 2026-10-26)
+
+The last board of a side, when it does not run into a post at its top end (no end newel, or it was removed), ends at
+the slab: its top is cut LEVEL at the floor (`totalRise` + `stringerTopEndAboveFloorMm`, default 0 — flush; a few mm
+proud of the floor for a board finished with a cap) — `stringerConstructionGeometry.js endsAtSlab` / `clampPolylineTop`;
+the outline (3D, takeoff) and the curve (DXF, `upperCurve` as lines for that board) agree. Before, the profile ran on
+above the floor into a spike. A board entering a post keeps its top (it goes into the post).
+
 ## 6. Known, deliberate limitations (not overengineered further)
 
 - **No true CSG.** A housing's rendered "recess" is a small, slightly-inset, slightly-darker

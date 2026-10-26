@@ -160,6 +160,7 @@ let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; nul
 let openingMode = 'off';
 let railingPostMode = false; // the plan's "▮ Słupki" mode: balustrade posts placed / moved / switched off by hand
 let wallMode = false; // the plan's "▥ Ściany" mode: the stairwell's walls added / stretched / removed by hand
+let trimMode = false; // the plan's "▬ Fajka" mode: the opening's trim switched on / off per edge
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
 let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
@@ -732,6 +733,8 @@ function regeneratePlan2D() {
     openingEdit: openingMode === 'edit',
     railingPostEdit: railingPostMode,
     wallEdit: wallMode,
+    openingTrim: lastModels?.openingTrim ?? null,
+    trimEdit: trimMode,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -843,7 +846,33 @@ function wallDrag(wallId, end, raw, final, mmPerPx) {
   const value = best ?? Math.round(t / 10) * 10;
   applyWallChange({ action: 'set-span', id: wallId, end, t0: end === 'a' ? value : w.t0, t1: end === 'b' ? value : w.t1, sideLength: w.sideLength }, { final });
 }
+// The opening's trim per edge (openingTrimModel.js): a click flips the edge against its automatic state
+function setTrimMode(on) {
+  trimMode = on && !!config.openingTrimEnabled;
+  if (trimMode && openingMode !== 'off') setOpeningMode('off');
+  if (trimMode && railingPostMode) setRailingPostMode(false);
+  if (trimMode && wallMode) setWallMode(false);
+  plan2dHud.querySelector('[data-action="trim"]')?.classList.toggle('active', trimMode);
+  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = !trimMode && !on;
+    if (trimMode) hint.textContent = 'Obróbka otworu (fajka): kliknij krawędź otworu — zielona = z obróbką, szara przerywana = bez. Wymiary noska i deski — folder „4. Otwór w stropie”.';
+    else if (on) hint.textContent = 'Najpierw włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.';
+  }
+  regeneratePlan2D();
+}
+function toggleTrimEdge(index) {
+  const edge = lastModels?.openingTrim?.edges?.find((e) => e.index === index);
+  if (!edge) return;
+  const next = { ...(config.openingTrimEdges || {}) };
+  if (!edge.enabled === edge.auto) delete next[index];
+  else next[index] = !edge.enabled;
+  config.openingTrimEdges = next;
+  rebuild();
+  commitHistory();
+}
 function setWallMode(on) {
+  if (on && trimMode) setTrimMode(false);
   wallMode = on && !!config.stairwellRoomEnabled;
   if (wallMode && openingMode !== 'off') setOpeningMode('off');
   if (wallMode && railingPostMode) setRailingPostMode(false);
@@ -1416,6 +1445,7 @@ plan2dHud.innerHTML = `
     <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
     <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
     <button type="button" data-action="railing-posts" title="Słupki balustrady: dodawaj, przesuwaj, usuwaj; wyłączaj słupki narożne">▮ Słupki</button>
+    <button type="button" data-action="trim" title="Obróbka otworu w stropie (fajka): włączaj / wyłączaj na krawędziach otworu">▬ Fajka</button>
     <button type="button" data-action="walls" title="Ściany klatki: dodawaj przy każdym boku (po obu stronach biegu), skracaj / wydłużaj, usuwaj">▥ Ściany</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
     <button type="button" data-action="zoom-in" title="Przybliż">+</button>
@@ -1446,6 +1476,7 @@ plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click'
 plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
 plan2dHud.querySelector('[data-action="railing-posts"]').addEventListener('click', () => setRailingPostMode(!railingPostMode));
 plan2dHud.querySelector('[data-action="walls"]').addEventListener('click', () => setWallMode(!wallMode));
+plan2dHud.querySelector('[data-action="trim"]').addEventListener('click', () => setTrimMode(!trimMode));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1577,6 +1608,8 @@ planApi = attachPlanInteractions({
   onPostClick: (postId) => setSelection({ elementType: 'post', postId }),
   getRailingPostMode: () => railingPostMode,
   getWallMode: () => wallMode,
+  getTrimMode: () => trimMode,
+  onTrimEdgeToggle: (index) => toggleTrimEdge(index),
   onWallAdd: (side, line) => applyWallChange({ action: 'add', side, line }),
   onWallDrag: (wallId, end, raw, final, mmPerPx) => wallDrag(wallId, end, raw, final, mmPerPx),
   onWallRemove: (wallId) => applyWallChange({ action: 'remove', id: wallId }),

@@ -17,6 +17,7 @@ const ELEMENT_LABEL_PL = {
   CONNECTOR: 'Łączniki (bez ceny)',
   GLASS_PANE: 'Szkło balustrady',
   GLASS_FIXING: 'Mocowania szkła',
+  OPENING_TRIM: 'Obróbka otworu (fajka)',
   STEEL: 'Konstrukcja stalowa (bez ceny)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
@@ -113,7 +114,7 @@ export function describeDimensions(d) {
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
 
-const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Szkło balustrady (z modelu)', 'Mocowania szkła (z modelu)', 'Łączniki (bez ceny)'];
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Obróbka otworu (fajka)', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Szkło balustrady (z modelu)', 'Mocowania szkła (z modelu)', 'Łączniki (bez ceny)'];
 
 function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
@@ -122,6 +123,8 @@ function categoryOf(item, winderStepIds) {
       return winderStepIds?.has(item.sourceElementId.replace(/^tread:/, '').split(':')[0]) ? 'Stopnie zabiegowe' : 'Stopnie';
     case 'LANDING':
       return 'Podesty';
+    case 'OPENING_TRIM':
+      return 'Obróbka otworu (fajka)';
     case 'RISER':
       return 'Podstopnie';
     case 'STRINGER':

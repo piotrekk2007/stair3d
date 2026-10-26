@@ -12,6 +12,8 @@ import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel, endNewelOntoSlab } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
+import { buildOpeningTrim } from './openingTrimModel.js';
+import { renderOpeningTrim } from './openingTrimRenderer.js';
 import { GLASS_TINTS } from './railingGlass.js';
 import { isCantilever, cantileverConfig, buildCantileverBox } from './cantileverModel.js';
 import { renderCantileverProfiles } from './cantileverRenderer.js';
@@ -98,6 +100,8 @@ export function buildStaircase(inputConfig) {
   const walls = stairwellWalls(stairwell, fullConfig, planLayout);
   // a starter step reaching into a stairwell wall (starterSteps.js) — reported with the stairwell's findings
   stairwell.diagnostics = [...(stairwell.diagnostics || []), ...starterWallDiagnostics(planLayout, walls?.pieces)];
+  // the opening's wooden trim ("fajka", openingTrimModel.js) on the chosen free edges — a real, priced element
+  const openingTrim = buildOpeningTrim({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
   const slabNewel = noWangi ? null : endNewelOntoSlab({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
   if (slabNewel) fullConfig.endNewelOntoSlab = slabNewel;
 
@@ -192,6 +196,9 @@ export function buildStaircase(inputConfig) {
     );
   }
 
+  const trimGroup = renderOpeningTrim(openingTrim, treadMaterial);
+  if (trimGroup) root.add(trimGroup);
+
   // Prezentacja: współrzędne tekstury z kierunkiem włókien (wzdłuż najdłuższej osi każdego elementu) + cienie.
   // Nie zmienia żadnego wierzchołka — tylko dokłada `uv` (scene/woodGrain.js).
   applyWoodGrainToTree(root);
@@ -209,5 +216,5 @@ export function buildStaircase(inputConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

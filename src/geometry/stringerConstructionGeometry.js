@@ -643,6 +643,20 @@ function hasSelfIntersection(polygon) {
   return false;
 }
 
+// A polyline (u increasing) with every part above `vMax` brought down to it — the crossings kept exactly.
+function clampPolylineTop(points, vMax) {
+  const out = [];
+  points.forEach((p, i) => {
+    const q = points[i - 1];
+    if (q && (q.v - vMax) * (p.v - vMax) < 0) {
+      const t = (vMax - q.v) / (p.v - q.v);
+      out.push({ u: q.u + t * (p.u - q.u), v: vMax });
+    }
+    out.push({ u: p.u, v: Math.min(p.v, vMax) });
+  });
+  return simplifyCollinear(out);
+}
+
 // Builds ONE result for a segment with no tread bearings at all (a real, if unusual, case —
 // see stringerSolver.js) — nothing to solve, nothing to take off.
 // The contour minus the region past `edgeU` below `floorZ` (the largest piece left; the contour unchanged when nothing
@@ -825,13 +839,24 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     const upperCurveSolved = solved.upperCurve ? translateCurveU(mergeCollinearLines(slice(solved.upperCurve)), -segStart) : null;
     // Arcs become chords only here, at the edge of the profile model, never inside it.
     const bottomPolyline = curveToPolyline(lowerCurve);
-    const topPolyline = upperCurveSolved ? curveToPolyline(upperCurveSolved) : null;
+    let topPolyline = upperCurveSolved ? curveToPolyline(upperCurveSolved) : null;
     const pitchLine = computePitchLineFromKnots(pitchProfile);
+    // The board the stair ENDS on, with no post at its top end, ends at the slab: its top is cut LEVEL at the floor
+    // (+ stringerTopEndAboveFloorMm) — it used to run on with the profile above the floor into a spike (user report
+    // 2026-10-26); at a post the board goes into the post as before.
+    const endsAtSlab = !segment.endPost && effective.length > 0 && effective[effective.length - 1].treadIndex === lastTreadIndex;
+    const topLimit = endsAtSlab && Number.isFinite(config.totalRise) ? config.totalRise + Math.max(0, Number(config.stringerTopEndAboveFloorMm) || 0) : null;
+    let topClamped = false;
+    if (topLimit !== null && topPolyline && topPolyline.some((p) => p.v > topLimit + GEOMETRY_EPS)) {
+      topPolyline = clampPolylineTop(topPolyline, topLimit);
+      topClamped = true;
+    }
 
     const diagnostics = i === 0 ? [...profileDiagnostics] : [];
     let outerContour;
     let housings;
-    let upperCurve = upperCurveSolved;
+    // (a top cut level at the floor: its curve from the cut polyline — lines only for that board)
+    let upperCurve = topClamped ? polylineToCurve(topPolyline) : upperCurveSolved;
     if (constructionType === CONSTRUCTION_TYPES.CUT) {
       const comb = buildCombCurve(extendCombToSpan(buildOverlayTop(effective), spanStart, spanEnd), params.notchRadiusMm);
       upperCurve = comb.curve;

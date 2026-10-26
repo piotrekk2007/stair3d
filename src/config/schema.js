@@ -1,4 +1,4 @@
-import { resolveOpening, openingFrame, requiredOpeningRelative, polygonContainsPolygon } from '../geometry/ceilingOpening.js';
+import { resolveOpening, openingFrame, requiredOpeningRelative, polygonContainsPolygon, topRiserFootprint } from '../geometry/ceilingOpening.js';
 import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
@@ -82,7 +82,15 @@ export function createDefaultConfig() {
     stairwellWallA: true, // (per-side, read only without stairwellWallList) the side runs along a wall
     stairwellWallB: true,
     stairwellWallC: true,
-    stairwellWallGapMm: 0, // mm, from the wall to the outer face of the wanga along it
+    stairwellWallGapMm: 0,
+    // The ceiling opening's wooden trim — "fajka" / nosek (user request 2026-10-26, openingTrimModel.js): along the
+    // free edges (on / off per edge: openingTrimEdges, toggled on the plan); sizes ASSUMPTION (workshop practice)
+    openingTrimEnabled: false,
+    openingTrimEdges: {},
+    openingTrimNoseWidthMm: 20, // how far the nose stands out into the opening
+    openingTrimNoseHeightMm: null, // the nose's height (null = the tread thickness; up to the slab's thickness)
+    openingTrimBoardThicknessMm: 15, // the board on the slab behind it, top flush with the floor
+    openingTrimBoardDepthMm: 100, // how far the board runs onto the floor // mm, from the wall to the outer face of the wanga along it
     // An S only: its sides A / B / C measured along the 'left' / 'right' line (walking up flight A) — '' = the line most
     // of its walls stand along (stairwell.js stairwellMeasureLine; without a wall list also the per-side walls' line)
     stairwellWallHand: '',
@@ -188,6 +196,9 @@ export function createDefaultConfig() {
     // mm, jak głęboko stopień wchodzi w wangę WPUSZCZANĄ (głębokość gniazda w licu wewnętrznym) — decyzja użytkownika:
     // ok. 20 mm, zmienialne. Starszy projekt bez tego pola: wzór BWF max(12, 0.4·grubość) (stringerModel.js housingDepthMm).
     stringerHousingDepthMm: 20,
+    // The last board at the slab with no post at its top end: its top cut level this far above the floor (0 = flush
+    // with the floor; user report 2026-10-26 — stringerConstructionGeometry.js endsAtSlab)
+    stringerTopEndAboveFloorMm: 0,
     // mm, jak głęboko wanga wchodzi PEŁNYM PRZEKROJEM we wręg (gniazdo) w licu słupa konstrukcyjnego (decyzja
     // użytkownika 2026-09-28: złącze wanga–słup = wręg pełnym przekrojem). 20 = wartość wyjściowa DO WERYFIKACJI
     // (CO-MFG-J-POST-HOUSING; ta sama co wpust stopnia w wangę) — brak źródła. 0 = wanga dochodzi do lica słupa.
@@ -499,6 +510,9 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
     if (topZ <= dangerThresholdZ) continue;
     if (!polygonContainsPolygon(opening.outline, tread.outline)) violatingTreads.push(tread.index);
   }
+  // the top riser reaches the floor: its thickness past the last back edge must be inside the opening too
+  const riserFootprint = topRiserFootprint(config, planLayout);
+  const violatingRisers = riserFootprint && !polygonContainsPolygon(opening.outline, riserFootprint) ? ['riser-top'] : [];
 
   return {
     openMinX,
@@ -511,7 +525,8 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
     openingRelativeOutline: opening.relativeOutline,
     openingMode: opening.shape === 'derived' ? 'derived' : 'given',
     soffitZ,
-    fits: violatingTreads.length === 0,
+    fits: violatingTreads.length === 0 && violatingRisers.length === 0,
     violatingTreads,
+    violatingRisers,
   };
 }

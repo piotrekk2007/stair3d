@@ -161,6 +161,8 @@ function midpoint(a, b) {
  * @param {(side:string, line:string) => void} [opts.onWallAdd]  Click on a dashed side (`.wall-candidate`).
  * @param {(wallId:string, end:'a'|'b', point, final:boolean, mmPerPx:number) => void} [opts.onWallDrag]  A wall end dragged.
  * @param {(wallId:string) => void} [opts.onWallRemove]  Right-click on a wall (`.wall-piece`).
+ * @param {() => boolean} [opts.getTrimMode]  The opening trim mode ("▬ Fajka") is on.
+ * @param {(edgeIndex:number) => void} [opts.onTrimEdgeToggle]  Click on an opening edge (`.trim-opening-edge`).
  */
 export function attachPlanInteractions(opts) {
   const {
@@ -202,6 +204,8 @@ export function attachPlanInteractions(opts) {
     onWallAdd,
     onWallDrag,
     onWallRemove,
+    getTrimMode = () => false,
+    onTrimEdgeToggle,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -378,6 +382,15 @@ export function attachPlanInteractions(opts) {
           dragState = { pointerId: e.pointerId, kind: 'opening-vertex', index, start, currentPoint: start, svg };
         }
         e.preventDefault();
+        return;
+      }
+    }
+
+    // --- the opening trim ("▬ Fajka"): click an opening edge = trim on / off
+    if (getTrimMode() && e.button === 0 && !spacePressed) {
+      const edgeEl = e.target.closest('.trim-opening-edge');
+      if (edgeEl) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'trim-edge', index: Number(edgeEl.dataset.trimEdge) } };
         return;
       }
     }
@@ -706,7 +719,8 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'wall-candidate' && onWallAdd) onWallAdd(hit.side, hit.line);
+        if (hit.kind === 'trim-edge' && onTrimEdgeToggle) onTrimEdgeToggle(hit.index);
+        else if (hit.kind === 'wall-candidate' && onWallAdd) onWallAdd(hit.side, hit.line);
         else if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
         else if (hit.kind === 'railing-ghost' && onRailingPostRestore) onRailingPostRestore(hit.sectionId, hit.s);
         else if (hit.kind === 'railing-opening-edge' && onRailingOpeningEdgeToggle) onRailingOpeningEdgeToggle(hit.index);
