@@ -212,7 +212,7 @@ function railingRunsAtPostHTML(s, postId) {
     .join('');
 }
 
-function railingPostPlaceHTML(railingModel, post) {
+function railingPostPlaceHTML(railingModel, post, config) {
   const out = [];
   for (const s of railingModel?.sections || []) {
     const spot = (s.postSpots || []).find((x) => x.postId === post.postId);
@@ -267,7 +267,7 @@ function postHTML(ctx) {
       if (post.overrideRejected) rows.push(`<div class="insp-diag warning"><b>UWAGA</b><div>Ta zmiana długości została zignorowana — słup byłby krótszy niż ${MIN_POST_HEIGHT_MM} mm.</div></div>`);
       rows.push(`<div class="insp-actions"><button type="button" class="insp-btn" data-post-dxf="${post.postId}" title="Rzeczywisty (skala 1:1) rysunek DXF tego słupa — prosty prostokąt przekrój × długość, do wycięcia w warsztacie">Eksportuj słup (DXF 1:1)</button></div>`);
     }
-    rows.push(railingPostPlaceHTML(ctx.railingModel, post));
+    rows.push(railingPostPlaceHTML(ctx.railingModel, post, config));
     rows.push(postEditFormHTML(post, config.manualPostOverrides?.[post.postId] || {}));
     if (!post.removed) rows.push(railingEndsHTML(ctx.railingModel, post.postId));
   }

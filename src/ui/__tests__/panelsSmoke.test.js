@@ -33,3 +33,13 @@ test('regression (user, 2026-10-23): the side panels render for every stair type
     }
   }
 });
+
+test('regression (user, 2026-10-26): the Inspektor shows every post — the start / end posts of a balustrade included (it threw "config is not defined", so such a post could not be edited)', () => {
+  const config = { ...createDefaultConfig(), stairType: 'L', turnDirection: 'left', treadsLegA: 4, treadsLegB: 4, windersPerTurn: 3, railingEnabled: true, railingSections: [{ id: 'r', side: 'outer', fromStep: 0, toStep: null }], railingOpeningEnabled: true };
+  const b = buildStaircase(config);
+  for (const p of b.allPostModels) {
+    const panel = { innerHTML: '' };
+    assert.doesNotThrow(() => updateInspectorPanel(panel, { selection: { elementType: 'post', postId: p.postId }, config, derived: b.derived, planLayout: b.planLayout, treadModels: b.treadModels, stringerModels: b.stringerModels, postModels: b.allPostModels, railingModel: b.railingModel, diagnostics: [] }), p.postId);
+    assert.ok(panel.innerHTML.includes(p.postId));
+  }
+});
