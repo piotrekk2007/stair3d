@@ -12,7 +12,7 @@ import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel, endNewelOntoSlab } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
-import { buildOpeningTrim } from './openingTrimModel.js';
+import { buildOpeningTrim, withTrimHoles } from './openingTrimModel.js';
 import { renderOpeningTrim } from './openingTrimRenderer.js';
 import { GLASS_TINTS } from './railingGlass.js';
 import { isCantilever, cantileverConfig, buildCantileverBox } from './cantileverModel.js';
@@ -101,7 +101,9 @@ export function buildStaircase(inputConfig) {
   // a starter step reaching into a stairwell wall (starterSteps.js) — reported with the stairwell's findings
   stairwell.diagnostics = [...(stairwell.diagnostics || []), ...starterWallDiagnostics(planLayout, walls?.pieces)];
   // the opening's wooden trim ("fajka", openingTrimModel.js) on the chosen free edges — a real, priced element
-  const openingTrim = buildOpeningTrim({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
+  let openingTrim = buildOpeningTrim({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
+  // the trim at the exit is the stair's nosing tread: the top riser ends under its nose (riserSolver.js)
+  if (openingTrim.exitNoseBottomZ !== null && openingTrim.exitNoseBottomZ !== undefined) fullConfig.exitTrimNoseBottomZ = openingTrim.exitNoseBottomZ;
   const slabNewel = noWangi ? null : endNewelOntoSlab({ config: fullConfig, planLayout, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] });
   if (slabNewel) fullConfig.endNewelOntoSlab = slabNewel;
 
@@ -150,6 +152,8 @@ export function buildStaircase(inputConfig) {
   // Legal/reference checks on the solved balustrade (validator/railingChecks.js) join its own findings, which
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
+  // the holes of the opening balustrade's posts and balusters through the trim (openingTrimModel.js)
+  openingTrim = withTrimHoles(openingTrim, railingModel, fullConfig);
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
   // (a structural post a handrail ends at is raised to the handrail's top — postSolver.js raisePostsToHandrail)
   const allPostModels = [...(noWangi ? [] : raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds)), ...railingModel.posts];

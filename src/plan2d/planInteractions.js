@@ -163,6 +163,7 @@ function midpoint(a, b) {
  * @param {(wallId:string) => void} [opts.onWallRemove]  Right-click on a wall (`.wall-piece`).
  * @param {() => boolean} [opts.getTrimMode]  The opening trim mode ("▬ Fajka") is on.
  * @param {(edgeIndex:number) => void} [opts.onTrimEdgeToggle]  Click on an opening edge (`.trim-opening-edge`).
+ * @param {() => void} [opts.onTrimExitToggle]  Click on the stair's exit stretch (`.trim-exit-edge`).
  */
 export function attachPlanInteractions(opts) {
   const {
@@ -206,6 +207,7 @@ export function attachPlanInteractions(opts) {
     onWallRemove,
     getTrimMode = () => false,
     onTrimEdgeToggle,
+    onTrimExitToggle,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -388,6 +390,10 @@ export function attachPlanInteractions(opts) {
 
     // --- the opening trim ("▬ Fajka"): click an opening edge = trim on / off
     if (getTrimMode() && e.button === 0 && !spacePressed) {
+      if (e.target.closest('.trim-exit-edge')) {
+        clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'trim-exit' } };
+        return;
+      }
       const edgeEl = e.target.closest('.trim-opening-edge');
       if (edgeEl) {
         clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'trim-edge', index: Number(edgeEl.dataset.trimEdge) } };
@@ -719,7 +725,8 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'trim-edge' && onTrimEdgeToggle) onTrimEdgeToggle(hit.index);
+        if (hit.kind === 'trim-exit' && onTrimExitToggle) onTrimExitToggle();
+        else if (hit.kind === 'trim-edge' && onTrimEdgeToggle) onTrimEdgeToggle(hit.index);
         else if (hit.kind === 'wall-candidate' && onWallAdd) onWallAdd(hit.side, hit.line);
         else if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
         else if (hit.kind === 'railing-ghost' && onRailingPostRestore) onRailingPostRestore(hit.sectionId, hit.s);

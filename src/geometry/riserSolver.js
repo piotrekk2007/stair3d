@@ -255,9 +255,12 @@ export function topRiserElevation(lastTreadIndex, config) {
   const nosingThickness = Number.isFinite(config.topNosingThicknessMm) && config.topNosingThicknessMm >= 0 ? config.topNosingThicknessMm : 0;
   const index = lastTreadIndex + 1;
   const floorLevel = Number.isFinite(totalRise) ? totalRise : (index + 1) * riserHeight;
+  // (with the opening's trim at the exit — openingTrimModel.js — the nosing tread on the slab IS that trim: the riser
+  // ends under its nose)
+  const underside = Number.isFinite(config.exitTrimNoseBottomZ) ? config.exitTrimNoseBottomZ : floorLevel - nosingThickness;
   return {
     bottom: index * riserHeight - treadThickness,
-    top: floorLevel - nosingThickness + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0),
+    top: underside + (riserTopOverlapMm > 0 ? riserTopOverlapMm : 0),
   };
 }
 

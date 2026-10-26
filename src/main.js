@@ -856,7 +856,7 @@ function setTrimMode(on) {
   const hint = plan2dHud.querySelector('#plan2d-opening-hint');
   if (hint) {
     hint.hidden = !trimMode && !on;
-    if (trimMode) hint.textContent = 'Obróbka otworu (fajka): kliknij krawędź otworu — zielona = z obróbką, szara przerywana = bez. Wymiary noska i deski — folder „4. Otwór w stropie”.';
+    if (trimMode) hint.textContent = 'Obróbka otworu (fajka): kliknij krawędź otworu — zielona = z obróbką, szara przerywana = bez; pomarańczowy odcinek przy wyjściu ze schodów (stopień fajkowy) — osobno. Wymiary noska i deski — folder „4. Otwór w stropie”.';
     else if (on) hint.textContent = 'Najpierw włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.';
   }
   regeneratePlan2D();
@@ -1611,6 +1611,11 @@ planApi = attachPlanInteractions({
   getWallMode: () => wallMode,
   getTrimMode: () => trimMode,
   onTrimEdgeToggle: (index) => toggleTrimEdge(index),
+  onTrimExitToggle: () => {
+    config.openingTrimExit = !(lastModels?.openingTrim?.exit?.enabled ?? config.openingTrimExit !== false);
+    rebuild();
+    commitHistory();
+  },
   onWallAdd: (side, line) => applyWallChange({ action: 'add', side, line }),
   onWallDrag: (wallId, end, raw, final, mmPerPx) => wallDrag(wallId, end, raw, final, mmPerPx),
   onWallRemove: (wallId) => applyWallChange({ action: 'remove', id: wallId }),

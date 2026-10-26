@@ -237,14 +237,21 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
 // The stairwell (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls along the sides marked
 // so (thick grey, on the wall side of the outer line) and every side's length outside them — a FIXED side with its
 // dimension (green when met, red when off), a free one as it comes out. Drawing only (pointer-events none).
-// The ceiling opening's trim ("fajka", openingTrimModel.js): every solid's plan outline (the nose darker); in the plan
-// mode "▬ Fajka" every opening edge is clickable (green = with trim, grey dashed = without).
+// The ceiling opening's trim ("fajka", openingTrimModel.js): every solid's plan outline (the nose darker) and the
+// balustrade's holes through it; in the plan mode "▬ Fajka" every opening edge is clickable (green = with trim, grey
+// dashed = without) and the stretch at the stair's exit on its own (orange = with trim).
 export function openingTrimXML(trim, editMode = false) {
   if (!trim) return '';
   let xml = '';
   for (const piece of trim.pieces || []) {
     for (const s of piece.solids) {
       xml += `<polygon class="opening-trim" points="${polygonPoints(s.outline)}" fill="${s.kind === 'nose' ? '#8a5a2b' : '#c89a62'}" fill-opacity="${s.kind === 'nose' ? 0.8 : 0.45}" stroke="#6b4423" stroke-width="0.8" ${HAIR} pointer-events="none"/>`;
+    }
+    for (const h of piece.holes || []) {
+      const r = h.sizeMm / 2;
+      xml += h.shape === 'round'
+        ? `<circle class="opening-trim-hole" cx="${fmt(h.x)}" cy="${fmt(-h.y)}" r="${fmt(r)}" fill="#fff" stroke="#6b4423" stroke-width="0.8" ${HAIR} pointer-events="none"/>`
+        : `<rect class="opening-trim-hole" x="${fmt(h.x - r)}" y="${fmt(-h.y - r)}" width="${fmt(2 * r)}" height="${fmt(2 * r)}" fill="#fff" stroke="#6b4423" stroke-width="0.8" ${HAIR} pointer-events="none"/>`;
     }
   }
   if (editMode) {
@@ -253,6 +260,9 @@ export function openingTrimXML(trim, editMode = false) {
       const why = e.wall ? ' (przy ścianie)' : '';
       xml += `<line class="trim-opening-edge" data-trim-edge="${e.index}" x1="${fmt(e.a.x)}" y1="${fmt(-e.a.y)}" x2="${fmt(e.b.x)}" y2="${fmt(-e.b.y)}" stroke="${color}" stroke-opacity="${e.enabled ? 0.45 : 0.35}" stroke-width="${px(12)}" ${e.enabled ? '' : 'stroke-dasharray="6 4"'} ${HAIR} pointer-events="stroke"><title>Krawędź otworu ${e.index + 1}${why}: obróbka (fajka) ${e.enabled ? 'TAK' : 'NIE'}${e.overridden ? ' (ręcznie)' : ''} — kliknij, żeby przełączyć</title></line>`;
     }
+    // the stair's exit: its own switch, on top of its edge
+    const x = trim.exit;
+    if (x) xml += `<line class="trim-exit-edge" x1="${fmt(x.a.x)}" y1="${fmt(-x.a.y)}" x2="${fmt(x.b.x)}" y2="${fmt(-x.b.y)}" stroke="${x.enabled ? '#e67e22' : '#888'}" stroke-opacity="0.7" stroke-width="${px(16)}" ${x.enabled ? '' : 'stroke-dasharray="6 4"'} ${HAIR} pointer-events="stroke"><title>Wyjście ze schodów: fajka (stopień fajkowy) ${x.enabled ? 'TAK' : 'NIE'} — kliknij, żeby przełączyć</title></line>`;
   }
   return xml ? `<g id="opening-trim-layer">${xml}</g>` : '';
 }

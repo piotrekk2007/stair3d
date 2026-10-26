@@ -895,9 +895,21 @@ export function buildOpeningTrimDXF(trim) {
     const a = Math.min(90, cutDeg(outer, 0, 3));
     const b = Math.min(90, cutDeg(outer, 1, 2));
     const longest = Math.max(...solids.flatMap((s) => [Math.hypot(s.pts[1].u - s.pts[0].u, s.pts[1].v - s.pts[0].v), Math.hypot(s.pts[2].u - s.pts[3].u, s.pts[2].v - s.pts[3].v)]));
-    text([`${p.id} (krawedz otworu ${p.edge + 1}): dl. ${Math.round(longest)} mm, szer. ${Math.round(p.widthMm)} mm; ciecie na koncach: ${a < 0.5 ? 'proste' : `${a.toFixed(1)} st.`} / ${b < 0.5 ? 'proste' : `${b.toFixed(1)} st.`}`]);
+    const holes = p.holes || [];
+    const holeText = holes.length ? `; otwory na wylot: ${['post', 'baluster'].map((k) => { const hs = holes.filter((h) => h.kind === k); return hs.length ? `${hs.length} x ${k === 'post' ? 'slupek' : 'tralka'} ${hs[0].shape === 'round' ? 'fi ' : ''}${hs[0].sizeMm}${hs[0].shape === 'round' ? '' : ` x ${hs[0].sizeMm}`}` : null; }).filter(Boolean).join(', ')}` : '';
+    text([`${p.id}${p.exit ? ' (wyjscie ze schodow)' : ''} (krawedz otworu ${p.edge + 1}): dl. ${Math.round(longest)} mm, szer. ${Math.round(p.widthMm)} mm; ciecie na koncach: ${a < 0.5 ? 'proste' : `${a.toFixed(1)} st.`} / ${b < 0.5 ? 'proste' : `${b.toFixed(1)} st.`}${holeText}`]);
     const at = (q) => ({ u: q.u - uMin, v: q.v - vMax + cursor });
     for (const s of solids) entities.push(...polygonEntities(s.pts.map(at), s.kind === 'nose' ? 'NOTCH' : 'OUTLINE'));
+    // the holes (posts / balusters of the opening's balustrade, through the trim): in the piece's own axes the plan's
+    // axis-aligned square is turned with the piece, so it is drawn as its four corners mapped
+    for (const h of holes) {
+      const c = at(local(h));
+      if (h.shape === 'round') entities.push(circleEntity(c, h.sizeMm / 2, 'JOINTS'));
+      else {
+        const r = h.sizeMm / 2;
+        entities.push(...polygonEntities([{ x: h.x - r, y: h.y - r }, { x: h.x + r, y: h.y - r }, { x: h.x + r, y: h.y + r }, { x: h.x - r, y: h.y + r }].map((q) => at(local(q))), 'JOINTS'));
+      }
+    }
     // the section, to the right of the plan: n across (the nose left), z up from the floor
     const u0 = Math.max(...all.map((q) => q.u)) - uMin + TRIM_SECTION_GAP_MM;
     const top = cursor;

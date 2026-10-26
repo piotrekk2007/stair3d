@@ -88,12 +88,13 @@ test('regression (user, 2026-10-26): an opening edge along a stairwell wall is o
   assert.ok(Math.abs(Math.hypot(pieces[0].b.x - pieces[0].a.x, pieces[0].b.y - pieces[0].a.y) - Math.hypot(wallEdge.b.x - wallEdge.a.x, wallEdge.b.y - wallEdge.a.y)) < 0.5, 'the whole edge');
 });
 
-test('regression (user, 2026-10-26): the opening balustrade stands ON the trim — posts and balusters on its top, the handrail measured from there; without the trim on the floor as before', () => {
+test('regression (user, 2026-10-26): the opening balustrade stands in the trim — posts and balusters through it, the handrail measured from its top; without the trim on the floor as before', () => {
   const on = stair({ railingOpeningEnabled: true, railingOpeningHeightMm: 1000 });
   const sec = on.railingModel.sections.find((s) => s.kind === 'opening');
   assert.ok(sec && sec.balusters.length > 0);
-  assert.ok(sec.balusters.every((b) => b.zBottom === 2615), 'on the trim (2600 + 15)');
-  assert.ok(sec.posts.every((p) => p.elevation.bottom === 2615));
+  // (set in holes through the trim, down to the slab — the handrail measured from the trim's top)
+  assert.ok(sec.balusters.every((b) => b.zBottom === 2600), 'in its hole, on the slab');
+  assert.ok(sec.posts.every((p) => p.elevation.bottom === 2600));
   assert.equal(sec.handrail.pieces[0].start.z, 2615 + 1000 - on.fullConfig.railingHandrailHeightMm / 2);
   const off = stair({ railingOpeningEnabled: true, railingOpeningHeightMm: 1000, openingTrimEnabled: false });
   assert.ok(off.railingModel.sections.find((s) => s.kind === 'opening').balusters.every((b) => b.zBottom === 2600));
@@ -108,4 +109,37 @@ test('the trim DXF: one sheet, every piece in plan with its end cuts and the pro
   assert.ok(/ciecie na koncach: 45\.0 st\./.test(dxf), 'a mitred end');
   assert.ok(dxf.includes('przekroj'));
   assert.equal(buildOpeningTrimDXF(stair({ openingTrimEnabled: false }).openingTrim), null);
+});
+
+test('regression (user, 2026-10-26): the trim has a hole for every post and baluster of the opening balustrade standing on it, through the trim — in the model, the 3D mesh and the DXF', async () => {
+  const b = stair({ railingOpeningEnabled: true });
+  const sec = b.railingModel.sections.find((s) => s.kind === 'opening');
+  const holes = b.openingTrim.pieces.flatMap((p) => p.holes);
+  assert.equal(holes.filter((h) => h.kind === 'baluster').length, sec.balusters.length);
+  assert.equal(holes.filter((h) => h.kind === 'post').length, sec.posts.filter((p) => !p.removed).length);
+  assert.ok(holes.every((h) => h.depthMm === 15), 'through the board');
+  // 3D: the board with holes has more triangles than without
+  const plain = stair().root.getObjectByName('OpeningTrim').children.find((m) => m.name.endsWith('_board'));
+  const holed = b.root.getObjectByName('OpeningTrim').children.find((m) => m.name === plain.name);
+  assert.ok(holed.geometry.getAttribute('position').count > plain.geometry.getAttribute('position').count);
+  const { buildOpeningTrimDXF } = await import('../../export/dxfExport.js');
+  assert.ok(/otwory na wylot: \d+ x slupek \d+ x \d+, \d+ x tralka/.test(buildOpeningTrimDXF(b.openingTrim)));
+});
+
+test('regression (user, 2026-10-26): the trim at the stair EXIT — its own piece between the wangi, on by default, its own switch; the top riser ends under its nose', () => {
+  // (the opening derived from the stair: its exit edge where the stair arrives)
+  const b = stair({ hasRiserBoards: true, riserBoardThickness: 16, openingMode: 'derived' });
+  const exit = b.openingTrim.pieces.find((p) => p.exit);
+  assert.ok(exit, 'the exit piece');
+  assert.equal(exit.id, 'opening-trim-exit');
+  // between the wangi's inner faces: the stair's width less two boards
+  const t = b.fullConfig.stringerThickness;
+  assert.ok(Math.abs(Math.hypot(exit.b.x - exit.a.x, exit.b.y - exit.a.y) - (b.fullConfig.stairWidth - 2 * t)) < 0.5);
+  const top = b.riserModels.find((r) => r.riserId === 'riser-top');
+  assert.equal(top.elevation.top, 2615 - 40 + b.fullConfig.riserTopOverlapMm, 'under the nose (+ the overlap into it)');
+  const off = stair({ hasRiserBoards: true, riserBoardThickness: 16, openingMode: 'derived', openingTrimExit: false });
+  assert.ok(!off.openingTrim.pieces.some((p) => p.exit));
+  assert.equal(off.openingTrim.exit.enabled, false);
+  assert.equal(off.riserModels.find((r) => r.riserId === 'riser-top').elevation.top, 2600 - off.fullConfig.topNosingThicknessMm + off.fullConfig.riserTopOverlapMm);
+  assert.ok(/class="trim-exit-edge"/.test(openingTrimXML(b.openingTrim, true)));
 });

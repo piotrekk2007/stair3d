@@ -399,7 +399,10 @@ function buildOpeningTrimItems(trim, config, wasteFactors) {
       wasteFactor: wasteFactorFor(elementType, materialId, wasteFactors),
       optional: false,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Obróbka otworu w stropie („fajka”): nosek ${trim.dims.noseWidth} × ${trim.dims.noseHeight} mm, deska ${trim.dims.boardThickness} mm na ${trim.dims.boardDepth} mm w głąb stropu; formatka z deski grub. ${thicknessMm} mm.`],
+      notes: [
+        `Obróbka otworu w stropie („fajka”)${p.exit ? ' przy wyjściu ze schodów (stopień fajkowy)' : ''}: nosek ${trim.dims.noseWidth} × ${trim.dims.noseHeight} mm, deska ${trim.dims.boardThickness} mm na ${trim.dims.boardDepth} mm w głąb stropu; formatka z deski grub. ${thicknessMm} mm.`,
+        ...((p.holes || []).length ? [`Otwory na wylot pod balustradę: ${(p.holes || []).filter((h) => h.kind === 'post').length} pod słupki, ${(p.holes || []).filter((h) => h.kind === 'baluster').length} pod tralki.`] : []),
+      ],
     });
   });
 }

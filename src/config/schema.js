@@ -87,6 +87,7 @@ export function createDefaultConfig() {
     // free edges (on / off per edge: openingTrimEdges, toggled on the plan); sizes ASSUMPTION (workshop practice)
     openingTrimEnabled: false,
     openingTrimEdges: {},
+    openingTrimExit: true, // the trim at the stair's exit too (its nosing tread on the slab) — its own switch
     openingTrimNoseWidthMm: 20, // how far the nose stands out into the opening
     openingTrimNoseHeightMm: null, // the nose's height (null = the tread thickness; up to the slab's thickness)
     openingTrimBoardThicknessMm: 15, // the board on the slab behind it, top flush with the floor
