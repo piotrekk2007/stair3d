@@ -17,7 +17,9 @@ a real stairwell is described by the dimensions that are RIGID.
 | `stairwellWall{A,B,C}Extent` + `…LengthMm` | (per-side, as above) how far the wall reaches (user decision 2026-10-19): `full` (the whole side), `start` (from the side's start — A: the first front edge, B/C: the corner — that long, at most the side), `end` (back from the side's end — A: the corner / side B, C: the slab edge — that long; longer than the side = the wall goes on past its start, e.g. behind the entry) — `wallInterval` |
 | `stairwellWallGapMm` | wall → wanga face |
 
-The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U C). Example (the user's U): B = 1885
+The exit side is the one the stair ends on (`exitSideLetter`: straight A, L B, U C). With riser boards it is measured
+on past the last back edge by the top riser's thickness — to the riser's back face, the slab's edge (`exitExtraMm`,
+`lineSides(…, exitExtra)`, the fit the same; user report 2026-10-26: a rigid exit side put the riser into the slab). Example (the user's U): B = 1885
 wall to wall and C = 2350 from the end wall to the slab edge fixed, A free — the entry floats (2000 or 2500 depending
 on the counts), so the entry and the exit need not be on one line.
 

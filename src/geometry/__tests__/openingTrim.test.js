@@ -10,16 +10,17 @@ import { signedPolygonArea } from '../pathUtils.js';
 // a straight stair under a rectangular opening (no stairwell walls): every edge but the stair's own stretch is free
 const stair = (patch = {}) => buildStaircase({ ...createDefaultConfig(), stairType: 'straight', treadsLegA: 12, totalRise: 2600, treadThickness: 40, openingTrimEnabled: true, ...patch });
 
-test('the opening trim ("fajka", user request 2026-10-26): a nose as thick as a tread standing out into the opening, a thin board on the slab behind it, both flush with the floor', () => {
+test('the opening trim ("fajka", user request 2026-10-26): a nose as thick as a tread standing out into the opening, a thin board LYING ON the slab behind it (regression: it was sunk into the slab), their tops flush', () => {
   const b = stair();
   const trim = b.openingTrim;
   assert.ok(trim.enabled && trim.pieces.length > 0);
   for (const p of trim.pieces) {
     const nose = p.solids.find((s) => s.kind === 'nose');
     const board = p.solids.find((s) => s.kind === 'board');
-    assert.equal(nose.zTop, 2600);
-    assert.equal(nose.zBottom, 2560, 'the nose: the tread thickness');
-    assert.equal(board.zBottom, 2585, 'the board: 15 mm');
+    assert.equal(board.zBottom, 2600, 'the board on the slab');
+    assert.equal(board.zTop, 2615, 'the board: 15 mm');
+    assert.equal(nose.zTop, 2615);
+    assert.equal(nose.zBottom, 2575, 'the nose: the tread thickness');
     // the nose lies on the opening's side of the edge (inside the opening outline), the board on the slab's
     const inside = (pt) => {
       const o = b.ceilingFit.openingOutline;
@@ -34,7 +35,7 @@ test('the opening trim ("fajka", user request 2026-10-26): a nose as thick as a 
   }
   // the nose can be made taller — down to covering the slab's edge
   const tall = stair({ openingTrimNoseHeightMm: 250 });
-  assert.equal(tall.openingTrim.pieces[0].solids[0].zBottom, 2350);
+  assert.equal(tall.openingTrim.pieces[0].solids[0].zBottom, 2365);
 });
 
 test('trim pieces meeting at a corner of the opening are mitred: the two bands share their corner points', () => {
@@ -72,4 +73,17 @@ test('the plan draws the trim, and in the "▬ Fajka" mode every opening edge is
   assert.equal((xml.match(/class="opening-trim"/g) || []).length, trim.pieces.length * 2);
   assert.equal((xml.match(/class="trim-opening-edge"/g) || []).length, trim.edges.length);
   assert.equal((openingTrimXML(trim, false).match(/trim-opening-edge/g) || []).length, 0);
+});
+
+test('regression (user, 2026-10-26): an opening edge along a stairwell wall is off by default, but switched on it gets the trim along its whole length — the wall does not cut it out as it does the balustrade', () => {
+  const cfg = { ...createDefaultConfig(), stairType: 'L', turnDirection: 'left', treadsLegA: 5, treadsLegB: 4, windersPerTurn: 3, totalRise: 2800, stairwellRoomEnabled: true, openingTrimEnabled: true, openingMode: 'derived' };
+  const b = buildStaircase(cfg);
+  const wallEdge = b.openingTrim.edges.find((e) => e.wall);
+  assert.ok(wallEdge, 'an edge along a wall');
+  assert.equal(wallEdge.enabled, false);
+  assert.ok(!b.openingTrim.pieces.some((p) => p.edge === wallEdge.index));
+  const on = buildStaircase({ ...cfg, openingTrimEdges: { [wallEdge.index]: true } });
+  const pieces = on.openingTrim.pieces.filter((p) => p.edge === wallEdge.index);
+  assert.equal(pieces.length, 1);
+  assert.ok(Math.abs(Math.hypot(pieces[0].b.x - pieces[0].a.x, pieces[0].b.y - pieces[0].a.y) - Math.hypot(wallEdge.b.x - wallEdge.a.x, wallEdge.b.y - wallEdge.a.y)) < 0.5, 'the whole edge');
 });

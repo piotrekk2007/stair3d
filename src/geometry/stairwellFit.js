@@ -31,7 +31,7 @@
 import { buildPlanLayout } from './planLayout.js';
 import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { wellEnabled, wellFixedTargets, wellSideLetters, wellMainSide, stairwellMeasureLine, lineSides } from './stairwell.js';
+import { wellEnabled, wellFixedTargets, wellSideLetters, wellMainSide, stairwellMeasureLine, lineSides, exitExtraMm } from './stairwell.js';
 
 const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 
@@ -60,11 +60,11 @@ function sideLetters(stairType) {
  * @param {{outerFullPath:{x:number,y:number}[]}} planLayout
  * @returns {number[]}
  */
-export function outerSideLengths(planLayout, line = 'outer', stairType = null) {
+export function outerSideLengths(planLayout, line = 'outer', stairType = null, exitExtra = 0) {
   // with the stair type: the sides found by direction (stairwell.js lineSides — a flight with no piece on this line is
   // a zero-length side, the letters do not shift)
   if (stairType) {
-    const sides = lineSides(planLayout, line, stairType);
+    const sides = lineSides(planLayout, line, stairType, exitExtra);
     return sideLetters(stairType).map((s) => sides[s]?.length ?? 0);
   }
   const path = (line === 'inner' ? planLayout.innerFullPath : planLayout.outerFullPath) || [];
@@ -101,7 +101,8 @@ function measure(config) {
   const planLayout = buildPlanLayout({ ...config, riserHeight: derived.riserHeight, manualEdgeOverrides: {}, manualTreadOverhangs: {} });
   // (along the line the sides are measured on — an S may be measured along its inner line, stairwell.js
   // stairwellMeasureLine)
-  return { derived, sides: outerSideLengths(planLayout, stairwellMeasureLine(config), config.stairType) };
+  // (the exit side to the top riser's back face — the slab's edge, stairwell.js exitExtraMm)
+  return { derived, sides: outerSideLengths(planLayout, stairwellMeasureLine(config), config.stairType, exitExtraMm(config)) };
 }
 
 function sideOf(config, letter) {

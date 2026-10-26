@@ -131,7 +131,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `stairwellWallList(config, planLayout)` (null → the older per-side fields `stairwellWall{S}`/`…Extent`/`…LengthMm`),
   edits `stairwellWallEdits.js applyWallEdit`; plan mode "▥ Ściany" (click a dashed side = add, drag an end, right-click
   = remove) + the list in folder 3. Sides are found BY DIRECTION (`lineSides`: a missing flight = zero-length side, no
-  shifted letters — the S A = 0 bug); corners close only between walls of the same line reaching them; a partial wall
+  shifted letters — the S A = 0 bug; with riser boards the EXIT side runs on to the top riser's back face, the slab's
+  edge — `exitExtraMm`); corners close only between walls of the same line reaching them; a partial wall
   is capped + labelled on the plan. The opening balustrade skips only the walled part of an edge; "Balustrada zewn.
   tam, gdzie nie ma ściany" (folder 9) sets every walled side's sections from `treadsOpenOnOuterSide(…, line)` (built
   returns `stairwellWalls`); the wall handrail only on a side with a wall (`wallRailAllowed`).
@@ -171,8 +172,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - **Opening trim "fajka"** (`openingTrimModel.js`, user request 2026-10-26, docs
   [OPENING_TRIM.md](docs/architecture/OPENING_TRIM.md)): `openingTrimEnabled`; along the opening balustrade's free
   pieces (`railingSolver.js openingEdgePieces` — one rule), per edge `openingTrimEdges` (plan mode "▬ Fajka"); a nose
-  (`openingTrimNoseWidthMm` into the opening × `openingTrimNoseHeightMm`, default the tread thickness) + a board on the
-  slab (`…BoardThicknessMm` × `…BoardDepthMm`), top flush with the floor, mitred at corners → `built.openingTrim`, 3D
+  (`openingTrimNoseWidthMm` into the opening × `openingTrimNoseHeightMm`, default the tread thickness) + a board LYING
+  ON the slab (`…BoardThicknessMm` × `…BoardDepthMm`, top one board above the slab), mitred at corners; a wall does
+  not cut it (an edge along a wall: off by default, on = its whole length) → `built.openingTrim`, 3D
   (`openingTrimRenderer.js`), plan, takeoff `OPENING_TRIM` (board price list), gate. No DXF yet.
 
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):

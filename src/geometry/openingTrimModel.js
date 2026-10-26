@@ -5,12 +5,15 @@
 // the opening and takes the posts / balusters of the gallery balustrade.
 //
 //   section (n = from the opening's edge into the slab, z up; F = the floor, totalRise):
-//     nose  : n ∈ [−noseWidth, 0],   z ∈ [F − noseHeight, F]
-//     board : n ∈ [0, boardDepth],   z ∈ [F − boardThickness, F]
+//     nose  : n ∈ [−noseWidth, 0],   z ∈ [T − noseHeight, T]
+//     board : n ∈ [0, boardDepth],   z ∈ [F, T]          T = F + boardThickness
+// — the board LIES ON the slab (its underside on the slab's top, F = totalRise; user report 2026-10-26: inside the
+// slab it collided with it), its top flush with the finished floor laid round it.
 //
 // Which edges: the same free pieces as the opening's balustrade (railingSolver.js openingEdgePieces — not along a
 // stairwell wall, not the stretch where the stair arrives), each edge on / off by hand (`openingTrimEdges`, toggled on
-// the plan). Adjacent pieces of a chain are MITRED (the band corners where the offset lines of the two edges meet); a
+// the plan) — an edge along a wall is off by default but, switched on, gets the trim along its whole length (a wall
+// does not cut it, unlike the balustrade; user report 2026-10-26). Adjacent pieces of a chain are MITRED (the band corners where the offset lines of the two edges meet); a
 // free end (at the stair, at a wall, next to an edge without trim) is cut square to its edge.
 //
 // Pure: no Three.js. Sizes ASSUMPTION / DO WERYFIKACJI (workshop practice, no published figure).
@@ -55,9 +58,10 @@ export function buildOpeningTrim(ctx) {
   const { config, openingOutline } = ctx;
   const empty = { enabled: false, edges: [], pieces: [], diagnostics: [] };
   if (!config.openingTrimEnabled || !Array.isArray(openingOutline) || openingOutline.length < 3) return empty;
-  const { edges, pieces: all } = openingEdgePieces(openingOutline, ctx, config.openingTrimEdges);
+  const { edges, pieces: all } = openingEdgePieces(openingOutline, ctx, config.openingTrimEdges, { wallsCut: false });
   const dims = openingTrimDims(config);
   const F = Number(config.totalRise) || 0;
+  const T = F + dims.boardThickness;
   const diagnostics = [];
   if (dims.noseHeight > (Number(config.ceilingThickness) || Infinity)) {
     diagnostics.push(createDiagnostic({ ruleId: 'OPENING-TRIM-NOSE-HEIGHT', severity: 'WARNING', elementType: 'stair', elementId: null, parameter: 'openingTrimNoseHeightMm', value: dims.noseHeight, expected: `≤ ${config.ceilingThickness}`, unit: 'mm', message: `Obróbka otworu: nosek ${dims.noseHeight} mm jest wyższy niż grubość stropu (${config.ceilingThickness} mm) — wystaje poniżej stropu.` }));
@@ -82,8 +86,8 @@ export function buildOpeningTrim(ctx) {
     };
     const band = (n0, n1) => [at('a', n0), at('b', n0), at('b', n1), at('a', n1)];
     const solids = [
-      { kind: 'nose', outline: band(-dims.noseWidth, 0), zBottom: F - dims.noseHeight, zTop: F },
-      ...(dims.boardDepth > 0 ? [{ kind: 'board', outline: band(0, dims.boardDepth), zBottom: F - dims.boardThickness, zTop: F }] : []),
+      { kind: 'nose', outline: band(-dims.noseWidth, 0), zBottom: T - dims.noseHeight, zTop: T },
+      ...(dims.boardDepth > 0 ? [{ kind: 'board', outline: band(0, dims.boardDepth), zBottom: F, zTop: T }] : []),
     ].filter((s) => dims.noseWidth > 0 || s.kind !== 'nose');
     // the blank: the longest side of the band × its full width, at the nose's height (one board, milled)
     const lengthMm = Math.max(...solids.flatMap((s) => [Math.hypot(s.outline[1].x - s.outline[0].x, s.outline[1].y - s.outline[0].y), Math.hypot(s.outline[2].x - s.outline[3].x, s.outline[2].y - s.outline[3].y)]));

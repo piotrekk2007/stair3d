@@ -1326,8 +1326,10 @@ const paramOn = (p, a, b) => {
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
 // `overrides`: the per-edge on / off by hand ({[edge]: boolean}) — the balustrade's `railingOpeningEdges`, or another
-// element along the opening's edges (openingTrimModel.js: the trim's `openingTrimEdges`).
-function openingEdgeStates(outline, ctx, overrides = ctx.config.railingOpeningEdges) {
+// element along the opening's edges (openingTrimModel.js: the trim's `openingTrimEdges`). `wallsCut` false: a wall
+// along an edge does not cut it into pieces (the trim may run along a wall when switched on there) — it is still
+// reported (`wall`) and keeps the edge off by default.
+function openingEdgeStates(outline, ctx, overrides = ctx.config.railingOpeningEdges, { wallsCut = true } = {}) {
   const { planLayout, wallSegments = [], config } = ctx;
   const last = planLayout.treads[planLayout.treads.length - 1];
   const exitMid = last ? { x: (last.backEdge[0].x + last.backEdge[1].x) / 2, y: (last.backEdge[0].y + last.backEdge[1].y) / 2 } : null;
@@ -1360,7 +1362,7 @@ function openingEdgeStates(outline, ctx, overrides = ctx.config.railingOpeningEd
       const hi = Math.min(1, Math.max(u0, u1));
       if (hi > lo) wallCuts.push([lo, hi]);
     }
-    const cuts = mergeIntervals([...wallCuts.map(([t0, t1]) => ({ t0, t1, kind: 'wall' })), ...(stair ? [{ t0: stair[0], t1: stair[1], kind: 'stair' }] : [])]);
+    const cuts = mergeIntervals([...(wallsCut ? wallCuts : []).map(([t0, t1]) => ({ t0, t1, kind: 'wall' })), ...(stair ? [{ t0: stair[0], t1: stair[1], kind: 'stair' }] : [])]);
     const coveredMm = cuts.reduce((sum, c) => sum + (c.t1 - c.t0) * len, 0);
     const wallMm = mergeIntervals(wallCuts.map(([t0, t1]) => ({ t0, t1, kind: 'wall' }))).reduce((sum, c) => sum + (c.t1 - c.t0) * len, 0);
     const wall = wallMm >= len - 1; // the whole edge along a wall
@@ -1419,8 +1421,8 @@ function openingPieces(states) {
  * everything that runs along the opening's edges (its balustrade, its trim): {edges, pieces}, each edge with `auto` /
  * `enabled` from `overrides` ({[edge]: boolean}).
  */
-export function openingEdgePieces(outline, ctx, overrides) {
-  const edges = openingEdgeStates(outline, ctx, overrides);
+export function openingEdgePieces(outline, ctx, overrides, options = {}) {
+  const edges = openingEdgeStates(outline, ctx, overrides, options);
   return { edges, pieces: openingPieces(edges) };
 }
 

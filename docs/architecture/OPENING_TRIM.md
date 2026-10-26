@@ -5,12 +5,13 @@ User request 2026-10-26. A wooden finishing piece along chosen edges of the ceil
 
 ## Section
 
-Along each piece, square to its edge (n = from the opening's edge into the slab, z up, F = the floor = `totalRise`):
+Along each piece, square to its edge (n = from the opening's edge into the slab, z up, F = the slab's top =
+`totalRise`, T = F + boardThickness — the board LIES ON the slab, user report 2026-10-26; sunk into it, it collided):
 
 | part  | n                      | z                          | config |
 | ---   | ---                    | ---                        | --- |
-| nose  | `[−noseWidth, 0]`      | `[F − noseHeight, F]`      | `openingTrimNoseWidthMm` (20) — how far it stands out into the opening; `openingTrimNoseHeightMm` (null = `treadThickness`; up to the slab's thickness, to cover its whole edge) |
-| board | `[0, boardDepth]`      | `[F − boardThickness, F]`  | `openingTrimBoardThicknessMm` (15), `openingTrimBoardDepthMm` (100) — on the slab, top flush with the floor, meeting the floor finish |
+| nose  | `[−noseWidth, 0]`      | `[T − noseHeight, T]`      | `openingTrimNoseWidthMm` (20) — how far it stands out into the opening; `openingTrimNoseHeightMm` (null = `treadThickness`; up to the slab's thickness, to cover its whole edge) |
+| board | `[0, boardDepth]`      | `[F, T]`                   | `openingTrimBoardThicknessMm` (15), `openingTrimBoardDepthMm` (100) — on the slab, top flush with the floor, meeting the floor finish |
 
 All sizes ASSUMPTION (workshop practice, no published figure). A nose taller than the slab → WARNING
 `OPENING-TRIM-NOSE-HEIGHT`.
@@ -19,7 +20,8 @@ All sizes ASSUMPTION (workshop practice, no published figure). A nose taller tha
 
 `openingTrimEnabled` switches it on. The pieces are the opening balustrade's free pieces — ONE rule for both
 (`railingSolver.js openingEdgePieces(outline, ctx, overrides)`): not along a stairwell wall, not the stretch where the
-stair arrives (last back edge + one wanga each side); every edge on / off by hand (`openingTrimEdges[i]`, plan mode
+stair arrives (last back edge + one wanga each side) — except that a WALL does not cut the trim (`wallsCut: false`): an
+edge along a wall is off by default, but switched on it gets the trim along its whole length; every edge on / off by hand (`openingTrimEdges[i]`, plan mode
 "▬ Fajka": click an edge — green = with trim, grey dashed = without).
 
 ## Corners and ends

@@ -185,12 +185,22 @@ function linePieces(planLayout, line) {
 const SAME_FLIGHT_DOT = 0.999;
 
 /**
+ * How far the EXIT side runs on past the last back edge: the top riser's thickness (riserSolver.js buildTopRiserModel —
+ * it stands behind that edge, up to the floor), so the exit side ends at the slab's edge, where the riser's back face
+ * is (user report 2026-10-26: measured to the back edge, a rigid "do krawędzi stropu" put the riser into the slab).
+ */
+export function exitExtraMm(config) {
+  const t = Number(config?.riserBoardThickness) || 0;
+  return config?.hasRiserBoards && t > 0 ? t : 0;
+}
+
+/**
  * The sides A / B / C of one plan line ('outer' | 'inner'), BY DIRECTION: the line's straight pieces matched in order
  * to the flights' directions (A = the outer line's first piece, B = its second, C = −A for a U, A for an S). A flight
  * with no piece on this line (e.g. an S's inner line when the stair starts with winders) gets a zero-length side where
  * it would be. {A: {a, b, length, dir}, ...} for the sides the type has ({} for an empty plan).
  */
-export function lineSides(planLayout, line, stairType) {
+export function lineSides(planLayout, line, stairType, exitExtra = 0) {
   const letters = wellSideLetters(stairType);
   const outer = linePieces(planLayout, 'outer');
   const pieces = line === 'outer' ? outer : linePieces(planLayout, line);
@@ -213,6 +223,12 @@ export function lineSides(planLayout, line, stairType) {
     const p = before ? out[before].b : after ? out[after].a : pieces[0].a;
     out[s] = { a: p, b: p, length: 0, dir: dirs[s] };
   });
+  // the exit side on past the last back edge (exitExtraMm)
+  const exit = out[exitSideLetter(stairType)];
+  if (exit && exitExtra > 0) {
+    exit.b = add(exit.b, mul(exit.dir, exitExtra));
+    exit.length += exitExtra;
+  }
   return out;
 }
 
@@ -225,7 +241,7 @@ export function stairwellWallList(config, planLayout) {
   const letters = wellSideLetters(config.stairType);
   if (Array.isArray(config.stairwellWallList)) return config.stairwellWallList.filter((w) => w && letters.includes(w.side) && (w.line === 'outer' || w.line === 'inner'));
   const line = legacyWallLine(config);
-  const sides = planLayout ? lineSides(planLayout, line, config.stairType) : {};
+  const sides = planLayout ? lineSides(planLayout, line, config.stairType, exitExtraMm(config)) : {};
   const out = [];
   for (const s of letters) {
     if (!sideHasWall(config, s)) continue;
@@ -265,7 +281,7 @@ export function spanToFromTo(side, length, t0, t1) {
 export function wellFrame(config, planLayout) {
   if (!wellEnabled(config) || !planLayout) return null;
   const line = stairwellMeasureLine(config);
-  const sides = lineSides(planLayout, line, config.stairType);
+  const sides = lineSides(planLayout, line, config.stairType, exitExtraMm(config));
   const A = sides.A;
   if (!A) return null;
   const origin = A.b; // the end of side A — the end wall's corner
@@ -333,7 +349,7 @@ function wallSegments(config, planLayout) {
   const letters = wellSideLetters(config.stairType);
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
   const handedness = planLayout.handedness ?? 1;
-  const sidesOf = { outer: lineSides(planLayout, 'outer', config.stairType), inner: lineSides(planLayout, 'inner', config.stairType) };
+  const sidesOf = { outer: lineSides(planLayout, 'outer', config.stairType, exitExtraMm(config)), inner: lineSides(planLayout, 'inner', config.stairType, exitExtraMm(config)) };
   // each wall's stretch along its side, and whether it reaches the side's start / end (only there does it meet the
   // neighbouring side's wall in a closed corner)
   const walls = stairwellWallList(config, planLayout)
@@ -481,7 +497,7 @@ export function stairwellPlanDrawing(report, config, planLayout) {
   const handedness = planLayout.handedness ?? 1;
   const candidates = [];
   for (const line of ['outer', 'inner']) {
-    const sides = lineSides(planLayout, line, config.stairType);
+    const sides = lineSides(planLayout, line, config.stairType, exitExtraMm(config));
     for (const s of wellSideLetters(config.stairType)) {
       const side = sides[s];
       if (!side || !(side.length > MIN_WALL_LENGTH_MM)) continue;

@@ -66,3 +66,12 @@ test('a rigid side that cannot be met is an ERROR saying what to change (the use
   assert.equal(d.severity, 'ERROR');
   assert.match(d.message, /Zmień liczbę stopni zabiegowych/);
 });
+
+test("regression (user, 2026-10-26): with riser boards the exit side (\"do krawędzi stropu\") is measured to the top riser's BACK face — a rigid one puts the last back edge one riser thickness before the slab's edge, and the riser no longer runs into the slab", () => {
+  const cfg = base({ stairType: 'L', treadsLegA: 4, treadsLegB: 4, hasRiserBoards: true, riserBoardThickness: 16, stairwellSideBMm: 2050, stairwellSideBState: 'main' });
+  const b = buildStaircase(cfg);
+  assert.ok(Math.abs(b.stairwell.sides.find((x) => x.side === 'B').achieved - 2050) <= 1, 'the exit side (to the slab edge) exact');
+  assert.ok(Math.abs(lineSides(b.planLayout, 'outer', 'L', 0).B.length + 16 - 2050) <= 1, 'the last back edge 16 mm before it');
+  // the opening derived from the stair holds the riser too
+  assert.deepEqual(buildStaircase({ ...cfg, openingMode: 'derived' }).ceilingFit.violatingRisers, []);
+});
