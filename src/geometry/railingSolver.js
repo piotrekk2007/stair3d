@@ -47,6 +47,7 @@ import { RAILING_INFILL, isGlassInfill, glassLateralOffsetMm, glassType, panesFo
 import { starterNewelTread } from './starterSteps.js';
 import { sanitizeRailingPostEdits, manualRailingPostId, SUPPRESS_MATCH_MM, MANUAL_POST_MIN_FROM_END_MM } from './railingPostEdits.js';
 import { wallRailAllowed } from './stairwell.js';
+import { pointInPolygon } from './polygonClip.js';
 export { applyRailingPostEdit, sanitizeRailingPostEdits } from './railingPostEdits.js';
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
@@ -1474,9 +1475,20 @@ function openingChainPath(chain, setback) {
   return pts;
 }
 
+// The ground the opening's balustrade stands on at a plan point: the top of the opening's TRIM where it lies there
+// (openingTrimModel.js — the balustrade stands ON the trim, user request 2026-10-26), else the floor (totalRise).
+function openingGroundAt(ctx) {
+  const floor = ctx.config.totalRise || 0;
+  const solids = (ctx.openingTrim?.enabled ? ctx.openingTrim.pieces : []).flatMap((p) => p.solids);
+  if (!solids.length) return () => floor;
+  return (p) => solids.reduce((z, s) => (pointInPolygon(p, s.outline) ? Math.max(z, s.zTop) : z), floor);
+}
+
 function buildOpeningSection(id, path, ctx, closed) {
   const { config, stairPosts = [] } = ctx;
-  const z = config.totalRise || 0;
+  const groundAt = openingGroundAt(ctx);
+  // the handrail's height from the highest ground along the section (on the trim where it runs on the trim)
+  const z = Math.max(config.totalRise || 0, ...path.map(groundAt));
   const height = config.railingOpeningHeightMm || 1100;
   const handrailHeight = config.railingHandrailHeightMm;
   const balusterSize = config.railingBalusterSizeMm;
@@ -1540,7 +1552,8 @@ function buildOpeningSection(id, path, ctx, closed) {
     kind: 'railing',
     ...(sp.kind === 'manual' ? { manual: true, sectionId: id, manualId: sp.manualId, s: sp.s } : {}),
     position: { x: sp.at.x, y: sp.at.y },
-    elevation: { bottom: z, top: topOfPost },
+    // (on the trim where it lies there)
+    elevation: { bottom: groundAt(sp.at), top: topOfPost },
     size: config.railingPostSizeMm,
   }));
   base.posts = applyPostOverrides(nominal, config.manualPostOverrides);
@@ -1578,11 +1591,11 @@ function buildOpeningSection(id, path, ctx, closed) {
     base.runs.push({ key: runKey, startPostId, endPostId, pieces: runPieces, bent: false, bare: bareRun, startAtPostFace: fit.startFitted, endAtPostFace: fit.endFitted, startOffsetMm: 0, endOffsetMm: 0 });
     if (bareRun) return; // the handrail on its two posts only (railingPostEdits.js `bare`)
     if (glass) {
-      const result = panesForRun(run, { config, sectionId: id, runIndex: j, startClearMm: halfOf(spots[j]), endClearMm: halfOf(spots[j + 1]), railBottomAt: () => railTop - handrailHeight, groundAt: () => z });
+      const result = panesForRun(run, { config, sectionId: id, runIndex: j, startClearMm: halfOf(spots[j]), endClearMm: halfOf(spots[j + 1]), railBottomAt: () => railTop - handrailHeight, groundAt });
       base.glassPanes.push(...result.panes);
       for (const message of result.diagnostics) base.diagnostics.push(diag(id, 'RAILING-GLASS-PANE-LOW', `Balustrada ${id}: ${message}`));
     } else {
-      // balusters spread evenly along the run, standing on the floor
+      // balusters spread evenly along the run, standing on the floor (or on the trim)
       const cumulative = cumulativeLengths(runPath);
       const total = cumulative[cumulative.length - 1];
       const startHalf = fit.startFitted ? 0 : halfOf(spots[j]);
@@ -1592,7 +1605,7 @@ function buildOpeningSection(id, path, ctx, closed) {
       const gap = (usable - count * balusterSize) / (count + 1);
       for (let b = 0; b < count; b++) {
         const p = pointAt(runPath, cumulative, startHalf + gap * (b + 1) + balusterSize * b + balusterSize / 2);
-        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: z, zTop: railTop - handrailHeight });
+        balusters.push({ treadIndex: null, position: { x: p.x, y: p.y }, zBottom: groundAt(p), zTop: railTop - handrailHeight });
       }
     }
   });
@@ -1659,7 +1672,7 @@ export function buildOpeningRailing(ctx) {
  * @param {Object[]} [models.postModels]  the posts that exist (postSolver.js buildPostModels)
  * @param {Object} config  full config incl. `riserHeight`
  */
-export function buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels, openingOutline = null, wallSegments = [] }, config) {
+export function buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels, openingOutline = null, wallSegments = [], openingTrim = null }, config) {
   const empty = { enabled: false, sections: [], posts: [], diagnostics: [], openingEdges: [] };
   if (!config.railingEnabled && !config.railingOpeningEnabled) return empty;
   const ctx = { config, planLayout, treadModels, stringerModels, stringerConstruction, postModels, riserHeight: config.riserHeight };
@@ -1667,7 +1680,7 @@ export function buildRailingModel({ planLayout, treadModels, stringerModels, str
   // the balustrade round the ceiling opening on the upper floor (buildOpeningRailing above)
   // (it ends on the stair's own posts where they stand: the structural ones and the stair balustrade's)
   const stairPosts = [...(postModels || []), ...stairSections.flatMap((sec) => sec.posts.filter((p) => !p.removed))];
-  const opening = buildOpeningRailing({ config, planLayout, openingOutline, wallSegments, stairPosts });
+  const opening = buildOpeningRailing({ config, planLayout, openingOutline, wallSegments, stairPosts, openingTrim });
   const sections = [...stairSections, ...opening.sections];
   const postTopNeeds = {};
   for (const s of sections) for (const [postId, need] of Object.entries(s.postTopNeeds || {})) postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);

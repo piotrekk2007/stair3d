@@ -855,3 +855,63 @@ export function buildMetalDXF(metalStructure) {
   }
   return wrapDxf(entities);
 }
+
+// --- the ceiling opening's trim ("fajka", geometry/openingTrimModel.js) ---------------------------------------------
+
+const TRIM_ROW_GAP_MM = 200;
+const TRIM_SECTION_GAP_MM = 250;
+
+/**
+ * The opening's trim on one 1:1 sheet: per piece its PLAN (u along its edge, v away from the slab — the nose on top;
+ * the nose and the board as drawn, with their mitred / square ends) and next to it its SECTION (n across, z up, the
+ * floor at 0), with the sizes and the end cuts listed. `null` when there is no trim.
+ */
+export function buildOpeningTrimDXF(trim) {
+  if (!trim?.enabled || !trim.pieces?.length) return null;
+  const d = trim.dims;
+  const entities = [];
+  let cursor = 0;
+  const text = (lines) => {
+    lines.forEach((line, i) => entities.push(textEntity(line, { u: 0, v: cursor - (i + 1) * TITLE_LINE_HEIGHT_MM }, TITLE_TEXT_HEIGHT_MM, 'TEXT')));
+    cursor -= lines.length * TITLE_LINE_HEIGHT_MM + TITLE_MARGIN_MM;
+  };
+  text([
+    'Obrobka otworu w stropie (fajka) - skala 1:1, wszystkie wymiary w mm',
+    `Profil: nosek ${d.noseWidth} x ${d.noseHeight} mm (wystaje w otwor), deska ${d.boardThickness} mm na ${d.boardDepth} mm w glab stropu; spod deski na stropie`,
+  ]);
+  for (const p of trim.pieces) {
+    const len = Math.hypot(p.b.x - p.a.x, p.b.y - p.a.y) || 1;
+    const dir = { x: (p.b.x - p.a.x) / len, y: (p.b.y - p.a.y) / len };
+    // plan → (u along the edge from a, v = −n: the nose (n < 0, in the opening) on top)
+    const local = (q) => ({ u: (q.x - p.a.x) * dir.x + (q.y - p.a.y) * dir.y, v: -((q.x - p.a.x) * p.outward.x + (q.y - p.a.y) * p.outward.y) });
+    const solids = p.solids.map((s) => ({ kind: s.kind, pts: s.outline.map(local) }));
+    const all = solids.flatMap((s) => s.pts);
+    const uMin = Math.min(...all.map((q) => q.u));
+    const vMax = Math.max(...all.map((q) => q.v));
+    const vMin = Math.min(...all.map((q) => q.v));
+    // the end cut at each end: its angle from square (the outline's corners at that end, front and back line)
+    const cutDeg = (s, k0, k1) => deg(Math.atan2(Math.abs(s.pts[k1].u - s.pts[k0].u), Math.abs(s.pts[k1].v - s.pts[k0].v)));
+    const outer = solids.find((s) => s.kind === 'board') || solids[0];
+    const a = Math.min(90, cutDeg(outer, 0, 3));
+    const b = Math.min(90, cutDeg(outer, 1, 2));
+    const longest = Math.max(...solids.flatMap((s) => [Math.hypot(s.pts[1].u - s.pts[0].u, s.pts[1].v - s.pts[0].v), Math.hypot(s.pts[2].u - s.pts[3].u, s.pts[2].v - s.pts[3].v)]));
+    text([`${p.id} (krawedz otworu ${p.edge + 1}): dl. ${Math.round(longest)} mm, szer. ${Math.round(p.widthMm)} mm; ciecie na koncach: ${a < 0.5 ? 'proste' : `${a.toFixed(1)} st.`} / ${b < 0.5 ? 'proste' : `${b.toFixed(1)} st.`}`]);
+    const at = (q) => ({ u: q.u - uMin, v: q.v - vMax + cursor });
+    for (const s of solids) entities.push(...polygonEntities(s.pts.map(at), s.kind === 'nose' ? 'NOTCH' : 'OUTLINE'));
+    // the section, to the right of the plan: n across (the nose left), z up from the floor
+    const u0 = Math.max(...all.map((q) => q.u)) - uMin + TRIM_SECTION_GAP_MM;
+    const top = cursor;
+    const sec = [
+      { u: 0, v: 0 },
+      { u: d.noseWidth + d.boardDepth, v: 0 },
+      { u: d.noseWidth + d.boardDepth, v: -d.boardThickness },
+      { u: d.noseWidth, v: -d.boardThickness },
+      { u: d.noseWidth, v: -d.noseHeight },
+      { u: 0, v: -d.noseHeight },
+    ].map((q) => ({ u: q.u + u0, v: q.v + top }));
+    entities.push(...polygonEntities(sec, 'OUTLINE'));
+    entities.push(textEntity('przekroj', { u: u0, v: top + 10 }, 12, 'TEXT'));
+    cursor -= Math.max(vMax - vMin, d.noseHeight) + TRIM_ROW_GAP_MM;
+  }
+  return wrapDxf(entities);
+}

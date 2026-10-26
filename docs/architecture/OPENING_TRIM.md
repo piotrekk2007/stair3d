@@ -40,5 +40,9 @@ part, a, b, outward, lengthMm, widthMm, solids: [{kind: 'nose'|'board', outline 
   STOCK = one board of the nose's height, the piece's longest side × (nose width + board depth); priced from the board
   price list like a tread (`boardPricing.js boardBlankOf`), category „Obróbka otworu (fajka)”.
 - Gate: its diagnostics.
-
-Not done: DXF of the trim, the gallery balustrade standing ON the trim (it stands on the floor as before).
+- DXF (`dxfExport.js buildOpeningTrimDXF`, Kosztorys → „Fajka (DXF 1:1)”): one 1:1 sheet, per piece its plan (u along
+  the edge, the nose on top, nose = layer NOTCH, board = OUTLINE) with the length, width and the end cuts (square /
+  mitre angle), and its section (the L-profile).
+- The opening's BALUSTRADE stands on the trim (user request 2026-10-26, `railingSolver.js openingGroundAt`): where a
+  post / baluster / glass pane is over a trim solid its bottom is the trim's top, else the floor; the handrail's height
+  is measured from the highest ground along the section.

@@ -1364,6 +1364,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportPostsDXF: () => exporter.allPostsDXF(),
   onExportRailingDXF: () => exporter.railingDXF(),
   onExportMetalDXF: () => exporter.metalDXF(),
+  onExportTrimDXF: () => exporter.trimDXF(),
   onExportTreadsDXF: () => exporter.allTreadsDXF(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia

@@ -146,7 +146,7 @@ export function buildStaircase(inputConfig) {
 
   // Balustrade: depends on the treads/wangi/posts above, changes none of them (RULES.md #6). Its end
   // posts are ordinary posts from here on (rendered, priced, exported, editable in the Inspektor).
-  const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [] }, fullConfig);
+  const solvedRailing = buildRailingModel({ planLayout, treadModels, stringerModels, stringerConstruction, postModels: structuralPostModels, openingOutline: ceilingFit.openingOutline, wallSegments: walls?.pieces || [], openingTrim }, fullConfig);
   // Legal/reference checks on the solved balustrade (validator/railingChecks.js) join its own findings, which
   // reach the Walidacja tab and the takeoff gate like the stringer construction diagnostics do.
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };

@@ -175,7 +175,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   (`openingTrimNoseWidthMm` into the opening × `openingTrimNoseHeightMm`, default the tread thickness) + a board LYING
   ON the slab (`…BoardThicknessMm` × `…BoardDepthMm`, top one board above the slab), mitred at corners; a wall does
   not cut it (an edge along a wall: off by default, on = its whole length) → `built.openingTrim`, 3D
-  (`openingTrimRenderer.js`), plan, takeoff `OPENING_TRIM` (board price list), gate. No DXF yet.
+  (`openingTrimRenderer.js`), plan, takeoff `OPENING_TRIM` (board price list), gate, DXF (`buildOpeningTrimDXF`,
+  „Fajka (DXF 1:1)”); the opening's balustrade stands ON it (`railingSolver.js openingGroundAt`).
 
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and

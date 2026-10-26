@@ -133,7 +133,7 @@ function summaryHTML(summary, takeoff, settings) {
     </div>`;
 }
 
-export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF, onExportTreadsDXF, onExportRailingDXF, onExportMetalDXF }) {
+export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF, onExportTreadsDXF, onExportRailingDXF, onExportMetalDXF, onExportTrimDXF }) {
   const panel = document.createElement('div');
   panel.id = 'takeoff-panel';
   panel.innerHTML = `
@@ -150,6 +150,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
       <button type="button" data-action="posts-dxf" title="Wszystkie słupy tej klatki na jednym arkuszu DXF, w skali 1:1">Słupy (DXF 1:1)</button>
       <button type="button" data-action="treads-dxf" title="Wszystkie stopnie tej klatki na jednym arkuszu DXF, w skali 1:1">Stopnie (DXF 1:1)</button>
       <button type="button" data-action="railing-dxf" title="Poręcz (elementy z długościami i kątami cięcia) i lista cięcia tralek na jednym arkuszu DXF, w skali 1:1">Balustrada (DXF 1:1)</button>
+      <button type="button" data-action="trim-dxf" title="Obróbka otworu w stropie (fajka): każdy kawałek w rzucie z cięciami na końcach + przekrój, w skali 1:1">Fajka (DXF 1:1)</button>
       <button type="button" data-action="metal-dxf" title="Konstrukcja metalowa: płaskowniki w zęby (kontur do wycięcia) albo belki z podporami stopni, w skali 1:1">Stal (DXF 1:1)</button>
     </div>
     <div id="takeoff-manual"></div>
@@ -167,6 +168,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
   panel.querySelector('[data-action="treads-dxf"]').addEventListener('click', () => onExportTreadsDXF());
   panel.querySelector('[data-action="railing-dxf"]').addEventListener('click', () => onExportRailingDXF?.());
   panel.querySelector('[data-action="metal-dxf"]').addEventListener('click', () => onExportMetalDXF?.());
+  panel.querySelector('[data-action="trim-dxf"]').addEventListener('click', () => onExportTrimDXF?.());
   panel.querySelector('#takeoff-body').addEventListener('click', (e) => {
     const el = e.target.closest('[data-item-index]');
     if (!el) return;

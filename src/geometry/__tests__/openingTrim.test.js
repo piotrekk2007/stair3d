@@ -87,3 +87,25 @@ test('regression (user, 2026-10-26): an opening edge along a stairwell wall is o
   assert.equal(pieces.length, 1);
   assert.ok(Math.abs(Math.hypot(pieces[0].b.x - pieces[0].a.x, pieces[0].b.y - pieces[0].a.y) - Math.hypot(wallEdge.b.x - wallEdge.a.x, wallEdge.b.y - wallEdge.a.y)) < 0.5, 'the whole edge');
 });
+
+test('regression (user, 2026-10-26): the opening balustrade stands ON the trim — posts and balusters on its top, the handrail measured from there; without the trim on the floor as before', () => {
+  const on = stair({ railingOpeningEnabled: true, railingOpeningHeightMm: 1000 });
+  const sec = on.railingModel.sections.find((s) => s.kind === 'opening');
+  assert.ok(sec && sec.balusters.length > 0);
+  assert.ok(sec.balusters.every((b) => b.zBottom === 2615), 'on the trim (2600 + 15)');
+  assert.ok(sec.posts.every((p) => p.elevation.bottom === 2615));
+  assert.equal(sec.handrail.pieces[0].start.z, 2615 + 1000 - on.fullConfig.railingHandrailHeightMm / 2);
+  const off = stair({ railingOpeningEnabled: true, railingOpeningHeightMm: 1000, openingTrimEnabled: false });
+  assert.ok(off.railingModel.sections.find((s) => s.kind === 'opening').balusters.every((b) => b.zBottom === 2600));
+});
+
+test('the trim DXF: one sheet, every piece in plan with its end cuts and the profile', async () => {
+  const { buildOpeningTrimDXF } = await import('../../export/dxfExport.js');
+  const b = stair();
+  const dxf = buildOpeningTrimDXF(b.openingTrim);
+  assert.ok(dxf.startsWith('0\nSECTION') || dxf.includes('ENTITIES'));
+  for (const p of b.openingTrim.pieces) assert.ok(dxf.includes(p.id), p.id);
+  assert.ok(/ciecie na koncach: 45\.0 st\./.test(dxf), 'a mitred end');
+  assert.ok(dxf.includes('przekroj'));
+  assert.equal(buildOpeningTrimDXF(stair({ openingTrimEnabled: false }).openingTrim), null);
+});

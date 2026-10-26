@@ -4,7 +4,7 @@
 // the files.
 
 import { treadJointsByStep } from '../geometry/jointSolver.js';
-import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF, buildMetalDXF } from '../export/dxfExport.js';
+import { buildPostDXF, buildAllPostsDXF, buildTreadDXF, buildAllTreadsDXF, buildRailingDXF, buildMetalDXF, buildOpeningTrimDXF } from '../export/dxfExport.js';
 import { exportStaircaseToOBJ } from '../export/objExporter.js';
 import { exportStaircaseToDAE } from '../export/daeExporter.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
@@ -71,6 +71,12 @@ export function createExports(opts) {
       const text = buildMetalDXF(opts.getModels()?.metalStructure);
       if (text) dxf(text, 'konstrukcja_stalowa');
       else window.alert('Brak konstrukcji stalowej do narysowania — wybierz konstrukcję metalową (wanga na profilu albo płaskowniki).');
+    },
+    // The ceiling opening's trim ("fajka"): every piece's plan with its end cuts + the profile, on one 1:1 sheet.
+    trimDXF() {
+      const text = buildOpeningTrimDXF(opts.getModels()?.openingTrim);
+      if (text) dxf(text, 'fajka_otworu');
+      else window.alert('Brak obróbki otworu do narysowania — włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.');
     },
     takeoff(kind) {
       const takeoff = opts.getTakeoff();
