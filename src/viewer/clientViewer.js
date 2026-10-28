@@ -10,9 +10,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { snapHitPoint, measureValues, measureText } from './measure3d.js';
 
-const SNAP_PX = 14; // a click this close (on screen) to a corner / an edge of the face hit snaps onto it
-const M_TO_MM = 1000;
+const M_TO_MM = 1000; // the file is in metres
 
 const css = `
   html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #eef1f4; color: #1f2d3a; }
@@ -168,31 +168,9 @@ function start() {
     });
     const hit = raycaster.intersectObjects(targets, false)[0];
     if (!hit) return null;
-    const p = hit.point.clone();
-    if (!hit.face) return p;
-    const pos = hit.object.geometry.getAttribute('position');
-    const corners = [hit.face.a, hit.face.b, hit.face.c].map((i) => new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(hit.object.matrixWorld));
-    const click = { x: ev.clientX, y: ev.clientY };
-    const px = (q) => {
-      const s = toScreen(q);
-      return Math.hypot(s.x - click.x, s.y - click.y);
-    };
-    let best = null;
-    for (const c of corners) if (px(c) <= SNAP_PX && (!best || px(c) < best.d)) best = { p: c, d: px(c) };
-    if (best) return best.p;
-    for (let k = 0; k < 3; k++) {
-      const line = new THREE.Line3(corners[k], corners[(k + 1) % 3]);
-      const q = line.closestPointToPoint(p, true, new THREE.Vector3());
-      if (px(q) <= SNAP_PX * 0.6 && (!best || px(q) < best.d)) best = { p: q, d: px(q) };
-    }
-    return best ? best.p : p;
+    return snapHitPoint(hit, { x: ev.clientX, y: ev.clientY }, toScreen);
   }
-  function describe(a, b) {
-    const d = a.distanceTo(b) * M_TO_MM;
-    const dh = Math.abs(b.y - a.y) * M_TO_MM;
-    const dxy = Math.hypot(b.x - a.x, b.z - a.z) * M_TO_MM;
-    return `${Math.round(d)} mm  ·  wys. ${Math.round(dh)}  ·  poziomo ${Math.round(dxy)}`;
-  }
+  const describe = (a, b) => measureText(measureValues(a, b, M_TO_MM));
   let down = null;
   renderer.domElement.addEventListener('pointerdown', (ev) => {
     down = { x: ev.clientX, y: ev.clientY };

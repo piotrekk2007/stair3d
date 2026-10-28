@@ -15,6 +15,7 @@ import { boardPlanFootprint } from '../geometry/stringerModel.js';
 import { boundaryEditPoints } from './edgeEdit.js';
 import { starterHandles } from '../geometry/starterSteps.js';
 import { sideShort } from '../util/sideNames.js';
+import { planMeasureText } from './planMeasure.js';
 
 function fmt(n) {
   return Math.round(n * 100) / 100;
@@ -237,6 +238,25 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
 // The stairwell (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls along the sides marked
 // so (thick grey, on the wall side of the outer line) and every side's length outside them — a FIXED side with its
 // dimension (green when met, red when off), a free one as it comes out. Drawing only (pointer-events none).
+// The plan's tape measure (planMeasure.js, mode "📏 Miarka"): every measure a red line with end ticks and its label
+// (length, Δx, Δy), the one being drawn as a rubber band to the cursor.
+export function measuresXML(measures = [], draft = null) {
+  const color = '#c0392b';
+  const one = (a, b, dashed = false) => {
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 0.5) return `<circle cx="${fmt(a.x)}" cy="${fmt(-a.y)}" r="${px(4)}" fill="${color}" ${HAIR}/>`;
+    const n = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len };
+    const tick = (p) => `<line x1="${fmt(p.x - n.x * px(6))}" y1="${fmt(-(p.y - n.y * px(6)))}" x2="${fmt(p.x + n.x * px(6))}" y2="${fmt(-(p.y + n.y * px(6)))}" stroke="${color}" stroke-width="1.5" ${HAIR}/>`;
+    const m = { x: (a.x + b.x) / 2 + n.x * px(12), y: (a.y + b.y) / 2 + n.y * px(12) };
+    const angle = (-Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+    return `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1.5" ${dashed ? 'stroke-dasharray="6 4"' : ''} ${HAIR}/>${tick(a)}${tick(b)}<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(12)}" font-weight="600" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${planMeasureText(a, b)}</text>`;
+  };
+  let xml = measures.map((m) => one(m.a, m.b)).join('');
+  if (draft?.a) xml += draft.cursor ? one(draft.a, draft.cursor, true) : one(draft.a, draft.a);
+  return xml ? `<g class="plan-measures" pointer-events="none">${xml}</g>` : '';
+}
+
 // The ceiling opening's trim ("fajka", openingTrimModel.js): every solid's plan outline (the nose darker) and the
 // balustrade's holes through it; in the plan mode "▬ Fajka" every opening edge is clickable (green = with trim, grey
 // dashed = without) and the stretch at the stair's exit on its own (orange = with trim).
@@ -549,7 +569,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -712,6 +732,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
   const wallEditXMLStr = wallEdit ? wallEditXML(stairwell, config) : '';
   const openingTrimXMLStr = openingTrimXML(openingTrim, trimEdit);
+  const measuresXMLStr = measuresXML(measures, measureDraft);
 
   // a new project not generated yet (config.stairPending): only the stairwell's walls and the ceiling opening
   if (config.stairPending) {
@@ -722,6 +743,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${openingXMLStr}
     ${openingTrimXMLStr}
     ${wallEditXMLStr}
+    ${measuresXMLStr}
   </svg>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}" width="100%" height="100%">
@@ -749,7 +771,8 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${railingPostEditXMLStr}
     ${openingTrimXMLStr}
     ${wallEditXMLStr}
-    ${openingEdit || railingPostEdit || wallEdit || trimEdit || clientView ? '' : starterHandlesXML(planLayout, selection)}
+    ${measuresXMLStr}
+    ${openingEdit || railingPostEdit || wallEdit || trimEdit || measureDraft !== null || clientView ? '' : starterHandlesXML(planLayout, selection)}
   </svg>`;
 }
 

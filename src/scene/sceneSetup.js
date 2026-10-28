@@ -158,9 +158,12 @@ export function createScene(container) {
   window.addEventListener('resize', onResize);
   new ResizeObserver(onResize).observe(container);
 
+  // per-frame hooks (the tape measure keeps its dots a few px big while zooming)
+  const frameHooks = [];
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
+    for (const hook of frameHooks) hook();
     renderer.render(scene, activeCamera);
     labelRenderer.render(scene, activeCamera);
   }
@@ -199,6 +202,7 @@ export function createScene(container) {
 
   return {
     scene,
+    addFrameHook: (fn) => frameHooks.push(fn),
     camera: perspectiveCamera,
     getCamera: () => activeCamera,
     getCameraMode: () => (activeCamera === orthoCamera ? 'orthographic' : 'perspective'),

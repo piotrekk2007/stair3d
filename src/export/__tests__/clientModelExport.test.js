@@ -46,9 +46,18 @@ test("the client's HTML: the data and the viewer in one file — the data cannot
   assert.ok(html.includes('console.log("viewer")'));
 });
 
-test("the client's viewer is a program of its own: it imports three.js only — never the designer's modules", () => {
-  const src = fs.readFileSync(new URL('../../viewer/clientViewer.js', import.meta.url), 'utf8');
-  const imports = [...src.matchAll(/^import .* from '([^']+)';/gm)].map((m) => m[1]);
-  assert.ok(imports.length > 0);
-  for (const i of imports) assert.ok(i === 'three' || i.startsWith('three/examples/'), i);
+test("the client's viewer is a program of its own: it imports three.js and its own folder only — never the designer's modules", () => {
+  const seen = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const src = fs.readFileSync(new URL(`../../viewer/${file}`, import.meta.url), 'utf8');
+    for (const [, i] of src.matchAll(/^import .* from '([^']+)';/gm)) {
+      if (i === 'three' || i.startsWith('three/examples/')) continue;
+      assert.ok(/^\.\/[\w-]+\.js$/.test(i), `${file}: ${i}`);
+      visit(i.slice(2));
+    }
+  };
+  visit('clientViewer.js');
+  assert.ok(seen.has('measure3d.js'));
 });

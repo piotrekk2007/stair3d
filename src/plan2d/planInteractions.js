@@ -164,6 +164,10 @@ function midpoint(a, b) {
  * @param {() => boolean} [opts.getTrimMode]  The opening trim mode ("▬ Fajka") is on.
  * @param {(edgeIndex:number) => void} [opts.onTrimEdgeToggle]  Click on an opening edge (`.trim-opening-edge`).
  * @param {() => void} [opts.onTrimExitToggle]  Click on the stair's exit stretch (`.trim-exit-edge`).
+ * @param {() => boolean} [opts.getMeasureMode]  The plan's tape measure ("📏 Miarka") is on.
+ * @param {(point, mmPerPx:number) => void} [opts.onMeasureClick]  A click: the first / the second point.
+ * @param {(point, mmPerPx:number) => void} [opts.onMeasureMove]  The cursor moves (the rubber band).
+ * @param {() => void} [opts.onMeasureClear]  Right-click in the mode: every measure removed.
  */
 export function attachPlanInteractions(opts) {
   const {
@@ -208,6 +212,10 @@ export function attachPlanInteractions(opts) {
     getTrimMode = () => false,
     onTrimEdgeToggle,
     onTrimExitToggle,
+    getMeasureMode = () => false,
+    onMeasureClick,
+    onMeasureMove,
+    onMeasureClear,
   } = opts;
 
   // Rysowanie otworu: kliknięte punkty + ostatnia pozycja kursora (po przyciąganiu). Żyje tylko w trakcie rysowania.
@@ -388,6 +396,13 @@ export function attachPlanInteractions(opts) {
       }
     }
 
+    // --- the tape measure ("📏 Miarka"): a click is a point (the plan still pans with the middle button / space)
+    if (getMeasureMode() && e.button === 0 && !spacePressed) {
+      const svg = getSvg();
+      if (svg) clickCandidate = { pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, hit: { kind: 'measure', raw: screenToPlanPoint(svg, e.clientX, e.clientY) } };
+      return;
+    }
+
     // --- the opening trim ("▬ Fajka"): click an opening edge = trim on / off
     if (getTrimMode() && e.button === 0 && !spacePressed) {
       if (e.target.closest('.trim-exit-edge')) {
@@ -550,6 +565,11 @@ export function attachPlanInteractions(opts) {
       const { width, height } = getPanelSize();
       setViewport(panBy(getViewport(), dx, dy, width, height));
       return;
+    }
+
+    if (getMeasureMode() && !panState && onMeasureMove) {
+      const svg = getSvg();
+      if (svg) onMeasureMove(screenToPlanPoint(svg, e.clientX, e.clientY), mmPerPx());
     }
 
     if (getOpeningMode() === 'draw' && !panState) {
@@ -725,7 +745,8 @@ export function attachPlanInteractions(opts) {
       if (moved < 4) {
         // treat as a click, not a drag
         const { hit } = clickCandidate;
-        if (hit.kind === 'trim-exit' && onTrimExitToggle) onTrimExitToggle();
+        if (hit.kind === 'measure' && onMeasureClick) onMeasureClick(hit.raw, mmPerPx());
+        else if (hit.kind === 'trim-exit' && onTrimExitToggle) onTrimExitToggle();
         else if (hit.kind === 'trim-edge' && onTrimEdgeToggle) onTrimEdgeToggle(hit.index);
         else if (hit.kind === 'wall-candidate' && onWallAdd) onWallAdd(hit.side, hit.line);
         else if (hit.kind === 'railing-path' && onRailingPostAdd) onRailingPostAdd(hit.sectionId, hit.raw, mmPerPx());
@@ -756,6 +777,11 @@ export function attachPlanInteractions(opts) {
       e.preventDefault();
       draft.points = draft.points.slice(0, -1);
       showDraft();
+      return;
+    }
+    if (getMeasureMode()) {
+      e.preventDefault();
+      onMeasureClear?.();
       return;
     }
     const wallEl = getWallMode() ? e.target.closest('.wall-piece, .wall-handle') : null;

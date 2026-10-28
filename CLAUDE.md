@@ -413,6 +413,10 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 
 ## 3D, presentation
 
+- **Tape measures** (user request 2026-10-28, docs [MEASURE_TOOLS.md](docs/architecture/MEASURE_TOOLS.md)): 3D
+  (`scene/measureTool.js`, viewport HUD „📏 Miarka”: two clicks snapped to a corner / edge of the face hit — the rule in
+  `viewer/measure3d.js`, shared with the client's viewer — distance, height, horizontal) and plan (`plan2d/planMeasure.js`,
+  plan mode „📏 Miarka”: snapped to the plan's points within 10 px, Δx / Δy); view tools only, never in config / project.
 - Traceability `userData` on every mesh (`scene/traceability.js`, `elementInspector.js`); debug overlay
   (`debugOverlay.js`); selection highlight; standard views + ortho (`sceneSetup.js`); HUD layers.
 - Presentation state (NOT config, not in undo): `scene/appearance.js` colours + finish per element (oak photo texture

@@ -40,7 +40,7 @@ const VIEWS = [
  * @param {() => void} [opts.onLogoRemove]
  * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onHeadroomChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onHeadroomChange, onBackgroundChange, onSnapshot, onLogoFile, onLogoRemove, onLogoSettings, onMeasureToggle, onMeasureClear }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -69,6 +69,13 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
           <option value="perspective">Perspektywa</option>
           <option value="orthographic">Ortogonalny</option>
         </select>
+      </div>
+    </div>
+    <div class="vh-group">
+      <div class="vh-title">Miarka</div>
+      <div class="vh-buttons">
+        <button type="button" data-measure title="Kliknij dwa punkty na modelu: odległość, różnica wysokości i odległość w poziomie (punkty przyciągają się do narożników i krawędzi)">📏 Miarka</button>
+        <button type="button" data-measure-clear title="Usuń wszystkie pomiary">Wyczyść</button>
       </div>
     </div>
     <div class="vh-group client-only">
@@ -109,6 +116,8 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
   hud.querySelector('[data-fit]').addEventListener('click', () => onStandardView('iso'));
   hud.querySelector('[data-camera-mode]').addEventListener('change', (e) => onCameraMode(e.target.value));
   hud.querySelector('[data-bg]').addEventListener('input', (e) => onBackgroundChange(e.target.value));
+  hud.querySelector('[data-measure]').addEventListener('click', () => onMeasureToggle?.());
+  hud.querySelector('[data-measure-clear]').addEventListener('click', () => onMeasureClear?.());
 
   const fileInput = hud.querySelector('[data-logo-file]');
   hud.querySelector('[data-snapshot]').addEventListener('click', () => onSnapshot && onSnapshot());
@@ -133,6 +142,9 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       hud.querySelector('[data-logo-corner]').value = settings.corner;
       hud.querySelector('[data-logo-size]').value = String(settings.sizePct);
       hud.querySelector('[data-logo-status]').textContent = message;
+    },
+    syncMeasure(on) {
+      hud.querySelector('[data-measure]').classList.toggle('active', on);
     },
     syncCeiling(visible) {
       hud.querySelector('[data-ceiling]').checked = visible;

@@ -469,6 +469,25 @@ html, body {
   transform: translate(-50%, -50%);
 }
 
+/* the 3D tape measure's button when on, and its label (scene/measureTool.js) */
+.vh-buttons button.active {
+  background: #1a5fb4;
+  border-color: #1a5fb4;
+  color: #fff;
+}
+
+.measure-label {
+  color: #c0392b;
+  background: #fff;
+  border: 1px solid #c0392b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .dim-label-red {
   color: #c01c1c;
 }
@@ -572,25 +591,31 @@ html, body {
 
 #plan2d-zoom-controls {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
 }
 
+/* every mode button as wide as its label (they were 30 px squares — the labels ran into each other); the zoom ones
+   square */
 #plan2d-zoom-controls button {
-  width: 30px;
+  min-width: 30px;
   height: 30px;
-  font-size: 15px;
+  padding: 0 9px;
+  font-size: 13px;
+  white-space: nowrap;
   cursor: pointer;
   border-radius: 6px;
   border: 1px solid #ccc;
   background: #fff;
 }
 
-#plan2d-zoom-controls button[data-action="edit"],
-#plan2d-zoom-controls button[data-action="opening-draw"],
-#plan2d-zoom-controls button[data-action="opening-edit"] {
-  width: auto;
-  padding: 0 10px;
-  font-size: 13px;
+#plan2d-zoom-controls button[data-action="zoom-in"],
+#plan2d-zoom-controls button[data-action="zoom-out"],
+#plan2d-zoom-controls button[data-action="fit"] {
+  width: 30px;
+  padding: 0;
+  font-size: 15px;
 }
 
 #plan2d-opening-hint {
@@ -607,6 +632,7 @@ html, body {
   display: none;
 }
 
+#plan2d-panel.measuring svg,
 #plan2d-panel.opening-drawing svg {
   cursor: crosshair;
 }
@@ -620,9 +646,7 @@ html, body {
   cursor: move;
 }
 
-#plan2d-zoom-controls button[data-action="opening-draw"].active,
-#plan2d-zoom-controls button[data-action="opening-edit"].active,
-#plan2d-zoom-controls button[data-action="edit"].active {
+#plan2d-zoom-controls button.active {
   background: #1a5fb4;
   border-color: #1a5fb4;
   color: #fff;

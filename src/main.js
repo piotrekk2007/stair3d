@@ -54,6 +54,8 @@ import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUnd
 import { sideShort } from './util/sideNames.js';
 import { lineHasWall, stairwellWallList } from './geometry/stairwell.js';
 import { applyWallEdit } from './geometry/stairwellWallEdits.js';
+import { createMeasureTool } from './scene/measureTool.js';
+import { snapMeasurePoint, planMeasureRefs } from './plan2d/planMeasure.js';
 
 // What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
 const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
@@ -161,6 +163,10 @@ let openingMode = 'off';
 let railingPostMode = false; // the plan's "▮ Słupki" mode: balustrade posts placed / moved / switched off by hand
 let wallMode = false; // the plan's "▥ Ściany" mode: the stairwell's walls added / stretched / removed by hand
 let trimMode = false; // the plan's "▬ Fajka" mode: the opening's trim switched on / off per edge
+// the plan's tape measure (plan2d/planMeasure.js) — view state only: the measures (plan mm) and the one being drawn
+let planMeasureMode = false;
+let planMeasures = [];
+let planMeasureDraft = null; // {a, cursor}
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
 let planApi = null; // {redrawDraft, resetDraft} z attachPlanInteractions
 
@@ -191,6 +197,9 @@ viewport.id = 'viewport';
 ws.mainEl.appendChild(viewport);
 
 const sceneApi = createScene(viewport);
+// the 3D tape measure (scene/measureTool.js): a view tool — on the stair, the slab and the stairwell's walls as shown
+const measureTool = createMeasureTool({ scene: sceneApi.scene, getCamera: () => sceneApi.getCamera(), domElement: sceneApi.renderer.domElement, getTargets: () => [currentRoot, currentCeiling, currentWalls] });
+sceneApi.addFrameHook(() => measureTool.update());
 const { scene, renderer } = sceneApi;
 
 // ---------------------------------------------------------------------------------------------
@@ -542,6 +551,12 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   onLogoFile: (file) => logo.loadFile(file),
   onLogoRemove: () => logo.remove(),
   onLogoSettings: (patch) => logo.update(patch),
+  onMeasureToggle: () => {
+    measureTool.setActive(!measureTool.active);
+    viewportHudApi.syncMeasure(measureTool.active);
+    ws.setStatus({ selection: measureTool.active ? 'Miarka: kliknij pierwszy punkt na modelu, potem drugi (przyciąga do narożników i krawędzi). Wyłącz przyciskiem „📏 Miarka”.' : '' });
+  },
+  onMeasureClear: () => measureTool.clear(),
 });
 // the wangi layers' names follow the stair type (an S: lewa / prawa)
 afterRebuild.push(() => viewportHudApi.syncSideNames(config));
@@ -735,6 +750,8 @@ function regeneratePlan2D() {
     wallEdit: wallMode,
     openingTrim: lastModels?.openingTrim ?? null,
     trimEdit: trimMode,
+    measures: planMeasures,
+    measureDraft: planMeasureMode ? planMeasureDraft : null,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -846,9 +863,35 @@ function wallDrag(wallId, end, raw, final, mmPerPx) {
   const value = best ?? Math.round(t / 10) * 10;
   applyWallChange({ action: 'set-span', id: wallId, end, t0: end === 'a' ? value : w.t0, t1: end === 'b' ? value : w.t1, sideLength: w.sideLength }, { final });
 }
+// --- the plan's tape measure (plan2d/planMeasure.js): two clicks, snapped to the plan's points within 10 px
+function planMeasurePoint(raw, mmPerPx) {
+  const refs = planMeasureRefs({ planLayout: currentPlanLayout, treadModels: lastModels?.treadModels, posts: lastModels?.allPostModels, openingOutline: lastModels?.ceilingFit?.openingOutline, walls: stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout)?.walls });
+  return snapMeasurePoint(raw, refs, 10 * (mmPerPx || 1));
+}
+function setPlanMeasureMode(on) {
+  planMeasureMode = !!on;
+  if (planMeasureMode) {
+    if (openingMode !== 'off') setOpeningMode('off');
+    if (railingPostMode) setRailingPostMode(false);
+    if (wallMode) setWallMode(false);
+    if (trimMode) setTrimMode(false);
+  }
+  planMeasureDraft = null;
+  plan2dHud.querySelector('[data-action="measure"]')?.classList.toggle('active', planMeasureMode);
+  plan2dPanel.classList.toggle('measuring', planMeasureMode);
+  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
+  if (hint) {
+    hint.hidden = !planMeasureMode;
+    if (planMeasureMode) hint.textContent = 'Miarka: kliknij pierwszy punkt, potem drugi (przyciąga do narożników stopni, linii wang, słupów, otworu i ścian w promieniu 10 px). Prawy klik — usuń wszystkie pomiary. Pomiary zostają do wyłączenia miarki.';
+  }
+  if (!planMeasureMode) planMeasures = [];
+  regeneratePlan2D();
+}
+
 // The opening's trim per edge (openingTrimModel.js): a click flips the edge against its automatic state
 function setTrimMode(on) {
   trimMode = on && !!config.openingTrimEnabled;
+  if (trimMode && planMeasureMode) setPlanMeasureMode(false);
   if (trimMode && openingMode !== 'off') setOpeningMode('off');
   if (trimMode && railingPostMode) setRailingPostMode(false);
   if (trimMode && wallMode) setWallMode(false);
@@ -873,6 +916,7 @@ function toggleTrimEdge(index) {
 }
 function setWallMode(on) {
   if (on && trimMode) setTrimMode(false);
+  if (on && planMeasureMode) setPlanMeasureMode(false);
   wallMode = on && !!config.stairwellRoomEnabled;
   if (wallMode && openingMode !== 'off') setOpeningMode('off');
   if (wallMode && railingPostMode) setRailingPostMode(false);
@@ -1396,8 +1440,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   pointerDownAt = { x: e.clientX, y: e.clientY };
 });
 renderer.domElement.addEventListener('click', (event) => {
-  if (!currentRoot || viewState.clientMode) return;
   if (pointerDownAt && Math.hypot(event.clientX - pointerDownAt.x, event.clientY - pointerDownAt.y) > 4) return;
+  // the tape measure takes the click while it is on (also in the presentation mode)
+  if (measureTool.click(event)) return;
+  if (!currentRoot || viewState.clientMode) return;
   const rect = renderer.domElement.getBoundingClientRect();
   pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1454,6 +1500,7 @@ plan2dHud.innerHTML = `
     <button type="button" data-action="opening-draw" title="Narysuj otwór w stropie jako wielokąt: klikaj narożniki na planie">✏ Rysuj otwór</button>
     <button type="button" data-action="opening-edit" title="Edytuj otwór w stropie: przeciągaj narożniki, boki i cały otwór">▭ Otwór</button>
     <button type="button" data-action="railing-posts" title="Słupki balustrady: dodawaj, przesuwaj, usuwaj; wyłączaj słupki narożne">▮ Słupki</button>
+    <button type="button" data-action="measure" title="Miarka: kliknij dwa punkty na planie — odległość i Δx / Δy (przyciąga do punktów schodów)">📏 Miarka</button>
     <button type="button" data-action="trim" title="Obróbka otworu w stropie (fajka): włączaj / wyłączaj na krawędziach otworu">▬ Fajka</button>
     <button type="button" data-action="walls" title="Ściany klatki: dodawaj przy każdym boku (po obu stronach biegu), skracaj / wydłużaj, usuwaj">▥ Ściany</button>
     <button type="button" data-action="zoom-out" title="Oddal">−</button>
@@ -1486,6 +1533,7 @@ plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click'
 plan2dHud.querySelector('[data-action="railing-posts"]').addEventListener('click', () => setRailingPostMode(!railingPostMode));
 plan2dHud.querySelector('[data-action="walls"]').addEventListener('click', () => setWallMode(!wallMode));
 plan2dHud.querySelector('[data-action="trim"]').addEventListener('click', () => setTrimMode(!trimMode));
+plan2dHud.querySelector('[data-action="measure"]').addEventListener('click', () => setPlanMeasureMode(!planMeasureMode));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1618,6 +1666,26 @@ planApi = attachPlanInteractions({
   getRailingPostMode: () => railingPostMode,
   getWallMode: () => wallMode,
   getTrimMode: () => trimMode,
+  getMeasureMode: () => planMeasureMode,
+  onMeasureClick: (raw, mmPerPx) => {
+    const p = planMeasurePoint(raw, mmPerPx);
+    if (!planMeasureDraft) planMeasureDraft = { a: p, cursor: null };
+    else {
+      planMeasures = [...planMeasures, { a: planMeasureDraft.a, b: p }];
+      planMeasureDraft = null;
+    }
+    regeneratePlan2D();
+  },
+  onMeasureMove: (raw, mmPerPx) => {
+    if (!planMeasureDraft) return;
+    planMeasureDraft = { ...planMeasureDraft, cursor: planMeasurePoint(raw, mmPerPx) };
+    regeneratePlan2D();
+  },
+  onMeasureClear: () => {
+    planMeasures = [];
+    planMeasureDraft = null;
+    regeneratePlan2D();
+  },
   onTrimEdgeToggle: (index) => toggleTrimEdge(index),
   onTrimExitToggle: () => {
     config.openingTrimExit = !(lastModels?.openingTrim?.exit?.enabled ?? config.openingTrimExit !== false);
