@@ -316,6 +316,17 @@ export function wallEditXML(drawing, config) {
   return `<g id="wall-edit-layer">${xml}</g>`;
 }
 
+// LED lighting (geometry/ledModel.js): every strip's centre line in plan — under a tread's nose, along a wanga's face,
+// under the handrail — a warm yellow line as wide as the profile (at least 3 px). Drawing only.
+export function ledXML(led) {
+  if (!led?.strips?.length) return '';
+  const w = Math.max(led.profile?.widthMm || 17, px(3));
+  const xml = led.strips
+    .map((s) => `<polyline class="led-strip" data-led="${s.kind}" points="${s.points.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ')}" fill="none" stroke="#f2b705" stroke-opacity="0.85" stroke-width="${fmt(w)}" stroke-linecap="butt"><title>LED ${s.kind === 'tread' ? 'pod noskiem' : s.kind === 'stringer' ? 'w wandze' : 'pod poręczą'}: ${Math.round(s.lengthMm)} mm</title></polyline>`)
+    .join('');
+  return `<g id="led-layer" pointer-events="none">${xml}</g>`;
+}
+
 // Free walls, doors and windows (geometry/walls.js): every free wall's masonry (its mitred quads, grey), each door /
 // window in any wall as a gap through it — a door with its leaf and swing on the stair's side, a window as a double
 // line. Drawing only.
@@ -622,7 +633,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -811,6 +822,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${runBoundariesXMLStr}
     ${postsXML}
     ${railingLayerXML}
+    ${layers.led === false ? '' : ledXML(led)}
     ${openingEdit ? '' : openingXMLStr}
     ${arrowXML}
     ${widthsXML}

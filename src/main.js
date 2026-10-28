@@ -105,6 +105,7 @@ const viewState = {
     stringerSpacing: false,
     ceilingOpening: true,
     stairwell: true,
+    led: true,
   },
 };
 const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: true };
@@ -765,6 +766,7 @@ function regeneratePlan2D() {
     openingTrim: lastModels?.openingTrim ?? null,
     trimEdit: trimMode,
     wallsModel: lastModels?.wallsModel ?? null,
+    led: lastModels?.led ?? null,
     measures: planMeasures,
     measureDraft: planMeasureMode ? planMeasureDraft : null,
   });

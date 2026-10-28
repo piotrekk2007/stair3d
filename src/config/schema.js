@@ -94,6 +94,20 @@ export function createDefaultConfig() {
     wallOpenings: [],
     doorClearDepthMm: 1000,
     freeWallThicknessMm: 120, // a new free wall's thickness (ASSUMPTION — a partition wall)
+    // LED lighting (geometry/ledModel.js, user decisions 2026-10-28): strips in a routed aluminium profile under the
+    // treads' noses, in the wangi (parallel to the top edge, on the face toward the stair) and under the handrail;
+    // profile 17 × 8 mm, sizes and power ASSUMPTION
+    ledTreadEnabled: false,
+    ledStringerEnabled: false,
+    ledStringerSide: 'both', // 'both' | 'outer' | 'inner'
+    ledHandrailEnabled: false,
+    ledProfileWidthMm: 17,
+    ledProfileDepthMm: 8,
+    ledTreadSetbackMm: 4, // the groove's edge behind the nosed front face
+    ledEndMarginMm: 30, // the strip short of each end
+    ledStringerFromTopMm: 25, // the groove's centre below the wanga's top edge
+    ledPowerWPerM: 9.6,
+    ledSupplyReservePct: 20,
     openingTrimEnabled: false,
     openingTrimEdges: {},
     openingTrimExit: true, // the trim at the stair's exit too (its nosing tread on the slab) — its own switch

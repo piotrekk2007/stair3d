@@ -32,6 +32,8 @@ import { buildStairwellWalls } from './stairwellWallsRenderer.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
 import { withFloorRise } from './floors.js';
+import { buildLedModel } from './ledModel.js';
+import { renderLed } from './ledRenderer.js';
 import { resolveFreeWalls, allWallSegments, resolveWallOpenings, stairParts, wallChecks } from './walls.js';
 
 // Wypukłość porów/słojów z tekstury dębu (bumpMap) — wartość dobrana na oko w widoku 3D, tylko wizualna.
@@ -53,6 +55,10 @@ const glassFixingMaterial = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, ro
 const steelMaterial = new THREE.MeshStandardMaterial({ color: 0x5f6368, roughness: 0.5, metalness: 0.8 });
 // metal stair (metalStructureModel.js): the beams with their supports / the toothed flat bars — painted steel
 const metalStructureMaterial = new THREE.MeshStandardMaterial({ color: 0x565b61, roughness: 0.6, metalness: 0.25 });
+// LED strips (ledModel.js): a warm-white glow, presentation only
+const ledMaterial = new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffc23a, emissiveIntensity: 2.2, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
+// its glow on the wood round the groove (a soft additive band — presentation only)
+const ledGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xffb43c, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -212,6 +218,11 @@ export function buildStaircase(rawConfig) {
   const trimGroup = renderOpeningTrim(openingTrim, treadMaterial);
   if (trimGroup) root.add(trimGroup);
 
+  // LED lighting (ledModel.js): strips under the treads' noses, in the wangi, under the handrail
+  const led = buildLedModel({ treadModels, stringerModels, stringerConstruction, railingModel }, fullConfig);
+  const ledGroup = renderLed(led, ledMaterial, ledGlowMaterial);
+  if (ledGroup) root.add(ledGroup);
+
   // Prezentacja: współrzędne tekstury z kierunkiem włókien (wzdłuż najdłuższej osi każdego elementu) + cienie.
   // Nie zmienia żadnego wierzchołka — tylko dokłada `uv` (scene/woodGrain.js).
   applyWoodGrainToTree(root);
@@ -236,5 +247,5 @@ export function buildStaircase(rawConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

@@ -25,6 +25,7 @@ import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog
 import { buildRailingItems } from './railingItems.js';
 import { buildConnectorItems } from './connectorItems.js';
 import { buildMetalItems } from './metalItems.js';
+import { buildLedItems } from './ledItems.js';
 
 const MM2_TO_M2 = 1 / 1_000_000;
 const MM3_TO_M3 = 1 / 1_000_000_000;
@@ -407,7 +408,7 @@ function buildOpeningTrimItems(trim, config, wasteFactors) {
   });
 }
 
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure, openingTrim }, config, options = {}) {
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure, openingTrim, led }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
     ...buildOpeningTrimItems(openingTrim, config, wasteFactors),
@@ -419,5 +420,6 @@ export function computeMaterialTakeoff({ treadModels, riserModels, stringerModel
     ...buildRailingItems(railingModel, config, wasteFactors),
     ...buildConnectorItems(joints, config, wasteFactors),
     ...buildMetalItems(metalStructure, config, wasteFactors),
+    ...buildLedItems(led),
   ];
 }

@@ -677,6 +677,20 @@ export function createUI({
 
   // Orientative structural check (tab "Konstrukcja", src/structural/) — the takeoff keeps using timberGrade.
   // Load defaults are the UK values (UK-GUID-I-01, user decision), labelled as such in the tab.
+  // LED lighting (geometry/ledModel.js; user decisions 2026-10-28): the three places, the profile's groove, the power
+  const led = gui.addFolder('10. Oświetlenie LED');
+  live(led.add(config, 'ledTreadEnabled')).name('LED pod noskiem stopni');
+  live(led.add(config, 'ledStringerEnabled')).name('LED w wandze (wzdłuż biegu)');
+  live(led.add(config, 'ledStringerSide', { 'obie wangi': 'both', 'wanga zewn.': 'outer', 'wanga wewn.': 'inner' })).name('LED w wandze: która');
+  live(led.add(config, 'ledHandrailEnabled')).name('LED pod poręczą');
+  live(led.add(config, 'ledProfileWidthMm', 6, 40, 1)).name('Profil / frez: szerokość [mm]');
+  live(led.add(config, 'ledProfileDepthMm', 2, 20, 1)).name('Profil / frez: głębokość [mm]');
+  live(led.add(config, 'ledTreadSetbackMm', 0, 40, 1)).name('Pod noskiem: od czoła noska [mm]');
+  live(led.add(config, 'ledStringerFromTopMm', 10, 200, 1)).name('W wandze: oś frezu od góry wangi [mm]');
+  live(led.add(config, 'ledEndMarginMm', 0, 200, 1)).name('Taśma krótsza na końcach o [mm]');
+  live(led.add(config, 'ledPowerWPerM', 1, 30, 0.1)).name('Moc taśmy [W/m]');
+  live(led.add(config, 'ledSupplyReservePct', 0, 100, 1)).name('Zapas mocy zasilacza [%]');
+
   const structural = gui.addFolder('Kontrola konstrukcji (orientacyjna)');
   const structuralClassOptions = Object.fromEntries(Object.entries(TIMBER_STRENGTH_CLASSES).map(([id, c]) => [c.label, id]));
   live(structural.add(config, 'structuralMaterialClass', structuralClassOptions)).name('Klasa drewna (EN 338)');
@@ -764,6 +778,7 @@ export function createUI({
     ['railing', 'Balustrada (poręcz, tralki, krańce)'],
     ['ceilingOpening', 'Otwór w stropie'],
     ['stairwell', 'Klatka (ściany, wymiary boków)'],
+    ['led', 'Oświetlenie LED'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));

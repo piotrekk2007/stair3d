@@ -161,6 +161,23 @@ function housingEntities(geometry, offsetU) {
   return out;
 }
 
+// The LED groove on the board's face toward the stair (geometry/ledModel.js): a band `widthMm` wide round its centre
+// line (u, v), layer LED, with its size.
+function ledBoardEntities(led, segmentId, offsetU) {
+  const strip = led?.strips?.find((s) => s.kind === 'stringer' && s.segmentId === segmentId);
+  if (!strip) return [];
+  const { widthMm: w, depthMm: d } = led.profile;
+  const path = strip.groove.path;
+  const side = (k) => path.map((p) => ({ u: p.u + offsetU, v: p.v + (k * w) / 2 }));
+  const top = side(1);
+  const bottom = side(-1);
+  const out = [];
+  for (const line of [top, bottom]) for (let i = 0; i < line.length - 1; i++) out.push(lineEntity(line[i], line[i + 1], 'LED'));
+  out.push(lineEntity(top[0], bottom[0], 'LED'), lineEntity(top[top.length - 1], bottom[bottom.length - 1], 'LED'));
+  out.push(textEntity(`frez LED ${w} x ${d} mm (od strony stopni)`, { u: top[0].u, v: top[0].v + 6 }, 10, 'LED'));
+  return out;
+}
+
 // Where the board enters a structural post's housing (ends.*.intoPost — jointSolver.js / stringerConstructionGeometry.js):
 // a line across the board at the post FACE (the part beyond it goes into the post) and its depth.
 function postJointEntities(geometry, offsetU) {
@@ -257,7 +274,7 @@ function titleEntities(lines, bounds) {
 function wrapDxf(entityLines) {
   const header = ['0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC'];
   const layer = (name, color) => ['0', 'LAYER', '2', name, '70', '0', '62', String(color), '6', 'CONTINUOUS'];
-  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '6', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('NOTCH', 6), ...layer('BEARINGS', 5), ...layer('JOINTS', 4), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
+  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '7', ...layer('OUTLINE', 7), ...layer('HOUSINGS', 1), ...layer('NOTCH', 6), ...layer('BEARINGS', 5), ...layer('JOINTS', 4), ...layer('TEXT', 3), ...layer('LED', 2), '0', 'ENDTAB', '0', 'ENDSEC'];
   const entities = ['0', 'SECTION', '2', 'ENTITIES', ...entityLines, '0', 'ENDSEC'];
   return [...header, ...tables, ...entities, '0', 'EOF'].join('\n');
 }
@@ -270,11 +287,11 @@ function wrapDxf(entityLines) {
  * `segment` (the matching StringerModel segment, for treadBearings) and `config` are optional —
  * without them the drawing is still correct, just without those extras.
  */
-export function buildStringerBoardDXF(geometry, { segment, config, holes } = {}) {
+export function buildStringerBoardDXF(geometry, { segment, config, holes, led = null } = {}) {
   const outline = buildBoardOutlineCurve(geometry);
   if (!outline) return null;
   const bounds = boundsOf(outline);
-  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...postJointEntities(geometry, 0), ...connectorHoleEntities(holes, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config, holes), bounds)];
+  const entities = [curveToEntities(outline, 'OUTLINE'), ...housingEntities(geometry, 0), ...ledBoardEntities(led, geometry.segmentId, 0), ...postJointEntities(geometry, 0), ...connectorHoleEntities(holes, 0), ...bearingEntities(segment, 0), ...titleEntities(titleLines(geometry, config, holes), bounds)];
   return wrapDxf(entities);
 }
 
@@ -283,7 +300,7 @@ export function buildStringerBoardDXF(geometry, { segment, config, holes } = {})
  * DXF — an overview sheet rather than a per-board file. `model` (the StringerModel for this side,
  * for treadBearings) and `config` are optional, same as above.
  */
-export function buildStringerAllBoardsDXF(geometries, { model, config, holesBySegment = {} } = {}) {
+export function buildStringerAllBoardsDXF(geometries, { model, config, holesBySegment = {}, led = null } = {}) {
   const entities = [];
   let cursor = 0;
   let any = false;
@@ -301,7 +318,7 @@ export function buildStringerAllBoardsDXF(geometries, { model, config, holesBySe
     });
     const segment = model?.segments?.find((s) => s.id === geometry.segmentId);
     const holes = holesBySegment?.[geometry.segmentId] || [];
-    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...postJointEntities(geometry, offsetU), ...connectorHoleEntities(holes, offsetU), ...bearingEntities(segment, offsetU));
+    entities.push(curveToEntities(shifted, 'OUTLINE'), ...housingEntities(geometry, offsetU), ...ledBoardEntities(led, geometry.segmentId, offsetU), ...postJointEntities(geometry, offsetU), ...connectorHoleEntities(holes, offsetU), ...bearingEntities(segment, offsetU));
     entities.push(...titleEntities(titleLines(geometry, config, holes), boundsOf(shifted)));
   }
   if (!any) return null;
@@ -521,6 +538,23 @@ function treadNotchEntities(tread, offsetU) {
   return out;
 }
 
+// The LED groove under the tread's nose (geometry/ledModel.js): its rectangle in plan (from below), layer LED.
+function treadLedEntities(tread, led, offsetU) {
+  const strip = led?.strips?.find((s) => s.kind === 'tread' && s.elementId === tread.stepId);
+  if (!strip) return [];
+  const { widthMm: w, depthMm: d } = led.profile;
+  const { a, b, forward: f } = strip.groove;
+  const toLocal = treadLocalFrame(tread);
+  const at = (p, k) => {
+    const l = toLocal({ x: p.x + (f.x * k * w) / 2, y: p.y + (f.y * k * w) / 2 });
+    return { u: l.u + offsetU, v: l.v };
+  };
+  const rect = [at(a, -1), at(b, -1), at(b, 1), at(a, 1)];
+  const out = polygonEntities(rect, 'LED');
+  out.push(textEntity(`frez LED od spodu ${w} x ${d} mm`, { u: Math.min(...rect.map((p) => p.u)), v: Math.max(...rect.map((p) => p.v)) + 8 }, 10, 'LED'));
+  return out;
+}
+
 function isValidTread(tread) {
   return !!tread && Array.isArray(tread.outline) && tread.outline.length >= 3;
 }
@@ -585,15 +619,15 @@ function treadTitleLines(tread, joint = null) {
  * One tread, full size, as a standalone DXF: its real (nosed) outline — cut around a structural post it passes through
  * (`joint`, stage 2 of the joints) — + a title block.
  */
-export function buildTreadDXF(tread, joint = null) {
+export function buildTreadDXF(tread, joint = null, { led = null } = {}) {
   if (!isValidTread(tread)) return null;
   const local = localTreadOutline(tread);
-  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadJointEntities(tread, joint, 0), ...cantileverEntities(tread, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
+  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadLedEntities(tread, led, 0), ...treadJointEntities(tread, joint, 0), ...cantileverEntities(tread, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
   return wrapDxf(entities);
 }
 
 /** Every tread the stair has, laid out side by side on one sheet, each in its own local frame. */
-export function buildAllTreadsDXF(treads, jointsByStep = {}) {
+export function buildAllTreadsDXF(treads, jointsByStep = {}, { led = null } = {}) {
   const valid = (treads || []).filter(isValidTread);
   if (valid.length === 0) return null;
   const entities = [];
@@ -605,7 +639,7 @@ export function buildAllTreadsDXF(treads, jointsByStep = {}) {
     cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
     const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
     const joint = jointsByStep[tread.stepId] || null;
-    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadJointEntities(tread, joint, offsetU), ...cantileverEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
+    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadLedEntities(tread, led, offsetU), ...treadJointEntities(tread, joint, offsetU), ...cantileverEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }
@@ -673,7 +707,7 @@ function railCutText(cut) {
  * @param {import('../geometry/railingSolver.js').RailingModel} railingModel
  * @param {{balusterSizeMm?:number}} [options]
  */
-export function buildRailingDXF(railingModel, { balusterSizeMm, config = null } = {}) {
+export function buildRailingDXF(railingModel, { balusterSizeMm, config = null, led = null } = {}) {
   // (zewn. / wewn. — an S: lewa / prawa, without diacritics in the DXF; util/sideNames.js)
   const RAIL_SIDE_LABELS = { outer: stripDiacritics(sideShort('outer', config)), inner: stripDiacritics(sideShort('inner', config)) };
   const sections = (railingModel?.sections || []).filter((s) => s.valid && s.handrail?.pieces?.length > 0);
@@ -693,6 +727,8 @@ export function buildRailingDXF(railingModel, { balusterSizeMm, config = null } 
     'Katy ciecia: pion - od ciecia prostopadlego do osi (widok z boku), rzut - polowa kata skretu na laczeniu',
     'Tralki: dol przy wandze wpuszczanej przyjety rownolegle do poreczy (przyblizenie)',
   ];
+  // the LED groove under the handrail (geometry/ledModel.js): the same on every piece
+  if (led?.strips?.some((s) => s.kind === 'handrail')) header.push(`Frez LED od spodu poreczy ${led.profile.widthMm} x ${led.profile.depthMm} mm, osiowo, na calej dlugosci kazdego elementu (bez ${Math.round(Number(config?.ledEndMarginMm ?? 30))} mm na koncach)`);
   row(0, header, () => {});
 
   for (const section of sections) {

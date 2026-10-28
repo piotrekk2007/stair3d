@@ -359,6 +359,16 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   `StringerOuter/Inner` layers), plan 2D footprints, the gate (`METAL-*`), takeoff (`metalItems.js`, `STEEL`,
   unpriced) and `buildMetalDXF`. All sizes DO WERYFIKACJI (`CO-MFG-J-METAL`); the steel is never checked.
 
+## LED lighting — `geometry/ledModel.js`
+
+Docs: [LED_LIGHTING.md](docs/architecture/LED_LIGHTING.md) (user decisions 2026-10-28). `ledTreadEnabled` (under the
+nose, on the underside along the final front edge, in front of the riser), `ledStringerEnabled` (+ side; on a housed
+board's stair-side face `ledStringerFromTopMm` under its top profile), `ledHandrailEnabled` (under every handrail
+piece); profile / groove `ledProfileWidthMm` × `ledProfileDepthMm` (17 × 8, ASSUMPTION) → `built.led` (strips, totals,
+power + supply, `LED-*` findings in the gate) → 3D layer `LedLighting` (`ledRenderer.js`: emissive band + glow), plan
+layer „Oświetlenie LED”, DXF layer `LED` (tread / board grooves, balustrade note), takeoff `LED` items (strip per place
+in mb with the cut list + power supply, unpriced). Folder „10. Oświetlenie LED”.
+
 ## Validation
 
 Docs: [CONSTRAINTS_AND_VALIDATION.md](docs/architecture/CONSTRAINTS_AND_VALIDATION.md).

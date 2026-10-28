@@ -89,19 +89,19 @@ export function createExports(opts) {
     treadDXF(stepId) {
       const m = opts.getModels();
       const tread = m?.treadModels?.find((t) => t.stepId === stepId);
-      const text = tread ? buildTreadDXF(tread, treadJointsByStep(m?.joints, m?.postModels)[tread.stepId] || null) : null;
+      const text = tread ? buildTreadDXF(tread, treadJointsByStep(m?.joints, m?.postModels)[tread.stepId] || null, { led: m?.led }) : null;
       if (text) dxf(text, stepId);
     },
     allTreadsDXF() {
       const m = opts.getModels();
-      const text = m?.treadModels ? buildAllTreadsDXF(m.treadModels, treadJointsByStep(m?.joints, m?.postModels)) : null;
+      const text = m?.treadModels ? buildAllTreadsDXF(m.treadModels, treadJointsByStep(m?.joints, m?.postModels), { led: m?.led }) : null;
       if (text) dxf(text, 'stopnie');
     },
     // The whole balustrade (handrail pieces with their cuts + the baluster cut list) on one 1:1 sheet. Nothing to draw
     // (no balustrade / no valid section) -> a message instead of an empty file.
     railingDXF() {
       const m = opts.getModels();
-      const text = m?.railingModel ? buildRailingDXF(m.railingModel, { balusterSizeMm: m.fullConfig.railingBalusterSizeMm, config: m.fullConfig }) : null;
+      const text = m?.railingModel ? buildRailingDXF(m.railingModel, { balusterSizeMm: m.fullConfig.railingBalusterSizeMm, config: m.fullConfig, led: m.led }) : null;
       if (text) dxf(text, 'balustrada');
       else window.alert('Brak balustrady do narysowania — włącz balustradę i dodaj odcinek.');
     },

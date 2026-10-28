@@ -19,6 +19,7 @@ const ELEMENT_LABEL_PL = {
   GLASS_FIXING: 'Mocowania szkła',
   OPENING_TRIM: 'Obróbka otworu (fajka)',
   STEEL: 'Konstrukcja stalowa (bez ceny)',
+  LED: 'Oświetlenie LED (bez ceny)',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -146,6 +147,8 @@ function categoryOf(item, winderStepIds) {
       return 'Mocowania szkła (z modelu)';
     case 'STEEL':
       return 'Konstrukcja stalowa (bez ceny)';
+    case 'LED':
+      return 'Oświetlenie LED (bez ceny)';
     default:
       return null; // wpusty — poza kosztorysem
   }
