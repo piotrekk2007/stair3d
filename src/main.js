@@ -59,9 +59,8 @@ import { createMeasureTool } from './scene/measureTool.js';
 import { snapMeasurePoint, planMeasureRefs } from './plan2d/planMeasure.js';
 import { floorDrivenFields } from './geometry/floors.js';
 import { buildPartList, partsForSelection } from './production/partCodes.js';
+import { NEW_PROJECT_START } from './config/newProject.js';
 
-// What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
-const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
 
 // ARCHITEKTURA (etap 10): main.js tylko ŁĄCZY moduły — UI zmienia model (config), woła rebuild(),
 // a wszystkie panele/widoki są renderowane z już-rozwiązanych modeli. Żaden panel ani interakcja

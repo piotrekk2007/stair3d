@@ -91,7 +91,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   A / B / C are measured along `stairwell.js stairwellMeasureLine` (`stairwellWallHand` left / right, default the line
   with most walls).
 - **New project = no stair yet** (user decision 2026-10-23): `config.stairPending` (start + „Nowy”, with the stairwell
-  on) — built but not shown (3D root hidden, the plan only stairwell + opening, no stair findings / takeoff) until
+  on) — built but not shown (3D root hidden, the plan only stairwell + opening, no stair findings / takeoff; the opening DERIVED
+  from the stair — `config/newProject.js NEW_PROJECT_START`, so the generated stair has no ceiling errors) until
   „▶ Generuj schody” (folder 1, `main.js generateStair`); live from then on.
 - **Winders are laid out from the walkline** (every project; user decision 2026-10-02): the walkline is a straight,
   a quarter arc of radius `walklineOffset` round the inner corner, a straight; the zone is `windersPerTurn` equal
@@ -470,7 +471,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 
 ## Open items / known limitations
 
-- Default L stair still has ceiling collisions and `STRINGER-MIN-SECTION` warnings (cleanup step 5: tune defaults).
+- The default L stair (a new project, generated) still has 4 `STRINGER-MIN-SECTION` warnings (no errors).
 - Winders: one dusza distribution (even); a ~10 mm dusza can flip the housed recess order on the wanga; in a U with a
   0-tread middle flight and a barely fitting arc the two corner posts may overlap.
 - Metal structure: sizes are placeholders, the steel is not checked, no fixings / welds / corner details.
