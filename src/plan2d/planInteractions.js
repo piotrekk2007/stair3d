@@ -157,6 +157,11 @@ function midpoint(a, b) {
  * @param {(dx:number, dy:number, final:boolean) => void} [opts.onOpeningTranslate]  Whole-opening drag, total delta.
  * @param {(points:{x,y}[]) => void} [opts.onOpeningDrawFinish]  Drawing closed (>= 3 points, plan coords).
  * @param {() => void} [opts.onOpeningDrawCancel]  Esc while drawing.
+ * @param {(points:{x,y}[], closed:boolean) => void} [opts.onWallDrawFinish]  A free wall drawn (mode 'draw-wall', >= 2
+ *   points, plan coords; closed = ended on its first point).
+ * @param {(wallId:string, index:number, point, final:boolean) => void} [opts.onFreeWallVertexMove]  A free wall's corner dragged.
+ * @param {(wallId:string, index:number) => void} [opts.onFreeWallVertexRemove]  Right-click on a free wall's corner.
+ * @param {(wallId:string) => void} [opts.onFreeWallRemove]  Right-click on a free wall.
  * @param {() => boolean} [opts.getWallMode]  The wall editor ("▭ Ściany") is on (main.js owns it).
  * @param {(side:string, line:string) => void} [opts.onWallAdd]  Click on a dashed side (`.wall-candidate`).
  * @param {(wallId:string, end:'a'|'b', point, final:boolean, mmPerPx:number) => void} [opts.onWallDrag]  A wall end dragged.
@@ -195,6 +200,10 @@ export function attachPlanInteractions(opts) {
     onOpeningTranslate,
     onOpeningDrawFinish,
     onOpeningDrawCancel,
+    onWallDrawFinish,
+    onFreeWallVertexMove,
+    onFreeWallVertexRemove,
+    onFreeWallRemove,
     onOpeningEdgeMove,
     getRailingPostMode = () => false,
     onRailingPostAdd,
@@ -241,15 +250,20 @@ export function attachPlanInteractions(opts) {
     showSnapGuides(svg, guideX, guideY);
   }
 
-  function finishDraw() {
+  // the draw mode draws the ceiling opening ('draw', a polygon) or a free wall ('draw-wall', a polyline — open, or
+  // closed when it ends on its first point)
+  const isDrawing = () => getOpeningMode() === 'draw' || getOpeningMode() === 'draw-wall';
+  function finishDraw(closed = false) {
     const pts = draft.points;
     draft = { points: [], cursor: null };
-    if (pts.length >= 3 && onOpeningDrawFinish) onOpeningDrawFinish(pts);
+    if (getOpeningMode() === 'draw-wall') {
+      if (pts.length >= 2 && onWallDrawFinish) onWallDrawFinish(pts, closed && pts.length >= 3);
+    } else if (pts.length >= 3 && onOpeningDrawFinish) onOpeningDrawFinish(pts);
   }
 
   // Wywoływane z main.js po każdym przerysowaniu planu, żeby szkic nie znikał (innerHTML nadpisuje <svg>).
   function redrawDraft() {
-    if (getOpeningMode() === 'draw') showDraft();
+    if (isDrawing()) showDraft();
   }
 
   function resetDraft() {
@@ -272,7 +286,7 @@ export function attachPlanInteractions(opts) {
   }
 
   window.addEventListener('keydown', (e) => {
-    if (getOpeningMode() === 'draw') {
+    if (isDrawing()) {
       const tag = e.target?.tagName;
       if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
         if (e.key === 'Escape') {
@@ -353,13 +367,13 @@ export function attachPlanInteractions(opts) {
 
     // --- otwór w stropie: rysowanie (klik = punkt) ---
     const openingMode = getOpeningMode();
-    if (openingMode === 'draw' && e.button === 0 && !spacePressed) {
+    if (isDrawing() && e.button === 0 && !spacePressed) {
       const svg = getSvg();
       if (!svg) return;
       const { point } = openingSnap(screenToPlanPoint(svg, e.clientX, e.clientY));
       const res = openingDrawClick(draft.points, point, CLOSE_PICK_PX * mmPerPx());
       draft.points = res.points;
-      if (res.closed) finishDraw();
+      if (res.closed) finishDraw(true);
       else showDraft();
       e.preventDefault();
       return;
@@ -419,6 +433,15 @@ export function attachPlanInteractions(opts) {
     // --- the wall editor ("▭ Ściany"): drag a wall's end, click a dashed side to add a wall
     if (getWallMode() && e.button === 0 && !spacePressed) {
       const svg = getSvg();
+      const vertexEl = e.target.closest('.free-wall-vertex');
+      if (svg && vertexEl && onFreeWallVertexMove) {
+        panelEl.setPointerCapture(e.pointerId);
+        const start = { x: Number(vertexEl.getAttribute('cx')), y: -Number(vertexEl.getAttribute('cy')) };
+        dragState = { pointerId: e.pointerId, kind: 'free-wall-vertex', wallId: vertexEl.dataset.wallId, index: Number(vertexEl.dataset.index), start, last: null };
+        e.preventDefault();
+        return;
+      }
+      if (e.target.closest('.free-wall-body')) return;
       const handleEl = e.target.closest('.wall-handle');
       if (svg && handleEl && onWallDrag) {
         panelEl.setPointerCapture(e.pointerId);
@@ -572,7 +595,7 @@ export function attachPlanInteractions(opts) {
       if (svg) onMeasureMove(screenToPlanPoint(svg, e.clientX, e.clientY), mmPerPx());
     }
 
-    if (getOpeningMode() === 'draw' && !panState) {
+    if (isDrawing() && !panState) {
       const svg = getSvg();
       if (svg) {
         const { point, guideX, guideY } = openingSnap(screenToPlanPoint(svg, e.clientX, e.clientY));
@@ -593,6 +616,14 @@ export function attachPlanInteractions(opts) {
       const { point, guideX, guideY } = openingSnap(raw, dragState.start);
       dragState.currentPoint = point;
       if (onOpeningVertexMove) onOpeningVertexMove(dragState.index, point, false);
+      showSnapGuides(liveSvg(), guideX, guideY);
+      return;
+    }
+
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'free-wall-vertex') {
+      const { point, guideX, guideY } = openingSnap(screenToPlanPoint(liveSvg(), e.clientX, e.clientY), dragState.start);
+      dragState.last = point;
+      onFreeWallVertexMove(dragState.wallId, dragState.index, point, false);
       showSnapGuides(liveSvg(), guideX, guideY);
       return;
     }
@@ -695,6 +726,13 @@ export function attachPlanInteractions(opts) {
       return;
     }
 
+    if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'free-wall-vertex') {
+      const { wallId, index, last } = dragState;
+      dragState = null;
+      if (last) onFreeWallVertexMove(wallId, index, last, true);
+      return;
+    }
+
     if (dragState && e.pointerId === dragState.pointerId && dragState.kind === 'wall-end') {
       const { wallId, end, last } = dragState;
       dragState = null;
@@ -765,14 +803,14 @@ export function attachPlanInteractions(opts) {
 
   // Dwuklik w trybie rysowania zamyka wielokąt (dwa kliknięcia w to samo miejsce dodały jeden punkt — duplikaty są pomijane).
   panelEl.addEventListener('dblclick', (e) => {
-    if (getOpeningMode() !== 'draw') return;
+    if (!isDrawing()) return;
     e.preventDefault();
     finishDraw();
   });
 
   panelEl.addEventListener('contextmenu', (e) => {
     const openingMode = getOpeningMode();
-    if (openingMode === 'draw') {
+    if (isDrawing()) {
       // prawy klik w trakcie rysowania: cofnij ostatni punkt
       e.preventDefault();
       draft.points = draft.points.slice(0, -1);
@@ -782,6 +820,18 @@ export function attachPlanInteractions(opts) {
     if (getMeasureMode()) {
       e.preventDefault();
       onMeasureClear?.();
+      return;
+    }
+    const freeVertex = getWallMode() ? e.target.closest('.free-wall-vertex') : null;
+    if (freeVertex) {
+      e.preventDefault();
+      onFreeWallVertexRemove?.(freeVertex.dataset.wallId, Number(freeVertex.dataset.index));
+      return;
+    }
+    const freeBody = getWallMode() ? e.target.closest('.free-wall-body') : null;
+    if (freeBody) {
+      e.preventDefault();
+      onFreeWallRemove?.(freeBody.dataset.wallId);
       return;
     }
     const wallEl = getWallMode() ? e.target.closest('.wall-piece, .wall-handle') : null;

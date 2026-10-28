@@ -188,6 +188,15 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   stands on the finished floor (z = 0); the upper raw slab's top `rawSlabTopZ` (the trim's board lies on it, its
   thickness by default the top finish), its soffit `slabSoffitZ` (ceiling fit, derived opening, headroom, walls); 3D
   slab + its top finish layer.
+- **Free walls, doors, windows** (`walls.js`, user decisions 2026-10-28, docs
+  [WALLS_OPENINGS.md](docs/architecture/WALLS_OPENINGS.md)): besides the stairwell's side walls, `config.freeWalls`
+  (polylines of the wall's FACE in the opening frame, `thicknessMm` on a `side`, open / closed) and `wallOpenings`
+  (door / window in ANY wall segment — `side:<piece>` / `free:<id>:<k>` — offset, width, height, sill) → `built.wallsModel`
+  (segments, openings, checks in the gate: ERROR `WALL-COLLISION` (tread / post in a free wall), at a door in the
+  `doorClearDepthMm` strip WARNING `DOOR-STEP-IN-FRONT` / ERROR `DOOR-HEADROOM`, WARNING `WALL-OPENING-INVALID`;
+  windows only shown); 3D = every wall segment with holes (`stairwellWallsRenderer.js`, in `wallsMesh`, also without a
+  stairwell); plan `freeWallsXML` (door leaf + swing, window double line), „✏ Rysuj ścianę” (draw mode `'draw-wall'`),
+  corners dragged in „▥ Ściany”; edits `applyFreeWallEdit`; lists in folder 3.
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
   tread tops like `deriveCeilingFit`, none at the exit) = translucent curtains, green ≥ `minHeadroom`, red below; the

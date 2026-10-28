@@ -316,6 +316,59 @@ export function wallEditXML(drawing, config) {
   return `<g id="wall-edit-layer">${xml}</g>`;
 }
 
+// Free walls, doors and windows (geometry/walls.js): every free wall's masonry (its mitred quads, grey), each door /
+// window in any wall as a gap through it — a door with its leaf and swing on the stair's side, a window as a double
+// line. Drawing only.
+export function freeWallsXML(wallsModel) {
+  if (!wallsModel) return '';
+  const wall = '#6b6b6b';
+  let xml = '';
+  for (const w of wallsModel.freeWalls || []) {
+    for (const s of w.segments) {
+      xml += `<polygon class="free-wall" points="${polygonPoints(s.quad)}" fill="#9a9a9a" fill-opacity="0.55" stroke="${wall}" stroke-width="1" ${HAIR}/>`;
+    }
+  }
+  for (const o of wallsModel.openings || []) {
+    if (!o.valid) continue;
+    const t = Math.max(o.segment.thickness || 0, px(7));
+    const out = (p, k) => ({ x: p.x + o.outward.x * k, y: p.y + o.outward.y * k });
+    const color = o.type === 'door' ? '#8a5a2b' : '#1a5fb4';
+    xml += `<polygon class="wall-opening" points="${polygonPoints([out(o.a, -px(1)), out(o.b, -px(1)), out(o.b, t + px(1)), out(o.a, t + px(1))])}" fill="#fff" stroke="${color}" stroke-width="1" ${HAIR} pointer-events="none"/>`;
+    const width = Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y);
+    if (o.type === 'door') {
+      // hinge at a, the leaf open 90° toward the stair (away from the masonry), its swing back to b
+      const leaf = { x: o.a.x - o.outward.x * width, y: o.a.y - o.outward.y * width };
+      const sweep = o.dir.x * -o.outward.y - o.dir.y * -o.outward.x > 0 ? 1 : 0;
+      xml += `<line x1="${fmt(o.a.x)}" y1="${fmt(-o.a.y)}" x2="${fmt(leaf.x)}" y2="${fmt(-leaf.y)}" stroke="${color}" stroke-width="2" ${HAIR}/>`;
+      xml += `<path d="M ${fmt(leaf.x)} ${fmt(-leaf.y)} A ${fmt(width)} ${fmt(width)} 0 0 ${sweep} ${fmt(o.b.x)} ${fmt(-o.b.y)}" fill="none" stroke="${color}" stroke-width="1" stroke-dasharray="4 3" ${HAIR}/>`;
+    } else {
+      for (const k of [t * 0.35, t * 0.65]) xml += `<line x1="${fmt(out(o.a, k).x)}" y1="${fmt(-out(o.a, k).y)}" x2="${fmt(out(o.b, k).x)}" y2="${fmt(-out(o.b, k).y)}" stroke="${color}" stroke-width="1.2" ${HAIR}/>`;
+    }
+    const m = { x: (o.a.x + o.b.x) / 2 + o.outward.x * (t + px(10)), y: (o.a.y + o.b.y) / 2 + o.outward.y * (t + px(10)) };
+    const angle = (-Math.atan2(o.dir.y, o.dir.x) * 180) / Math.PI;
+    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+    const label = o.type === 'door' ? `drzwi ${Math.round(o.widthMm)}×${Math.round(o.heightMm)}` : `okno ${Math.round(o.widthMm)}×${Math.round(o.heightMm)}, parapet ${Math.round(o.sillMm)}`;
+    xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(10)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${label}</text>`;
+  }
+  return xml ? `<g id="free-walls-layer" pointer-events="none">${xml}</g>` : '';
+}
+
+// The free walls' edit layer (on top of everything in the "▥ Ściany" mode): every wall's masonry as a right-click target
+// (= remove the wall), its segment lengths and a handle on every corner.
+export function freeWallEditXML(wallsModel) {
+  let xml = '';
+  for (const w of wallsModel?.freeWalls || []) {
+    for (const s of w.segments) {
+      xml += `<polygon class="free-wall-body" data-wall-id="${w.id}" points="${polygonPoints(s.quad)}" fill="#b36b00" fill-opacity="0.15" stroke="#b36b00" stroke-width="1" ${HAIR} pointer-events="all"><title>Ściana dowolna (${Math.round(s.thickness)} mm) — prawy klik usuwa całą ścianę</title></polygon>`;
+      xml += edgeLengthLabelXML(s.a, s.b, '#7a4a00');
+    }
+    w.planPoints.forEach((p, i) => {
+      xml += `<circle class="free-wall-vertex" data-wall-id="${w.id}" data-index="${i}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${px(6)}" fill="#fff" stroke="#b36b00" stroke-width="2" ${HAIR}><title>Przeciągnij narożnik ściany; prawy klik — usuń narożnik</title></circle>`;
+    });
+  }
+  return xml ? `<g id="free-wall-edit-layer">${xml}</g>` : '';
+}
+
 export function stairwellXML(drawing) {
   if (!drawing) return '';
   const wall = '#6b6b6b';
@@ -569,7 +622,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -725,12 +778,12 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const winderWidthXMLStr = layers.winderWidth ? winderWidthXML(planLayout, config) : '';
   const stringerSpacingXMLStr = layers.stringerSpacing ? stringerSpacingXML(planLayout, config) : '';
   const openingXMLStr = layers.ceilingOpening === false && !openingEdit ? '' : openingXML(opening, openingEdit);
-  const stairwellXMLStr = layers.stairwell === false ? '' : stairwellXML(stairwell);
+  const stairwellXMLStr = (layers.stairwell === false ? '' : stairwellXML(stairwell)) + freeWallsXML(wallsModel);
   const editXML = editMode ? editHandlesXML(planLayout, liveEdits, config, activeBoundary) : '';
   const overhangXML = editMode ? overhangHandlesXML(planLayout, config.manualTreadOverhangs, selectedStepIndex) : '';
 
   const railingPostEditXMLStr = railingPostEdit ? railingPostEditXML(railingModel, selection) : '';
-  const wallEditXMLStr = wallEdit ? wallEditXML(stairwell, config) : '';
+  const wallEditXMLStr = wallEdit ? wallEditXML(stairwell, config) + freeWallEditXML(wallsModel) : '';
   const openingTrimXMLStr = openingTrimXML(openingTrim, trimEdit);
   const measuresXMLStr = measuresXML(measures, measureDraft);
 

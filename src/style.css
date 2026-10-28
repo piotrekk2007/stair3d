@@ -1627,6 +1627,7 @@ code {
 .railing-section-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
 .railing-section-row input { width: 52px; }
 .railing-sections select, .railing-sections input, .railing-sections button { font: inherit; }
+.railing-sections button, .railing-sections select, .railing-sections input { color: #222; }
 
 /* ---- Zakładka "Konstrukcja" (ui/structuralPanel.js) ---- */
 #structural-panel {
@@ -1819,3 +1820,8 @@ code {
   margin-top: 3px;
   line-height: 1.35;
 }
+
+/* free walls, doors and windows (folder 3, ui.js renderFreeWalls): rows wrap in the narrow panel */
+.free-walls .railing-section-row { flex-wrap: wrap; }
+.free-walls .railing-section-row select { max-width: 100%; }
+.free-walls > button { display: block; margin-top: 4px; }

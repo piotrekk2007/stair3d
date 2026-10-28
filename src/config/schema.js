@@ -86,6 +86,14 @@ export function createDefaultConfig() {
     stairwellWallGapMm: 0,
     // The ceiling opening's wooden trim — "fajka" / nosek (user request 2026-10-26, openingTrimModel.js): along the
     // free edges (on / off per edge: openingTrimEdges, toggled on the plan); sizes ASSUMPTION (workshop practice)
+    // Free walls drawn on the plan and the doors / windows in any wall (geometry/walls.js, user decisions 2026-10-28):
+    // freeWalls [{id, points (opening frame), closed, thicknessMm, side 'left'|'right'}], wallOpenings [{id, type
+    // 'door'|'window', segmentId 'side:<id>'|'free:<id>:<k>', offsetMm, widthMm, heightMm, sillMm}]; the free floor
+    // checked before a door (ASSUMPTION)
+    freeWalls: [],
+    wallOpenings: [],
+    doorClearDepthMm: 1000,
+    freeWallThicknessMm: 120, // a new free wall's thickness (ASSUMPTION — a partition wall)
     openingTrimEnabled: false,
     openingTrimEdges: {},
     openingTrimExit: true, // the trim at the stair's exit too (its nosing tread on the slab) — its own switch

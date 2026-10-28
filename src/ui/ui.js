@@ -81,6 +81,11 @@ export function createUI({
   getWalls,
   onWallEdit,
   onWallMode,
+  getFreeWalls,
+  getWallSegments,
+  getWallOpenings,
+  onFreeWallEdit,
+  onStartWallDraw,
   onGenerateStair,
   container,
 }) {
@@ -248,6 +253,106 @@ export function createUI({
   }
   renderWalls();
   well.$children.appendChild(wallsBox);
+  // free walls drawn on the plan and the doors / windows in any wall (geometry/walls.js; user decisions 2026-10-28)
+  const freeBox = document.createElement('div');
+  freeBox.className = 'railing-sections free-walls';
+  const num = (value, title, step = 10, min = 0) => {
+    const el = document.createElement('input');
+    el.type = 'number';
+    el.min = String(min);
+    el.step = String(step);
+    el.title = title;
+    el.value = String(Math.round(value));
+    return el;
+  };
+  const removeButton = (title, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '✕';
+    b.title = title;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  function renderFreeWalls() {
+    freeBox.innerHTML = '';
+    if (!getFreeWalls || !onFreeWallEdit) return;
+    const title = document.createElement('div');
+    title.className = 'railing-sections-title';
+    title.textContent = 'Ściany dowolne (rysowane na planie: punkty = lico ściany; grubość [mm], mur po lewej / prawej kierunku rysowania)';
+    freeBox.appendChild(title);
+    getFreeWalls().forEach((w, i) => {
+      const row = document.createElement('div');
+      row.className = 'railing-section-row';
+      const name = document.createElement('span');
+      name.textContent = `${i + 1}. ${w.segments.length} odc.${w.closed ? ', zamknięta' : ''} `;
+      const t = num(w.thicknessMm, 'grubość ściany [mm]', 10, 10);
+      t.addEventListener('change', () => onFreeWallEdit({ action: 'set', id: w.id, patch: { thicknessMm: Number(t.value) } }));
+      const side = document.createElement('select');
+      side.title = 'po której stronie lica jest mur (patrząc w kierunku rysowania)';
+      [['left', 'mur z lewej'], ['right', 'mur z prawej']].forEach(([v, l]) => side.add(new Option(l, v, false, w.side === v)));
+      side.addEventListener('change', () => onFreeWallEdit({ action: 'set', id: w.id, patch: { side: side.value } }));
+      row.append(name, t, side, removeButton('Usuń ścianę (z jej drzwiami i oknami)', () => onFreeWallEdit({ action: 'remove', id: w.id })));
+      freeBox.appendChild(row);
+    });
+    if (onStartWallDraw) {
+      const draw = document.createElement('button');
+      draw.type = 'button';
+      draw.textContent = '✏ Rysuj ścianę na planie';
+      draw.addEventListener('click', () => onStartWallDraw());
+      freeBox.appendChild(draw);
+    }
+    // doors and windows: in any wall segment, the offset from the segment's start along it
+    const segments = getWallSegments ? getWallSegments() : [];
+    const title2 = document.createElement('div');
+    title2.className = 'railing-sections-title';
+    title2.textContent = 'Drzwi i okna (ściana, odsunięcie od początku ściany, szerokość × wysokość, parapet okna [mm])';
+    freeBox.appendChild(title2);
+    for (const o of getWallOpenings ? getWallOpenings() : []) {
+      const row = document.createElement('div');
+      row.className = 'railing-section-row';
+      const type = document.createElement('select');
+      [['door', 'drzwi'], ['window', 'okno']].forEach(([v, l]) => type.add(new Option(l, v, false, o.type === v)));
+      type.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { type: type.value } }));
+      const seg = document.createElement('select');
+      seg.title = 'ściana';
+      if (!o.valid) seg.add(new Option('— brak ściany —', o.segmentId, false, true));
+      segments.forEach((sg) => seg.add(new Option(`${sg.label} (${Math.round(sg.length)})`, sg.id, false, sg.id === o.segmentId)));
+      seg.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { segmentId: seg.value } }));
+      const off = num(o.offsetMm, 'odsunięcie od początku ściany [mm]');
+      off.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { offsetMm: Number(off.value) } }));
+      const w = num(o.widthMm, 'szerokość [mm]', 10, 100);
+      w.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { widthMm: Number(w.value) } }));
+      const h = num(o.heightMm, 'wysokość [mm]', 10, 100);
+      h.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { heightMm: Number(h.value) } }));
+      row.append(type, seg, off, w, document.createTextNode('×'), h);
+      if (o.type === 'window') {
+        const sill = num(o.sillMm, 'parapet — wysokość dolnej krawędzi okna nad podłogą [mm]');
+        sill.addEventListener('change', () => onFreeWallEdit({ action: 'set-opening', id: o.id, patch: { sillMm: Number(sill.value) } }));
+        row.append(sill);
+      }
+      if (o.valid && !o.fits) row.title = 'nie mieści się w ścianie';
+      row.append(removeButton('Usuń', () => onFreeWallEdit({ action: 'remove-opening', id: o.id })));
+      freeBox.appendChild(row);
+    }
+    if (segments.length) {
+      for (const [type, label] of [['door', '+ Dodaj drzwi'], ['window', '+ Dodaj okno']]) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.textContent = label;
+        add.addEventListener('click', () => onFreeWallEdit({ action: 'add-opening', opening: { type, segmentId: segments[0].id, offsetMm: 100 } }));
+        freeBox.appendChild(add);
+      }
+    } else {
+      const none = document.createElement('div');
+      none.className = 'railing-sections-title';
+      none.textContent = 'Drzwi i okna — najpierw ściana (klatki albo dowolna).';
+      freeBox.appendChild(none);
+    }
+  }
+  renderFreeWalls();
+  well.$children.appendChild(freeBox);
+  live(well.add(config, 'freeWallThicknessMm', 50, 500, 10)).name('Grubość nowej ściany dowolnej [mm]');
+  live(well.add(config, 'doorClearDepthMm', 300, 2000, 10)).name('Wolne miejsce przed drzwiami [mm]');
   // the fixed sides are kept on every change (stairwellFit.js solveFixedSides): the going and — unless set by hand —
   // the counts are AUTO; with the counts by hand only the going follows the key side (e.g. 4 or 5 straight in C)
   live(well.add(config, 'stairwellManualCounts')).name('Liczby stopni ustawiam ręcznie (AUTO tylko głębokość)');
@@ -558,7 +663,7 @@ export function createUI({
   }
   renderSections();
   rail.$children.appendChild(sectionsBox);
-  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync()), syncSideNames, renderWalls];
+  gui.refreshHooks = [renderSections, () => lockSyncs.forEach((sync) => sync()), syncSideNames, renderWalls, renderFreeWalls];
   // (the balustrade sections' side lists too — re-rendered only when the names change, not while typing in them)
   let namesKey = `${config.stairType}|${config.turnDirection}`;
   gui.syncSideNames = () => {
