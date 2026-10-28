@@ -399,6 +399,12 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   stringerStrips / stringerSplitBlanks`, `calculatedDimensions.stringerPricing`);
   post price table; manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
   project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
+- **Part codes and labels** (`production/partCodes.js`, `labelSheet.js`, user decisions 2026-10-28, docs
+  [PART_CODES.md](docs/architecture/PART_CODES.md)): every physical part (the ungated takeoff items) gets a code by type,
+  numbered walking up — `ST-01` (= the plan's tread number), `PD`, `PS-01` (fan riser per panel `PS-06a`, top `PS-G`),
+  `WZ`/`WW` (S: `WL`/`WP`), `SL`/`SB`, `PR`, `UP`, `PP`, `TR`, `SZ`, `MS`, `FJ`, `KS`; shown in the Inspektor („Kod
+  elementu”); Kosztorys „🏷 Etykiety A4” prints a sticker sheet (3 × 8 / 2 × 7; code, name, sizes, material, project,
+  date; no QR).
 - **Model 3D for the client** (user request 2026-10-28, docs [CLIENT_MODEL.md](docs/architecture/CLIENT_MODEL.md)):
   „Oferta” tab → HTML (one self-contained file: the client's own viewer `viewer/clientViewer.js` — three.js only, bundled
   on its own by `vite.config.js clientViewerRuntime` as `virtual:client-viewer-runtime` — + the model as GLB + logo +

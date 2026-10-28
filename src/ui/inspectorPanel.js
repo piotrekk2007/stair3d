@@ -39,6 +39,14 @@ function diagnosticsHTML(diagnostics) {
     .join('');
 }
 
+// The selected element's part codes (production/partCodes.js — the same as on the labels): "ST-03 · PS-03".
+function partsRow(parts) {
+  if (!parts?.length) return '';
+  const codes = parts.map((p) => `<b>${escapeHtml(p.code)}</b>`).join(' · ');
+  const title = parts.map((p) => `${p.code}: ${p.name}`).join('\n');
+  return `<div class="insp-row insp-codes" title="${escapeHtml(title)}"><span class="insp-label">Kod elementu</span><span class="insp-value">${codes}</span></div>`;
+}
+
 function offsetOfPoints(nominal, final) {
   // przesunięcie każdego końca krawędzi względem nominału — wyłącznie do wyświetlenia
   return nominal.map((p, i) => Math.hypot(final[i].x - p.x, final[i].y - p.y));
@@ -64,6 +72,7 @@ function treadHTML(ctx) {
   const lockedGoing = config.lockedFields?.includes('treadGoing');
   const rows = [];
   rows.push(`<div class="insp-title">Stopień nr ${idx + 1} <small>${TYPE_LABEL_PL[t.type] || t.type}</small></div>`);
+  rows.push(partsRow(ctx.parts));
   rows.push(row('Wysokość góry (elewacja)', mm(t.elevation.top, 1), 'auto'));
   rows.push(row('Szerokość — czoło / tył', `${mm(t.widths.atFront)} / ${mm(t.widths.atBack)}`, 'auto'));
   if (t.winderInfo) {
@@ -134,6 +143,7 @@ function stringerHTML(ctx) {
   const locked = (f) => (config.lockedFields?.includes(f) ? 'user' : 'auto');
   const rows = [];
   rows.push(`<div class="insp-title">${wangaName(selection.stringerId, config)}${segment ? ` <small>${segment.id}</small>` : ''}</div>`);
+  rows.push(partsRow(ctx.parts));
   rows.push(row('Typ wangi', typeLabel, 'user'));
   rows.push(row('Min. głębokość wangi', mm(config.minimumStringerDepthMm), locked('minimumStringerDepthMm')));
   rows.push(row('Grubość deski', mm(config.stringerThickness), locked('stringerThickness')));
@@ -255,6 +265,7 @@ function postHTML(ctx) {
   const post = postModels?.find((p) => p.postId === selection.postId) ?? null;
   const rows = [];
   rows.push(`<div class="insp-title">Słup <small>${selection.postId ?? ''}</small></div>`);
+  rows.push(partsRow(ctx.parts));
   if (post) {
     rows.push(row('Rodzaj', post.kind === 'railing' ? 'słupek balustrady' : post.kind, 'auto'));
     rows.push(row('Przekrój', `${post.size} × ${post.size} mm`, post.kind === 'railing' ? (post.overridden && post.nominalSize !== undefined ? 'manual' : 'auto') : config.lockedFields?.includes('postSize') ? 'user' : 'auto'));

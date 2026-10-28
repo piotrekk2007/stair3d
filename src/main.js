@@ -58,6 +58,7 @@ import { applyWallEdit } from './geometry/stairwellWallEdits.js';
 import { createMeasureTool } from './scene/measureTool.js';
 import { snapMeasurePoint, planMeasureRefs } from './plan2d/planMeasure.js';
 import { floorDrivenFields } from './geometry/floors.js';
+import { buildPartList, partsForSelection } from './production/partCodes.js';
 
 // What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
 const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
@@ -158,6 +159,13 @@ let lastDiagnostics = []; // AKTYWNE (bez objętych wyjątkiem)
 let lastWaived = [];
 let lastStaleWaivers = [];
 let lastTakeoff = null;
+// the part codes (production/partCodes.js) of the current models — built when first asked for after a rebuild
+let partListCache = { models: null, list: null };
+function partList() {
+  if (!lastModels || lastModels.fullConfig?.stairPending) return null;
+  if (partListCache.models !== lastModels) partListCache = { models: lastModels, list: buildPartList(lastModels) };
+  return partListCache.list;
+}
 let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
 // Otwór w stropie na planie 2D: 'off' | 'edit' (uchwyty wierzchołków) | 'draw' (klikanie nowego wielokąta).
 // Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
@@ -648,6 +656,8 @@ function refreshSelectionViews() {
       railingModel: lastModels.railingModel ?? null,
       postModels: lastModels.allPostModels, // także usunięte (oznaczone) — Inspektor pokazuje "Przywróć"
       manualCount: manualEditCount(),
+      // the selected element's part codes (production/partCodes.js), the same as on the labels
+      parts: partsForSelection(partList(), selection),
     });
   }
   markValidatorSelection(validatorPanel, selectedDiagnostic);
@@ -1442,6 +1452,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportMetalDXF: () => exporter.metalDXF(),
   onExportTrimDXF: () => exporter.trimDXF(),
   onExportTreadsDXF: () => exporter.allTreadsDXF(),
+  onPrintLabels: (layout) => exporter.labels(layout),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.

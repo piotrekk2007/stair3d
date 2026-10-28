@@ -133,7 +133,7 @@ function summaryHTML(summary, takeoff, settings) {
     </div>`;
 }
 
-export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF, onExportTreadsDXF, onExportRailingDXF, onExportMetalDXF, onExportTrimDXF }) {
+export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onExportCSV, onExportTXT, onExportPostsDXF, onExportTreadsDXF, onExportRailingDXF, onExportMetalDXF, onExportTrimDXF, onPrintLabels }) {
   const panel = document.createElement('div');
   panel.id = 'takeoff-panel';
   panel.innerHTML = `
@@ -151,6 +151,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
       <button type="button" data-action="treads-dxf" title="Wszystkie stopnie tej klatki na jednym arkuszu DXF, w skali 1:1">Stopnie (DXF 1:1)</button>
       <button type="button" data-action="railing-dxf" title="Poręcz (elementy z długościami i kątami cięcia) i lista cięcia tralek na jednym arkuszu DXF, w skali 1:1">Balustrada (DXF 1:1)</button>
       <button type="button" data-action="trim-dxf" title="Obróbka otworu w stropie (fajka): każdy kawałek w rzucie z cięciami na końcach + przekrój, w skali 1:1">Fajka (DXF 1:1)</button>
+      <span class="tk-labels"><button type="button" data-action="labels" title="Etykiety elementów z kodami (ST-01, WZ-1, SL-1…) na arkuszu A4 naklejek — druk z przeglądarki">🏷 Etykiety A4</button><select data-action="labels-layout" title="Arkusz naklejek"><option value="3x8">3 × 8 (70 × 37 mm)</option><option value="2x7">2 × 7 (105 × 42 mm)</option></select></span>
       <button type="button" data-action="metal-dxf" title="Konstrukcja metalowa: płaskowniki w zęby (kontur do wycięcia) albo belki z podporami stopni, w skali 1:1">Stal (DXF 1:1)</button>
     </div>
     <div id="takeoff-manual"></div>
@@ -169,6 +170,7 @@ export function createTakeoffPanel(container, { onSelectItem, onGroupChange, onE
   panel.querySelector('[data-action="railing-dxf"]').addEventListener('click', () => onExportRailingDXF?.());
   panel.querySelector('[data-action="metal-dxf"]').addEventListener('click', () => onExportMetalDXF?.());
   panel.querySelector('[data-action="trim-dxf"]').addEventListener('click', () => onExportTrimDXF?.());
+  panel.querySelector('[data-action="labels"]').addEventListener('click', () => onPrintLabels?.(panel.querySelector('[data-action="labels-layout"]').value));
   panel.querySelector('#takeoff-body').addEventListener('click', (e) => {
     const el = e.target.closest('[data-item-index]');
     if (!el) return;
