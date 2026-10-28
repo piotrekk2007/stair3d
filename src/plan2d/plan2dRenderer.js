@@ -320,6 +320,23 @@ export function wallEditXML(drawing, config) {
   return `<g id="wall-edit-layer">${xml}</g>`;
 }
 
+// The stair on the next floor (geometry/referenceStair.js): its treads, wangi and posts in this stair's plan frame, grey
+// dashed (above — purple, below — teal), the spots too low to walk under red; its name. Drawing only.
+const escapeXml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+export function referenceXML(reference) {
+  const d = reference?.planDrawing;
+  if (!d) return '';
+  const color = reference.level === 'above' ? '#7b4fa0' : '#2a8a8a';
+  let xml = '';
+  for (const t of d.treads) xml += `<polygon points="${polygonPoints(t.outline)}" fill="${color}" fill-opacity="0.06" stroke="${color}" stroke-width="1" stroke-dasharray="6 4" ${HAIR}/>`;
+  for (const s of d.stringers) xml += `<polygon points="${polygonPoints(s)}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="0.8" stroke-dasharray="3 3" ${HAIR}/>`;
+  for (const p of d.posts) xml += `<rect x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="${color}" fill-opacity="0.35" stroke="${color}" stroke-width="0.8" ${HAIR}/>`;
+  for (const m of reference.markers || []) xml += `<circle cx="${fmt(m.at.x)}" cy="${fmt(-m.at.y)}" r="${px(5)}" fill="#d62828" stroke="#fff" stroke-width="1" ${HAIR}><title>Za nisko: ${Math.round(m.clearanceMm)} mm (min. ${reference.minHeadroom} mm)</title></circle>`;
+  const first = d.treads[0]?.outline[0];
+  if (first) xml += `<text x="${fmt(first.x)}" y="${fmt(-first.y - px(6))}" font-size="${px(11)}" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR}>bieg ${reference.level === 'above' ? 'wyżej' : 'niżej'}: ${escapeXml(reference.name || '')}</text>`;
+  return `<g id="reference-stair-layer" pointer-events="none">${xml}</g>`;
+}
+
 // LED lighting (geometry/ledModel.js): every strip's centre line in plan — under a tread's nose, along a wanga's face,
 // under the handrail — a warm yellow line as wide as the profile (at least 3 px). Drawing only.
 export function ledXML(led) {
@@ -628,7 +645,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, reference = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -818,6 +835,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${postsXML}
     ${railingLayerXML}
     ${layers.led === false ? '' : ledXML(led)}
+    ${layers.reference === false ? '' : referenceXML(reference)}
     ${openingEdit ? '' : openingXMLStr}
     ${arrowXML}
     ${widthsXML}

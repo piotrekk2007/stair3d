@@ -34,6 +34,8 @@ import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTe
 import { withFloorRise } from './floors.js';
 import { buildLedModel } from './ledModel.js';
 import { renderLed } from './ledRenderer.js';
+import { buildReferenceModel } from './referenceStair.js';
+import { renderReferenceStair } from './referenceStairRenderer.js';
 import { resolveFreeWalls, allWallSegments, resolveWallOpenings, stairParts, wallChecks } from './walls.js';
 
 // Wypukłość porów/słojów z tekstury dębu (bumpMap) — wartość dobrana na oko w widoku 3D, tylko wizualna.
@@ -238,6 +240,10 @@ export function buildStaircase(rawConfig) {
   // the headroom under the opening's edges (headroomModel.js) — drawn by main.js as a 3D overlay
   const headroom = buildHeadroomModel({ planLayout, ceilingFit, config: fullConfig });
   const wallsMesh = buildStairwellWalls(walls, wallsModel);
+  // the stair on the next floor, loaded from its own file (referenceStair.js): placed, shown, the passage under the
+  // upper stair checked
+  const reference = fullConfig.referenceStair ? buildReferenceModel({ fullConfig, treadModels, stringerModels, stringerConstruction, postModels, ceilingFit }, buildStaircase) : null;
+  const referenceMesh = renderReferenceStair(reference);
   // strop przyjmuje cień, ale go nie rzuca — inaczej słońce z góry zostawiłoby schody w cieniu płyty
   ceilingMesh.receiveShadow = true;
 
@@ -247,5 +253,5 @@ export function buildStaircase(rawConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, referenceMesh, reference, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
 }

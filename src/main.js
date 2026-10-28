@@ -46,7 +46,8 @@ import { stairwellPlanDrawing, treadsOpenOnOuterSide, openOuterRailingRanges } f
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
 import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stairwellVariantsPanel.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
-import { exportProjectJSON, parseProjectFile, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
+import { exportProjectJSON, parseProjectFile, buildProjectPayload, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
+import { sanitizeReferenceStair, inverseReference } from './geometry/referenceStair.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
@@ -73,6 +74,7 @@ Object.assign(config, NEW_PROJECT_START);
 const viewState = {
   showCeiling: true,
   showWalls: true, // the stairwell room's walls (stairwell.js stairwellWalls), when there is a room
+  showReference: true, // the stair on the next floor (geometry/referenceStair.js)
   showHeadroom: false, // the headroom curtain under the opening (scene/headroomOverlay.js) — also in the presentation mode
   showDimensions: true,
   showStringerLengths: false,
@@ -105,6 +107,7 @@ const viewState = {
     ceilingOpening: true,
     stairwell: true,
     led: true,
+    reference: true,
   },
 };
 const exportSelection = { Stopnie: true, Wangi: true, Slupy: true, Podstopnie: true };
@@ -144,6 +147,7 @@ const appearance = defaultAppearance();
 let currentRoot = null;
 let currentCeiling = null;
 let currentWalls = null;
+let currentReference = null; // the stair on the next floor (geometry/referenceStair.js) — its own scene object
 let currentHeadroom = null;
 let currentDimLabels = null;
 let currentStringerLengthLabels = null;
@@ -204,7 +208,7 @@ ws.mainEl.appendChild(viewport);
 
 const sceneApi = createScene(viewport);
 // the 3D tape measure (scene/measureTool.js): a view tool — on the stair, the slab and the stairwell's walls as shown
-const measureTool = createMeasureTool({ scene: sceneApi.scene, getCamera: () => sceneApi.getCamera(), domElement: sceneApi.renderer.domElement, getTargets: () => [currentRoot, currentCeiling, currentWalls] });
+const measureTool = createMeasureTool({ scene: sceneApi.scene, getCamera: () => sceneApi.getCamera(), domElement: sceneApi.renderer.domElement, getTargets: () => [currentRoot, currentCeiling, currentWalls, currentReference] });
 sceneApi.addFrameHook(() => measureTool.update());
 const { scene, renderer } = sceneApi;
 
@@ -268,7 +272,7 @@ function rebuild() {
       o.material?.dispose();
     });
   }
-  for (const group of [currentRoot, currentCeiling, currentWalls, currentHeadroom, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
+  for (const group of [currentRoot, currentCeiling, currentWalls, currentReference, currentHeadroom, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels, currentDebugOverlay, currentJointMarkers]) {
     if (!group) continue;
     scene.remove(group);
     disposeGroup(group);
@@ -304,6 +308,8 @@ function rebuild() {
   currentCeiling = ceilingMesh;
   currentWalls = wallsMesh;
   if (wallsMesh) scene.add(wallsMesh);
+  currentReference = built.referenceMesh;
+  if (currentReference) scene.add(currentReference);
   currentHeadroom = buildHeadroomOverlay(built.headroom);
   if (currentHeadroom) scene.add(currentHeadroom);
 
@@ -484,6 +490,7 @@ function applyOverlayVisibility() {
   const technical = !viewState.clientMode;
   if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
   if (currentWalls) currentWalls.visible = viewState.showWalls;
+  if (currentReference) currentReference.visible = viewState.showReference;
   // the headroom is meant for the client too: shown in the presentation mode as well
   if (currentHeadroom) currentHeadroom.visible = viewState.showHeadroom && !config.stairPending;
   const stair = !config.stairPending; // (nothing of the stair before "Generuj schody")
@@ -584,7 +591,7 @@ function offerImage3D() {
   const center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
   // a little more room than the on-screen "Dopasuj" — the whole stair with its posts must fit the picture
   const radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
-  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentWalls, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
+  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentWalls, currentReference, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
   const was = hidden.map((o) => o.visible);
   hidden.forEach((o) => (o.visible = false));
   const groundWas = sceneApi.helpers.ground.visible;
@@ -762,6 +769,7 @@ function regeneratePlan2D() {
     trimEdit: planMode === 'trim',
     wallsModel: lastModels?.wallsModel ?? null,
     led: lastModels?.led ?? null,
+    reference: lastModels?.reference ?? null,
     measures: planMeasures,
     measureDraft: planMode === 'measure' ? planMeasureDraft : null,
   });
@@ -1023,7 +1031,7 @@ function handleViewChange(key, value) {
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
   if (key === 'showWalls') viewportHudApi.syncWalls(value);
   if (key === 'showHeadroom') viewportHudApi.syncHeadroom(value);
-  if (['showCeiling', 'showWalls', 'showHeadroom', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
+  if (['showCeiling', 'showWalls', 'showReference', 'showHeadroom', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();
 }
@@ -1168,16 +1176,21 @@ function fileBaseName() {
   return projectFileBaseName(projectMeta.name);
 }
 
-function handleSaveProject() {
-  const filename = `${fileBaseName()}_projekt.json`;
-  exportProjectJSON(config, filename, {
+// everything of the project that is not config (saved beside it in the file)
+function currentProjectMeta() {
+  return {
     projectName: projectMeta.name,
     notes: projectMeta.notes,
     takeoffSettings: { priceList: takeoffSettings.priceList, wasteFactors: takeoffSettings.wasteFactors, boardPricing: takeoffSettings.boardPricing, manualItems: takeoffSettings.manualItems },
     waivers,
     appearance: { ...appearance },
     offer: offer.settings(),
-  });
+  };
+}
+
+function handleSaveProject() {
+  const filename = `${fileBaseName()}_projekt.json`;
+  exportProjectJSON(config, filename, currentProjectMeta());
   projectMeta.lastFileNote = `Zapisano ${filename} · ${new Date().toLocaleTimeString('pl-PL')} · schemat v${CURRENT_PROJECT_VERSION}`;
   ws.setProjectMeta({ lastFileNote: projectMeta.lastFileNote });
 }
@@ -1189,39 +1202,89 @@ function handleFileSelected(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const { config: loadedConfig, meta } = parseProjectFile(reader.result);
-      Object.assign(config, createDefaultConfig(), loadedConfig);
-      projectMeta.name = meta.projectName;
-      projectMeta.notes = meta.notes;
-      waivers = meta.waivers;
-      Object.assign(appearance, sanitizeAppearance(meta.appearance));
-      setAppearance(appearance);
-      resetTakeoffSettings();
-      if (meta.takeoffSettings) {
-        for (const incoming of meta.takeoffSettings.priceList || []) {
-          const price = takeoffSettings.priceList.find((p) => p.materialId === incoming.materialId);
-          if (price) Object.assign(price, incoming);
-        }
-        Object.assign(takeoffSettings.wasteFactors, meta.takeoffSettings.wasteFactors || {});
-        if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
-        if (meta.takeoffSettings.manualItems) takeoffSettings.manualItems = sanitizeManualItems(meta.takeoffSettings.manualItems);
-      }
-      offer.load(meta.offer);
-      pricingEditor.render();
-      manualItemsEditor.render();
-      projectMeta.lastFileNote = `Wczytano ${file.name} · schemat v${meta.schemaVersion}`;
-      ws.setProjectMeta({ name: projectMeta.name, notes: projectMeta.notes, lastFileNote: projectMeta.lastFileNote });
-      document.title = projectMeta.name ? `${projectMeta.name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
-      refreshUI(gui);
-      clearSelectionState();
-      planViewport = null;
-      rebuild();
-      commitHistory();
+      applyProjectFile(reader.result, `Wczytano ${file.name}`);
     } catch (e) {
       alert(`Nie udało się wczytać projektu: ${e.message}`);
     }
   };
   reader.readAsText(file);
+}
+
+// A project file (text) becomes the current project; `patch` changes its config before the first rebuild (the swap
+// with the stair on the next floor). Throws on a file that is not a project.
+function applyProjectFile(text, note, patch = null) {
+  const { config: loadedConfig, meta } = parseProjectFile(text);
+  Object.assign(config, createDefaultConfig(), loadedConfig);
+  if (patch) Object.assign(config, patch);
+  projectMeta.name = meta.projectName;
+  projectMeta.notes = meta.notes;
+  waivers = meta.waivers;
+  Object.assign(appearance, sanitizeAppearance(meta.appearance));
+  setAppearance(appearance);
+  resetTakeoffSettings();
+  if (meta.takeoffSettings) {
+    for (const incoming of meta.takeoffSettings.priceList || []) {
+      const price = takeoffSettings.priceList.find((p) => p.materialId === incoming.materialId);
+      if (price) Object.assign(price, incoming);
+    }
+    Object.assign(takeoffSettings.wasteFactors, meta.takeoffSettings.wasteFactors || {});
+    if (meta.takeoffSettings.boardPricing) takeoffSettings.boardPricing = sanitizeBoardPricing(meta.takeoffSettings.boardPricing);
+    if (meta.takeoffSettings.manualItems) takeoffSettings.manualItems = sanitizeManualItems(meta.takeoffSettings.manualItems);
+  }
+  offer.load(meta.offer);
+  pricingEditor.render();
+  manualItemsEditor.render();
+  projectMeta.lastFileNote = `${note} · schemat v${meta.schemaVersion}`;
+  ws.setProjectMeta({ name: projectMeta.name, notes: projectMeta.notes, lastFileNote: projectMeta.lastFileNote });
+  document.title = projectMeta.name ? `${projectMeta.name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
+  refreshUI(gui);
+  clearSelectionState();
+  planViewport = null;
+  rebuild();
+  commitHistory();
+}
+
+// --- the stair on the next floor (geometry/referenceStair.js): loaded from its own project file, placed, swapped
+const referenceInput = document.createElement('input');
+referenceInput.type = 'file';
+referenceInput.accept = 'application/json,.json';
+referenceInput.style.display = 'none';
+let referenceLevel = 'above';
+referenceInput.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const { meta } = parseProjectFile(reader.result); // validates (and migrates) the file
+      config.referenceStair = { name: meta.projectName || file.name.replace(/\.json$/i, ''), level: referenceLevel, file: JSON.parse(reader.result), dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false };
+      rebuild();
+      uiRefresh?.();
+      commitHistory();
+    } catch (e) {
+      alert(`Nie udało się wczytać biegu z pliku: ${e.message}`);
+    }
+  };
+  reader.readAsText(file);
+});
+document.body.appendChild(referenceInput);
+function loadReferenceStair(level) {
+  referenceLevel = level;
+  referenceInput.click();
+}
+// "Zamień": the other floor's stair becomes the project being edited, this one its reference (placed back by the
+// inverse transform). Each stays its own file: save the one you edit under its own name.
+function swapReferenceStair() {
+  const ref = sanitizeReferenceStair(config.referenceStair);
+  if (!ref) return;
+  const payload = buildProjectPayload({ ...config, referenceStair: null }, currentProjectMeta());
+  const back = { name: projectMeta.name || 'bez nazwy', file: JSON.parse(JSON.stringify(payload)), ...inverseReference(ref) };
+  try {
+    applyProjectFile(JSON.stringify(ref.file), `Zamieniono biegi: edytujesz „${ref.name}”`, { referenceStair: back });
+  } catch (e) {
+    alert(`Nie udało się zamienić biegów: ${e.message}`);
+  }
 }
 
 const fileInput = document.createElement('input');
@@ -1769,6 +1832,10 @@ const gui = createUI({
   getWallSegments: () => lastModels?.wallsModel?.segments || [],
   getWallOpenings: () => lastModels?.wallsModel?.openings || [],
   onFreeWallEdit: (change) => applyFreeWalls(change),
+  // the stair on the next floor (folder 2)
+  onLoadReference: (level) => loadReferenceStair(level),
+  onSwapReference: () => swapReferenceStair(),
+  getReference: () => lastModels?.reference ?? null,
   onStartWallDraw: () => {
     if (viewState.view !== '2d') setView('2d');
     setPlanMode('wall-draw');
@@ -1797,6 +1864,7 @@ const gui = createUI({
 });
 // the panel's wangi names follow the stair type (an S: lewa / prawa)
 afterRebuild.push(() => gui.syncSideNames?.());
+afterRebuild.push(() => gui.syncReference?.());
 
 uiRefresh = () => refreshUI(gui);
 setAppearance(appearance); // domyślne wykończenie = dąb (tekstura) — musi być na materiałach od startu

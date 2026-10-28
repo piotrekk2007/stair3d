@@ -86,6 +86,9 @@ export function createUI({
   getWallOpenings,
   onFreeWallEdit,
   onStartWallDraw,
+  onLoadReference,
+  onSwapReference,
+  getReference,
   onGenerateStair,
   container,
 }) {
@@ -152,6 +155,73 @@ export function createUI({
   // B along flight B (U: wall to wall), C along flight C (corner → last back edge); each FIXED (exact) or FREE (follows
   // from the tread counts); a side may run along a wall. The variant search (folder 5) solves it; findings
   // STAIRWELL-SIDE-FIXED; the opening (folder 4) is then given from the walls.
+  // the stair on the next floor (geometry/referenceStair.js; user decisions 2026-10-28): the other floor's own project
+  // file loaded as a reference — placed (shift, rotation, mirror), shown, the passage under the upper stair checked;
+  // "Zamień" makes it the project being edited (this one becomes its reference)
+  if (onLoadReference) {
+    const refFolder = building.addFolder('Bieg na sąsiednim piętrze (z pliku)');
+    const ref = () => config.referenceStair;
+    const set = (key, value) => {
+      if (!ref()) return;
+      config.referenceStair = { ...ref(), [key]: value };
+      onChange();
+    };
+    const refProxy = {
+      get name() {
+        const r = ref();
+        return r ? `${r.level === 'above' ? 'wyżej' : 'niżej'}: ${r.name}` : '— brak —';
+      },
+      set name(v) {},
+      get dx() { return ref()?.dxMm ?? 0; },
+      set dx(v) { set('dxMm', v); },
+      get dy() { return ref()?.dyMm ?? 0; },
+      set dy(v) { set('dyMm', v); },
+      get rotation() { return ref()?.rotationDeg ?? 0; },
+      set rotation(v) { set('rotationDeg', Number(v)); },
+      get mirror() { return !!ref()?.mirror; },
+      set mirror(v) { set('mirror', !!v); },
+      above: () => onLoadReference('above'),
+      below: () => onLoadReference('below'),
+      swap: () => onSwapReference?.(),
+      remove: () => {
+        config.referenceStair = null;
+        onChange();
+        (onCommit || onChange)();
+        refreshUI(gui);
+      },
+    };
+    refFolder.add(refProxy, 'above').name('📂 Wczytaj bieg WYŻEJ (plik projektu)');
+    refFolder.add(refProxy, 'below').name('📂 Wczytaj bieg NIŻEJ (plik projektu)');
+    refFolder.add(refProxy, 'name').name('Wczytany bieg').disable();
+    refFolder.add(refProxy, 'dx', -20000, 20000, 1).name('Przesunięcie X [mm]').onFinishChange(() => (onCommit || onChange)());
+    refFolder.add(refProxy, 'dy', -20000, 20000, 1).name('Przesunięcie Y [mm]').onFinishChange(() => (onCommit || onChange)());
+    refFolder.add(refProxy, 'rotation', { '0°': 0, '90°': 90, '180°': 180, '270°': 270 }).name('Obrót').onFinishChange(() => (onCommit || onChange)());
+    refFolder.add(refProxy, 'mirror').name('Lustrzane odbicie').onFinishChange(() => (onCommit || onChange)());
+    refFolder.add(refProxy, 'swap').name('⇅ Zamień — edytuj tamten bieg');
+    refFolder.add(refProxy, 'remove').name('✕ Usuń bieg z sąsiedniego piętra');
+    const info = document.createElement('div');
+    info.className = 'railing-sections';
+    const renderInfo = () => {
+      const r = getReference?.();
+      if (!r) {
+        info.textContent = 'Wczytaj plik projektu schodów z piętra wyżej (albo niżej): program pokaże je nad (pod) tymi schodami i sprawdzi, czy idąc dolnym biegiem nie uderzysz głową w górny. Punkt (0, 0) wczytanego biegu = początek jego pierwszego stopnia; ustaw przesunięcie i obrót.';
+        return;
+      }
+      if (r.error) {
+        info.textContent = r.error;
+        return;
+      }
+      const worst = r.clearances.length ? Math.min(...r.clearances.map((c) => c.clearanceMm)) : null;
+      info.textContent = worst === null
+        ? 'Biegi nie nachodzą na siebie nad otworem w stropie — nic do sprawdzenia.'
+        : `Najmniejsza skrajnia na dolnym biegu pod górnym: ${Math.round(worst)} mm (min. ${r.minHeadroom} mm)${r.clashes.length ? ` — za nisko w ${r.clashes.length} miejscach (Walidacja)` : ' — OK'}.`;
+    };
+    renderInfo();
+    refFolder.$children.appendChild(info);
+    gui.syncReference = renderInfo; // main.js calls it after every rebuild
+    lockSyncs.push(renderInfo);
+  }
+
   const well = gui.addFolder('3. Klatka schodowa');
   live(well.add(config, 'stairwellRoomEnabled')).name('Wymiary klatki: włączone');
   // an S has a dusza on each line: its sides may be measured along either (stairwell.js stairwellMeasureLine — by
@@ -779,6 +849,7 @@ export function createUI({
     ['ceilingOpening', 'Otwór w stropie'],
     ['stairwell', 'Klatka (ściany, wymiary boków)'],
     ['led', 'Oświetlenie LED'],
+    ['reference', 'Bieg na sąsiednim piętrze'],
   ];
   for (const [key, label] of layerDefs) {
     layers.add(viewState.plan2dLayers, key).name(label).onChange(() => onViewChange('plan2dLayers', viewState.plan2dLayers));

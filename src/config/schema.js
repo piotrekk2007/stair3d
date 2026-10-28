@@ -97,6 +97,9 @@ export function createDefaultConfig() {
     // LED lighting (geometry/ledModel.js, user decisions 2026-10-28): strips in a routed aluminium profile under the
     // treads' noses, in the wangi (parallel to the top edge, on the face toward the stair) and under the handrail;
     // profile 17 × 8 mm, sizes and power ASSUMPTION
+    // the stair on the next floor, loaded from its own project file (geometry/referenceStair.js, user decisions
+    // 2026-10-28): {name, level 'above'|'below', file, dxMm, dyMm, rotationDeg, mirror} or null
+    referenceStair: null,
     ledTreadEnabled: false,
     ledStringerEnabled: false,
     ledStringerSide: 'both', // 'both' | 'outer' | 'inner'

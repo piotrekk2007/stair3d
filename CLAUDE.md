@@ -198,6 +198,13 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   windows only shown); 3D = every wall segment with holes (`stairwellWallsRenderer.js`, in `wallsMesh`, also without a
   stairwell); plan `freeWallsXML` (door leaf + swing, window double line), „✏ Rysuj ścianę” (draw mode `'draw-wall'`),
   corners dragged in „▥ Ściany”; edits `applyFreeWallEdit`; lists in folder 3.
+- **Stair on the next floor** (`referenceStair.js`, user decisions 2026-10-28, docs
+  [REFERENCE_STAIR.md](docs/architecture/REFERENCE_STAIR.md)): `config.referenceStair` = the other floor's project FILE
+  (above / below) + its placement (dx, dy, rotation 0/90/180/270, mirror) → built by the same `buildStaircase` →
+  `built.reference` (plan drawing, clashes) / `built.referenceMesh` (own scene object): inside the lower stair's ceiling
+  opening, every lower tread's clearance up to the upper stair's underside (`stairParts`) < `minHeadroom` → ERROR
+  `REFERENCE-STAIR-HEADROOM` on this project's element (gate); plan layer, panel folder 2 (load, place, „⇅ Zamień” =
+  `inverseReference`, remove).
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
   tread tops like `deriveCeilingFit`, none at the exit) = translucent curtains, green ≥ `minHeadroom`, red below; the
