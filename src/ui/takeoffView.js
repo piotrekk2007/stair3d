@@ -14,12 +14,12 @@ const ELEMENT_LABEL_PL = {
   HANDRAIL: 'Poręcze',
   BASERAIL: 'Podporęcze',
   BALUSTER: 'Tralki (lista cięcia)',
-  CONNECTOR: 'Łączniki (bez ceny)',
+  CONNECTOR: 'Łączniki',
   GLASS_PANE: 'Szkło balustrady',
   GLASS_FIXING: 'Mocowania szkła',
   OPENING_TRIM: 'Obróbka otworu (fajka)',
-  STEEL: 'Konstrukcja stalowa (bez ceny)',
-  LED: 'Oświetlenie LED (bez ceny)',
+  STEEL: 'Konstrukcja stalowa',
+  LED: 'Oświetlenie LED',
   SUPPORT: 'Podpory',
   OTHER: 'Inne',
 };
@@ -115,7 +115,7 @@ export function describeDimensions(d) {
   return `${text} mm${area ? ` · ${area}` : ''}`;
 }
 
-const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Obróbka otworu (fajka)', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Szkło balustrady (z modelu)', 'Mocowania szkła (z modelu)', 'Łączniki (bez ceny)'];
+const CATEGORY_ORDER = ['Stopnie', 'Stopnie zabiegowe', 'Podesty', 'Obróbka otworu (fajka)', 'Podstopnie', 'Wangi', 'Słupy', 'Poręcze (z modelu)', 'Tralki (z modelu)', 'Szkło balustrady (z modelu)', 'Mocowania szkła (z modelu)', 'Łączniki', 'Oświetlenie LED', 'Konstrukcja stalowa'];
 
 function categoryOf(item, winderStepIds) {
   if (item.pricingSource === 'manual') return item.material; // nazwa wpisana przez użytkownika
@@ -140,15 +140,15 @@ function categoryOf(item, winderStepIds) {
     case 'BALUSTER':
       return 'Tralki (z modelu)';
     case 'CONNECTOR':
-      return 'Łączniki (bez ceny)';
+      return 'Łączniki';
     case 'GLASS_PANE':
       return 'Szkło balustrady (z modelu)';
     case 'GLASS_FIXING':
       return 'Mocowania szkła (z modelu)';
     case 'STEEL':
-      return 'Konstrukcja stalowa (bez ceny)';
+      return 'Konstrukcja stalowa';
     case 'LED':
-      return 'Oświetlenie LED (bez ceny)';
+      return 'Oświetlenie LED';
     default:
       return null; // wpusty — poza kosztorysem
   }
@@ -173,7 +173,8 @@ export function summarizeByCategory(items, { winderStepIds } = {}) {
     if (!label) continue;
     if (!byLabel.has(label)) byLabel.set(label, { label, count: 0, cost: 0, unpriced: 0, manual: item.pricingSource === 'manual' });
     const line = byLabel.get(label);
-    line.count += item.quantity;
+    // pieces only: an item counted in running metres (LED strip / profile) is not a number of pieces
+    if (item.unit !== 'mb') line.count += item.quantity;
     if (item.calculatedCost === null) line.unpriced += 1;
     else line.cost += item.calculatedCost;
   }

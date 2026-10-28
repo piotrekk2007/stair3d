@@ -1,8 +1,7 @@
 // Joint connectors (stair bolts, joints stage 4) -> MaterialTakeoffItem[]. Derived ONLY from the joint model's
 // `connectors` (geometry/jointConnectors.js) — the same bolts the DXF drills holes for. One item per joint, `quantity`
-// = its bolts (they all have the joint's one length). Deliberately UNPRICED ("bez ceny", user decision 2026-09-28):
-// no price entry exists for `joint-connector`, so pricing.js leaves the cost null and the summary flags it — never a
-// guessed price. No timber volume (hardware), so the self-weight ignores it.
+// = its bolts (they all have the joint's one length). Priced per piece from the accessories (user decision 2026-10-28:
+// one price for every length, pricing.js `joint-connector`; 0 = unpriced and flagged) — never a guessed price. No timber volume (hardware), so the self-weight ignores it.
 
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
@@ -40,7 +39,7 @@ export function buildConnectorItems(jointModel, config, wasteFactors = {}) {
       wasteFactor: wasteFactorFor(ELEMENT_TYPES.CONNECTOR, JOINT_CONNECTOR_MATERIAL_ID, wasteFactors),
       optional: true,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Łącznik złącza: ${where}; długość = cała oś otworu do gniazda nakrętki. Bez ceny — wymiary i typ śruby do weryfikacji (CO-MFG-J-CONNECTORS).`],
+      notes: [`Łącznik złącza: ${where}; długość = cała oś otworu do gniazda nakrętki. Wymiary i typ śruby do weryfikacji (CO-MFG-J-CONNECTORS).`],
     });
   });
 }

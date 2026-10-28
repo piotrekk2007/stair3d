@@ -12,7 +12,8 @@ export const PRICE_UNITS = Object.freeze({
   VOLUME: 'volume', // unitPrice is per m³ — multiplies item.wasteAdjustedQuantity when its unit is 'm3'
   AREA: 'area', // unitPrice is per m² — multiplies item.wasteAdjustedQuantity when its unit is 'm2'
   PIECE: 'piece', // unitPrice is per szt — multiplies item.quantity
-  LENGTH: 'length', // unitPrice is per running metre — multiplies (item length in m) x quantity
+  LENGTH: 'length', // unitPrice is per running metre — multiplies (item length in m) x quantity; an item counted in 'mb' (its quantity IS the metres) multiplies its quantity
+  MASS: 'mass', // unitPrice is per kg — multiplies the item's whole mass (calculatedDimensions.massKg)
 });
 
 /**
@@ -36,6 +37,13 @@ export const DEFAULT_PRICE_LIST = Object.freeze([
   { materialId: 'railing-baserail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę podporęczy za metr bieżący.' },
   { materialId: 'railing-glass', price: 0, currency: 'PLN', unit: PRICE_UNITS.AREA, source: 'Wpisz własną cenę szkła VSG za m² (prostokąt, z którego jest cięta tafla).' },
   { materialId: 'railing-glass-fixing', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę rotuli / uchwytu szyby za sztukę.' },
+  // Accessories (user decisions 2026-10-28): 0 = not priced yet, the user types the real price; the LED power supply has
+  // its own table by power (boardPricing.js ledSupplyPrices).
+  { materialId: 'joint-connector', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz cenę śruby schodowej za sztukę (jedna cena dla wszystkich długości).' },
+  { materialId: 'led-strip', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz cenę taśmy LED za metr bieżący.' },
+  { materialId: 'led-profile', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz cenę profilu aluminiowego (z kloszem) za metr bieżący.' },
+  { materialId: 'railing-wall-bracket', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz cenę wspornika poręczy ściennej za sztukę.' },
+  { materialId: 'steel-structure', price: 0, currency: 'PLN', unit: PRICE_UNITS.MASS, source: 'Wpisz cenę konstrukcji stalowej za kg (z obróbką).' },
 ]);
 
 function indexByMaterialId(priceList) {
@@ -48,7 +56,11 @@ function measureFor(item, unit) {
   if (unit === PRICE_UNITS.VOLUME) return item.wasteAdjustedUnit === 'm3' ? item.wasteAdjustedQuantity : null;
   if (unit === PRICE_UNITS.AREA) return item.wasteAdjustedUnit === 'm2' ? item.wasteAdjustedQuantity : null;
   if (unit === PRICE_UNITS.PIECE) return item.quantity;
-  if (unit === PRICE_UNITS.LENGTH) return item.calculatedDimensions?.lengthMm > 0 ? (item.calculatedDimensions.lengthMm / 1000) * item.quantity : null;
+  if (unit === PRICE_UNITS.LENGTH) {
+    if (item.unit === 'mb') return item.quantity;
+    return item.calculatedDimensions?.lengthMm > 0 ? (item.calculatedDimensions.lengthMm / 1000) * item.quantity : null;
+  }
+  if (unit === PRICE_UNITS.MASS) return item.calculatedDimensions?.massKg > 0 ? item.calculatedDimensions.massKg : null;
   throw new Error(`applyPricing: unknown price unit "${unit}"`);
 }
 

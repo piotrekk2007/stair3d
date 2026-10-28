@@ -1,11 +1,13 @@
 // LED lighting (geometry/ledModel.js) -> MaterialTakeoffItem[]: per place (under the noses / in the wangi / under the
-// handrail) the strip in its aluminium profile in running metres with the cut list (every piece's length), and the
-// power supply (the strips' power + the reserve). UNPRICED like the connectors — no price entry exists for these
-// material ids, so the cost stays null and the summary / offer flag it; a price can be added as a manual row.
+// handrail) the strip and its aluminium profile, each in running metres with the cut list (every piece's length), and
+// the power supply (the strips' power + the reserve). Priced from the accessories (user decisions 2026-10-28): the strip
+// and the profile per running metre (pricing.js `led-strip` / `led-profile`), the supply from the table by power
+// (boardPricing.js ledSupplyPrices); a price of 0 leaves the item unpriced and flagged.
 
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 
-export const LED_STRIP_MATERIAL_ID = 'led-strip-profile';
+export const LED_STRIP_MATERIAL_ID = 'led-strip';
+export const LED_PROFILE_MATERIAL_ID = 'led-profile';
 export const LED_SUPPLY_MATERIAL_ID = 'led-power-supply';
 const PLACE_PL = { tread: 'pod noskami stopni', stringer: 'w wangach', handrail: 'pod poręczą' };
 
@@ -18,14 +20,15 @@ export function buildLedItems(led) {
     if (!strips.length) continue;
     const total = strips.reduce((a, s) => a + s.lengthMm, 0);
     const cuts = strips.map((s) => Math.round(s.lengthMm));
-    items.push(
+    const metres = Math.round(total / 10) / 100;
+    const line = (what, materialId, material, note) =>
       createTakeoffItem({
-        itemId: `led-${kind}`,
+        itemId: `led-${kind}-${what}`,
         elementType: ELEMENT_TYPES.LED,
-        sourceElementId: `led:${kind}`,
-        material: `Taśma LED w profilu alu ${widthMm}×${depthMm} mm — ${PLACE_PL[kind]}`,
-        materialId: LED_STRIP_MATERIAL_ID,
-        quantity: Math.round(total / 10) / 100,
+        sourceElementId: `led:${kind}:${what}`,
+        material,
+        materialId,
+        quantity: metres,
         unit: 'mb',
         nominalDimensions: { lengthMm: total },
         calculatedDimensions: { lengthMm: total, widthMm, depthMm },
@@ -37,8 +40,11 @@ export function buildLedItems(led) {
         wasteFactor: 0,
         optional: true,
         status: TAKEOFF_ITEM_STATUS.OK,
-        notes: [`${strips.length} odc.: ${cuts.join(', ')} mm (frez ${widthMm} × ${depthMm} mm). Bez ceny — typ taśmy, profil i moc do weryfikacji (ASSUMPTION).`],
-      })
+        notes: [note],
+      });
+    items.push(
+      line('strip', LED_STRIP_MATERIAL_ID, `Taśma LED — ${PLACE_PL[kind]}`, `${strips.length} odc.: ${cuts.join(', ')} mm. Typ taśmy i moc do weryfikacji (ASSUMPTION).`),
+      line('profile', LED_PROFILE_MATERIAL_ID, `Profil alu ${widthMm}×${depthMm} mm — ${PLACE_PL[kind]}`, `${strips.length} odc.: ${cuts.join(', ')} mm (frez ${widthMm} × ${depthMm} mm).`)
     );
   }
   items.push(
@@ -50,7 +56,7 @@ export function buildLedItems(led) {
       materialId: LED_SUPPLY_MATERIAL_ID,
       quantity: 1,
       unit: 'szt',
-      nominalDimensions: { powerW: led.powerW },
+      nominalDimensions: { powerW: led.powerW, supplyW: led.supplyW },
       calculatedDimensions: {},
       catalogStock: null,
       netVolume: 0,
@@ -60,7 +66,7 @@ export function buildLedItems(led) {
       wasteFactor: 0,
       optional: true,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Taśmy razem ${(led.totals.all / 1000).toFixed(2)} m, ${Math.round(led.powerW)} W + zapas. Bez ceny (ASSUMPTION: moc na metr z ustawień).`],
+      notes: [`Taśmy razem ${(led.totals.all / 1000).toFixed(2)} m, ${Math.round(led.powerW)} W + zapas = ${Math.ceil(led.supplyW)} W (ASSUMPTION: moc na metr z ustawień).`],
     })
   );
   return items;

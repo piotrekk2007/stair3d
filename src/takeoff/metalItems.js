@@ -1,7 +1,7 @@
 // Steel of a metal stair (geometry/metalStructureModel.js) -> MaterialTakeoffItem[]. Derived ONLY from the model's
-// members — the same beams, supports and toothed flat bars the 3D view and the DXF draw. UNPRICED (like the stair
-// bolts): no price entry exists for `steel-structure`, so pricing.js leaves the cost null and the summary flags it —
-// never a guessed price. No timber volume, so the self-weight ignores it; the steel's own mass is in the notes.
+// members — the same beams, supports and toothed flat bars the 3D view and the DXF draw. Priced per kg from the
+// accessories (user decision 2026-10-28, pricing.js `steel-structure`; `calculatedDimensions.massKg` = the item's WHOLE
+// mass; 0 = unpriced and flagged). No timber volume, so the self-weight ignores it.
 
 import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoffTypes.js';
 import { wasteFactorFor } from './wasteFactors.js';
@@ -9,7 +9,7 @@ import { wasteFactorFor } from './wasteFactors.js';
 export const STEEL_MATERIAL_ID = 'steel-structure';
 const ROW_LABELS = { outer: 'strona zewn.', inner: 'strona wewn.', centre: 'środek biegu' };
 const kg = (v) => `${v.toFixed(1).replace('.', ',')} kg`;
-const UNVERIFIED = 'Bez ceny — przekroje i masa orientacyjne, do weryfikacji (CO-MFG-J-METAL).';
+const UNVERIFIED = 'Przekroje i masa orientacyjne, do weryfikacji (CO-MFG-J-METAL).';
 
 function item(fields, wasteFactors) {
   return createTakeoffItem({

@@ -103,6 +103,31 @@ export function createPricingEditor(container, { settings, onChange }) {
       })
       .join('');
 
+    // Accessories (user decisions 2026-10-28): bolts, LED strip / profile, wall brackets, steel — one price each from the
+    // general price list; the LED power supplies by power (their own table)
+    const ACCESSORY_LABELS = {
+      'joint-connector': 'Śruba schodowa (każda długość)',
+      'led-strip': 'Taśma LED',
+      'led-profile': 'Profil aluminiowy LED (z kloszem)',
+      'railing-wall-bracket': 'Wspornik poręczy ściennej',
+      'steel-structure': 'Konstrukcja stalowa (z obróbką)',
+    };
+    const UNIT_LABELS = { volume: 'zł/m³', area: 'zł/m²', length: 'zł/mb', mass: 'zł/kg', piece: 'zł/szt.' };
+    const accessoryRows = settings.priceList
+      .filter((price) => price.materialId in ACCESSORY_LABELS)
+      .map((price) => `<tr><td>${esc(ACCESSORY_LABELS[price.materialId])}</td><td>${numInput(`data-kind="price" data-material="${esc(price.materialId)}"`, price.price)}</td><td>${UNIT_LABELS[price.unit] || 'zł'}</td></tr>`)
+      .join('');
+    const supplyRows = (p.ledSupplyPrices || [])
+      .map(
+        (r, i) => `
+        <tr>
+          <td>${numInput(`data-kind="supply" data-i="${i}" data-field="powerW"`, r.powerW)}</td>
+          <td>${numInput(`data-kind="supply" data-i="${i}" data-field="price"`, r.price)}</td>
+          <td><button type="button" class="tk-x" data-action="del-supply" data-i="${i}" title="Usuń">✕</button></td>
+        </tr>`
+      )
+      .join('');
+
     const wasteRows = Object.keys(settings.wasteFactors)
       .filter((type) => type === 'RISER')
       .map((type) => `<tr><td>${esc(elementLabelPl(type))}</td><td>${numInput(`data-kind="waste" data-type="${esc(type)}"`, Math.round(settings.wasteFactors[type] * 1000) / 10)}</td><td>%</td></tr>`)
@@ -150,6 +175,17 @@ export function createPricingEditor(container, { settings, onChange }) {
             <tbody>${postRows}</tbody>
           </table>
           <div class="tkp-actions"><button type="button" data-action="add-post">+ Dodaj przekrój</button></div>
+        </div>
+
+        <div class="tkp-block">
+          <div class="tkp-title">Akcesoria <span class="tk-hint">(0 = bez ceny — pozycja nie wchodzi do sumy)</span></div>
+          <table class="tkp-table"><tbody>${accessoryRows}</tbody></table>
+          <div class="tkp-title">Zasilacze LED <span class="tk-hint">(najmniejszy z ceną, który wystarcza; przy większej mocy kilka największych)</span></div>
+          <table class="tkp-table">
+            <thead><tr><th>Moc W</th><th>Cena zł/szt.</th><th></th></tr></thead>
+            <tbody>${supplyRows}</tbody>
+          </table>
+          <div class="tkp-actions"><button type="button" data-action="add-supply">+ Dodaj zasilacz</button></div>
         </div>
 
         <div class="tkp-block">
@@ -208,6 +244,9 @@ export function createPricingEditor(container, { settings, onChange }) {
     } else if (kind === 'post') {
       const row = p.postPrices[Number(el.dataset.i)];
       row[el.dataset.field] = el.dataset.field === 'unit' ? el.value : Math.max(0, Number(el.value) || 0);
+    } else if (kind === 'supply') {
+      const row = p.ledSupplyPrices[Number(el.dataset.i)];
+      row[el.dataset.field] = Math.max(0, Number(el.value) || 0);
     } else if (kind === 'price') {
       const price = settings.priceList.find((x) => x.materialId === el.dataset.material);
       if (price) price.price = Math.max(0, Number(el.value) || 0);
@@ -232,6 +271,12 @@ export function createPricingEditor(container, { settings, onChange }) {
       p.postPrices.push({ sectionMm: last ? last.sectionMm + 20 : 100, price: 0, unit: last ? last.unit : 'szt' });
     } else if (action === 'del-post') {
       p.postPrices.splice(Number(btn.dataset.i), 1);
+    } else if (action === 'add-supply') {
+      p.ledSupplyPrices = p.ledSupplyPrices || [];
+      const last = p.ledSupplyPrices[p.ledSupplyPrices.length - 1];
+      p.ledSupplyPrices.push({ powerW: last ? last.powerW + 100 : 60, price: 0 });
+    } else if (action === 'del-supply') {
+      p.ledSupplyPrices.splice(Number(btn.dataset.i), 1);
     } else if (action === 'add-mult') {
       p.table.speciesMultipliers.push({ species: 'Nowy gatunek', cls: 'Klasa Natura', multiplierPct: 100 });
     } else if (action === 'del-mult') {

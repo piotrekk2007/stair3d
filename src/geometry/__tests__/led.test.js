@@ -77,14 +77,14 @@ test('LED under the handrail: along every piece, half the handrail’s height un
   assert.equal(ids(base({ ledHandrailEnabled: true, ledProfileWidthMm: 65 }), 'LED-HANDRAIL-NARROW').length, 1);
 });
 
-test('LED consumers: the 3D layer, the plan, the DXF grooves, the unpriced takeoff (strip per place + supply), the gate', () => {
+test('LED consumers: the 3D layer, the plan, the DXF grooves, the takeoff (strip + profile per place, the supply), the gate', () => {
   const b = base(all);
   assert.equal(b.root.getObjectByName('LedLighting').children.filter((m) => !m.name.endsWith('-glow')).length, b.led.strips.length);
   const items = computeMaterialTakeoff(b, b.fullConfig).filter((i) => i.elementType === 'LED');
-  assert.deepEqual(items.map((i) => i.itemId), ['led-tread', 'led-stringer', 'led-handrail', 'led-supply']);
+  assert.deepEqual(items.map((i) => i.itemId), ['led-tread-strip', 'led-tread-profile', 'led-stringer-strip', 'led-stringer-profile', 'led-handrail-strip', 'led-handrail-profile', 'led-supply']);
   assert.equal(items[0].quantity, Math.round(b.led.totals.tread / 10) / 100);
   assert.equal(items[0].unit, 'mb');
-  assert.match(items[3].material, new RegExp(`≥ ${Math.ceil(b.led.supplyW)} W`));
+  assert.match(items[6].material, new RegExp(`≥ ${Math.ceil(b.led.supplyW)} W`));
   assert.ok(Math.abs(b.led.supplyW - (b.led.totals.all / 1000) * 9.6 * 1.2) < 1e-6);
   assert.match(buildAllTreadsDXF(b.treadModels, {}, { led: b.led }), /frez LED od spodu 17 x 8 mm/);
   assert.doesNotMatch(buildAllTreadsDXF(b.treadModels, {}), /frez LED/);

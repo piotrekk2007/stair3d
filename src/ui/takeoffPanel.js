@@ -88,7 +88,7 @@ function summaryHTML(summary, takeoff, settings) {
 
   const lines = categories.lines
     .map((l) => {
-      const count = l.manual ? '' : ` <span class="tk-muted">(${l.count} szt.)</span>`;
+      const count = l.manual || !l.count ? '' : ` <span class="tk-muted">(${l.count} szt.)</span>`;
       const warn = l.unpriced > 0 ? ` <span class="tk-warn" title="Pozycje bez ceny nie wchodzą do sumy">⚠ ${l.unpriced} bez ceny</span>` : '';
       return `<div class="tk-cat"><span>${esc(l.label)}${count}${warn}</span><b>${money(l.cost, currency)}</b></div>`;
     })

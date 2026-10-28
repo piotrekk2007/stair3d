@@ -282,7 +282,7 @@ Docs: [JOINTS_MODEL.md](docs/architecture/JOINTS_MODEL.md).
   no housing, bolted. Stair bolts in stringer joints (`jointConnector*`, DO WERYFIKACJI), crossing groups shifted, clash /
   edge / spacing / short / post-weakening findings.
 - Output `{joints, pocketsByPost, holesByPost, holesBySegment, treadCuts, riserCuts, connectors, postWeakening,
-  diagnostics}` read by renderers, DXF, takeoff (`connectorItems.js`, unpriced) and the 3D layer "Złącza"
+  diagnostics}` read by renderers, DXF, takeoff (`connectorItems.js`, one price per bolt — accessories) and the 3D layer "Złącza"
   (`jointMarkers.js` + `scene/jointMarkersOverlay.js`, never exported).
 
 ## Balustrade, glass, cantilever, metal structure
@@ -358,7 +358,7 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   two bars at the sides cut in teeth (top under the treads, the same zig-zag below leaving `metalFlatNeckMm`).
   Members are side outlines extruded across their plan piece; read by `metalStructureRenderer.js` (inside the
   `StringerOuter/Inner` layers), plan 2D footprints, the gate (`METAL-*`), takeoff (`metalItems.js`, `STEEL`,
-  unpriced) and `buildMetalDXF`. All sizes DO WERYFIKACJI (`CO-MFG-J-METAL`); the steel is never checked.
+  priced per kg — accessories) and `buildMetalDXF`. All sizes DO WERYFIKACJI (`CO-MFG-J-METAL`); the steel is never checked.
 
 ## LED lighting — `geometry/ledModel.js`
 
@@ -368,7 +368,7 @@ board's stair-side face `ledStringerFromTopMm` under its top profile), `ledHandr
 piece); profile / groove `ledProfileWidthMm` × `ledProfileDepthMm` (17 × 8, ASSUMPTION) → `built.led` (strips, totals,
 power + supply, `LED-*` findings in the gate) → 3D layer `LedLighting` (`ledRenderer.js`: emissive band + glow), plan
 layer „Oświetlenie LED”, DXF layer `LED` (tread / board grooves, balustrade note), takeoff `LED` items (strip per place
-in mb with the cut list + power supply, unpriced). Folder „10. Oświetlenie LED”.
+and its profile in mb with the cut list + power supply — accessories). Folder „10. Oświetlenie LED”.
 
 ## Validation
 
@@ -408,7 +408,11 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   (400 mm strips, each at its own depth measured at its own slant) or `split` (two straight blanks where they save the
   most) — all with the whole board's length column, ONE price, the note says what was priced (`stockGeometry.js
   stringerStrips / stringerSplitBlanks`, `calculatedDimensions.stringerPricing`);
-  post price table; manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
+  post price table; **accessories** (user decisions 2026-10-28): stair bolts one price per piece, LED strip and profile per
+  mb, wall-handrail brackets per piece, steel per kg (`PRICE_UNITS.MASS`, the item's `massKg`) in the general list
+  (`pricing.js`, 0 = unpriced and flagged), LED power supplies by power (`boardPricing.js ledSupplyPrices`: the smallest
+  priced one that is enough, else n × the largest) — editor block „Akcesoria”; a category line counts pieces only (not
+  mb); manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
   project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
 - **Part codes and labels** (`production/partCodes.js`, `labelSheet.js`, user decisions 2026-10-28, docs
   [PART_CODES.md](docs/architecture/PART_CODES.md)): every physical part (the ungated takeoff items) gets a code by type,

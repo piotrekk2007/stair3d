@@ -39,5 +39,7 @@ User decisions 2026-10-28: LED under the treads' noses, in the wanga along the f
 - DXF (layer `LED`): the tread's groove rectangle with „frez LED od spodu W x D mm” (`buildTreadDXF` /
   `buildAllTreadsDXF` `{led}`), the wanga's band along its line (`buildStringerBoardDXF` / `…AllBoardsDXF` `{led}`), and
   a header line on the balustrade sheet (`buildRailingDXF` `{led}`).
-- Takeoff (`takeoff/ledItems.js`, `ELEMENT_TYPES.LED`, UNPRICED like the connectors): per place the strip in its profile
-  in running metres with its cut list, and the power supply `≥ supplyW`; category „Oświetlenie LED (bez ceny)”.
+- Takeoff (`takeoff/ledItems.js`, `ELEMENT_TYPES.LED`): per place the strip and the profile, each in running metres with
+  its cut list (`led-strip` / `led-profile`, priced per mb in the accessories), and the power supply `≥ supplyW` (priced
+  from the table of supplies by power, `boardPricing.js ledSupplyPrices`); 0 = unpriced and flagged; category
+  „Oświetlenie LED”.

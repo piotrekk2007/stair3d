@@ -120,7 +120,7 @@ test('findings: too shallow a section, unavoidable crossing, a weakened post, a 
   for (const w of Object.values(m.joints.postWeakening)) assert.ok(w.netFraction > 0.5 && w.netFraction < 1);
 });
 
-test('takeoff: one unpriced CONNECTOR item per joint, quantity = its bolts; its own summary line', () => {
+test('takeoff: one CONNECTOR item per joint, quantity = its bolts; its own summary line; unpriced until a price per piece is given', () => {
   const m = build({});
   // (ungated: the default stair's takeoff is blocked by unrelated findings — the connectors don't depend on the gate)
   const priced = applyPricing(computeMaterialTakeoff(m, m.fullConfig), DEFAULT_PRICE_LIST);
@@ -129,11 +129,15 @@ test('takeoff: one unpriced CONNECTOR item per joint, quantity = its bolts; its 
   assert.equal(items.length, joints.size);
   for (const it of items) {
     assert.equal(it.quantity, 2);
-    assert.equal(it.calculatedCost, null, 'bez ceny');
+    assert.equal(it.calculatedCost, null, 'bez ceny (0 in the default price list)');
     assert.match(it.material, /^Śruba schodowa M10 × \d+$/);
   }
-  const line = summarizeByCategory(priced).lines.find((l) => l.label === 'Łączniki (bez ceny)');
+  const line = summarizeByCategory(priced).lines.find((l) => l.label === 'Łączniki');
   assert.ok(line && line.unpriced === items.length && line.cost === 0);
+  // one price per piece for every length (user decision 2026-10-28)
+  const list = DEFAULT_PRICE_LIST.map((p) => (p.materialId === 'joint-connector' ? { ...p, price: 12.5 } : p));
+  const withPrice = applyPricing(computeMaterialTakeoff(m, m.fullConfig), list).filter((i) => i.elementType === 'CONNECTOR');
+  for (const it of withPrice) assert.equal(it.calculatedCost, 25);
   const none = build({ jointConnectorCount: 0 });
   assert.equal(computeMaterialTakeoff(none, none.fullConfig).filter((i) => i.elementType === 'CONNECTOR').length, 0);
 });

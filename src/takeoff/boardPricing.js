@@ -32,6 +32,7 @@
 
 import { ELEMENT_TYPES } from './takeoffTypes.js';
 import { round2 } from '../util/format.js';
+import { LED_SUPPLY_MATERIAL_ID } from './ledItems.js';
 
 export const BOARD_THICKNESS_CLASSES_MM = Object.freeze([20, 40, 60]);
 export const BOARD_PRICING_SOURCE = 'board-table';
@@ -95,6 +96,15 @@ export function createDefaultBoardPricing() {
       { sectionMm: 80, price: 120, unit: 'szt' },
       { sectionMm: 100, price: 160, unit: 'szt' },
       { sectionMm: 110, price: 200, unit: 'mb' }, // słup 110×110 — cena podana przez użytkownika
+    ],
+    // LED power supplies by power (user decision 2026-10-28): the smallest supply >= the power the strips need (+ the
+    // reserve), several of the largest when none is enough; 0 = not priced yet (the user types the real prices).
+    ledSupplyPrices: [
+      { powerW: 60, price: 0 },
+      { powerW: 100, price: 0 },
+      { powerW: 150, price: 0 },
+      { powerW: 240, price: 0 },
+      { powerW: 320, price: 0 },
     ],
     table: {
       boards: DEFAULT_BOARDS.map((r) => ({ ...r })),
@@ -242,6 +252,7 @@ function describeBreakdown(pricing, blank, lookup, cost, quantity) {
 
 export const EXCLUDED_PRICING_SOURCE = 'excluded';
 export const POST_PRICING_SOURCE = 'post-table';
+export const LED_SUPPLY_PRICING_SOURCE = 'led-supply-table';
 
 function excludedItem(item) {
   return {
@@ -249,6 +260,31 @@ function excludedItem(item) {
     pricingSource: EXCLUDED_PRICING_SOURCE,
     calculatedCost: null,
     notes: [...item.notes, 'Poza zakresem kosztorysu — liczony jest tylko materiał: stopnie, stopnie zabiegowe, podesty, podstopnie, wangi i słupy.'],
+  };
+}
+
+// The LED power supply (takeoff/ledItems.js): the smallest supply in the table with a price that is >= the power it
+// needs — or n of the largest priced one when none is enough.
+function priceLedSupply(item, pricing) {
+  const need = item.nominalDimensions?.supplyW || 0;
+  const rows = [...(pricing.ledSupplyPrices || [])].filter((r) => r.price > 0 && r.powerW > 0).sort((a, b) => a.powerW - b.powerW);
+  const base = { ...item, pricingSource: LED_SUPPLY_PRICING_SOURCE, wasteFactor: 0, catalogStock: null };
+  if (!rows.length) return { ...base, notes: [...item.notes, 'Brak ceny zasilacza — wpisz ceny zasilaczy wg mocy w „Cennik i materiały” → Akcesoria.'] };
+  const row = rows.find((r) => r.powerW >= need - 1e-6);
+  const largest = rows[rows.length - 1];
+  const count = row ? 1 : Math.ceil(need / largest.powerW);
+  const pick = row || largest;
+  const cost = round2(pick.price * count);
+  return {
+    ...base,
+    material: count > 1 ? `Zasilacz LED ${pick.powerW} W × ${count}` : `Zasilacz LED ${pick.powerW} W`,
+    quantity: count,
+    unitPrice: pick.price,
+    priceUnit: 'szt',
+    currency: 'PLN',
+    calculatedCost: cost,
+    priceBreakdown: { powerW: pick.powerW, price: pick.price, count },
+    notes: [...item.notes, `Cennik zasilaczy: potrzeba ${Math.ceil(need)} W → ${count > 1 ? `${count} × ` : ''}${pick.powerW} W · ${fmtPln(pick.price)} zł/szt. = ${fmtPln(cost)} zł`],
   };
 }
 
@@ -336,6 +372,7 @@ export function applyBoardPricing(items, pricing) {
     if (item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
     if (item.status !== 'OK') return item;
     if (item.elementType === ELEMENT_TYPES.POST) return pricePost(item, pricing);
+    if (item.materialId === LED_SUPPLY_MATERIAL_ID) return priceLedSupply(item, pricing);
     const blank = boardBlankOf(item, pricing.riserMaterial);
     if (!blank) return item;
     const pieces = stringerPiecesFor(item, pricing.stringerPricingMode);
@@ -436,8 +473,12 @@ export function sanitizeBoardPricing(value) {
   const postPrices = Array.isArray(value.postPrices)
     ? value.postPrices.filter((r) => r && isNum(r.sectionMm) && r.sectionMm > 0 && isNum(r.price) && r.price >= 0 && (r.unit === 'szt' || r.unit === 'mb')).map((r) => ({ sectionMm: r.sectionMm, price: r.price, unit: r.unit }))
     : null;
+  const ledSupplyPrices = Array.isArray(value.ledSupplyPrices)
+    ? value.ledSupplyPrices.filter((r) => r && isNum(r.powerW) && r.powerW > 0 && isNum(r.price) && r.price >= 0).map((r) => ({ powerW: r.powerW, price: r.price }))
+    : null;
   return {
     postPrices: postPrices ?? fresh.postPrices,
+    ledSupplyPrices: ledSupplyPrices ?? fresh.ledSupplyPrices,
     species: typeof value.species === 'string' ? value.species : fresh.species,
     cls: typeof value.cls === 'string' ? value.cls : fresh.cls,
     riserMaterial: Object.values(RISER_MATERIALS).includes(value.riserMaterial) ? value.riserMaterial : fresh.riserMaterial,
