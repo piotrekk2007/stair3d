@@ -9,6 +9,18 @@ import { exportStaircaseToOBJ } from '../export/objExporter.js';
 import { exportStaircaseToDAE } from '../export/daeExporter.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { takeoffToCSV, takeoffToTextReport } from '../takeoff/index.js';
+import { buildClientScene, sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML, clientFacts } from '../export/clientModelExport.js';
+
+function downloadBinary(buffer, filename, mimeType) {
+  const url = URL.createObjectURL(new Blob([buffer], { type: mimeType }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /** The file-name stem of a project's exports: its name with anything but letters, digits, _ and - made "_". */
 export function projectFileBaseName(projectName) {
@@ -28,6 +40,8 @@ export function projectFileBaseName(projectName) {
  * @param {() => Object|null} opts.getRoot        the rendered stair (OBJ/DAE)
  * @param {Object} opts.exportSelection           which element groups go into OBJ/DAE
  * @param {(fn: () => void) => void} opts.withCleanMaterials  runs `fn` with the selection highlight removed
+ * @param {() => THREE.Object3D[]} [opts.getRoom]   the stairwell's walls and the slab (the client's model, 'room' layer)
+ * @param {() => string|null} [opts.getLogoDataUrl] the company logo (the client's HTML)
  */
 export function createExports(opts) {
   const base = () => projectFileBaseName(opts.getProjectName());
@@ -77,6 +91,30 @@ export function createExports(opts) {
       const text = buildOpeningTrimDXF(opts.getModels()?.openingTrim);
       if (text) dxf(text, 'fajka_otworu');
       else window.alert('Brak obróbki otworu do narysowania — włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.');
+    },
+    // The model for the CLIENT (export/clientModelExport.js): 'html' — the self-contained viewer with a tape measure,
+    // 'glb' — Windows / Android / any 3D program, 'usdz' — iPhone / iPad (3D and AR). Only geometry and its look.
+    async clientModel(kind) {
+      const m = opts.getModels();
+      if (!m || !opts.getRoot()) return;
+      let scene = null;
+      opts.withCleanMaterials(() => {
+        scene = buildClientScene({ root: opts.getRoot(), room: opts.getRoom ? opts.getRoom() : [] });
+      });
+      const name = base();
+      if (kind === 'usdz') {
+        downloadBinary(await sceneToUSDZ(scene), `${name}_model_3d.usdz`, 'model/vnd.usdz+zip');
+        return;
+      }
+      const glb = await sceneToGLB(scene);
+      if (kind === 'glb') {
+        downloadBinary(glb, `${name}_model_3d.glb`, 'model/gltf-binary');
+        return;
+      }
+      const { default: runtime } = await import('virtual:client-viewer-runtime');
+      const title = opts.getProjectName() || 'Schody';
+      const html = clientViewerHTML({ glbBase64: arrayBufferToBase64(glb), title, logo: opts.getLogoDataUrl ? opts.getLogoDataUrl() : null, facts: clientFacts(m), runtime });
+      downloadTextFile(html, `${name}_model_3d.html`, 'text/html');
     },
     takeoff(kind) {
       const takeoff = opts.getTakeoff();

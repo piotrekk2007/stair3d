@@ -99,6 +99,7 @@ export function createOfferController(opts) {
       refresh();
     },
     onGenerate: () => generatePDF(),
+    onClientModel: (kind) => opts.onClientModel?.(kind),
   });
   fillOfferForm(panel, settings, company);
 

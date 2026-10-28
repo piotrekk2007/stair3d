@@ -1200,6 +1200,9 @@ const exporter = createExports({
   getWaivedCount: () => lastWaived.length,
   getProjectName: () => projectMeta.name,
   getRoot: () => currentRoot,
+  // (the client's model: the stairwell's walls and the slab as its 'room' layer)
+  getRoom: () => [currentCeiling, currentWalls].filter(Boolean),
+  getLogoDataUrl: () => logo.dataUrl(),
   exportSelection,
   withCleanMaterials: (fn) => {
     applySelectionHighlight(currentRoot, null);
@@ -1351,6 +1354,11 @@ offer = createOfferController({
   getProjectName: () => projectMeta.name,
   renderImage3D: offerImage3D,
   renderPlanSVG: offerPlanSVG,
+  onClientModel: (kind) =>
+    exporter.clientModel(kind).catch((e) => {
+      console.error(e);
+      window.alert(`Nie udało się zapisać modelu 3D: ${e?.message || e}`);
+    }),
 });
 
 const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {

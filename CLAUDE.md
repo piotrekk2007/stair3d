@@ -384,6 +384,12 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   stringerStrips / stringerSplitBlanks`, `calculatedDimensions.stringerPricing`);
   post price table; manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
   project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
+- **Model 3D for the client** (user request 2026-10-28, docs [CLIENT_MODEL.md](docs/architecture/CLIENT_MODEL.md)):
+  „Oferta” tab → HTML (one self-contained file: the client's own viewer `viewer/clientViewer.js` — three.js only, bundled
+  on its own by `vite.config.js clientViewerRuntime` as `virtual:client-viewer-runtime` — + the model as GLB + logo +
+  main sizes; views, walls / slab on-off, a tape measure), GLB (Windows / Android) and USDZ (iPhone / iPad, AR) —
+  `export/clientModelExport.js` (`buildClientScene`: the stair root cloned, every layer, no userData, metres; the
+  walls / slab as the 'room' layer). Never the project, its parameters or prices.
 - Offer (`offer/offerModel.js`, `offerDocument.js`, `ui/offerPanel.js`): CNC + projekt is a hidden lump sum spread over
   material lines; categories can be shown separately; extras, discount (`discountPct`: % of the material + extras only,
   never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation, VAT

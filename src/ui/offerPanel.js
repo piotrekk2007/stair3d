@@ -20,6 +20,13 @@ export function createOfferPanel(container, handlers) {
     <div class="of-actions">
       <button type="button" data-of="generate" class="of-primary" title="Otwiera okno drukowania — wybierz „Zapisz jako PDF”">📄 Generuj ofertę (PDF)</button>
     </div>
+    <h4>Model 3D dla klienta</h4>
+    <div class="of-actions of-client-model">
+      <button type="button" data-client-model="html" title="Jeden plik HTML: model 3D z teksturami, Twoim logo i miarką — otwiera się w każdej przeglądarce (także w telefonie, bez internetu). Bez kodu programu i bez cen.">📦 Podgląd 3D (HTML)</button>
+      <button type="button" data-client-model="glb" title="Sam model 3D (GLB): Windows (Podgląd 3D), Android (aplikacje 3D / AR), dowolny program 3D">GLB — Windows / Android</button>
+      <button type="button" data-client-model="usdz" title="Sam model 3D (USDZ): iPhone / iPad — Quick Look, z widokiem AR (schody „w pokoju”)">USDZ — iPhone / iPad (AR)</button>
+    </div>
+    <div class="of-hint">Klient dostaje tylko geometrię i wygląd schodów (plus logo i główne wymiary w podglądzie HTML) — bez parametrów projektu, kodu programu i cen.</div>
     <div class="of-warnings" data-of="warnings"></div>
     <h4>Podgląd wyceny</h4>
     <div data-of="preview"></div>
@@ -76,6 +83,7 @@ export function createOfferPanel(container, handlers) {
     }
   });
   panel.querySelector('[data-of="generate"]').addEventListener('click', () => handlers.onGenerate());
+  panel.querySelectorAll('[data-client-model]').forEach((b) => b.addEventListener('click', () => handlers.onClientModel?.(b.dataset.clientModel)));
   panel.querySelector('[data-of="suggest"]').addEventListener('click', () => handlers.onSuggestNumber());
   return panel;
 }
