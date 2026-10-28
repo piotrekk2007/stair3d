@@ -31,6 +31,7 @@ import { buildHeadroomModel } from './headroomModel.js';
 import { buildStairwellWalls } from './stairwellWallsRenderer.js';
 import { applyAppearanceToMaterials } from '../scene/appearance.js';
 import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTexture, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
+import { withFloorRise } from './floors.js';
 
 // Wypukłość porów/słojów z tekstury dębu (bumpMap) — wartość dobrana na oko w widoku 3D, tylko wizualna.
 const OAK_BUMP_SCALE = 0.6;
@@ -73,7 +74,9 @@ export function setAppearance(appearance) {
 // Każdy `build*Models()` jest czystą funkcją (planLayout, config) -> dane; każdy `render*()`
 // przyjmuje TYLKO już gotowy model i zwraca THREE.Group — żaden renderer nie woła solvera
 // sam, i żaden solver nie zagląda do Three.js. Patrz docs/architecture/CONSOLIDATION.md.
-export function buildStaircase(inputConfig) {
+export function buildStaircase(rawConfig) {
+  // the stair's rise between the finished floors from the raw height and the floor finishes (geometry/floors.js)
+  const inputConfig = withFloorRise(rawConfig);
   // "Dopasuj do klatki" (stairwellFit.js): the going and straight-tread counts derived from the stairwell's side
   // lengths replace the user's values BEFORE anything is solved, so every model, the validation and the takeoff
   // see one and the same stair. With the fit off (or without a solution) this is the user's config unchanged.

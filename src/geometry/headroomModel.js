@@ -15,6 +15,7 @@
 
 import { pointInPolygon, subtractConvex } from './polygonClip.js';
 import { signedPolygonArea } from './pathUtils.js';
+import { slabSoffitZ } from './floors.js';
 
 export const HEADROOM_SAMPLE_MM = 10;
 // How far past the edge (onto the slab side) a tread must go on to count as passing under the edge (mm).
@@ -39,7 +40,7 @@ function isConvex(poly) {
  * @returns {{soffitZ:number, requiredMm:number, pieces:Object[], blocks:Object[], min:Object|null}}
  */
 export function buildHeadroomModel({ planLayout, ceilingFit, config }) {
-  const soffitZ = (Number(config.totalRise) || 0) - (Number(config.ceilingThickness) || 0);
+  const soffitZ = slabSoffitZ(config);
   const requiredMm = Number(config.minHeadroom) || 0;
   const outline = ceilingFit?.openingOutline;
   const empty = { soffitZ, requiredMm, pieces: [], blocks: [], min: null };

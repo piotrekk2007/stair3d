@@ -15,6 +15,7 @@
 
 import { signedPolygonArea, segmentsProperlyIntersect } from './pathUtils.js';
 import { wellFrame } from './stairwell.js';
+import { slabSoffitZ } from './floors.js';
 import { unionRectangles } from './rectUnion.js';
 
 export const OPENING_SHAPES = Object.freeze({ RECT: 'rect', POLYGON: 'polygon' });
@@ -165,7 +166,7 @@ export function topRiserFootprint(config, planLayout) {
 }
 
 export function requiredOpeningRelative(config, planLayout, riserHeight, frame) {
-  const threshold = config.totalRise - config.ceilingThickness - config.minHeadroom;
+  const threshold = slabSoffitZ(config) - config.minHeadroom;
   const rects = [];
   // every tread above the headroom line — and the top riser (it reaches the floor)
   const riser = topRiserFootprint(config, planLayout);

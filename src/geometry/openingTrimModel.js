@@ -29,6 +29,7 @@
 
 import { openingEdgePieces } from './railingSolver.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { rawSlabTopZ, floorFinishes } from './floors.js';
 
 const JOIN_MM = 0.5;
 
@@ -40,7 +41,8 @@ export function openingTrimDims(config) {
   return {
     noseWidth: num(config.openingTrimNoseWidthMm, 20),
     noseHeight,
-    boardThickness: Math.min(num(config.openingTrimBoardThicknessMm, 15), noseHeight),
+    // (by default the top floor finish — the board lies on the raw slab, its top flush with the finished floor)
+    boardThickness: Math.min(config.openingTrimBoardThicknessMm === null || config.openingTrimBoardThicknessMm === undefined ? floorFinishes(config).top || 15 : num(config.openingTrimBoardThicknessMm, 15), noseHeight),
     boardDepth: num(config.openingTrimBoardDepthMm, 100),
   };
 }
@@ -69,7 +71,8 @@ export function buildOpeningTrim(ctx) {
   if (!config.openingTrimEnabled || !Array.isArray(openingOutline) || openingOutline.length < 3) return empty;
   const { edges, pieces: all } = openingEdgePieces(openingOutline, ctx, config.openingTrimEdges, { wallsCut: false });
   const dims = openingTrimDims(config);
-  const F = Number(config.totalRise) || 0;
+  // the raw slab's top (geometry/floors.js): the board lies on it
+  const F = rawSlabTopZ(config);
   const T = F + dims.boardThickness;
   const diagnostics = [];
   if (dims.noseHeight > (Number(config.ceilingThickness) || Infinity)) {

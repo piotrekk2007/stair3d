@@ -21,6 +21,7 @@
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { inwardNormal } from './planLayout.js';
 import { sideHand } from '../util/sideNames.js';
+import { slabSoffitZ } from './floors.js';
 
 export const WELL_SIDES = Object.freeze(['A', 'B', 'C']);
 // A fixed side within this of its dimension counts as met (mm).
@@ -399,7 +400,7 @@ export function stairwellWalls(report, config, planLayout) {
   const frame = report?.frame;
   if (!frame || !planLayout) return null;
   const T = STAIRWELL_WALL_DRAWN_THICKNESS_MM;
-  const height = Math.max(0, (Number(config.totalRise) || 0) - (Number(config.ceilingThickness) || 0));
+  const height = Math.max(0, slabSoffitZ(config));
   const pieces = wallSegments(config, planLayout).map((w) => {
     const dir = unit(sub(w.b, w.a));
     // (at a convex corner the wall runs on by its thickness to close it; at a concave one it ends short — the other

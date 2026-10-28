@@ -1,4 +1,5 @@
 import { resolveOpening, openingFrame, requiredOpeningRelative, polygonContainsPolygon, topRiserFootprint } from '../geometry/ceilingOpening.js';
+import { slabSoffitZ } from '../geometry/floors.js';
 import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from '../geometry/winderArc.js';
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
@@ -90,7 +91,7 @@ export function createDefaultConfig() {
     openingTrimExit: true, // the trim at the stair's exit too (its nosing tread on the slab) — its own switch
     openingTrimNoseWidthMm: 20, // how far the nose stands out into the opening
     openingTrimNoseHeightMm: null, // the nose's height (null = the tread thickness; up to the slab's thickness)
-    openingTrimBoardThicknessMm: 15, // the board on the slab behind it, top flush with the floor
+    openingTrimBoardThicknessMm: null, // the board on the slab behind it, top flush with the floor (null = the top floor finish, else 15)
     openingTrimBoardDepthMm: 100, // how far the board runs onto the floor // mm, from the wall to the outer face of the wanga along it
     // An S only: its sides A / B / C measured along the 'left' / 'right' line (walking up flight A) — '' = the line most
     // of its walls stand along (stairwell.js stairwellMeasureLine; without a wall list also the per-side walls' line)
@@ -325,7 +326,13 @@ export function createDefaultConfig() {
     maxRiser: 200, // mm, górna granica sensownej wysokości podstopnia
 
     minHeadroom: 2000, // mm, minimalna skrajnia (wolna wysokość) nad noskiem stopnia
-    ceilingThickness: 250, // mm, grubość stropu
+    ceilingThickness: 250, // mm, grubość stropu (surowego)
+    // Floors raw / finished (geometry/floors.js, user decisions 2026-10-28): the height between the RAW slabs as
+    // measured on site (null = an older project: totalRise given directly) and the floor finish at the bottom / top —
+    // the stair stands on the finished floor, totalRise = raw − bottom + top (AUTO)
+    rawStoreyHeightMm: null,
+    floorFinishBottomMm: 0,
+    floorFinishTopMm: 0,
     // Otwór w stropie zadawany ręcznie (prostokąt), pozycjonowany względem lewego-dolnego
     // rogu rzutu schodów (bounds.minX/minY z planLayout) + offset:
     openingLength: 2400, // mm, wymiar otworu wzdłuż kierunku biegu (Y)
@@ -494,7 +501,7 @@ export function alignedOpeningOffsets(config, bounds, targetId) {
 // nisko nad podłogą nie mają z nim żadnej kolizji niezależnie od pozycji otworu; sprawdzane są
 // tylko te, których szczyt wchodzi w strefę min. skrajni pod spodem stropu.
 export function deriveCeilingFit(config, planLayout, riserHeight) {
-  const { totalRise, ceilingThickness, minHeadroom } = config;
+  const { minHeadroom } = config;
   // Prostokąt albo narysowany wielokąt — jeden obrys (geometry/ceilingOpening.js). open* = jego obwiednia.
   // in DERIVED mode the opening is the one the stair needs (requiredOpeningRelative)
   const frame = openingFrame(config, planLayout);
@@ -502,7 +509,8 @@ export function deriveCeilingFit(config, planLayout, riserHeight) {
   const opening = resolveOpening(config, frame, derivedRelative);
   const { minX: openMinX, maxX: openMaxX, minY: openMinY, maxY: openMaxY } = opening;
 
-  const soffitZ = totalRise - ceilingThickness;
+  // (the raw slab's underside — geometry/floors.js: the finished floor less the top finish and the slab)
+  const soffitZ = slabSoffitZ(config);
   const dangerThresholdZ = soffitZ - minHeadroom;
 
   const violatingTreads = [];

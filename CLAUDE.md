@@ -182,6 +182,12 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   under its nose (`exitTrimNoseBottomZ` → `topRiserElevation`); the exit piece spans the whole stretch (wangi included)
   and joins the trim beside it / at the corner, the wangi ending at the slab notched under its nose.
 
+- **Floors raw / finished** (`geometry/floors.js`, user decisions 2026-10-28, docs
+  [FLOORS.md](docs/architecture/FLOORS.md)): `rawStoreyHeightMm` (null = older project) + `floorFinishBottomMm` /
+  `floorFinishTopMm` → `totalRise` = raw − bottom + top (AUTO, `withFloorRise` at the start of `buildStaircase`); the stair
+  stands on the finished floor (z = 0); the upper raw slab's top `rawSlabTopZ` (the trim's board lies on it, its
+  thickness by default the top finish), its soffit `slabSoffitZ` (ceiling fit, derived opening, headroom, walls); 3D
+  slab + its top finish layer.
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
   tread tops like `deriveCeilingFit`, none at the exit) = translucent curtains, green ≥ `minHeadroom`, red below; the

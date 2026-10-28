@@ -5,6 +5,7 @@ import { stepIndexFromElementId } from './selection.js';
 import { APPEARANCE_ELEMENTS, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, finishKey, METAL_ELEMENTS, METAL_PRESETS } from '../scene/appearance.js';
 import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSolver.js';
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
+import { floorDrivenFields } from '../geometry/floors.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
 import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
@@ -30,12 +31,13 @@ function makeLockable(controller, config, fieldName, syncs) {
   const badge = stateBadgeElement('auto');
   const sync = () => {
     const locked = config.lockedFields.includes(fieldName);
-    const driven = stairwellDrivenFields(config).includes(fieldName);
+    const fromFloors = floorDrivenFields(config).includes(fieldName);
+    const driven = fromFloors || stairwellDrivenFields(config).includes(fieldName);
     btn.textContent = locked ? '🔒' : '🔓';
     btn.classList.toggle('locked', locked);
     setStateBadge(badge, locked && !driven ? 'user' : 'auto');
     controller.disable(locked || driven);
-    controller.domElement.title = driven ? 'Wyliczane z wymiarów klatki (Klatka schodowa → Dopasuj do klatki)' : '';
+    controller.domElement.title = fromFloors ? 'Wyliczane: wysokość surowa − posadzka na dole + posadzka na górze' : driven ? 'Wyliczane z wymiarów klatki (Klatka schodowa → Dopasuj do klatki)' : '';
   };
   if (syncs) syncs.push(sync);
   btn.addEventListener('click', (e) => {
@@ -124,8 +126,21 @@ export function createUI({
 
 
   const building = gui.addFolder('2. Budynek');
-  lockable(building.add(config, 'totalRise', 2000, 3600, 1).name('Wys. kondygnacji [mm]'), 'totalRise');
-  lockable(building.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu [mm]'), 'ceilingThickness');
+  // floors raw / finished (geometry/floors.js): the raw height measured on site + the floor finishes give the stair's
+  // rise (AUTO below); a project without a raw height shows the one that matches its rise, and editing it switches over
+  const floorsProxy = {
+    get raw() {
+      return config.rawStoreyHeightMm ?? (Number(config.totalRise) || 0) + (Number(config.floorFinishBottomMm) || 0) - (Number(config.floorFinishTopMm) || 0);
+    },
+    set raw(v) {
+      config.rawStoreyHeightMm = v;
+    },
+  };
+  live(building.add(floorsProxy, 'raw', 2000, 3800, 1)).name('Wys. kondygnacji SUROWA [mm]');
+  live(building.add(config, 'floorFinishBottomMm', 0, 200, 1)).name('Posadzka na dole [mm]');
+  live(building.add(config, 'floorFinishTopMm', 0, 200, 1)).name('Posadzka na górze [mm]');
+  lockable(building.add(config, 'totalRise', 2000, 3600, 1).name('Wys. schodów (podłoga–podłoga gotowa) [mm]'), 'totalRise');
+  lockable(building.add(config, 'ceilingThickness', 150, 400, 10).name('Grubość stropu (surowego) [mm]'), 'ceilingThickness');
   lockable(building.add(config, 'minHeadroom', 1900, 2200, 10).name('Min. skrajnia [mm]'), 'minHeadroom');
 
   // The stairwell as side lengths (geometry/stairwell.js, model v3): A along flight A (first front edge → corner),
@@ -283,9 +298,16 @@ export function createUI({
     set noseHeight(v) {
       config.openingTrimNoseHeightMm = v;
     },
+    // (by default the top floor finish — geometry/floors.js; editing it sets the board's own thickness)
+    get boardThickness() {
+      return config.openingTrimBoardThicknessMm ?? ((Number(config.floorFinishTopMm) || 0) > 0 ? Number(config.floorFinishTopMm) : 15);
+    },
+    set boardThickness(v) {
+      config.openingTrimBoardThicknessMm = v;
+    },
   };
   live(ceiling.add(trimProxy, 'noseHeight', 10, 600, 1)).name('Fajka: wysokość noska [mm]');
-  live(ceiling.add(config, 'openingTrimBoardThicknessMm', 5, 40, 1)).name('Fajka: grubość deski na stropie [mm]');
+  live(ceiling.add(trimProxy, 'boardThickness', 5, 60, 1)).name('Fajka: grubość deski na stropie [mm]');
   live(ceiling.add(config, 'openingTrimBoardDepthMm', 0, 400, 5)).name('Fajka: deska w głąb stropu [mm]');
 
   const steps = gui.addFolder('5. Bieg i stopnie');
@@ -705,7 +727,11 @@ export function updateInfoPanel(panel, derived, planLayout, config, ceilingFit, 
   rows.push(`<div class="row"><span>Liczba stopni</span><b>${derived.numTreads}</b></div>`);
   rows.push(`<div class="row${fitted ? ' resultant' : ''}"><span>Głębokość stopnia (prosty)${fitted ? ` ${AUTO_BADGE}` : ''}</span><b>${goingText} mm</b></div>`);
   rows.push(`<div class="row resultant"><span>Wysokość podstopnia ${AUTO_BADGE}</span><b>${derived.riserHeight.toFixed(1)} mm</b></div>`);
-  rows.push(`<div class="row"><span>Wysokość kondygnacji</span><b>${config.totalRise.toFixed(0)} mm</b></div>`);
+  // (with the raw height and the floor finishes — geometry/floors.js — both heights)
+  if (floorDrivenFields(config).length) {
+    rows.push(`<div class="row"><span>Wysokość kondygnacji surowa</span><b>${Number(config.rawStoreyHeightMm).toFixed(0)} mm</b></div>`);
+    rows.push(`<div class="row"><span>Wysokość schodów (podłogi gotowe)</span><b>${config.totalRise.toFixed(0)} mm</b></div>`);
+  } else rows.push(`<div class="row"><span>Wysokość kondygnacji</span><b>${config.totalRise.toFixed(0)} mm</b></div>`);
 
   if (planLayout) {
     const footprintX = planLayout.bounds.maxX - planLayout.bounds.minX;

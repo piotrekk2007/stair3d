@@ -56,6 +56,7 @@ import { lineHasWall, stairwellWallList } from './geometry/stairwell.js';
 import { applyWallEdit } from './geometry/stairwellWallEdits.js';
 import { createMeasureTool } from './scene/measureTool.js';
 import { snapMeasurePoint, planMeasureRefs } from './plan2d/planMeasure.js';
+import { floorDrivenFields } from './geometry/floors.js';
 
 // What a NEW project starts with (the app's start and "Nowy"): no stair yet, the stairwell's walls on.
 const NEW_PROJECT_START = Object.freeze({ stairPending: true, stairwellRoomEnabled: true });
@@ -282,8 +283,10 @@ function rebuild() {
   // gone when the stairwell is off — stairwellFit.js solveFixedSides)
   const { turnSplitOffsetsMm: _shifts, ...fitValues } = built.stairwellFit?.values || {};
   if (built.stairwellFit?.values) Object.assign(config, fitValues);
+  // the rise from the raw height and the floor finishes (geometry/floors.js) — AUTO in the panel
+  if (config.rawStoreyHeightMm !== null && config.rawStoreyHeightMm !== undefined) config.totalRise = fullConfig.totalRise;
   const fitOn = !!(config.stairwellFitEnabled || built.stairwellFit?.live);
-  if (fitOn || fitWasEnabled) uiRefresh?.();
+  if (fitOn || fitWasEnabled || floorDrivenFields(config).length) uiRefresh?.();
   fitWasEnabled = fitOn;
 
   // not generated yet (config.stairPending): the stair is built (the walls and the opening follow it) but not shown
