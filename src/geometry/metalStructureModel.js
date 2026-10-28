@@ -20,6 +20,7 @@
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { cleanPolygon, polygonArea } from './polygonClip.js';
+import { vecSub as sub } from './pathUtils.js';
 
 export const METAL_CONSTRUCTIONS = Object.freeze({ PROFILE: 'metal-profile', FLAT: 'metal-flat' });
 export const STEEL_DENSITY_KG_M3 = 7850; // structural steel, the usual handbook value
@@ -62,7 +63,6 @@ export function metalConfig(fullConfig) {
   return { ...fullConfig, hasRiserBoards: false, stringerConstructionTypeOuter: 'cut', stringerConstructionTypeInner: 'cut' };
 }
 
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 const cross = (a, b) => a.x * b.y - a.y * b.x;
 

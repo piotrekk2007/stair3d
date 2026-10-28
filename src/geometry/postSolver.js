@@ -108,12 +108,6 @@ export function cornerPostIdAt(planLayout, point) {
   return null;
 }
 
-/** True when a corner post is switched on globally but the user removed this particular one. */
-export function isCornerPostRemoved(planLayout, config, point) {
-  const id = cornerPostIdAt(planLayout, point);
-  return id !== null && sanitizePostOverrides(config.manualPostOverrides)[id]?.removed === true;
-}
-
 export function applyPostOverrides(models, rawOverrides) {
   const overrides = sanitizePostOverrides(rawOverrides);
   return models.map((m) => {

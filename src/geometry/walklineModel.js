@@ -15,6 +15,7 @@
 // dusza: 233 mm instead of the 270 mm going on the walkline).
 
 import { inwardNormal } from './planLayout.js';
+import { normalizeVector as normalize } from './pathUtils.js';
 
 const ARC_SAMPLE_DEG = 3;
 
@@ -175,10 +176,6 @@ export function buildWalklineModel(planLayout, config) {
   return { offset, origin, direction, points };
 }
 
-function normalize(v) {
-  const len = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / len, y: v.y / len };
-}
 
 // The point of an edge `offsetMm` from the dusza on `side` ('inner' | 'outer'): where the edge (read from that end)
 // crosses the dusza's offset line, else that fraction of the edge.

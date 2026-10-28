@@ -13,19 +13,13 @@
 // WITH its nosing, final); treadSolver.js keeps that outline (no nosing added, no riser groove); riserSolver.js builds
 // the riser from `tread.starter.riserPath`.
 
-import { signedPolygonArea } from './pathUtils.js';
+import { signedPolygonArea, vecSub as sub, vecDot as dot, normalizeVector as unit } from './pathUtils.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
 const CORNER_SEGMENTS = 12; // points per quarter circle of a rounded end
 const BOW_SEGMENTS = 24; // points along a bowed front
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const dot = (a, b) => a.x * b.x + a.y * b.y;
-const unit = (v) => {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 
 /** Cleans `manualStarterTreads`: non-negative numbers, `riser` a boolean. */
 export function sanitizeStarterTreads(raw) {

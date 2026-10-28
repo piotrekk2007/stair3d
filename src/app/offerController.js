@@ -7,6 +7,7 @@ import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings
 import { buildOfferHTML } from '../offer/offerDocument.js';
 import { createOfferPanel, fillOfferForm, updateOfferPanel } from '../ui/offerPanel.js';
 import { summarizeByCategory } from '../ui/takeoffView.js';
+import { printHtml } from './printHtml.js';
 
 const COMPANY_STORAGE_KEY = 'stair3d.company';
 
@@ -67,17 +68,7 @@ export function createOfferController(opts) {
       planSvg: opts.renderPlanSVG(),
       projectName: opts.getProjectName(),
     });
-    // Printed through a hidden frame: the browser's print dialog -> "Save as PDF" (no PDF library; Polish letters and
-    // pictures work as they are). The document title is the default file name.
-    const frame = document.createElement('iframe');
-    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-    frame.onload = () => {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-      setTimeout(() => frame.remove(), 60000);
-    };
-    frame.srcdoc = html;
-    document.body.appendChild(frame);
+    printHtml(html);
   }
 
   const panel = createOfferPanel(opts.container, {

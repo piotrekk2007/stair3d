@@ -6,12 +6,10 @@
 // DOM. The result is a plain `config.manualEdgeOverrides` entry {inner, outer} — both ends at once.
 
 import { getBoundaryPoints, getNominalBoundaryPoints, edgeOverrideEndpoints } from '../geometry/edgeOverrides.js';
-import { cumulativeDistances, pointAtDistance, segmentsProperlyIntersect, subPathPoints } from '../geometry/pathUtils.js';
+import { cumulativeDistances, pointAtDistance, segmentsProperlyIntersect, subPathPoints, vecSub as sub, vecDot as dot } from '../geometry/pathUtils.js';
 
 const SLIDE_SNAP_MM = 5; // the dragged end lands on a 5 mm step along its stringer line (same step as the grid snap)
 
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const dot = (a, b) => a.x * b.x + a.y * b.y;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** Nearest point of a polyline to p, with its distance along the polyline. */

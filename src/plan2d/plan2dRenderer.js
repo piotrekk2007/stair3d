@@ -235,6 +235,15 @@ function editHandlesXML(planLayout, overrides, config, activeBoundary) {
   return `<g id="edge-edit-layer">${xml}</g>`;
 }
 
+// A label written ALONG a direction at plan point `m` (rotated with it, never upside down): the one rule for every
+// length / dimension / name label on the plan. `halo` = a white outline under the letters (readable over lines).
+const sub2 = (b, a) => ({ x: b.x - a.x, y: b.y - a.y });
+function alongTextXML(m, dir, text, { size = 11, color, weight = null, halo = false, cls = null, inert = false } = {}) {
+  const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
+  const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
+  return `<text${cls ? ` class="${cls}"` : ''} x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(size)}"${weight ? ` font-weight="${weight}"` : ''} fill="${color}" text-anchor="middle" dominant-baseline="middle"${halo ? ` stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR}` : ''}${inert ? ' pointer-events="none"' : ''} transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${text}</text>`;
+}
+
 // The stairwell (geometry/stairwell.js stairwellPlanDrawing, already in the plan frame): the walls along the sides marked
 // so (thick grey, on the wall side of the outer line) and every side's length outside them — a FIXED side with its
 // dimension (green when met, red when off), a free one as it comes out. Drawing only (pointer-events none).
@@ -248,9 +257,7 @@ export function measuresXML(measures = [], draft = null) {
     const n = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len };
     const tick = (p) => `<line x1="${fmt(p.x - n.x * px(6))}" y1="${fmt(-(p.y - n.y * px(6)))}" x2="${fmt(p.x + n.x * px(6))}" y2="${fmt(-(p.y + n.y * px(6)))}" stroke="${color}" stroke-width="1.5" ${HAIR}/>`;
     const m = { x: (a.x + b.x) / 2 + n.x * px(12), y: (a.y + b.y) / 2 + n.y * px(12) };
-    const angle = (-Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
-    return `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1.5" ${dashed ? 'stroke-dasharray="6 4"' : ''} ${HAIR}/>${tick(a)}${tick(b)}<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(12)}" font-weight="600" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${planMeasureText(a, b)}</text>`;
+    return `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1.5" ${dashed ? 'stroke-dasharray="6 4"' : ''} ${HAIR}/>${tick(a)}${tick(b)}${alongTextXML(m, sub2(b, a), planMeasureText(a, b), { size: 12, color, weight: 600, halo: true })}`;
   };
   let xml = measures.map((m) => one(m.a, m.b)).join('');
   if (draft?.a) xml += draft.cursor ? one(draft.a, draft.cursor, true) : one(draft.a, draft.a);
@@ -307,11 +314,8 @@ export function wallEditXML(drawing, config) {
       const h = { x: p.x + w.outward.x * off, y: p.y + w.outward.y * off };
       xml += `<circle class="wall-handle" data-wall-id="${w.id}" data-end="${end}" cx="${fmt(h.x)}" cy="${fmt(-h.y)}" r="${px(6)}" fill="#fff" stroke="${color}" stroke-width="2" ${HAIR}><title>Przeciągnij koniec ściany wzdłuż boku</title></circle>`;
     }
-    const dir = { x: w.b.x - w.a.x, y: w.b.y - w.a.y };
     const m = { x: (w.spanA.x + w.spanB.x) / 2 + w.outward.x * px(22), y: (w.spanA.y + w.spanB.y) / 2 + w.outward.y * px(22) };
-    const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
-    xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">ściana ${w.side} ${sideShort(w.line, config)}: ${Math.round(w.lengthMm)}</text>`;
+    xml += alongTextXML(m, sub2(w.b, w.a), `ściana ${w.side} ${sideShort(w.line, config)}: ${Math.round(w.lengthMm)}`, { color, halo: true, inert: true });
   }
   return `<g id="wall-edit-layer">${xml}</g>`;
 }
@@ -356,10 +360,8 @@ export function freeWallsXML(wallsModel) {
       for (const k of [t * 0.35, t * 0.65]) xml += `<line x1="${fmt(out(o.a, k).x)}" y1="${fmt(-out(o.a, k).y)}" x2="${fmt(out(o.b, k).x)}" y2="${fmt(-out(o.b, k).y)}" stroke="${color}" stroke-width="1.2" ${HAIR}/>`;
     }
     const m = { x: (o.a.x + o.b.x) / 2 + o.outward.x * (t + px(10)), y: (o.a.y + o.b.y) / 2 + o.outward.y * (t + px(10)) };
-    const angle = (-Math.atan2(o.dir.y, o.dir.x) * 180) / Math.PI;
-    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
     const label = o.type === 'door' ? `drzwi ${Math.round(o.widthMm)}×${Math.round(o.heightMm)}` : `okno ${Math.round(o.widthMm)}×${Math.round(o.heightMm)}, parapet ${Math.round(o.sillMm)}`;
-    xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(10)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${label}</text>`;
+    xml += alongTextXML(m, o.dir, label, { size: 10, color, halo: true, inert: true });
   }
   return xml ? `<g id="free-walls-layer" pointer-events="none">${xml}</g>` : '';
 }
@@ -394,11 +396,8 @@ export function stairwellXML(drawing) {
       for (const [p, free] of [[w.a, !w.prevWall], [w.b, !w.nextWall]]) {
         if (free) xml += `<line x1="${fmt(p.x)}" y1="${fmt(-p.y)}" x2="${fmt(p.x + cap.x)}" y2="${fmt(-(p.y + cap.y))}" stroke="${wall}" stroke-width="2" ${HAIR}/>`;
       }
-      const dir = { x: w.b.x - w.a.x, y: w.b.y - w.a.y };
       const m = { x: (w.a.x + w.b.x) / 2 - w.outward.x * px(10), y: (w.a.y + w.b.y) / 2 - w.outward.y * px(10) };
-      const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-      const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
-      xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(10)}" fill="${wall}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">ściana ${w.side}: ${Math.round(w.lengthMm)}</text>`;
+      xml += alongTextXML(m, sub2(w.b, w.a), `ściana ${w.side}: ${Math.round(w.lengthMm)}`, { size: 10, color: wall });
     }
   }
   for (const d of drawing.dims || []) {
@@ -416,9 +415,7 @@ export function stairwellXML(drawing) {
     xml += `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${color}" stroke-width="1" ${HAIR}/>`;
     for (const [p, q] of [[d.a, a], [d.b, b]]) xml += `<line x1="${fmt(p.x)}" y1="${fmt(-p.y)}" x2="${fmt(q.x)}" y2="${fmt(-q.y)}" stroke="${color}" stroke-width="0.8" stroke-dasharray="2 2" ${HAIR}/>`;
     const m = { x: (a.x + b.x) / 2 + n.x * px(8), y: (a.y + b.y) / 2 + n.y * px(8) };
-    const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-    const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
-    xml += `<text x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${text}</text>`;
+    xml += alongTextXML(m, dir, text, { color });
   }
   return `<g id="stairwell-layer" pointer-events="none">${xml}</g>`;
 }
@@ -470,9 +467,7 @@ export function edgeLengthLabelXML(a, b, color = '#1a5fb4') {
   const len = Math.hypot(dir.x, dir.y);
   if (len < 1) return '';
   const m = { x: (a.x + b.x) / 2 + (dir.y / len) * px(10), y: (a.y + b.y) / 2 - (dir.x / len) * px(10) };
-  const angle = (-Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-  const upright = angle > 90 || angle < -90 ? angle + 180 : angle;
-  return `<text class="opening-length" x="${fmt(m.x)}" y="${fmt(-m.y)}" font-size="${px(11)}" fill="${color}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="3" paint-order="stroke" ${HAIR} pointer-events="none" transform="rotate(${upright.toFixed(2)} ${fmt(m.x)} ${fmt(-m.y)})">${Math.round(len)}</text>`;
+  return alongTextXML(m, dir, Math.round(len), { color, halo: true, inert: true, cls: 'opening-length' });
 }
 
 // Otwór w stropie (prostokąt albo narysowany wielokąt — geometry/ceilingOpening.js, obrys z deriveCeilingFit).

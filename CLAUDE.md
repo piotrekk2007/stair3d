@@ -52,7 +52,7 @@ structural check / takeoff / DXF / offer.
   the app state and wires the panels; self-contained page features live in `src/app/` and get the current state
   through getters: `presentation.js` (company logo + "Zapisz zdjęcie"), `offerController.js` (the "Oferta" tab: offer
   settings, company data, print to PDF), `exports.js` (DXF / takeoff CSV-TXT / OBJ-DAE downloads,
-  `projectFileBaseName`).
+  `projectFileBaseName`, the label sheet), `printHtml.js` (print-to-PDF through a hidden frame — the offer, the labels).
 
 ## Conventions
 
@@ -66,7 +66,7 @@ structural check / takeoff / DXF / offer.
 - **Nominal/final**: `TreadModel.frontEdge = {nominal, final, overridden}`; the automatic housing recess counts as
   nominal (an unedited tread never reads "RĘCZNA").
 - **Tolerances** (`geometry/tolerances.js`): `GEOMETRY_EPS` (mm), `COLLINEAR_EPS` (mm²), `INTERSECTION_EPS`
-  (dimensionless). Primitives: `pathUtils.js` (`pointsEqual`, `normalizeVector`, `signedPolygonArea`, `crossZ`,
+  (dimensionless). Primitives: `pathUtils.js` (`pointsEqual`, `normalizeVector`, `vecAdd` / `vecSub` / `vecScale` / `vecDot` — no module keeps its own copy, `signedPolygonArea`, `crossZ`,
   `segmentsProperlyIntersect`, cumulative distances), `polygonClip.js` (`clipToConvex`, `subtractConvex`,
   `pointInPolygon`, `cleanPolygon`), `rectUnion.js`, `nosingUtils.js` (two deliberately different outward normals),
   `util/format.js` (`escapeHtml`, `round2` — the one copy).
@@ -438,7 +438,8 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
 - Workspace (`ui/workspace.js`, `style.css` grid): toolbar, left info + the variant list + lil-gui parameters (`ui/ui.js`,
   folders most to least important: 1 Schody, 2 Budynek, 3 Klatka, 4 Otwór, 5 Bieg i stopnie, 6 Zabieg, 7 Wangi/słupy/
   podstopnie, 8 Wspornikowa/metalowa, 9 Balustrada, then checks, view, export), main view
-  (Plan 2D | Widok 3D | Profil wangi | Profil poręczy), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
+  (Plan 2D | Widok 3D | Profil wangi | Profil poręczy; the plan's edit modes are ONE `planMode` — `main.js PLAN_MODES`:
+  HUD button, when possible, hint), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
   selection (`ui/selection.js`, model ids only). Value states AUTO/USER/RĘCZNA (`ui/valueState.js`). Undo/redo of
   config snapshots (`history/modelHistory.js`), committed on drag end.
 

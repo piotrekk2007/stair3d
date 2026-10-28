@@ -168,14 +168,10 @@ function partList() {
   return partListCache.list;
 }
 let planViewport = null; // {x,y,width,height} — patrz plan2d/viewport.js; null = jeszcze nie dopasowany
-// Otwór w stropie na planie 2D: 'off' | 'edit' (uchwyty wierzchołków) | 'draw' (klikanie nowego wielokąta).
-// Stan WIDOKU — nie trafia do historii ani do pliku; zmienia się tylko config.openingShape/openingPolygon.
-let openingMode = 'off';
-let railingPostMode = false; // the plan's "▮ Słupki" mode: balustrade posts placed / moved / switched off by hand
-let wallMode = false; // the plan's "▥ Ściany" mode: the stairwell's walls added / stretched / removed by hand
-let trimMode = false; // the plan's "▬ Fajka" mode: the opening's trim switched on / off per edge
+// The plan's edit mode — ONE at a time (PLAN_MODES below): 'off' | 'opening-draw' | 'opening-edit' | 'wall-draw' |
+// 'walls' | 'trim' | 'railing-posts' | 'measure'. View state — never in the history or the project file.
+let planMode = 'off';
 // the plan's tape measure (plan2d/planMeasure.js) — view state only: the measures (plan mm) and the one being drawn
-let planMeasureMode = false;
 let planMeasures = [];
 let planMeasureDraft = null; // {a, cursor}
 let openingBase = null; // wielokąt (względny) zapamiętany na początku przeciągania
@@ -760,15 +756,15 @@ function regeneratePlan2D() {
       ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }
       : null,
     stairwell: stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout),
-    openingEdit: openingMode === 'edit',
-    railingPostEdit: railingPostMode,
-    wallEdit: wallMode,
+    openingEdit: planMode === 'opening-edit',
+    railingPostEdit: planMode === 'railing-posts',
+    wallEdit: planMode === 'walls',
     openingTrim: lastModels?.openingTrim ?? null,
-    trimEdit: trimMode,
+    trimEdit: planMode === 'trim',
     wallsModel: lastModels?.wallsModel ?? null,
     led: lastModels?.led ?? null,
     measures: planMeasures,
-    measureDraft: planMeasureMode ? planMeasureDraft : null,
+    measureDraft: planMode === 'measure' ? planMeasureDraft : null,
   });
   if (plan2dPanel.classList.contains('visible')) {
     plan2dSvgContainer.innerHTML = currentPlan2DSVG;
@@ -897,42 +893,70 @@ function planMeasurePoint(raw, mmPerPx) {
   const refs = planMeasureRefs({ planLayout: currentPlanLayout, treadModels: lastModels?.treadModels, posts: lastModels?.allPostModels, openingOutline: lastModels?.ceilingFit?.openingOutline, walls: stairwellPlanDrawing(lastModels?.stairwell, config, currentPlanLayout)?.walls });
   return snapMeasurePoint(raw, refs, 10 * (mmPerPx || 1));
 }
-function setPlanMeasureMode(on) {
-  planMeasureMode = !!on;
-  if (planMeasureMode) {
-    if (openingMode !== 'off') setOpeningMode('off');
-    if (railingPostMode) setRailingPostMode(false);
-    if (wallMode) setWallMode(false);
-    if (trimMode) setTrimMode(false);
-  }
+// The plan's edit modes: the HUD button, when the mode is possible (else the hint says what to switch on first), its
+// hint, and whether it draws (the crosshair). Entering one leaves the other; the measures go with the tape measure.
+const PLAN_MODES = {
+  'opening-draw': {
+    button: 'opening-draw',
+    drawing: true,
+    hint: () => 'Rysowanie otworu: klikaj kolejne narożniki (przyciąga do stopni, wang i siatki 5 mm). Zamknij: klik w pierwszy punkt, Enter albo dwuklik. Backspace / prawy klik cofa punkt, Esc anuluje.',
+  },
+  'opening-edit': {
+    button: 'opening-edit',
+    hint: () => 'Edycja otworu: przeciągnij kółko = narożnik, kropkę na boku = nowy narożnik, wnętrze = cały otwór. Prawy klik na narożniku usuwa go.',
+  },
+  'wall-draw': {
+    button: 'wall-draw',
+    drawing: true,
+    hint: () => `Rysowanie ściany: klikaj kolejne punkty LICA ściany (przyciąga do stopni, wang, otworu, ścian i siatki 5 mm); mur (${config.freeWallThicknessMm || 120} mm) po lewej stronie kierunku rysowania — stronę i grubość zmienisz na liście ścian. Zakończ: Enter albo dwuklik; klik w pierwszy punkt — ściana zamknięta. Backspace / prawy klik cofa punkt, Esc anuluje.`,
+  },
+  walls: {
+    button: 'walls',
+    allowed: () => !!config.stairwellRoomEnabled || (config.freeWalls || []).length > 0,
+    blocked: 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”) albo narysuj ścianę („✏ Rysuj ścianę”).',
+    hint: () => `${config.stairwellRoomEnabled ? 'Ściany klatki: klik na przerywanej linii przy boku schodów — nowa ściana na całym boku (także po drugiej stronie biegu); przeciągnij kółko na końcu ściany — skróć / wydłuż (przyciąga do końców boku i krawędzi stopni); prawy klik na ścianie — usuń. ' : ''}Ściany dowolne: przeciągnij narożnik (pomarańczowe kółko), prawy klik na narożniku — usuń go, na ścianie — usuń ścianę. Nowa ściana — „✏ Rysuj ścianę”. Listy ścian, drzwi i okien — folder „3. Klatka schodowa”.`,
+  },
+  trim: {
+    button: 'trim',
+    allowed: () => !!config.openingTrimEnabled,
+    blocked: 'Najpierw włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.',
+    hint: () => 'Obróbka otworu (fajka): kliknij krawędź otworu — zielona = z obróbką, szara przerywana = bez; pomarańczowy odcinek przy wyjściu ze schodów (stopień fajkowy) — osobno. Wymiary noska i deski — folder „4. Otwór w stropie”.',
+  },
+  'railing-posts': {
+    button: 'railing-posts',
+    allowed: () => !!lastModels?.railingModel?.enabled,
+    blocked: 'Najpierw włącz balustradę (odcinek przy schodach albo „Balustrada przy otworze w stropie” w folderze „9. Balustrada”).',
+    hint: () => 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij słupek (ręczny, narożny albo końcowy) — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / przywróć AUTO przesuniętego / wyłącz narożny; klik na przerywanym kółku — przywróć. Bieg bez tralek i poręcz przyścienna — w Inspektorze słupka. Krawędzie otworu (zielone = z balustradą): klik — włącz / wyłącz.',
+  },
+  measure: {
+    button: 'measure',
+    hint: () => 'Miarka: kliknij pierwszy punkt, potem drugi (przyciąga do narożników stopni, linii wang, słupów, otworu i ścian w promieniu 10 px). Prawy klik — usuń wszystkie pomiary. Pomiary zostają do wyłączenia miarki.',
+  },
+};
+function setPlanMode(mode) {
+  const def = PLAN_MODES[mode];
+  const possible = !!def && (!def.allowed || def.allowed());
+  if (planMode === 'measure' && mode !== 'measure') planMeasures = [];
+  planMode = possible ? mode : 'off';
   planMeasureDraft = null;
-  plan2dHud.querySelector('[data-action="measure"]')?.classList.toggle('active', planMeasureMode);
-  plan2dPanel.classList.toggle('measuring', planMeasureMode);
+  planApi?.resetDraft();
+  for (const [key, d] of Object.entries(PLAN_MODES)) plan2dHud.querySelector(`[data-action="${d.button}"]`)?.classList.toggle('active', key === planMode);
+  plan2dPanel.classList.toggle('measuring', planMode === 'measure');
+  plan2dPanel.classList.toggle('opening-drawing', !!PLAN_MODES[planMode]?.drawing);
   const hint = plan2dHud.querySelector('#plan2d-opening-hint');
   if (hint) {
-    hint.hidden = !planMeasureMode;
-    if (planMeasureMode) hint.textContent = 'Miarka: kliknij pierwszy punkt, potem drugi (przyciąga do narożników stopni, linii wang, słupów, otworu i ścian w promieniu 10 px). Prawy klik — usuń wszystkie pomiary. Pomiary zostają do wyłączenia miarki.';
+    // the mode's hint — or, when it is not possible yet, what to switch on first
+    const text = possible ? def.hint() : def?.blocked || '';
+    hint.hidden = !text;
+    hint.textContent = text;
   }
-  if (!planMeasureMode) planMeasures = [];
   regeneratePlan2D();
 }
+const togglePlanMode = (mode) => setPlanMode(planMode === mode ? 'off' : mode);
+// planInteractions.js reads the opening's draw / edit state in its own words
+const openingModeOf = (mode) => ({ 'opening-draw': 'draw', 'opening-edit': 'edit', 'wall-draw': 'draw-wall' })[mode] || 'off';
 
 // The opening's trim per edge (openingTrimModel.js): a click flips the edge against its automatic state
-function setTrimMode(on) {
-  trimMode = on && !!config.openingTrimEnabled;
-  if (trimMode && planMeasureMode) setPlanMeasureMode(false);
-  if (trimMode && openingMode !== 'off') setOpeningMode('off');
-  if (trimMode && railingPostMode) setRailingPostMode(false);
-  if (trimMode && wallMode) setWallMode(false);
-  plan2dHud.querySelector('[data-action="trim"]')?.classList.toggle('active', trimMode);
-  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
-  if (hint) {
-    hint.hidden = !trimMode && !on;
-    if (trimMode) hint.textContent = 'Obróbka otworu (fajka): kliknij krawędź otworu — zielona = z obróbką, szara przerywana = bez; pomarańczowy odcinek przy wyjściu ze schodów (stopień fajkowy) — osobno. Wymiary noska i deski — folder „4. Otwór w stropie”.';
-    else if (on) hint.textContent = 'Najpierw włącz „Obróbka otworu (fajka)” w folderze „4. Otwór w stropie”.';
-  }
-  regeneratePlan2D();
-}
 function toggleTrimEdge(index) {
   const edge = lastModels?.openingTrim?.edges?.find((e) => e.index === index);
   if (!edge) return;
@@ -943,74 +967,9 @@ function toggleTrimEdge(index) {
   rebuild();
   commitHistory();
 }
-function setWallMode(on) {
-  if (on && trimMode) setTrimMode(false);
-  if (on && planMeasureMode) setPlanMeasureMode(false);
-  wallMode = on && (!!config.stairwellRoomEnabled || (config.freeWalls || []).length > 0);
-  if (wallMode && openingMode !== 'off') setOpeningMode('off');
-  if (wallMode && railingPostMode) setRailingPostMode(false);
-  plan2dHud.querySelector('[data-action="walls"]')?.classList.toggle('active', wallMode);
-  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
-  if (hint) {
-    hint.hidden = !wallMode && !on;
-    if (wallMode) hint.textContent = `${config.stairwellRoomEnabled ? 'Ściany klatki: klik na przerywanej linii przy boku schodów — nowa ściana na całym boku (także po drugiej stronie biegu); przeciągnij kółko na końcu ściany — skróć / wydłuż (przyciąga do końców boku i krawędzi stopni); prawy klik na ścianie — usuń. ' : ''}Ściany dowolne: przeciągnij narożnik (pomarańczowe kółko), prawy klik na narożniku — usuń go, na ścianie — usuń ścianę. Nowa ściana — „✏ Rysuj ścianę”. Listy ścian, drzwi i okien — folder „3. Klatka schodowa”.`;
-    else if (on) hint.textContent = 'Najpierw włącz wymiary klatki (folder „3. Klatka schodowa”) albo narysuj ścianę („✏ Rysuj ścianę”).';
-  }
-  regeneratePlan2D();
-}
-function setRailingPostMode(on) {
-  railingPostMode = on && !!lastModels?.railingModel?.enabled;
-  if (railingPostMode && wallMode) setWallMode(false);
-  if (railingPostMode && openingMode !== 'off') setOpeningMode('off');
-  plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.toggle('active', railingPostMode);
-  const hint = plan2dHud.querySelector('#plan2d-opening-hint');
-  if (hint) {
-    hint.hidden = !railingPostMode && openingMode === 'off';
-    if (railingPostMode) hint.textContent = 'Słupki balustrady: klik na linii balustrady — nowy słupek; przeciągnij słupek (ręczny, narożny albo końcowy) — przesuń (przyciąga do krawędzi stopni); prawy klik — usuń ręczny / przywróć AUTO przesuniętego / wyłącz narożny; klik na przerywanym kółku — przywróć. Bieg bez tralek i poręcz przyścienna — w Inspektorze słupka. Krawędzie otworu (zielone = z balustradą): klik — włącz / wyłącz.';
-  }
-  if (on && !railingPostMode) {
-    if (hint) {
-      hint.hidden = false;
-      hint.textContent = 'Najpierw włącz balustradę (odcinek przy schodach albo „Balustrada przy otworze w stropie” w folderze „9. Balustrada”).';
-    }
-  }
-  regeneratePlan2D();
-}
-
-function setOpeningMode(mode) {
-  openingMode = mode;
-  if (mode !== 'off' && trimMode) setTrimMode(false);
-  if (mode !== 'off' && planMeasureMode) setPlanMeasureMode(false);
-  if (mode !== 'off' && wallMode) {
-    wallMode = false;
-    plan2dHud.querySelector('[data-action="walls"]')?.classList.remove('active');
-  }
-  if (mode !== 'off' && railingPostMode) {
-    railingPostMode = false;
-    plan2dHud.querySelector('[data-action="railing-posts"]')?.classList.remove('active');
-  }
-
-  planApi?.resetDraft();
-  const hud = document.querySelector('#plan2d-hud');
-  hud?.querySelector('[data-action="opening-edit"]')?.classList.toggle('active', mode === 'edit');
-  hud?.querySelector('[data-action="opening-draw"]')?.classList.toggle('active', mode === 'draw');
-  hud?.querySelector('[data-action="wall-draw"]')?.classList.toggle('active', mode === 'draw-wall');
-  const hint = hud?.querySelector('#plan2d-opening-hint');
-  if (hint) {
-    hint.hidden = mode === 'off';
-    hint.textContent =
-      mode === 'draw-wall'
-        ? `Rysowanie ściany: klikaj kolejne punkty LICA ściany (przyciąga do stopni, wang, otworu, ścian i siatki 5 mm); mur (${config.freeWallThicknessMm || 120} mm) po lewej stronie kierunku rysowania — stronę i grubość zmienisz na liście ścian. Zakończ: Enter albo dwuklik; klik w pierwszy punkt — ściana zamknięta. Backspace / prawy klik cofa punkt, Esc anuluje.`
-        : mode === 'draw'
-        ? 'Rysowanie otworu: klikaj kolejne narożniki (przyciąga do stopni, wang i siatki 5 mm). Zamknij: klik w pierwszy punkt, Enter albo dwuklik. Backspace / prawy klik cofa punkt, Esc anuluje.'
-        : 'Edycja otworu: przeciągnij kółko = narożnik, kropkę na boku = nowy narożnik, wnętrze = cały otwór. Prawy klik na narożniku usuwa go.';
-  }
-  plan2dPanel.classList.toggle('opening-drawing', mode === 'draw' || mode === 'draw-wall');
-  regeneratePlan2D();
-}
 function startOpeningDraw() {
   if (viewState.view !== '2d') setView('2d');
-  setOpeningMode('draw');
+  setPlanMode('opening-draw');
 }
 function getOpeningSnapPoints() {
   if (!currentPlanLayout) return [];
@@ -1566,13 +1525,7 @@ plan2dHud.querySelector('[data-action="edit"]').addEventListener('click', () => 
   uiRefresh?.();
 });
 syncPlanEditButton();
-plan2dHud.querySelector('[data-action="opening-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw' ? 'off' : 'draw'));
-plan2dHud.querySelector('[data-action="opening-edit"]').addEventListener('click', () => setOpeningMode(openingMode === 'edit' ? 'off' : 'edit'));
-plan2dHud.querySelector('[data-action="railing-posts"]').addEventListener('click', () => setRailingPostMode(!railingPostMode));
-plan2dHud.querySelector('[data-action="walls"]').addEventListener('click', () => setWallMode(!wallMode));
-plan2dHud.querySelector('[data-action="wall-draw"]').addEventListener('click', () => setOpeningMode(openingMode === 'draw-wall' ? 'off' : 'draw-wall'));
-plan2dHud.querySelector('[data-action="trim"]').addEventListener('click', () => setTrimMode(!trimMode));
-plan2dHud.querySelector('[data-action="measure"]').addEventListener('click', () => setPlanMeasureMode(!planMeasureMode));
+for (const mode of Object.keys(PLAN_MODES)) plan2dHud.querySelector(`[data-action="${PLAN_MODES[mode].button}"]`).addEventListener('click', () => togglePlanMode(mode));
 plan2dHud.querySelector('[data-action="zoom-in"]').addEventListener('click', () => {
   const rect = plan2dPanel.getBoundingClientRect();
   planViewport = zoomAt(planViewport, rect.width / 2, rect.height / 2, rect.width, rect.height, 1.3);
@@ -1649,7 +1602,7 @@ planApi = attachPlanInteractions({
     }
   },
   // Otwór w stropie (tryby „Rysuj otwór" / „▭ Otwór"): punkty przychodzą w układzie planu, config dostaje względne.
-  getOpeningMode: () => openingMode,
+  getOpeningMode: () => openingModeOf(planMode),
   getOpeningSnapPoints,
   onOpeningDragStart: () => {
     openingBase = currentOpeningRelative();
@@ -1684,14 +1637,13 @@ planApi = attachPlanInteractions({
   },
   onOpeningDrawFinish: (points) => {
     setOpeningPolygon(points.map(toOpeningRelative), true);
-    setOpeningMode('edit'); // od razu można poprawiać narysowany otwór
+    setPlanMode('opening-edit'); // od razu można poprawiać narysowany otwór
   },
-  onOpeningDrawCancel: () => setOpeningMode('off'),
+  onOpeningDrawCancel: () => setPlanMode('off'),
   // a free wall drawn: stored in the opening frame, then straight into the wall mode to adjust its corners
   onWallDrawFinish: (points, closed) => {
     applyFreeWalls({ action: 'add', points: points.map(toOpeningRelative), closed, thicknessMm: config.freeWallThicknessMm });
-    setOpeningMode('off');
-    setWallMode(true);
+    setPlanMode('walls');
   },
   onFreeWallVertexMove: (id, index, point, final) => applyFreeWalls({ action: 'move-vertex', id, index, point: toOpeningRelative(point) }, { final }),
   onFreeWallVertexRemove: (id, index) => applyFreeWalls({ action: 'remove-vertex', id, index }),
@@ -1711,10 +1663,10 @@ planApi = attachPlanInteractions({
   onStepClick: (stepIndex) => setSelection(stepIndex === null ? null : { elementType: 'tread', stepIndex }),
   onStringerClick: (side) => setSelection({ elementType: 'stringer', stringerId: side, segmentId: null }),
   onPostClick: (postId) => setSelection({ elementType: 'post', postId }),
-  getRailingPostMode: () => railingPostMode,
-  getWallMode: () => wallMode,
-  getTrimMode: () => trimMode,
-  getMeasureMode: () => planMeasureMode,
+  getRailingPostMode: () => planMode === 'railing-posts',
+  getWallMode: () => planMode === 'walls',
+  getTrimMode: () => planMode === 'trim',
+  getMeasureMode: () => planMode === 'measure',
   onMeasureClick: (raw, mmPerPx) => {
     const p = planMeasurePoint(raw, mmPerPx);
     if (!planMeasureDraft) planMeasureDraft = { a: p, cursor: null };
@@ -1820,11 +1772,11 @@ const gui = createUI({
   onFreeWallEdit: (change) => applyFreeWalls(change),
   onStartWallDraw: () => {
     if (viewState.view !== '2d') setView('2d');
-    setOpeningMode('draw-wall');
+    setPlanMode('wall-draw');
   },
   onWallMode: () => {
     if (viewState.view !== '2d') setView('2d');
-    setWallMode(true);
+    setPlanMode('walls');
   },
   onFreezeDerivedOpening: () => {
     const rel = lastModels?.ceilingFit?.openingMode === 'derived' ? lastModels.ceilingFit.openingRelativeOutline : null;

@@ -11,6 +11,7 @@ import { downloadTextFile } from '../export/downloadTextFile.js';
 import { takeoffToCSV, takeoffToTextReport } from '../takeoff/index.js';
 import { buildPartList } from '../production/partCodes.js';
 import { labelSheetHTML } from '../production/labelSheet.js';
+import { printHtml } from './printHtml.js';
 import { buildClientScene, sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML, clientFacts } from '../export/clientModelExport.js';
 
 function downloadBinary(buffer, filename, mimeType) {
@@ -50,8 +51,7 @@ export function createExports(opts) {
   const dxf = (text, name) => downloadTextFile(text, `${base()}_${name}.dxf`, 'application/dxf');
 
   return {
-    // The parts' labels (production/labelSheet.js) on an A4 sheet of stickers, printed through a hidden frame like the
-    // offer; also with design errors (the codes do not depend on the gate) — the sheet says so on screen.
+    // The parts' labels (production/labelSheet.js) on an A4 sheet of stickers, printed like the offer (printHtml.js); also with design errors (the codes do not depend on the gate) — the sheet says so on screen.
     labels(layout = '3x8') {
       const m = opts.getModels();
       if (!m || m.fullConfig?.stairPending) return;
@@ -63,15 +63,7 @@ export function createExports(opts) {
         date: new Date().toLocaleDateString('pl-PL'),
         warning: blocked ? 'Uwaga: projekt ma błędy (Walidacja) — kosztorys jest zablokowany; etykiety pokazują elementy w obecnym stanie.' : null,
       });
-      const frame = document.createElement('iframe');
-      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-      frame.onload = () => {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-        setTimeout(() => frame.remove(), 60000);
-      };
-      frame.srcdoc = html;
-      document.body.appendChild(frame);
+      printHtml(html);
     },
     postDXF(postId) {
       const m = opts.getModels();

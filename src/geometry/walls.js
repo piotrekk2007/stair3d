@@ -19,19 +19,13 @@ import { clipToConvex, pointInPolygon, polygonArea } from './polygonClip.js';
 import { boardPlanFootprint } from './stringerModel.js';
 import { valueAtU } from './polylineProfile.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { vecAdd as add, vecSub as sub, vecScale as mul, normalizeVector as unit } from './pathUtils.js';
 
 export const FREE_WALL_DEFAULT_THICKNESS_MM = 120; // ASSUMPTION — a partition wall
 export const DOOR_CLEAR_DEPTH_DEFAULT_MM = 1000; // ASSUMPTION — a free strip of floor before a door
 const STEP_LOW_MM = 600; // a tread whose top is this low in front of a door is a step there, not a ceiling
 const SAMPLE_MM = 50;
 
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
-const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
-const unit = (v) => {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 function meet(p, d, q, e) {
   const den = d.x * e.y - d.y * e.x;
   if (Math.abs(den) < 1e-12) return null;

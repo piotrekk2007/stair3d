@@ -30,6 +30,7 @@
 import { openingEdgePieces } from './railingSolver.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { rawSlabTopZ, floorFinishes } from './floors.js';
+import { normalizeVector as unit } from './pathUtils.js';
 
 const JOIN_MM = 0.5;
 
@@ -55,10 +56,6 @@ function meet(p, d, q, e) {
   return { x: p.x + d.x * t, y: p.y + d.y * t };
 }
 
-const unit = (v) => {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 
 /**
  * @param {{config:Object, planLayout:Object, openingOutline:{x,y}[], wallSegments?:Object[]}} ctx

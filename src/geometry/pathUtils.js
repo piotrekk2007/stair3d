@@ -12,6 +12,12 @@ export function pointsEqual(p, q, eps = GEOMETRY_EPS) {
 // THE canonical "make this 2D vector unit length" primitive — previously reimplemented
 // independently (identical formula, different local name) in planLayout.js (`unit`),
 // riserGeometry.js (`normalize`), and inline in stringerSolver.js's direction handling.
+// Plan-vector arithmetic ({x, y}) — the one copy (the modules used to keep their own `sub` / `add` / `dot`).
+export const vecAdd = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+export const vecSub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+export const vecScale = (a, k) => ({ x: a.x * k, y: a.y * k });
+export const vecDot = (a, b) => a.x * b.x + a.y * b.y;
+
 export function normalizeVector(v) {
   const len = Math.hypot(v.x, v.y) || 1;
   return { x: v.x / len, y: v.y / len };

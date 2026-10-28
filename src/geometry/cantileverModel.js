@@ -15,6 +15,7 @@
 // (edgeOverrides.js housingRecessMm). Everything here is read off the solved tread (TreadModel + its plan tread).
 
 import { clipToConvex, subtractConvex, polygonArea, pointInPolygon } from './polygonClip.js';
+import { vecSub as sub, normalizeVector as unit } from './pathUtils.js';
 
 export const STAIR_CONSTRUCTIONS = Object.freeze({ STRINGERS: 'stringers', CANTILEVER: 'cantilever' });
 const BAND_EXTEND_MM = 20000; // a band is extended far along its edge so it covers the whole tread
@@ -63,12 +64,7 @@ export function cantileverConfig(fullConfig) {
   };
 }
 
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const len = (v) => Math.hypot(v.x, v.y);
-const unit = (v) => {
-  const l = len(v) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 const centroid = (poly) => ({ x: poly.reduce((s, p) => s + p.x, 0) / poly.length, y: poly.reduce((s, p) => s + p.y, 0) / poly.length });
 
 // The strip of width `w` along edge a-b on the side of `inside`, as a convex quad extended far along the edge.

@@ -22,6 +22,7 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { inwardNormal } from './planLayout.js';
 import { sideHand } from '../util/sideNames.js';
 import { slabSoffitZ } from './floors.js';
+import { vecAdd as add, vecSub as sub, vecScale as mul, vecDot as dot, normalizeVector as unit } from './pathUtils.js';
 
 export const WELL_SIDES = Object.freeze(['A', 'B', 'C']);
 // A fixed side within this of its dimension counts as met (mm).
@@ -30,14 +31,6 @@ export const WELL_TOLERANCE_MM = 1;
 export const STAIRWELL_WALL_DRAWN_THICKNESS_MM = 120;
 
 const SAME_DIRECTION_SIN = 1e-6;
-const dot = (a, b) => a.x * b.x + a.y * b.y;
-const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
-const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
-const unit = (v) => {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 
 /** The sides a stair type has. */
 export function wellSideLetters(stairType) {
@@ -115,7 +108,6 @@ export function sideHasWall(config, s) {
 // 'full' (the whole side), 'start' (from the side's start — side A: the first front edge — `stairwellWall{S}LengthMm`
 // along it, at most the whole side) or 'end' (back from the side's end — side A: the corner / end wall — that length;
 // longer than the side = the wall goes on past its start, e.g. behind the entry).
-export const WALL_EXTENTS = Object.freeze(['full', 'start', 'end']);
 const WALL_EXTENT_EPS_MM = 0.5;
 // The shortest wall the editor makes (mm).
 export const MIN_WALL_LENGTH_MM = 50;
