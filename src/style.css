@@ -1825,3 +1825,85 @@ code {
 .free-walls .railing-section-row { flex-wrap: wrap; }
 .free-walls .railing-section-row select { max-width: 100%; }
 .free-walls > button { display: block; margin-top: 4px; }
+
+/* ============ Readable left panel + foldable boxes (ui/panelBehaviour.js, user report 2026-10-29) ============ */
+/* bigger type and rows; long Polish names wrap instead of being cut (lil-gui sets its variables on EVERY folder) */
+#sidebar-left .lil-gui {
+  --font-size: 13px;
+  --input-font-size: 13px;
+  --widget-height: 24px;
+  --padding: 6px;
+  --spacing: 5px;
+  --name-width: 46%;
+  --text-color: #f1f3f5;
+  --number-color: #5fd3ff;
+}
+#sidebar-left .lil-controller > .lil-name {
+  flex: 0 0 var(--name-width);
+  min-width: 0;
+  max-width: var(--name-width);
+  white-space: normal;
+  line-height: 1.25;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  align-self: center;
+  overflow-wrap: anywhere;
+}
+/* the numbered folders: one open at a time (accordion), clearly headed */
+#sidebar-left .lil-gui.lil-root > .lil-children > .lil-gui {
+  margin-bottom: 3px;
+}
+#sidebar-left .lil-gui.lil-root > .lil-children > .lil-gui > .lil-title {
+  font-size: 14px;
+  font-weight: 600;
+  height: auto;
+  line-height: 1.3;
+  padding: 9px 10px;
+  background: #2a3a48;
+  border-left: 4px solid transparent;
+}
+#sidebar-left .lil-gui.lil-root > .lil-children > .lil-gui:not(.lil-closed) > .lil-title {
+  background: var(--c-accent);
+  border-left-color: #8fc1ff;
+}
+#sidebar-left .lil-gui .lil-gui .lil-gui > .lil-title {
+  font-weight: 600;
+  color: #cfe3ff;
+}
+#sidebar-left .railing-sections {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* a box folded to its title: the 3D HUD's groups, the plan legend, the summary */
+.collapsible-title {
+  cursor: pointer;
+  user-select: none;
+}
+.collapsible-title::after {
+  content: ' ▾';
+  opacity: 0.7;
+}
+.collapsible.collapsed > .collapsible-title::after {
+  content: ' ▸';
+}
+.collapsible.collapsed > :not(.collapsible-title) {
+  display: none !important;
+}
+#plan2d-legend .legend-title,
+#info-panel .info-title {
+  font-weight: 700;
+  color: var(--c-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+#info-panel .info-title {
+  margin-bottom: 2px;
+}
+#info-panel.collapsed .info-title {
+  margin-bottom: 0;
+}
+#info-panel {
+  font-size: 13px;
+}

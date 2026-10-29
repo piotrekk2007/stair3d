@@ -45,6 +45,7 @@ import { withEdgeOverride, effectiveEdgeOverrides } from './geometry/edgeOverrid
 import { stairwellPlanDrawing, treadsOpenOnOuterSide, openOuterRailingRanges } from './geometry/stairwell.js';
 import { generateStairwellVariants } from './designer/stairwellVariants.js';
 import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stairwellVariantsPanel.js';
+import { makeCollapsible } from './ui/panelBehaviour.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, buildProjectPayload, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
 import { sanitizeReferenceStair, inverseReference } from './geometry/referenceStair.js';
@@ -1569,6 +1570,7 @@ plan2dHud.innerHTML = `
   <div id="plan2d-opening-hint" hidden></div>
   <div id="plan2d-scale-readout"></div>
   <div id="plan2d-legend">
+    <div class="legend-title">Legenda</div>
     <div><span class="swatch" style="border-color:#9aa0a6;border-top-style:dashed"></span>krawędź automatyczna</div>
     <div><span class="swatch" style="border-color:#e08214"></span>krawędź ręcznie zmieniona</div>
     <div><span class="swatch" style="border-color:#c0392b;border-top-style:dashed"></span>linia biegu (walkline)</div>
@@ -1577,6 +1579,7 @@ plan2dHud.innerHTML = `
   </div>
 `;
 plan2dPanel.appendChild(plan2dHud);
+makeCollapsible(plan2dHud.querySelector('#plan2d-legend'), plan2dHud.querySelector('#plan2d-legend .legend-title'), 'plan-legend', { defaultCollapsed: (window.innerHeight || 1000) < 900 });
 const scaleReadout = plan2dHud.querySelector('#plan2d-scale-readout');
 
 plan2dHud.querySelector('[data-action="fit"]').addEventListener('click', fitPlanView);

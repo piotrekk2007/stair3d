@@ -451,7 +451,11 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   folders most to least important: 1 Schody, 2 Budynek, 3 Klatka, 4 Otwór, 5 Bieg i stopnie, 6 Zabieg, 7 Wangi/słupy/
   podstopnie, 8 Wspornikowa/metalowa, 9 Balustrada, then checks, view, export), main view
   (Plan 2D | Widok 3D | Profil wangi | Profil poręczy; the plan's edit modes are ONE `planMode` — `main.js PLAN_MODES`:
-  HUD button, when possible, hint), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. One shared
+  HUD button, when possible, hint), right tabs Inspektor / Walidacja / Kosztorys / Konstrukcja / Oferta. Panel behaviour
+  (`ui/panelBehaviour.js`, user report 2026-10-29): the parameter panel is an ACCORDION (one numbered folder open,
+  remembered in `localStorage`, sub-folders start closed), the mouse wheel over a slider / number field only scrolls
+  the panel (`guardWheel` — lil-gui changed the value), 13 px type with wrapping names; the summary, the 3D HUD's groups
+  and the plan legend fold to their titles (`makeCollapsible`, folded by default on a window lower than 900 px). One shared
   selection (`ui/selection.js`, model ids only). Value states AUTO/USER/RĘCZNA (`ui/valueState.js`). Undo/redo of
   config snapshots (`history/modelHistory.js`), committed on drag end.
 

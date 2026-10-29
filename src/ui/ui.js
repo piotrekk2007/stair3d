@@ -13,6 +13,7 @@ import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
 import { stairwellMeasureLine, wellSideLetters, wellSideState } from '../geometry/stairwell.js';
 import { applyWallEdit } from '../geometry/stairwellWallEdits.js';
+import { guardWheel, setupAccordion, makeCollapsible } from './panelBehaviour.js';
 
 const AUTO_BADGE = stateBadgeHTML('auto');
 
@@ -874,6 +875,9 @@ export function createUI({
     exportFolder.add({ export: onExportPlan2D }, 'export').name('Eksportuj plan 2D (SVG)');
   }
 
+  // the wheel scrolls the panel, never a slider; one folder open at a time (panelBehaviour.js, user report 2026-10-29)
+  if (container) guardWheel(container);
+  setupAccordion(gui, { defaultTitle: '1. Schody' });
   return gui;
 }
 
@@ -882,11 +886,19 @@ export function refreshUI(gui) {
   (gui.refreshHooks || []).forEach((hook) => hook());
 }
 
+// the summary box: a title (click = fold it, panelBehaviour.js) + the body updateInfoPanel fills (returned)
 export function createInfoPanel(container = document.body) {
-  const panel = document.createElement('div');
-  panel.id = 'info-panel';
-  container.appendChild(panel);
-  return panel;
+  const box = document.createElement('div');
+  box.id = 'info-panel';
+  const title = document.createElement('div');
+  title.className = 'info-title';
+  title.textContent = 'Podsumowanie';
+  const body = document.createElement('div');
+  body.className = 'info-body';
+  box.append(title, body);
+  container.appendChild(box);
+  makeCollapsible(box, title, 'summary');
+  return body;
 }
 
 // Info-panel rows for "Dopasuj do klatki": each side's achieved length against its target (* = key side).

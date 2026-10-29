@@ -5,6 +5,7 @@
 
 import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../scene/presentationImage.js';
 import { wangaShortName } from '../util/sideNames.js';
+import { makeCollapsible } from './panelBehaviour.js';
 
 export const LAYERS_3D = [
   ['Treads', 'Stopnie'],
@@ -99,6 +100,12 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
     </div>
   `;
   container.appendChild(hud);
+  // every group folds to its title (user report 2026-10-29: the HUD covered the view on small screens); folded by
+  // default on a low window
+  for (const group of hud.querySelectorAll('.vh-group')) {
+    const title = group.querySelector('.vh-title');
+    makeCollapsible(group, title, `hud3d-${title.textContent.trim()}`, { defaultCollapsed: (globalThis.innerHeight || 1000) < 900 && !group.classList.contains('client-only') });
+  }
 
   for (const input of hud.querySelectorAll('[data-layer]')) {
     input.addEventListener('change', () => {
