@@ -594,7 +594,16 @@ export function createUI({
       config.stairWidthC = v;
     },
   };
-  live(steps.add(widthCProxy, 'w', 500, 2000, 1)).name('Szerokość biegu C [mm] (U z podestem)').domElement.title = 'Bieg C może mieć inną szerokość niż bieg A (pole „Szerokość biegu” to szerokość biegu A). Działa przy U, którego drugi zakręt jest podestem; przy zabiegach obie szerokości są równe.';
+  const widthBProxy = {
+    get w() {
+      return config.stairWidthB ?? config.stairWidth;
+    },
+    set w(v) {
+      config.stairWidthB = v;
+    },
+  };
+  live(steps.add(widthBProxy, 'w', 500, 2000, 1)).name('Szerokość biegu B [mm] (L: wyjściowego)').domElement.title = 'Bieg B (w L — bieg po skręcie, w U — między skrętami) może mieć inną szerokość niż bieg A („Szerokość biegu” to szerokość biegu A). Zabiegi na skręcie z A do B leżą wtedy na prostokącie A × B (np. 900 × 1080, żeby ostatni zabieg zszedł się z podestem 1080). Przy B = 0 to szerokość wyjścia ze strefy zabiegów.';
+  live(steps.add(widthCProxy, 'w', 500, 2000, 1)).name('Szerokość biegu C [mm] (U)').domElement.title = 'Bieg C może mieć inną szerokość niż bieg A (pole „Szerokość biegu” to szerokość biegu A). Zabiegi lub podest drugiego skrętu dopasowują się (prostokąt B × C).';
   live(steps.add(config, 'uFlightGapMm', 0, 3000, 1)).name('Odstęp między biegami A i C [mm] (U z podestami)').domElement.title = 'Odległość między liniami dusz biegów A i C (np. ściana między nimi). Duży podest: ma wtedy szerokość A + odstęp + C, jego wolną krawędź między biegami niesie wanga. Dwa półpodesty: bieg B daje (liczba stopni B × głębokość stopnia) tego odstępu, resztę dokładają po równo oba półpodesty (wydłużone wzdłuż biegu B); mniejsza wartość nic nie zmienia.';
   landingDepth.domElement.title = 'Wymiar podestu wzdłuż biegu, który na niego wchodzi. Domyślnie = szerokość biegu (podest kwadratowy). Większa: bieg dalej odchodzi przy ścianie zewnętrznej; w U duży podest ma 2 szerokości × tę głębokość. Mniejsza niż szerokość biegu nie jest możliwa.';
   lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');

@@ -83,8 +83,10 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `planLayout.js buildLandingLocal` `depthIn` on the first turn / `depthOut` on the second): deeper along the flight
   entering it, the exit flight stays at the OUTER side, the landing's free dusza edge is an inner chain (the inner wanga
   carries it, the corner post where the dusza turns); a U's big landing = 2 widths × depth, flights A / C unchanged.
-  A U with landings: flight C its own width `stairWidthC` (null = `stairWidth`, which stays A's / B's; a winder turn keeps
-  one width) and flights A and C apart `uFlightGapMm` (between their inner lines — on a big landing: landing = A + gap + C,
+  Flight widths: `stairWidth` = flight A, `stairWidthB` (L: the exit flight, U: between the turns) and `stairWidthC` (U)
+  their own (null = `stairWidth`; not for an S); a winder turn between flights of different widths is a rectangle
+  (`winderArc.js` `exitWidth`: Oc = (0, Yc + Wout), the dusza ends and the walkline as in the square — user request
+  2026-11-02, 3 winders 900 × 1080 meeting a landing 1080 deep). A U with landings: and flights A and C apart `uFlightGapMm` (between their inner lines — on a big landing: landing = A + gap + C,
   its free edge between them an inner chain on the inner wanga, a corner post at each flight; with two half landings
   flight B makes up B × going of it, both half landings the rest equally along B; `buildLandingLocal` widthIn / widthOut /
   depthIn / depthOut; the pair-spacing constraint accepts either width or the landing's depth). Flight counts `treadsLegA/B/C` (A may be 0 for L/U: the flight starts with winders).

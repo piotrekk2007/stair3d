@@ -98,3 +98,22 @@ test('a U with two half landings (user request 2026-11-02): flights A and C apar
     assert.ok(!runTakeoffValidationGate(b).errors.some((d) => d.ruleId.startsWith('CONSTRAINT-STRINGER-PAIR')));
   }
 });
+
+test('flight B its own width (user request 2026-11-02: 3 winders + a landing 1080 deep): the winder zone a rectangle A × B — its last edge meets the landing along the landing’s whole 1080 side; the dusza side as it was', () => {
+  const base = { stairType: 'U', turn1Type: 'winder', turn2Type: 'landing', windersPerTurn: 3, treadsLegA: 5, treadsLegB: 0, treadsLegC: 5 };
+  const square = buildStaircase(cfg(base));
+  const rect = buildStaircase(cfg({ ...base, stairWidthB: 1080, landingDepthMm: 1080 }));
+  const T = rect.planLayout.treads;
+  const L = T.find((t) => t.type === 'landing');
+  const lastWinder = T[L.index - 1];
+  const edge = Math.hypot(lastWinder.outerChain.at(-1).x - lastWinder.innerChain.at(-1).x, lastWinder.outerChain.at(-1).y - lastWinder.innerChain.at(-1).y);
+  assert.ok(Math.abs(edge - 1080) < 1e-6, `last winder edge ${edge}`);
+  assert.ok(Math.abs(span(L.outerChain, 'y') - 1080) < 1e-6 && Math.abs(span(L.outerChain, 'x') - 900) < 1e-6, 'landing 900 × 1080');
+  // the dusza ends and the walkline are as in the square zone: only the outer corner moves out
+  const winders = (b) => b.planLayout.treads.filter((t) => t.type === 'winder');
+  winders(rect).forEach((t, i) => assert.deepEqual(t.innerChain, winders(square)[i].innerChain));
+  // flight C begins on the zone's dusza line, flight A unchanged
+  assert.ok(Math.abs(T[L.index + 1].innerChain[0].y - lastWinder.innerChain.at(-1).y) < 1e-6);
+  assert.deepEqual(T.slice(0, 5).map((t) => t.outline), square.planLayout.treads.slice(0, 5).map((t) => t.outline));
+  assert.ok(!runTakeoffValidationGate(rect).errors.some((d) => d.ruleId.startsWith('CONSTRAINT-')));
+});

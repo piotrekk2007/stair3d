@@ -3,7 +3,8 @@
 //
 // One turn, in the same local frame as planLayout.js buildTurnLocal: +y = the entrance direction, +x = the exit
 // direction after a right turn, x = 0 the outer line (wall), x = W the inner line (dusza); the inner corner is
-// Ic = (W, Yc), the outer corner Oc = (0, Yc + W).
+// Ic = (W, Yc), the outer corner Oc = (0, Yc + Wout) — Wout the exit flight's width (`params.exitWidth`, default W: the
+// old square; user request 2026-11-02: a winder zone 900 x 1080 meeting a landing 1080 deep).
 //
 // The walkline runs `off` (config.walklineOffset) from the inner line: a straight at x = W − off, a QUARTER ARC of
 // radius `off` round the inner corner Ic, a straight at y = Yc + off. The winder zone is windersCount equal goings
@@ -34,11 +35,12 @@ const MIN_DUSZA_ZONE_MM = 1; // the inner line of the zone must be longer than t
  */
 export function arcWinderGeometry(params, treadsIn, windersCount, pins = {}) {
   const W = params.stairWidth;
+  const Wout = params.exitWidth > 0 ? params.exitWidth : W;
   const g = params.treadGoing;
   const off = params.walklineOffset;
   const Lw = windersCount * g;
   const q = (Math.PI * off) / 4; // half the arc's length
-  if (!(windersCount >= 1) || !(g > 0) || !(off > 0) || !(off < W) || Lw - 2 * q < MIN_DUSZA_ZONE_MM) return null;
+  if (!(windersCount >= 1) || !(g > 0) || !(off > 0) || !(off < Math.min(W, Wout)) || Lw - 2 * q < MIN_DUSZA_ZONE_MM) return null;
 
   const s0 = treadsIn * g;
   const before = pins.startsFlight ? q : pins.endsFlight ? Lw - q : Math.min(Lw - q, Math.max(q, params.walklineSplitOffset));
@@ -49,7 +51,7 @@ export function arcWinderGeometry(params, treadsIn, windersCount, pins = {}) {
   const s1 = s0 + Lw;
   const xTurnEnd = W + (s1 - arcEnd);
   const Ic = { x: W, y: Yc };
-  const Oc = { x: 0, y: Yc + W };
+  const Oc = { x: 0, y: Yc + Wout };
 
   const walkAt = (s) => {
     if (s <= Yc) return { x: W - off, y: s };
@@ -73,7 +75,7 @@ export function arcWinderGeometry(params, treadsIn, windersCount, pins = {}) {
   };
 
   // the outer line, extended far past its ends so an edge always meets it
-  const outerLine = [{ x: 0, y: s0 - 1e6 }, Oc, { x: xTurnEnd + 1e6, y: Yc + W }];
+  const outerLine = [{ x: 0, y: s0 - 1e6 }, Oc, { x: xTurnEnd + 1e6, y: Yc + Wout }];
   const boundaries = [];
   for (let k = 0; k <= windersCount; k++) {
     const station = s0 + k * g;
@@ -102,7 +104,7 @@ export function arcWinderGeometry(params, treadsIn, windersCount, pins = {}) {
 export function fittingWalklineOffset(params, windersCount) {
   const Lw = windersCount * params.treadGoing;
   if (!(windersCount >= 1) || !(params.treadGoing > 0) || !(params.stairWidth > 0)) return null;
-  const configured = Math.min(params.walklineOffset, params.stairWidth - 1);
+  const configured = Math.min(params.walklineOffset, Math.min(params.stairWidth, params.exitWidth > 0 ? params.exitWidth : params.stairWidth) - 1);
   if (configured > 0 && Lw - (Math.PI * configured) / 2 >= MIN_DUSZA_ZONE_MM) return configured;
   const dusza = Math.min(windersCount * (params.minInnerWidth > 0 ? params.minInnerWidth : 0), Lw / 2);
   const fitted = Math.min(configured, (2 * (Lw - Math.max(dusza, MIN_DUSZA_ZONE_MM))) / Math.PI);

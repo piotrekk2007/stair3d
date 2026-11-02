@@ -316,7 +316,7 @@ export function evaluateGeometricConstraints({ treadModels, riserModels, stringe
   if (stringerModels) {
     diagnostics.push(...checkStringerReferenceLinesStraight(stringerModels.outer, 'StringerOuter'));
     diagnostics.push(...checkStringerReferenceLinesStraight(stringerModels.inner, 'StringerInner'));
-    diagnostics.push(...checkStringerPairInvariants(stringerModels.outer, stringerModels.inner, [config.stairWidth, config.stairWidthC, config.landingDepthMm]));
+    diagnostics.push(...checkStringerPairInvariants(stringerModels.outer, stringerModels.inner, [config.stairWidth, config.stairWidthB, config.stairWidthC, config.landingDepthMm]));
     diagnostics.push(...checkBearingAttachment(stringerModels.outer, treadModels.length, 'StringerOuter'));
     diagnostics.push(...checkBearingAttachment(stringerModels.inner, treadModels.length, 'StringerInner'));
   }

@@ -304,12 +304,14 @@ function buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, p
   const geo = off === null ? null : arcWinderGeometry({ ...params, walklineOffset: off }, treadsIn, windersCount, pins);
   if (!geo) return buildTurnLocalProportional(params, treadsIn, windersCount, treadsOut, startIndex);
   const { stairWidth: W, treadGoing: g } = params;
+  // the exit flight's own width (user request 2026-11-02 — a zone W wide and Wout deep; default the square)
+  const Wout = params.exitWidth > 0 ? params.exitWidth : W;
   const { s0, Yc, Ic, Oc, xTurnEnd } = geo;
   const zoneEnd = treadsIn + windersCount;
   const xEnd = xTurnEnd + treadsOut * g;
-  const outerPath = [{ x: 0, y: 0 }, Oc, { x: xEnd, y: Yc + W }];
+  const outerPath = [{ x: 0, y: 0 }, Oc, { x: xEnd, y: Yc + Wout }];
   const innerPath = [{ x: W, y: 0 }, Ic, { x: xEnd, y: Yc }];
-  const outerTurnPath = [{ x: 0, y: s0 }, Oc, { x: xTurnEnd, y: Yc + W }];
+  const outerTurnPath = [{ x: 0, y: s0 }, Oc, { x: xTurnEnd, y: Yc + Wout }];
   const innerTurnPath = [{ x: W, y: s0 }, Ic, { x: xTurnEnd, y: Yc }];
   const outerTurnCum = cumulativeDistances(outerTurnPath);
   const innerTurnCum = cumulativeDistances(innerTurnPath);
@@ -334,7 +336,7 @@ function buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, p
     } else if (k > zoneEnd) {
       const x = xTurnEnd + (k - zoneEnd) * g;
       innerPts.push({ x, y: Yc });
-      outerPts.push({ x, y: Yc + W });
+      outerPts.push({ x, y: Yc + Wout });
       walkPts.push({ x, y: Yc + off });
       innerDirAt.push(EXIT);
       outerDirAt.push(EXIT);
@@ -866,7 +868,9 @@ function buildHalfTurnLocal(params, treadsIn, windersCount, treadsOut) {
 
 function buildTurnOrLanding(turnType, params, treadsIn, windersCount, treadsOut, startIndex, pins, landingSize) {
   if (turnType === 'landing') return buildLandingLocal(params, treadsIn, treadsOut, startIndex, landingSize);
-  return buildTurnLocal(params, treadsIn, windersCount, treadsOut, startIndex, pins);
+  // a winder turn: the flight entering it and the one leaving it may differ in width (the zone a rectangle)
+  const sized = landingSize ? { ...params, stairWidth: landingSize.widthIn ?? params.stairWidth, exitWidth: landingSize.widthOut ?? params.stairWidth } : params;
+  return buildTurnLocal(sized, treadsIn, windersCount, treadsOut, startIndex, pins);
 }
 
 // numTurns: 1 dla L, 2 dla U. turn1Type/turn2Type: 'winder' | 'landing' niezależnie na każdym zakręcie.
@@ -941,7 +945,10 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   // a U with landings (user request 2026-11-02): flight C its own width (`stairWidthC`, null = the stair's width; a
   // winder turn keeps one width) and, on one big landing, flights A and C apart by `uFlightGapMm` (between their inner
   // lines — a wall between them); the big landing is then A + gap + C wide, its free edge between them an inner chain
-  const widthC = numTurns === 2 && !reverseSecond && turn2Type === 'landing' && Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : stairWidth;
+  const widthC = numTurns === 2 && !reverseSecond && Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : stairWidth;
+  // flight B's own width (L: the exit flight; U: between the turns) — `stairWidthB`, null = the stair's width; a winder
+  // turn into it is then a rectangle (user request 2026-11-02: 3 winders 900 x 1080 meeting a 1080-deep landing)
+  const widthB = !reverseSecond && Number(config.stairWidthB) > 0 ? Number(config.stairWidthB) : stairWidth;
   const flightGap = isBigLanding && Number(config.uFlightGapMm) > 0 ? Number(config.uFlightGapMm) : 0;
   // two half landings (user request 2026-11-02): the same distance between A's and C's inner lines — flight B makes up
   // B × going of it, the rest lengthens both half landings equally along B (a smaller value changes nothing)
@@ -949,10 +956,10 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   const halfExtra = halfLandingsU && Number(config.uFlightGapMm) > 0 ? Math.max(0, Number(config.uFlightGapMm) - (Number(treadsLegB) || 0) * treadGoing) / 2 : 0;
   const landing1 = isBigLanding
     ? { widthIn: stairWidth, widthOut: landingDepth, depthIn: landingDepth, depthOut: stairWidth + flightGap }
-    : { widthIn: stairWidth, widthOut: stairWidth, depthIn: landingDepth, depthOut: stairWidth + halfExtra };
+    : { widthIn: stairWidth, widthOut: widthB, depthIn: landingDepth, depthOut: stairWidth + halfExtra };
   const landing2 = isBigLanding
     ? { widthIn: landingDepth, widthOut: widthC, depthIn: widthC, depthOut: landingDepth }
-    : { widthIn: stairWidth, widthOut: widthC, depthIn: widthC + halfExtra, depthOut: landingDepth };
+    : { widthIn: widthB, widthOut: widthC, depthIn: widthC + halfExtra, depthOut: landingDepth };
 
   // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
   const half = numTurns === 2 && isHalfTurnU(config)

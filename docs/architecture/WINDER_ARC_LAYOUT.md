@@ -186,3 +186,12 @@ grubości wangi, krótka deska duszy, dopasowanie do klatki, oferta, strzałka k
 (prawo/lewo, rozstaw 0/40/120/300, A 0/2/4, C 0/3, 4–10 zabiegów, wangi wpuszczane/nakładane, balustrada po obu
 stronach): 0 wywrotek, 0 przecinających się konturów; zostają ustalenia o zbyt stromej/płytkiej wandze przy bardzo małej
 liczbie zabiegów albo bez stopni prostych w A i C.
+
+## A rectangular winder zone (user request 2026-11-02)
+
+The flights on either side of a turn may differ in width (`stairWidth` = A, `stairWidthB`, `stairWidthC` — planLayout.js
+`buildTurnOrLanding` passes the entering flight's as `stairWidth` and the leaving one's as `exitWidth`). The zone is
+then a rectangle: the outer corner Oc = (0, Yc + Wout), the exit flight's outer line at y = Yc + Wout; the walkline (its
+arc round Ic, the offset capped by the narrower width) and the dusza ends are exactly those of the square zone, so only
+the outer ends of the edges (the line through the dusza point and the walkline point, carried on to the outer line)
+move. Example: 3 winders, A 900 wide, B 1080 — the last winder meets a 1080-deep landing along its whole side.

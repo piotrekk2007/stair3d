@@ -56,6 +56,9 @@ export function createDefaultConfig() {
     // the distance between flights A and C (their inner lines; 0 = side by side; with two half landings flight B makes up
     // B × going of it, the half landings the rest) — planLayout.js, user request 2026-11-02
     stairWidthC: null,
+    // flight B's own width (L: the exit flight, U: between the turns; null = stairWidth) — a winder turn into it is a
+    // rectangle (A's width x B's width)
+    stairWidthB: null,
     uFlightGapMm: 0,
 
     walklineOffset: 400, // mm, odsunięcie linii biegu od policzka wewnętrznego (duszy) — zgodnie z wymogiem 40-50cm
