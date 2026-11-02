@@ -6,7 +6,7 @@ import { buildStaircase } from '../buildStaircase.js';
 import { concreteFromIndex, woodOnlyRailingSections } from '../concreteStair.js';
 import { runTakeoffValidationGate } from '../../takeoff/validationGate.js';
 import { buildStructuralReport } from '../../structural/index.js';
-import { rawSlabTopZ } from '../floors.js';
+import { rawSlabTopZ, slabSoffitZ } from '../floors.js';
 
 // the client's case (user request 2026-11-02): a U with winders, wooden up to the first turn, concrete from there on
 const uCfg = (patch = {}) => ({
@@ -82,8 +82,9 @@ test('the concrete flight: a block under every concrete step at its tread’s un
     const lows = steps.filter((x) => x.treadIndex === i + 1).flatMap((x) => x.bottomZ);
     assert.ok(Math.abs(Math.min(...lows) - Math.max(0, expected)) < 1, `step ${i + 1} starts on the soffit where step ${i} ends`);
   }
+  // (where the opening runs on past the last step, the piece at the floor reaching the slab's edge)
   const top = c.blocks.find((x) => x.treadIndex === null);
-  assert.ok(top && Math.abs(top.topZ - rawSlabTopZ(b.fullConfig)) < 1e-6);
+  if (top) assert.ok(Math.abs(top.topZ - rawSlabTopZ(b.fullConfig)) < 1e-6 && Math.max(...top.bottomZ) <= slabSoffitZ(b.fullConfig) + 1e-6);
   assert.ok(c.volumeM3 > 0.3 && c.volumeM3 < 3, String(c.volumeM3));
   // in 3D: its own layer
   const group = b.root.getObjectByName('Concrete');
@@ -93,4 +94,55 @@ test('the concrete flight: a block under every concrete step at its tread’s un
   assert.equal(off.concrete, null);
   assert.equal(off.root.getObjectByName('Concrete'), undefined);
   assert.ok(off.treadModels.every((t) => !t.onConcrete));
+});
+
+test('regression (user, 2026-11-02, "Schody_Pasek_1"): a U with one 180° winder zone and the concrete starting right after the dusza’s turning point — the inner wanga is ONE board, no zero-length second board (the profile editor could not edit it)', () => {
+  const cfg = uCfg({ treadsLegA: 6, treadsLegB: 0, treadsLegC: 2, windersPerTurn: 5, uSingleWinderZone: true, uWindersTotal: 6, uAxisGapMm: 40, hasCornerPost: false, concreteEnabled: true, concreteFromTread: 10 });
+  const b = buildStaircase(cfg);
+  for (const side of ['inner', 'outer']) {
+    for (const s of b.stringerModels[side].segments) assert.ok(s.referenceLine.length > 1 && s.treadBearings.length > 0, `${side} ${s.id}: ${Math.round(s.referenceLine.length)} mm, ${s.treadBearings.length} treads`);
+  }
+  assert.equal(b.stringerModels.inner.segments.length, 1);
+  assert.ok(b.stringerConstruction.inner.every((g) => g.outerContour.length > 0));
+});
+
+// the client's project (user report 2026-11-02, "Schody_Pasek_1"): one 180° zone, concrete from tread 10, the ceiling
+// opening given so that the slab starts right behind the last step
+const pasek = (patch = {}) =>
+  uCfg({
+    treadsLegA: 6, treadsLegB: 0, treadsLegC: 2, windersPerTurn: 5, uSingleWinderZone: true, uWindersTotal: 6, uAxisGapMm: 40, hasCornerPost: false,
+    totalRise: 3145, treadGoing: 269.37, stairwellRoomEnabled: true, stairwellSideAMm: 2008, stairwellSideBMm: 1800, stairwellSideCMm: 1540,
+    stairwellSideAState: 'free', stairwellSideBState: 'rigid', stairwellSideCState: 'main', stairwellManualCounts: true, ceilingThickness: 250,
+    openingShape: 'polygon', openingMode: 'given',
+    openingPolygon: [{ x: 1800.1, y: 1540 }, { x: 1800.1, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 2079.5 }, { x: 903.6, y: 2089.5 }, { x: 903.6, y: 1540 }],
+    concreteEnabled: true, concreteFromTread: 10, ...patch,
+  });
+
+test('regression (user, 2026-11-02): the slab starts right behind the last concrete step — no block past it (it hung 190 mm below the slab like a third step)', () => {
+  const b = buildStaircase(pasek());
+  const lastBack = b.planLayout.treads.at(-1).backEdge;
+  assert.ok(lastBack.every((p) => b.ceilingFit.openingOutline.some((q) => Math.abs(q.y - p.y) < 1)), 'the opening ends at the last back edge');
+  assert.equal(b.concrete.blocks.filter((x) => x.treadIndex === null).length, 0);
+  assert.ok(b.concrete.blocks.every((x) => x.treadIndex !== null));
+});
+
+test('a wall under the concrete flight (user request 2026-11-02): along the chosen edge, the wall’s thickness into the stair, from the floor up to the soffit — not up to the slab', () => {
+  const none = buildStaircase(pasek());
+  assert.deepEqual(none.concrete.walls, []);
+  const b = buildStaircase(pasek({ concreteWallSide: 'inner', concreteWallThicknessMm: 120 }));
+  const c = b.concrete;
+  assert.ok(c.walls.length > 0 && c.walls.every((w) => w.side === 'inner'));
+  assert.deepEqual([...new Set(c.walls.map((w) => w.treadIndex))], b.treadModels.filter((t) => t.onConcrete).map((t) => t.index));
+  for (const w of c.walls) {
+    assert.ok(w.bottomZ.every((z) => z === 0), 'from the floor');
+    const step = c.blocks.filter((x) => x.treadIndex === w.treadIndex);
+    assert.ok(Math.max(...w.topZ) <= Math.max(...step.map((x) => x.topZ)) && Math.max(...w.topZ) < slabSoffitZ(b.fullConfig), 'up to the soffit only');
+    // within the wall's thickness of the inner line
+    const line = b.planLayout.treads[w.treadIndex].innerChain;
+    const dist = (p) => Math.min(...line.slice(1).map((q, k) => { const a = line[k]; const dx = q.x - a.x, dy = q.y - a.y, l2 = dx * dx + dy * dy; const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0; return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); }));
+    assert.ok(w.outline.every((p) => dist(p) <= 120 * Math.SQRT2 + 1), JSON.stringify(w.outline));
+  }
+  assert.ok(b.root.getObjectByName('Concrete').children.some((m) => m.name.startsWith('ConcreteWall-inner')));
+  const both = buildStaircase(pasek({ concreteWallSide: 'both' }));
+  assert.deepEqual([...new Set(both.concrete.walls.map((w) => w.side))].sort(), ['inner', 'outer']);
 });

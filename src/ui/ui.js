@@ -145,16 +145,30 @@ export function createUI({
   concreteOn.domElement.title = 'Od wskazanego stopnia do wyjścia schody leżą na wylanym biegu betonowym (okładziny na betonie); niżej — schody drewniane na wangach, wangi dochodzą do betonu. Tylko dla konstrukcji „Na wangach”.';
   const concreteFrom = live(stairFolder.add(concreteProxy, 'from', 1, 40, 1)).name('Beton od stopnia nr');
   const concreteSlab = live(stairFolder.add(config, 'concreteSlabThicknessMm', 80, 300, 5)).name('Grubość płyty betonowej [mm]');
+  // a wall under the concrete flight along its edge, floor to soffit (concreteStair.js)
+  const concreteWall = live(stairFolder.add(config, 'concreteWallSide', { 'brak': 'none', 'po stronie wewn. (duszy)': 'inner', 'po stronie zewn.': 'outer', 'po obu stronach': 'both' })).name('Ściana pod biegiem betonowym');
+  concreteWall.domElement.title = 'Ściana od posadzki do spodu biegu betonowego wzdłuż jego krawędzi (nie ściana klatki — ta idzie do stropu).';
+  const wallProxy = {
+    get t() {
+      return config.concreteWallThicknessMm ?? config.freeWallThicknessMm ?? 120;
+    },
+    set t(v) {
+      config.concreteWallThicknessMm = v;
+    },
+  };
+  const concreteWallT = live(stairFolder.add(wallProxy, 't', 60, 400, 5)).name('Grubość ściany pod biegiem [mm]');
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
     concreteFrom.show(on).updateDisplay();
     concreteSlab.show(on);
+    concreteWall.show(on);
+    concreteWallT.show(on && (config.concreteWallSide || 'none') !== 'none').updateDisplay();
   };
   syncConcrete();
   lockSyncs.push(syncConcrete);
   // (its rows appear / go as soon as the switch or the construction changes)
-  for (const c of [concreteOn, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
+  for (const c of [concreteOn, concreteWall, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
     c.onChange((v) => {
       onChange(v);
       syncConcrete();

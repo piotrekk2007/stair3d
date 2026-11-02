@@ -65,6 +65,8 @@ const ledMaterial = new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 
 const ledGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xffb43c, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
 // the concrete flight under part of the stair (concreteStair.js)
 const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b1aa, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+// the wall under the concrete flight (masonry, like the stairwell's walls but solid)
+const concreteWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -146,7 +148,7 @@ export function buildStaircase(rawConfig) {
   }
   const riserModels = buildRiserModels(planLayout, fullConfig);
   // the concrete flight the upper treads lie on (concreteStair.js) — shown, not priced
-  const concrete = buildConcreteModel({ planLayout, treadModels }, fullConfig);
+  const concrete = buildConcreteModel({ planLayout, treadModels, openingOutline: ceilingFit.openingOutline }, fullConfig);
   const metalStructure = metal ? buildMetalStructure({ planLayout, treadModels }, fullConfig) : null;
   // A cantilever or metal stair has no wangi and no structural posts: empty models, so nothing downstream (render,
   // joints, takeoff, validation, the structural check) sees a board or a post that does not exist.
@@ -208,7 +210,7 @@ export function buildStaircase(rawConfig) {
   const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
   if (cantilever) root.add(renderCantileverProfiles(treadModels, steelMaterial));
-  const concreteGroup = renderConcrete(concrete, concreteMaterial);
+  const concreteGroup = renderConcrete(concrete, concreteMaterial, concreteWallMaterial);
   if (concreteGroup) root.add(concreteGroup);
 
   if (riserModels.length) {

@@ -702,7 +702,9 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const concreteXML = (concrete?.blocks || [])
     .filter((b) => b.treadIndex !== null)
     .map((b) => `<polygon class="concrete-footprint" points="${polygonPoints(b.outline)}" fill="#9e9a92" fill-opacity="0.35" stroke="#77736b" stroke-width="0.8" pointer-events="none" ${HAIR}/>`)
-    .join('');
+    .join('') +
+    // the wall under it (dashed — it is below the stair)
+    (concrete?.walls || []).map((w) => `<polygon class="concrete-wall" points="${polygonPoints(w.outline)}" fill="#6f6a62" fill-opacity="0.45" stroke="#4d4943" stroke-width="0.8" stroke-dasharray="5,3" pointer-events="none" ${HAIR}/>`).join('');
   const stringersXML = layers.stringers === false ? '' : concreteXML + stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath) + metalXML;
 
   // ID słupa = ten sam co w postSolver.js (post-start / post-end / post-corner-<indeks zakrętu>;

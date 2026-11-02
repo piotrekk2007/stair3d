@@ -16,7 +16,7 @@
 // chain fields) and buildBearingsForWalk (reads frontEdge/backEdge fields) each do.
 
 import { cumulativeDistances, goesStraightThrough, projectPointOntoLine, pointsEqual } from './pathUtils.js';
-import { COLLINEAR_EPS } from './tolerances.js';
+import { COLLINEAR_EPS, GEOMETRY_EPS } from './tolerances.js';
 import { buildPostModels } from './postSolver.js';
 import { inwardNormal } from './planLayout.js';
 import { starterLiesOn } from './starterSteps.js';
@@ -80,7 +80,9 @@ function splitWalkIntoRuns(walk) {
   for (let k = 0; k < cornerIdx.length - 1; k++) {
     const i0 = cornerIdx[k];
     const i1 = cornerIdx[k + 1];
-    if (i0 === i1) continue; // zero-length (can happen if two "corners" coincide)
+    // zero-length (two "corners" coincide — e.g. a walk ending at the dusza's turning point of a 180° zone, whose chain
+    // repeats that point: the concrete flight starting right after it, user report 2026-11-02)
+    if (i0 === i1 || cum[i1] - cum[i0] < GEOMETRY_EPS) continue;
     runs.push({ startIdx: i0, endIdx: i1, uStart: cum[i0], uEnd: cum[i1], start: pts[i0], end: pts[i1] });
   }
   return runs;

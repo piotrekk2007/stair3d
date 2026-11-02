@@ -15,15 +15,17 @@
 // underside, from its riser's back face (the front edge moved back by the riser board's thickness) to the next one's —
 // and one smooth soffit under them: on the line where step i begins it is step i−1's top less the slab's vertical
 // thickness, on the line where it ends step i's top less it, between the two by the distance to each (a winder's soffit
-// twists with it), never below the floor. Past the last step a block up to the raw slab's top (the flight is cast into
-// the slab). Pure: no Three.js.
+// twists with it), never below the floor. Where the ceiling opening runs on past the last step, a piece up to the raw
+// slab's top fills the gap to the slab's edge, its soffit rising to the slab's (none when the slab starts right behind
+// the last step — it used to be a 250 mm block hanging below the slab, user report 2026-11-02). Optionally a WALL under
+// the flight along its inner / outer edge (`concreteWallSide`), from the floor up to the soffit. Pure: no Three.js.
 
-import { clipToConvex, polygonArea } from './polygonClip.js';
-import { rawSlabTopZ } from './floors.js';
+import { clipToConvex, polygonArea, pointInPolygon } from './polygonClip.js';
+import { rawSlabTopZ, slabSoffitZ } from './floors.js';
 
 export const CONCRETE_SLAB_THICKNESS_DEFAULT_MM = 150; // ASSUMPTION: a typical cast-in-place stair slab
 const FAR_MM = 1e5; // the half-planes are quads this far along their line
-const TOP_BLOCK_DEPTH_MIN_MM = 200;
+export const CONCRETE_WALL_SIDES = ['none', 'inner', 'outer', 'both'];
 
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const dot = (a, b) => a.x * b.x + a.y * b.y;
@@ -89,13 +91,43 @@ function sideDistance(p, [a, b], towards) {
   return dot(sub(p, a), n);
 }
 
+// The distance from p along the unit direction d to the boundary of `poly` (p inside it), or 0.
+function rayToBoundary(p, d, poly) {
+  let best = Infinity;
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k];
+    const b = poly[(k + 1) % poly.length];
+    const e = sub(b, a);
+    const den = d.x * e.y - d.y * e.x;
+    if (Math.abs(den) < 1e-12) continue;
+    const w = sub(a, p);
+    const t = (w.x * e.y - w.y * e.x) / den;
+    const u = (w.x * d.y - w.y * d.x) / den;
+    if (t > 1e-6 && u >= -1e-9 && u <= 1 + 1e-9) best = Math.min(best, t);
+  }
+  return Number.isFinite(best) ? best : 0;
+}
+
+// The strip `w` wide along a chain segment p-q on the side of `inside` (a convex quad, run on `w` past both ends so the
+// pieces of a turning line overlap at its corners).
+function band(p, q, w, inside) {
+  const d = unit(sub(q, p));
+  let n = { x: -d.y, y: d.x };
+  if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
+  const A = { x: p.x - d.x * w, y: p.y - d.y * w };
+  const B = { x: q.x + d.x * w, y: q.y + d.y * w };
+  return [A, B, { x: B.x + n.x * w, y: B.y + n.y * w }, { x: A.x + n.x * w, y: A.y + n.y * w }];
+}
+
 /**
- * @param {{planLayout: Object, treadModels: Object[]}} models
+ * @param {{planLayout: Object, treadModels: Object[], openingOutline?: {x,y}[]}} models
  * @param {Object} config  the full config (riserHeight merged in)
  * @returns {null | {fromIndex:number, fromTreadNo:number, slabThicknessMm:number,
- *   blocks: {treadIndex:number|null, outline:{x,y}[], topZ:number, bottomZ:number[]}[], volumeM3:number}}
+ *   blocks: {treadIndex:number|null, outline:{x,y}[], topZ:number, bottomZ:number[]}[],
+ *   walls: {treadIndex:number, side:string, outline:{x,y}[], topZ:number[], bottomZ:number[]}[], volumeM3:number}}
+ *   (a wall's top follows the soffit: one height per outline point)
  */
-export function buildConcreteModel({ planLayout, treadModels }, config) {
+export function buildConcreteModel({ planLayout, treadModels, openingOutline = null }, config) {
   const treads = planLayout?.treads || [];
   const fromIndex = concreteFromIndex(config, treads.length);
   if (fromIndex === null) return null;
@@ -109,6 +141,10 @@ export function buildConcreteModel({ planLayout, treadModels }, config) {
   const topZ = (i) => (i + 1) * rise - tt; // the concrete step's top = its tread's underside (treadSolver.js)
 
   const blocks = [];
+  const walls = [];
+  const wallSide = CONCRETE_WALL_SIDES.includes(config.concreteWallSide) ? config.concreteWallSide : 'none';
+  const wallSides = wallSide === 'both' ? ['inner', 'outer'] : wallSide === 'none' ? [] : [wallSide];
+  const wallThickness = Number(config.concreteWallThicknessMm) > 0 ? Number(config.concreteWallThicknessMm) : Number(config.freeWallThicknessMm) > 0 ? Number(config.freeWallThicknessMm) : 120;
   const last = treads.length - 1;
   for (let i = fromIndex; i <= last; i++) {
     const t = treads[i];
@@ -136,22 +172,42 @@ export function buildConcreteModel({ planLayout, treadModels }, config) {
       if (outline.length < 3 || polygonArea(outline) < 1) continue;
       blocks.push({ treadIndex: i, outline, topZ: topZ(i), bottomZ: outline.map(soffitAt) });
     }
+    // the wall under the flight: along this tread's line(s), the wall's thickness into the stair, floor to soffit
+    for (const side of wallSides) {
+      const chain = side === 'inner' ? t.innerChain : t.outerChain;
+      for (let k = 1; k < (chain?.length || 0); k++) {
+        if (Math.hypot(chain[k].x - chain[k - 1].x, chain[k].y - chain[k - 1].y) < 1) continue;
+        const outline = clipToConvex(t.outline, band(chain[k - 1], chain[k], wallThickness, inside));
+        if (outline.length < 3 || polygonArea(outline) < 1) continue;
+        const tops = outline.map(soffitAt);
+        if (Math.max(...tops) < 1) continue;
+        walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0) });
+      }
+    }
   }
-  // past the last step: up to the raw slab (the flight is cast into it)
+  // past the last step, where the ceiling opening runs on: a piece at the floor up to the slab's edge, its soffit rising
+  // to the slab's (none when the slab starts right behind the last step — the flight ends against its edge)
   const lastTread = treads[last];
-  if (lastTread?.backEdge?.length === 2 && lastTread.outline?.length >= 3) {
+  if (lastTread?.backEdge?.length === 2 && lastTread.outline?.length >= 3 && openingOutline?.length >= 3) {
     const inside = centroid(lastTread.outline);
     const beyond = { x: 2 * lastTread.backEdge[0].x - inside.x, y: 2 * lastTread.backEdge[0].y - inside.y };
-    const depth = Math.max(TOP_BLOCK_DEPTH_MIN_MM, Number(config.ceilingThickness) || 0);
     const a = shiftedEdge(lastTread.backEdge, rt, beyond);
-    const b = shiftedEdge(lastTread.backEdge, rt + depth, beyond);
-    const outline = [a[0], a[1], b[1], b[0]];
-    const bottom = Math.max(0, topZ(last) - plumb);
-    const top = rawSlabTopZ(config);
-    if (top > bottom) blocks.push({ treadIndex: null, outline, topZ: top, bottomZ: outline.map(() => bottom) });
+    const out = unit(sub(a[0], shiftedEdge(lastTread.backEdge, rt - 1, beyond)[0]));
+    const mid = { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 };
+    const probe = { x: mid.x + out.x, y: mid.y + out.y };
+    const depth = pointInPolygon(probe, openingOutline) ? rayToBoundary(mid, out, openingOutline) : 0;
+    if (depth > 1) {
+      const b = shiftedEdge(lastTread.backEdge, rt + depth, beyond);
+      const outline = [a[0], a[1], b[1], b[0]];
+      const from = Math.max(0, topZ(last) - plumb);
+      const to = Math.max(from, slabSoffitZ(config));
+      const top = rawSlabTopZ(config);
+      if (top > from) blocks.push({ treadIndex: null, outline, topZ: top, bottomZ: [from, from, to, to] });
+    }
   }
 
   // the volume (m³, information only): each block's area × its mean height
-  const volumeM3 = blocks.reduce((s, b) => s + polygonArea(b.outline) * (b.topZ - b.bottomZ.reduce((x, z) => x + z, 0) / b.bottomZ.length), 0) / 1e9;
-  return { fromIndex, fromTreadNo: fromIndex + 1, slabThicknessMm: slab, blocks, volumeM3 };
+  const mean = (z) => (Array.isArray(z) ? z.reduce((x, v) => x + v, 0) / z.length : z);
+  const volumeM3 = [...blocks, ...walls].reduce((s, b) => s + polygonArea(b.outline) * (mean(b.topZ) - mean(b.bottomZ)), 0) / 1e9;
+  return { fromIndex, fromTreadNo: fromIndex + 1, slabThicknessMm: slab, blocks, walls, volumeM3 };
 }

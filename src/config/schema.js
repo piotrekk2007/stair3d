@@ -196,6 +196,10 @@ export function createDefaultConfig() {
     concreteEnabled: false,
     concreteFromTread: null,
     concreteSlabThicknessMm: 150,
+    // a wall under the concrete flight along its edge, from the floor up to the soffit: 'none' | 'inner' | 'outer' |
+    // 'both'; its thickness (null = freeWallThicknessMm)
+    concreteWallSide: 'none',
+    concreteWallThicknessMm: null,
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

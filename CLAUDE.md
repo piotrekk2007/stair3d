@@ -385,8 +385,9 @@ is THE rule, `planLayout.js` marks those treads `onConcrete` — no housing rece
 wangi end with a plumb cut at the concrete; the model's `lastTreadIndex` keeps them from being "the board at the slab"),
 no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnlyRailingSections`), skipped by the
 missing-support / continuity / structural checks. `buildConcreteModel` → `built.concrete` (a block per step under the
-tread, one smooth soffit at the slab's plumb thickness, never below the floor, a block into the slab at the top;
-`volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
+tread, one smooth soffit at the slab's plumb thickness, never below the floor, a piece up to the slab's edge only where
+the opening runs on past the last step; optional walls under it `concreteWallSide` none / inner / outer / both, floor to
+soffit; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
 
 ## Validation
 
