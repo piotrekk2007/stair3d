@@ -552,6 +552,17 @@ export function createUI({
   lockable(steps.add(config, 'treadsLegB', 0, 15, 1).name('Proste (odc. B)'), 'treadsLegB');
   live(steps.add(config, 'turn2Type', ['winder', 'landing'])).name('Zakręt 2: typ (U, S)');
   live(steps.add(config, 'mergeLandings')).name('1 duży podest (oba zakręty = landing)');
+  // the landing's depth along the flight entering it (planLayout.js buildLandingLocal; null = the stair's width)
+  const landingProxy = {
+    get d() {
+      return config.landingDepthMm ?? config.stairWidth;
+    },
+    set d(v) {
+      config.landingDepthMm = v;
+    },
+  };
+  const landingDepth = live(steps.add(landingProxy, 'd', 500, 2500, 1)).name('Głębokość podestu [mm]');
+  landingDepth.domElement.title = 'Wymiar podestu wzdłuż biegu, który na niego wchodzi. Domyślnie = szerokość biegu (podest kwadratowy). Większa: bieg dalej odchodzi przy ścianie zewnętrznej; w U duży podest ma 2 szerokości × tę głębokość. Mniejsza niż szerokość biegu nie jest możliwa.';
   lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');
   // U with no straight tread in B and two winder turns: ONE 180° winder zone round one central post (winderArc.js
   // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.

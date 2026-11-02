@@ -48,6 +48,10 @@ export function createDefaultConfig() {
     // (dwie sąsiadujące połówki scalone w jedną płytę); false = powrót do 2 osobnych półpodestów
     // na kolejnych wysokościach (dawne, wcześniejsze zachowanie).
     mergeLandings: true,
+    // the landing's depth along the flight entering it (mm; null = the stair's width — the square landing). Deeper: the
+    // exit flight stays at the outer side, a U's big landing becomes 2 widths x this (planLayout.js buildLandingLocal,
+    // user request 2026-11-02)
+    landingDepthMm: null,
 
     walklineOffset: 400, // mm, odsunięcie linii biegu od policzka wewnętrznego (duszy) — zgodnie z wymogiem 40-50cm
     // mm: ile z długości zabiegu (windersPerTurn * treadGoing, mierzonej NA LINII BIEGU) przypada przed środkiem
