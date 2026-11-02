@@ -459,7 +459,8 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   on its own by `vite.config.js clientViewerRuntime` as `virtual:client-viewer-runtime` — + the model as GLB + logo +
   main sizes; views, walls / slab on-off, a tape measure), GLB (Windows / Android) and USDZ (iPhone / iPad, AR) —
   `export/clientModelExport.js` (`buildClientScene`: the stair root cloned, every layer, no userData, metres; the
-  walls / slab as the 'room' layer). Never the project, its parameters or prices.
+  walls / slab as the 'room' layer, the headroom overlay as the 'headroom' layer — its label sprite turned into a
+  textured plane the viewer keeps facing the camera, button „Skrajnia”). Never the project, its parameters or prices.
 - Offer (`offer/offerModel.js`, `offerDocument.js`, `ui/offerPanel.js`): CNC + projekt is a hidden lump sum spread over
   material lines; categories can be shown separately; extras, discount (`discountPct`: % of the material + extras only,
   never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation, VAT

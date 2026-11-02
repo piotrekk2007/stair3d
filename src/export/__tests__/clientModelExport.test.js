@@ -61,3 +61,31 @@ test("the client's viewer is a program of its own: it imports three.js and its o
   visit('clientViewer.js');
   assert.ok(seen.has('measure3d.js'));
 });
+
+test("the client's scene shows the headroom too (user request 2026-11-02): its curtains / dimension as the 'headroom' layer, its label (a sprite — not carried by glTF / USDZ) as a flat picture; the viewer can switch it", async () => {
+  const { buildHeadroomOverlay } = await import('../../scene/headroomOverlay.js');
+  const b = built();
+  const overlay = buildHeadroomOverlay(b.headroom);
+  assert.ok(overlay, 'this stair has a headroom to show');
+  // (no canvas in node: the label sprite is added by hand, as the browser builds it)
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.Texture() }));
+  sprite.name = 'HeadroomLabel';
+  sprite.scale.set(600, 200, 1);
+  sprite.position.set(100, 2000, -300);
+  overlay.add(sprite);
+  const scene = buildClientScene({ root: b.root, room: [b.ceilingMesh], headroom: overlay });
+  const layer = [];
+  let sprites = 0;
+  scene.traverse((o) => {
+    if (o.isSprite) sprites++;
+    if (o.userData.viewerLayer === 'headroom') layer.push(o);
+  });
+  assert.equal(sprites, 0, 'no sprite left');
+  assert.ok(layer.some((o) => o.isMesh && !o.userData.label), 'the curtains');
+  const label = layer.find((o) => o.userData.label);
+  assert.ok(label?.isMesh && label.material.map, 'the label as a picture');
+  assert.deepEqual([label.scale.x, label.scale.y], [600, 200]);
+  assert.ok(overlay.getObjectByName('HeadroomLabel').isSprite, 'the designer’s own overlay untouched');
+  const viewer = fs.readFileSync(new URL('../../viewer/clientViewer.js', import.meta.url), 'utf8');
+  assert.match(viewer, /'headroom', 'Skrajnia'/);
+});

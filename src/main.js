@@ -1306,6 +1306,8 @@ const exporter = createExports({
   getRoot: () => currentRoot,
   // (the client's model: the stairwell's walls and the slab as its 'room' layer)
   getRoom: () => [currentCeiling, currentWalls].filter(Boolean),
+  // the headroom under the opening (scene/headroomOverlay.js) — in the client's model too, its own layer there
+  getHeadroom: () => (config.stairPending ? null : currentHeadroom),
   getLogoDataUrl: () => logo.dataUrl(),
   exportSelection,
   withCleanMaterials: (fn) => {

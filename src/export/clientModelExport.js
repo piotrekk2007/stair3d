@@ -14,10 +14,11 @@ const MM_TO_M = 0.001;
 
 /**
  * The scene the client gets: the stair (every layer, whatever the designer has hidden), plus the stairwell's walls and
- * the slab as the 'room' layer; in metres; userData reduced to the layer tag.
- * @param {{root: THREE.Object3D, room?: (THREE.Object3D|null)[]}} parts
+ * the slab as the 'room' layer and the headroom under the ceiling opening as the 'headroom' layer (user request
+ * 2026-11-02); in metres; userData reduced to the layer tag.
+ * @param {{root: THREE.Object3D, room?: (THREE.Object3D|null)[], headroom?: THREE.Object3D|null}} parts
  */
-export function buildClientScene({ root, room = [] }) {
+export function buildClientScene({ root, room = [], headroom = null }) {
   const scene = new THREE.Group();
   scene.name = 'Schody';
   // (materials cloned too: the clone keeps the look it has NOW — the designer's selection highlight is put back on the
@@ -41,6 +42,32 @@ export function buildClientScene({ root, room = [] }) {
       own(o);
     });
     scene.add(c);
+  }
+  // the headroom (scene/headroomOverlay.js): the curtains and the dimension as they are; its label — a sprite, which
+  // glTF / USDZ do not carry — as a flat picture of the same text (the client's viewer turns it to the camera)
+  if (headroom) {
+    const h = headroom.clone(true);
+    const sprites = [];
+    h.traverse((o) => {
+      o.visible = true;
+      o.userData = { viewerLayer: 'headroom' };
+      if (o.isSprite) sprites.push(o);
+      else own(o);
+    });
+    for (const sprite of sprites) {
+      const map = sprite.material?.map || null;
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ map, transparent: true, side: THREE.DoubleSide, depthTest: false })
+      );
+      plane.name = 'HeadroomLabel';
+      plane.position.copy(sprite.position);
+      plane.scale.set(sprite.scale.x, sprite.scale.y, 1);
+      plane.userData = { viewerLayer: 'headroom', label: true };
+      sprite.parent.add(plane);
+      sprite.parent.remove(sprite);
+    }
+    scene.add(h);
   }
   scene.scale.setScalar(MM_TO_M);
   scene.updateMatrixWorld(true);

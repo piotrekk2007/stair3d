@@ -56,7 +56,7 @@ function start() {
   if (data.logo) bar.appendChild(el('img', { src: data.logo, alt: '' }));
   bar.appendChild(el('h1', {}, data.title || 'Schody'));
   const buttons = {};
-  for (const [id, label] of [['iso', 'Widok'], ['front', 'Przód'], ['side', 'Bok'], ['top', 'Góra'], ['room', 'Ściany i strop'], ['measure', '📏 Miarka'], ['clear', 'Wyczyść pomiary']]) {
+  for (const [id, label] of [['iso', 'Widok'], ['front', 'Przód'], ['side', 'Bok'], ['top', 'Góra'], ['room', 'Ściany i strop'], ['headroom', 'Skrajnia'], ['measure', '📏 Miarka'], ['clear', 'Wyczyść pomiary']]) {
     buttons[id] = el('button', { type: 'button' }, label);
     bar.appendChild(buttons[id]);
   }
@@ -96,18 +96,28 @@ function start() {
   const model = new THREE.Group();
   scene.add(model);
   const roomMeshes = [];
+  // the headroom under the ceiling opening (userData.viewerLayer 'headroom'): curtains, its dimension and label
+  const headroomParts = [];
+  const headroomLabels = [];
   let box = new THREE.Box3();
   let roomOn = true;
+  let headroomOn = true;
 
   new GLTFLoader().parse(base64ToArrayBuffer(data.glb), '', (gltf) => {
     model.add(gltf.scene);
     gltf.scene.traverse((o) => {
       if (o.isMesh && o.userData?.viewerLayer === 'room') roomMeshes.push(o);
+      if (o.userData?.viewerLayer === 'headroom') headroomParts.push(o);
+      if (o.userData?.label) {
+        headroomLabels.push(o);
+        o.renderOrder = 10;
+        if (o.material) o.material.depthTest = false;
+      }
     });
     // the grid on the floor, the size of the stair
     const stairBox = new THREE.Box3();
     gltf.scene.traverse((o) => {
-      if (o.isMesh && o.userData?.viewerLayer !== 'room') stairBox.expandByObject(o);
+      if (o.isMesh && !o.userData?.viewerLayer) stairBox.expandByObject(o);
     });
     box = stairBox.isEmpty() ? new THREE.Box3().setFromObject(gltf.scene) : stairBox;
     const size = box.getSize(new THREE.Vector3());
@@ -117,6 +127,8 @@ function start() {
     setView('iso');
     setRoom(roomMeshes.length > 0);
     if (!roomMeshes.length) buttons.room.style.display = 'none';
+    setHeadroom(headroomParts.length > 0);
+    if (!headroomParts.length) buttons.headroom.style.display = 'none';
   }, (err) => {
     host.textContent = `Nie udało się wczytać modelu: ${err?.message || err}`;
   });
@@ -133,6 +145,11 @@ function start() {
     roomOn = on;
     for (const m of roomMeshes) m.visible = on;
     buttons.room.classList.toggle('on', on);
+  }
+  function setHeadroom(on) {
+    headroomOn = on;
+    for (const m of headroomParts) m.visible = on;
+    buttons.headroom.classList.toggle('on', on);
   }
 
   // --- the tape measure ---
@@ -164,7 +181,8 @@ function start() {
     raycaster.setFromCamera(ndc, camera);
     const targets = [];
     model.traverse((o) => {
-      if (o.isMesh && o.visible && (roomOn || o.userData?.viewerLayer !== 'room')) targets.push(o);
+      // (the headroom is a picture of a clearance, nothing to measure on)
+      if (o.isMesh && o.visible && o.userData?.viewerLayer !== 'headroom' && (roomOn || o.userData?.viewerLayer !== 'room')) targets.push(o);
     });
     const hit = raycaster.intersectObjects(targets, false)[0];
     if (!hit) return null;
@@ -212,6 +230,7 @@ function start() {
   });
   for (const v of ['iso', 'front', 'side', 'top']) buttons[v].addEventListener('click', () => setView(v));
   buttons.room.addEventListener('click', () => setRoom(!roomOn));
+  buttons.headroom.addEventListener('click', () => setHeadroom(!headroomOn));
 
   function resize() {
     const w = host.clientWidth || window.innerWidth;
@@ -224,6 +243,8 @@ function start() {
   resize();
   renderer.setAnimationLoop(() => {
     controls.update();
+    // the headroom's label always faces the camera
+    for (const l of headroomLabels) l.quaternion.copy(camera.quaternion);
     const s = dotSize();
     for (const m of measures) {
       m.dots.forEach((d) => d.scale.setScalar(s));

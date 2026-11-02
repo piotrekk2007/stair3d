@@ -44,6 +44,7 @@ export function projectFileBaseName(projectName) {
  * @param {Object} opts.exportSelection           which element groups go into OBJ/DAE
  * @param {(fn: () => void) => void} opts.withCleanMaterials  runs `fn` with the selection highlight removed
  * @param {() => THREE.Object3D[]} [opts.getRoom]   the stairwell's walls and the slab (the client's model, 'room' layer)
+ * @param {() => THREE.Object3D|null} [opts.getHeadroom]   the headroom overlay (the client's model, 'headroom' layer)
  * @param {() => string|null} [opts.getLogoDataUrl] the company logo (the client's HTML)
  */
 export function createExports(opts) {
@@ -116,7 +117,7 @@ export function createExports(opts) {
       if (!m || !opts.getRoot()) return;
       let scene = null;
       opts.withCleanMaterials(() => {
-        scene = buildClientScene({ root: opts.getRoot(), room: opts.getRoom ? opts.getRoom() : [] });
+        scene = buildClientScene({ root: opts.getRoot(), room: opts.getRoom ? opts.getRoom() : [], headroom: opts.getHeadroom ? opts.getHeadroom() : null });
       });
       const name = base();
       if (kind === 'usdz') {

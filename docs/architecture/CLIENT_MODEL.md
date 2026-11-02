@@ -32,3 +32,11 @@ mm; several measures, "Wyczyść pomiary"), the logo and the facts on the page.
 
 What the client can get out of it: the triangles of the model (as from any 3D model shown) — not the project, its
 parameters, the workshop drawings or the prices.
+
+## Headroom (user request 2026-11-02)
+
+`buildClientScene({ …, headroom })` (main.js `getHeadroom` → the designer's `scene/headroomOverlay.js` group, none for a
+pending stair) adds the headroom curtains, the blocks of the treads under the slab and the tightest spot's dimension as
+the layer `viewerLayer: 'headroom'`; the label is a SPRITE in the designer (drawn into photos), which glTF / USDZ do not
+carry — the client's copy is a textured plane (`userData.label`) the viewer turns to the camera every frame (depth test
+off, drawn last). The viewer's button „Skrajnia” switches the layer; it does not frame the view and is not measured on.
