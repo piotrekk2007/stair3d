@@ -257,7 +257,9 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
   `startPost`/`endPost` (face positions); a board wholly between post faces is not made. Construction type PER SIDE:
   `stringerConstructionTypeOuter/Inner` = `closed` (wpuszczana, housed) | `cut` (nakładana, the tread rests on the
   notch; no cleats). `housingDepthMm(config)` (`stringerHousingDepthMm`, default 20) is THE housing depth.
-- **Construction geometry** (`stringerConstructionGeometry.js`): reference = one knot per bearing front corner;
+- **Construction geometry** (`stringerConstructionGeometry.js`): reference = one knot per bearing front corner, and a
+  landing a second knot at its height one going before its end on the board (`:landing-end` — the board stays level
+  along a landing instead of rising across it, user report 2026-11-02);
   lap-jointed boards are solved as one group profile and sliced per board; at a POST each board is independent (user
   decision) and treads standing wholly on the post neither shape the board nor get a housing. Board ends: plumb faces,
   the first board's foot cut along the floor; a board entering a post goes `postHousingDepthMm` past its face; at a

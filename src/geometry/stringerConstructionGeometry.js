@@ -237,7 +237,7 @@ function groupSegmentsByLapJoint(segments, segmentJoints) {
 // collinear simplification below would drop the ids of interior treads of a straight flight, so
 // it is skipped when the stringer has manual overrides (`keepAllAnchors`) — a control point the
 // user can see must stay addressable. Without overrides the output is exactly what it always was.
-function buildPitchKnots(effectiveByGroup, segmentLengths, closingId) {
+function buildPitchKnots(effectiveByGroup, segmentLengths, closingId, going = 0) {
   const knots = [];
   const offsets = [];
   let offset = 0;
@@ -258,6 +258,21 @@ function buildPitchKnots(effectiveByGroup, segmentLengths, closingId) {
       knots.push({ u: offset + b.uStart, v: b.bearingElevation, id: anchorIdForTread(b.treadIndex) });
     }
     offset += segmentLengths[i];
+  }
+  // A LANDING is level over its whole length (user report 2026-11-02: with only its front corner as a knot, the line ran
+  // straight from there up to the next flight's first tread — over a whole landing — and the housed board's top rose
+  // across the landing, the board far too deep there). A second knot at the landing's height where the next flight's
+  // pitch line comes down to it — one going before the landing's end on this board — keeps it level up to there.
+  if (going > 0) {
+    effectiveByGroup.forEach((group, i) => {
+      for (const b of group) {
+        if (!b.landing || b.ownsEnd === false) continue;
+        const u = offsets[i] + b.uEnd - going;
+        const from = knots.find((k) => k.id === anchorIdForTread(b.treadIndex));
+        if (from ? u > from.u + 1 : u > offsets[i] + 1) knots.push({ u, v: b.bearingElevation, id: `${anchorIdForTread(b.treadIndex)}:landing-end` });
+      }
+    });
+    knots.sort((a, b) => a.u - b.u);
   }
   // A group whose only bearings continue a tread that started on another board (a short piece of the inner line
   // between two posts, e.g. the dusza of a 180° winder zone) has no tread front corner of its own: the first of them
@@ -779,7 +794,7 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
   const params = profileParamsFromConfig(config);
   const effectiveByGroup = withBearings.map((s) => effectiveBearings(s, extendInfo.get(s.id).extendStart, extendInfo.get(s.id).extendEnd));
   const segmentLengths = withBearings.map((s) => s.referenceLine.length);
-  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, closingAnchorId(withBearings[withBearings.length - 1].id, isLastGroupOfSide));
+  const { knots: groupKnots, offsets } = buildPitchKnots(effectiveByGroup, segmentLengths, closingAnchorId(withBearings[withBearings.length - 1].id, isLastGroupOfSide), Number(config.treadGoing) || 0);
   // Post anchors: every end of a board of this group that butts into a structural post (group u of the post face).
   const postAnchors = [];
   withBearings.forEach((segment, i) => {

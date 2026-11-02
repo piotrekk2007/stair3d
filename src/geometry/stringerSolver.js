@@ -245,6 +245,8 @@ export function buildStringerModel(planLayout, config, side) {
           // a starter step widened past this wanga LIES ON it (starterSteps.js): no housing, the board's top cut down
           // to its underside there (stringerConstructionGeometry.js)
           ...(starterLiesOn(tread, side) ? { starterOnTop: true } : {}),
+          // a landing: flat over its whole length — the profile keeps it level (stringerConstructionGeometry.js)
+          ...(tread.type === 'landing' ? { landing: true } : {}),
         };
       });
 

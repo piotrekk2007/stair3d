@@ -138,3 +138,13 @@ board mesh per segment), and separately extrudes each `cleats[]`/`housings[]` en
 small mesh, tagged with the same traceability `userData` scheme as every other element (a
 board mesh has `stepId: null` — it spans many treads; a cleat/housing mesh has `stepId:
 'step-N'` — it supports exactly one).
+
+## Landings in the reference (user report 2026-11-02)
+
+The reference is one knot per tread front corner — a landing (long and level) would otherwise give the line from its
+front corner straight to the next flight's first tread, rising across the whole landing (the housed board's top rose
+above the landing, the board 1100+ mm deep there). `buildPitchKnots` adds, for a bearing marked `landing`
+(stringerSolver.js) on the board carrying its end, a knot at the landing's height one going before that end — where the
+next flight's pitch line comes down to the landing — id `support:step-N:landing-end`. The board is level along the
+landing (top = landing top + `stringerTopMarginMm`, the minimum depth) and rises with the next flight from there; a
+landing at the stair's end stays level through the closing knot.
