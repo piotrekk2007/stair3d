@@ -81,3 +81,20 @@ test('a U with a big landing (user request 2026-11-02): flight C its own width, 
   assert.equal(landingOf(side.planLayout)[0].innerChain.length, 0);
   assert.equal(side.postModels.filter((p) => p.kind === 'corner').length, 1);
 });
+
+test('a U with two half landings (user request 2026-11-02): flights A and C apart too — flight B makes up B × going of the distance, both half landings the rest equally; less than B × going changes nothing', () => {
+  const halves = { stairType: 'U', turn1Type: 'landing', turn2Type: 'landing', mergeLandings: false, treadsLegA: 5, treadsLegB: 2, treadsLegC: 5 };
+  const gapOf = (b) => b.planLayout.treads.at(-1).innerChain[0].x - b.planLayout.treads[0].innerChain[0].x;
+  const plain = buildStaircase(cfg(halves));
+  assert.ok(Math.abs(gapOf(plain) - 2 * 270) < 1e-6);
+  assert.ok(Math.abs(gapOf(buildStaircase(cfg({ ...halves, uFlightGapMm: 400 }))) - 540) < 1e-6, 'less than flight B: as it was');
+  for (const B of [2, 0]) {
+    const b = buildStaircase(cfg({ ...halves, treadsLegB: B, uFlightGapMm: 1200 }));
+    assert.ok(Math.abs(gapOf(b) - 1200) < 1e-6, `B = ${B}: ${gapOf(b)}`);
+    const ls = landingOf(b.planLayout);
+    const along = ls.map((L) => span(L.outerChain, 'x'));
+    assert.ok(Math.abs(along[0] - along[1] + 0) < 1e-6 || Math.abs(along[0] - along[1]) < 1e-6, `equal halves ${along}`);
+    assert.equal(b.postModels.filter((p) => p.kind === 'corner').length, 2);
+    assert.ok(!runTakeoffValidationGate(b).errors.some((d) => d.ruleId.startsWith('CONSTRAINT-STRINGER-PAIR')));
+  }
+});

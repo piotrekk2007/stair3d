@@ -53,7 +53,8 @@ export function createDefaultConfig() {
     // user request 2026-11-02)
     landingDepthMm: null,
     // a U with landings: flight C's own width (null = stairWidth, which stays flight A's and B's) and, on one big landing,
-    // the distance between flights A and C (their inner lines; 0 = side by side) — planLayout.js, user request 2026-11-02
+    // the distance between flights A and C (their inner lines; 0 = side by side; with two half landings flight B makes up
+    // B × going of it, the half landings the rest) — planLayout.js, user request 2026-11-02
     stairWidthC: null,
     uFlightGapMm: 0,
 

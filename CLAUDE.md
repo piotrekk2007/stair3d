@@ -84,8 +84,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   entering it, the exit flight stays at the OUTER side, the landing's free dusza edge is an inner chain (the inner wanga
   carries it, the corner post where the dusza turns); a U's big landing = 2 widths × depth, flights A / C unchanged.
   A U with landings: flight C its own width `stairWidthC` (null = `stairWidth`, which stays A's / B's; a winder turn keeps
-  one width) and on a big landing flights A and C apart `uFlightGapMm` (landing = A + gap + C, its free edge between
-  them an inner chain on the inner wanga, a corner post at each flight; `buildLandingLocal` widthIn / widthOut /
+  one width) and flights A and C apart `uFlightGapMm` (between their inner lines — on a big landing: landing = A + gap + C,
+  its free edge between them an inner chain on the inner wanga, a corner post at each flight; with two half landings
+  flight B makes up B × going of it, both half landings the rest equally along B; `buildLandingLocal` widthIn / widthOut /
   depthIn / depthOut; the pair-spacing constraint accepts either width or the landing's depth). Flight counts `treadsLegA/B/C` (A may be 0 for L/U: the flight starts with winders).
 - **S** (user request 2026-10-23, docs [S_STAIR.md](docs/architecture/S_STAIR.md)): the second turn goes the other way
   (`buildMultiTurnLayout(…, { reverseSecond })`: built natively, mirrored locally, sides swapped) — the plan keeps ONE

@@ -943,12 +943,16 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   // lines — a wall between them); the big landing is then A + gap + C wide, its free edge between them an inner chain
   const widthC = numTurns === 2 && !reverseSecond && turn2Type === 'landing' && Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : stairWidth;
   const flightGap = isBigLanding && Number(config.uFlightGapMm) > 0 ? Number(config.uFlightGapMm) : 0;
+  // two half landings (user request 2026-11-02): the same distance between A's and C's inner lines — flight B makes up
+  // B × going of it, the rest lengthens both half landings equally along B (a smaller value changes nothing)
+  const halfLandingsU = numTurns === 2 && !reverseSecond && !isBigLanding && turn1Type === 'landing' && turn2Type === 'landing';
+  const halfExtra = halfLandingsU && Number(config.uFlightGapMm) > 0 ? Math.max(0, Number(config.uFlightGapMm) - (Number(treadsLegB) || 0) * treadGoing) / 2 : 0;
   const landing1 = isBigLanding
     ? { widthIn: stairWidth, widthOut: landingDepth, depthIn: landingDepth, depthOut: stairWidth + flightGap }
-    : { widthIn: stairWidth, widthOut: stairWidth, depthIn: landingDepth };
+    : { widthIn: stairWidth, widthOut: stairWidth, depthIn: landingDepth, depthOut: stairWidth + halfExtra };
   const landing2 = isBigLanding
     ? { widthIn: landingDepth, widthOut: widthC, depthIn: widthC, depthOut: landingDepth }
-    : { widthIn: stairWidth, widthOut: widthC, depthOut: landingDepth };
+    : { widthIn: stairWidth, widthOut: widthC, depthIn: widthC + halfExtra, depthOut: landingDepth };
 
   // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
   const half = numTurns === 2 && isHalfTurnU(config)
