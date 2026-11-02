@@ -78,6 +78,7 @@ New optional fields — no project version bump.
 - Plan 2D: the walls dashed, darker, over the concrete footprint.
 - Plan 2D: the steps' footprint grey under the treads (with the wangi layer).
 - Panel: folder „1. Schody” — „Górna część na biegu betonowym”, „Beton od stopnia nr”, „Grubość płyty betonowej”,
-  „Ściana pod biegiem betonowym” (+ its thickness).
+  „Ściana przy biegu betonowym” (+ „Grubość ściany”), „Ściana także nad biegiem (stopnie do ściany)” — always offered with
+  the concrete part; ticked with no side chosen it puts the wall on the outer side.
 - Inspektor summary and the offer's facts: „Bieg betonowy: od stopnia nr …”.
 - Takeoff / DXF / labels: the concrete is not there; the cladding treads are ordinary treads (no housing).

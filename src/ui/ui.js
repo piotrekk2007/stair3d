@@ -154,8 +154,8 @@ export function createUI({
   const concreteTo = live(stairFolder.add(concreteProxy, 'to', 1, 40, 1)).name('Beton do stopnia nr');
   const concreteSlab = live(stairFolder.add(config, 'concreteSlabThicknessMm', 80, 300, 5)).name('Grubość płyty betonowej [mm]');
   // a wall under the concrete flight along its edge, floor to soffit (concreteStair.js)
-  const concreteWall = live(stairFolder.add(config, 'concreteWallSide', { 'brak': 'none', 'po stronie wewn. (duszy)': 'inner', 'po stronie zewn.': 'outer', 'po obu stronach': 'both' })).name('Ściana pod biegiem betonowym');
-  concreteWall.domElement.title = 'Ściana od posadzki do spodu biegu betonowego wzdłuż jego krawędzi (nie ściana klatki — ta idzie do stropu).';
+  const concreteWall = live(stairFolder.add(config, 'concreteWallSide', { 'brak': 'none', 'po stronie wewn. (duszy)': 'inner', 'po stronie zewn.': 'outer', 'po obu stronach': 'both' })).name('Ściana przy biegu betonowym');
+  concreteWall.domElement.title = 'Ściana wzdłuż krawędzi biegu betonowego: od posadzki do spodu biegu (nie ściana klatki — ta idzie do stropu), a z „Ściana także nad biegiem” — na całą wysokość.';
   const wallProxy = {
     get t() {
       return config.concreteWallThicknessMm ?? config.freeWallThicknessMm ?? 120;
@@ -164,7 +164,7 @@ export function createUI({
       config.concreteWallThicknessMm = v;
     },
   };
-  const concreteWallT = live(stairFolder.add(wallProxy, 't', 60, 400, 5)).name('Grubość ściany pod biegiem [mm]');
+  const concreteWallT = live(stairFolder.add(wallProxy, 't', 60, 400, 5)).name('Grubość ściany [mm]');
   const concreteWallAbove = live(stairFolder.add(config, 'concreteWallAbove')).name('Ściana także nad biegiem (stopnie do ściany)');
   concreteWallAbove.domElement.title = 'Bieg betonowy idzie między ścianami: ściana stoi na całą wysokość, a stopnie i podstopnie na betonie dochodzą tylko do niej (krótsze o jej grubość).';
   const syncConcrete = () => {
@@ -176,11 +176,21 @@ export function createUI({
     concreteSlab.show(on);
     concreteWall.show(on);
     concreteWallT.show(on && (config.concreteWallSide || 'none') !== 'none').updateDisplay();
-    concreteWallAbove.show(on && (config.concreteWallSide || 'none') !== 'none');
+    // (always offered with the concrete part — it was hidden until a side was chosen, user report 2026-11-02)
+    concreteWallAbove.show(on);
   };
   syncConcrete();
   lockSyncs.push(syncConcrete);
   // (its rows appear / go as soon as the switch or the construction changes)
+  // ticking the wall above with no side chosen puts it on the outer side (the side can be changed)
+  concreteWallAbove.onChange((v) => {
+    if (v && (config.concreteWallSide || 'none') === 'none') {
+      config.concreteWallSide = 'outer';
+      concreteWall.updateDisplay();
+    }
+    onChange(v);
+    syncConcrete();
+  });
   for (const c of [concreteOn, concretePart, concreteWall, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
     c.onChange((v) => {
       onChange(v);
