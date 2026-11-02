@@ -148,7 +148,7 @@ export function buildStaircase(rawConfig) {
   }
   const riserModels = buildRiserModels(planLayout, fullConfig);
   // the concrete flight the upper treads lie on (concreteStair.js) — shown, not priced
-  const concrete = buildConcreteModel({ planLayout, treadModels, openingOutline: ceilingFit.openingOutline }, fullConfig);
+  const concrete = buildConcreteModel({ planLayout, treadModels, openingOutline: ceilingFit.openingOutline, wallSegments: allWallSegments(fullConfig, walls?.pieces || [], resolveFreeWalls(fullConfig, planLayout)) }, fullConfig);
   const metalStructure = metal ? buildMetalStructure({ planLayout, treadModels }, fullConfig) : null;
   // A cantilever or metal stair has no wangi and no structural posts: empty models, so nothing downstream (render,
   // joints, takeoff, validation, the structural check) sees a board or a post that does not exist.

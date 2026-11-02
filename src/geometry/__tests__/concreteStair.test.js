@@ -137,6 +137,7 @@ test('a wall under the concrete flight (user request 2026-11-02): along the chos
     assert.ok(w.bottomZ.every((z) => z === 0), 'from the floor');
     const step = c.blocks.filter((x) => x.treadIndex === w.treadIndex);
     assert.ok(Math.max(...w.topZ) <= Math.max(...step.map((x) => x.topZ)) && Math.max(...w.topZ) < slabSoffitZ(b.fullConfig), 'up to the soffit only');
+    if (w.toWall) continue; // (the piece carried back to the wall across — next test)
     // within the wall's thickness of the inner line
     const line = b.planLayout.treads[w.treadIndex].innerChain;
     const dist = (p) => Math.min(...line.slice(1).map((q, k) => { const a = line[k]; const dx = q.x - a.x, dy = q.y - a.y, l2 = dx * dx + dy * dy; const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0; return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); }));
@@ -145,4 +146,22 @@ test('a wall under the concrete flight (user request 2026-11-02): along the chos
   assert.ok(b.root.getObjectByName('Concrete').children.some((m) => m.name.startsWith('ConcreteWall-inner')));
   const both = buildStaircase(pasek({ concreteWallSide: 'both' }));
   assert.deepEqual([...new Set(both.concrete.walls.map((w) => w.side))].sort(), ['inner', 'outer']);
+});
+
+test('regression (user, 2026-11-02): the wall under the concrete flight runs on back along its line, under the first concrete winder, to the nearest wall across it — up to that step’s soffit', () => {
+  const b = buildStaircase(pasek({ concreteWallSide: 'inner', concreteWallThicknessMm: 120 }));
+  const carried = b.concrete.walls.filter((w) => w.toWall);
+  assert.ok(carried.length > 0, 'carried on');
+  // in this stair: along x = 900 (the dusza line of flight C) from the dusza's turning point to the stairwell wall B
+  const wallB = Math.max(...b.stairwellWalls.pieces.filter((p) => Math.abs(p.a.y - p.b.y) < 1).map((p) => p.a.y));
+  const reach = Math.max(...carried.flatMap((w) => w.outline.map((p) => p.y)));
+  assert.ok(Math.abs(reach - wallB) < 1, `reaches the wall across (${Math.round(reach)} vs ${Math.round(wallB)})`);
+  assert.ok(carried.every((w) => w.outline.every((p) => p.x >= 900 - 1e-6 && p.x <= 1020 + 1e-6)), 'the wall’s thickness into the stair, on the same line');
+  for (const w of carried) {
+    const block = b.concrete.blocks.find((x) => x.treadIndex === w.treadIndex);
+    assert.ok(w.bottomZ.every((z) => z === 0) && Math.max(...w.topZ) < block.topZ, 'from the floor up to the soffit');
+  }
+  // no wall across → nothing carried on
+  const open = buildStaircase(pasek({ concreteWallSide: 'inner', stairwellRoomEnabled: false }));
+  assert.ok(open.concrete.walls.every((w) => !w.toWall));
 });

@@ -18,7 +18,9 @@
 // twists with it), never below the floor. Where the ceiling opening runs on past the last step, a piece up to the raw
 // slab's top fills the gap to the slab's edge, its soffit rising to the slab's (none when the slab starts right behind
 // the last step — it used to be a 250 mm block hanging below the slab, user report 2026-11-02). Optionally a WALL under
-// the flight along its inner / outer edge (`concreteWallSide`), from the floor up to the soffit. Pure: no Three.js.
+// the flight along its inner / outer edge (`concreteWallSide`), from the floor up to the soffit — carried on back along
+// its line, under the concrete steps, to the nearest wall across it (user report 2026-11-02: under the first concrete
+// winder it stopped short and the step hung over open space). Pure: no Three.js.
 
 import { clipToConvex, polygonArea, pointInPolygon } from './polygonClip.js';
 import { rawSlabTopZ, slabSoffitZ } from './floors.js';
@@ -91,22 +93,37 @@ function sideDistance(p, [a, b], towards) {
   return dot(sub(p, a), n);
 }
 
-// The distance from p along the unit direction d to the boundary of `poly` (p inside it), or 0.
-function rayToBoundary(p, d, poly) {
+// The distance from p along the unit direction d to the nearest segment {a, b} it crosses (further than `minT`), or
+// Infinity.
+function rayToSegments(p, d, segments, minT = 1e-6) {
   let best = Infinity;
-  for (let k = 0; k < poly.length; k++) {
-    const a = poly[k];
-    const b = poly[(k + 1) % poly.length];
+  for (const { a, b } of segments) {
     const e = sub(b, a);
     const den = d.x * e.y - d.y * e.x;
     if (Math.abs(den) < 1e-12) continue;
     const w = sub(a, p);
     const t = (w.x * e.y - w.y * e.x) / den;
     const u = (w.x * d.y - w.y * d.x) / den;
-    if (t > 1e-6 && u >= -1e-9 && u <= 1 + 1e-9) best = Math.min(best, t);
+    if (t > minT && u >= -1e-9 && u <= 1 + 1e-9) best = Math.min(best, t);
   }
-  return Number.isFinite(best) ? best : 0;
+  return best;
 }
+
+// The distance from p along d to the boundary of `poly` (p inside it), or 0.
+function rayToBoundary(p, d, poly) {
+  const t = rayToSegments(p, d, poly.map((a, k) => ({ a, b: poly[(k + 1) % poly.length] })));
+  return Number.isFinite(t) ? t : 0;
+}
+
+// The quad `w` wide on the side of `inside` along p → q (no run-on past the ends).
+function strip(p, q, w, inside) {
+  const d = unit(sub(q, p));
+  let n = { x: -d.y, y: d.x };
+  if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
+  return [p, q, { x: q.x + n.x * w, y: q.y + n.y * w }, { x: p.x + n.x * w, y: p.y + n.y * w }];
+}
+// how far back a wall under the flight is carried to find a wall across it (mm)
+const WALL_REACH_MM = 20000;
 
 // The strip `w` wide along a chain segment p-q on the side of `inside` (a convex quad, run on `w` past both ends so the
 // pieces of a turning line overlap at its corners).
@@ -120,14 +137,15 @@ function band(p, q, w, inside) {
 }
 
 /**
- * @param {{planLayout: Object, treadModels: Object[], openingOutline?: {x,y}[]}} models
+ * `wallSegments`: the walls a wall under the flight may be carried back to (walls.js allWallSegments — `{a, b}` faces).
+ * @param {{planLayout: Object, treadModels: Object[], openingOutline?: {x,y}[], wallSegments?: {a,b}[]}} models
  * @param {Object} config  the full config (riserHeight merged in)
  * @returns {null | {fromIndex:number, fromTreadNo:number, slabThicknessMm:number,
  *   blocks: {treadIndex:number|null, outline:{x,y}[], topZ:number, bottomZ:number[]}[],
  *   walls: {treadIndex:number, side:string, outline:{x,y}[], topZ:number[], bottomZ:number[]}[], volumeM3:number}}
  *   (a wall's top follows the soffit: one height per outline point)
  */
-export function buildConcreteModel({ planLayout, treadModels, openingOutline = null }, config) {
+export function buildConcreteModel({ planLayout, treadModels, openingOutline = null, wallSegments = [] }, config) {
   const treads = planLayout?.treads || [];
   const fromIndex = concreteFromIndex(config, treads.length);
   if (fromIndex === null) return null;
@@ -142,6 +160,7 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
 
   const blocks = [];
   const walls = [];
+  const soffitOf = new Map(); // tread index → its soffit height function
   const wallSide = CONCRETE_WALL_SIDES.includes(config.concreteWallSide) ? config.concreteWallSide : 'none';
   const wallSides = wallSide === 'both' ? ['inner', 'outer'] : wallSide === 'none' ? [] : [wallSide];
   const wallThickness = Number(config.concreteWallThicknessMm) > 0 ? Number(config.concreteWallThicknessMm) : Number(config.freeWallThicknessMm) > 0 ? Number(config.freeWallThicknessMm) : 120;
@@ -163,6 +182,7 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
       const f = dF + dB > 1e-6 ? dF / (dF + dB) : 0.5;
       return Math.max(0, topZ(i - 1) + (topZ(i) - topZ(i - 1)) * f - plumb);
     };
+    soffitOf.set(i, soffitAt);
     const pieces = [clipToConvex(t.outline, halfPlane(begin[0], begin[1], inside))];
     // the strip of the next tread up to the next riser's back face carries this step's top too
     if (next && endShift > 0 && next.outline?.length >= 3) {
@@ -185,6 +205,29 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
       }
     }
   }
+  // ...carried on back along its line from where the concrete begins to the nearest wall across it: under every concrete
+  // step it passes, up to that step's soffit
+  const first = treads[fromIndex];
+  for (const side of wallSides) {
+    const chain = (side === 'inner' ? first?.innerChain : first?.outerChain) || [];
+    const k = chain.findIndex((q, j) => j > 0 && Math.hypot(q.x - chain[0].x, q.y - chain[0].y) >= 1);
+    if (k < 0 || !(wallSegments?.length > 0)) continue;
+    const p0 = chain[0];
+    const back = unit(sub(p0, chain[k]));
+    const reach = rayToSegments(p0, back, wallSegments, 1);
+    if (!(reach > 1 && reach < WALL_REACH_MM)) continue;
+    const band0 = strip(p0, { x: p0.x + back.x * reach, y: p0.y + back.y * reach }, wallThickness, centroid(first.outline));
+    for (let i = fromIndex; i <= last; i++) {
+      const soffitAt = soffitOf.get(i);
+      if (!soffitAt) continue;
+      const outline = clipToConvex(treads[i].outline, band0);
+      if (outline.length < 3 || polygonArea(outline) < 1) continue;
+      const tops = outline.map(soffitAt);
+      if (Math.max(...tops) < 1) continue;
+      walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), toWall: true });
+    }
+  }
+
   // past the last step, where the ceiling opening runs on: a piece at the floor up to the slab's edge, its soffit rising
   // to the slab's (none when the slab starts right behind the last step — the flight ends against its edge)
   const lastTread = treads[last];

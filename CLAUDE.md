@@ -387,7 +387,7 @@ no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnly
 missing-support / continuity / structural checks. `buildConcreteModel` → `built.concrete` (a block per step under the
 tread, one smooth soffit at the slab's plumb thickness, never below the floor, a piece up to the slab's edge only where
 the opening runs on past the last step; optional walls under it `concreteWallSide` none / inner / outer / both, floor to
-soffit; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
+soffit, carried back along their line under the concrete steps to the nearest wall across; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
 
 ## Validation
 
