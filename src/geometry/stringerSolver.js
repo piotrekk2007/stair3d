@@ -16,7 +16,7 @@
 // chain fields) and buildBearingsForWalk (reads frontEdge/backEdge fields) each do.
 
 import { cumulativeDistances, goesStraightThrough, projectPointOntoLine, pointsEqual } from './pathUtils.js';
-import { COLLINEAR_EPS, GEOMETRY_EPS } from './tolerances.js';
+import { COLLINEAR_EPS } from './tolerances.js';
 import { buildPostModels } from './postSolver.js';
 import { inwardNormal } from './planLayout.js';
 import { starterLiesOn } from './starterSteps.js';
@@ -80,9 +80,10 @@ function splitWalkIntoRuns(walk) {
   for (let k = 0; k < cornerIdx.length - 1; k++) {
     const i0 = cornerIdx[k];
     const i1 = cornerIdx[k + 1];
-    // zero-length (two "corners" coincide — e.g. a walk ending at the dusza's turning point of a 180° zone, whose chain
-    // repeats that point: the concrete flight starting right after it, user report 2026-11-02)
-    if (i0 === i1 || cum[i1] - cum[i0] < GEOMETRY_EPS) continue;
+    // (next to) zero length — two "corners" (nearly) coincide: a walk ending at the dusza's turning point of a 180° zone
+    // whose chain repeats that point, or a few thousandths of a mm left between two points by hand-moved winder edges
+    // (user reports 2026-11-02 — such a sliver became an empty second board and broke the profile editor)
+    if (i0 === i1 || cum[i1] - cum[i0] < MIN_RUN_MM) continue;
     runs.push({ startIdx: i0, endIdx: i1, uStart: cum[i0], uEnd: cum[i1], start: pts[i0], end: pts[i1] });
   }
   return runs;
@@ -164,6 +165,8 @@ function buildBearingsForWalk(walk, runs, treads, sideIdx) {
 // `anchor` — the SAME posts that are rendered and priced) and where that post's face lies along the board's own
 // reference line (local u). null when no post stands there (a postless lap joint, a removed post, the outer side).
 const POST_ANCHOR_TOLERANCE_MM = 1;
+// a straight run of a wanga line shorter than this is no board (a sliver between two nearly equal points)
+const MIN_RUN_MM = 1;
 const MIN_BOARD_SPAN_MM = 1;
 
 function boardEndPosts(segment, posts) {

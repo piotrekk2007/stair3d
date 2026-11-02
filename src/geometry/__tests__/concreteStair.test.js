@@ -227,3 +227,28 @@ test('regression (user, 2026-11-02): the wall under the concrete flight runs on 
   const block = b.concrete.blocks.find((x) => x.treadIndex === landing.index);
   assert.ok(under.every((w) => Math.max(...w.topZ) < block.topZ && w.bottomZ.every((z) => z === 0)));
 });
+
+test('regression (user, 2026-11-02, "Schody_Pasek_V3_2podesty_c"): hand-moved winder edges leave a few thousandths of a mm between two points of the dusza line — no empty sliver board on the inner wanga, the profile editor builds for both wangi', async () => {
+  const { buildProfileViewModel } = await import('../stringerProfileView.js');
+  const b = buildStaircase({
+    ...createDefaultConfig(),
+    stairType: 'U', turnDirection: 'right', totalRise: 3145, rawStoreyHeightMm: 3145, stairWidth: 900, treadGoing: 270,
+    treadsLegA: 8, treadsLegB: 0, treadsLegC: 4, windersPerTurn: 3, turn1Type: 'winder', turn2Type: 'landing', mergeLandings: false,
+    landingDepthMm: 1080, stairWidthC: 1020, uFlightGapMm: 120, walklineOffset: 360, walklineSplitOffset: 840, hasCornerPost: false, postSize: 110,
+    stairwellRoomEnabled: true, stairwellSideAMm: 3400, stairwellSideBMm: 1920, stairwellSideCMm: 2160, stairwellSideAState: 'free', stairwellSideBState: 'rigid', stairwellSideCState: 'main', stairwellManualCounts: true,
+    concreteEnabled: true, concreteFromTread: 12, concreteWallSide: 'inner',
+    manualEdgeOverridesLayout: 'stairType=U;turnDirection=right;treadsLegA=8;treadsLegB=0;treadsLegC=4;windersPerTurn=3;turn1Type=winder;turn2Type=landing;mergeLandings=false;uSingleWinderZone=false;uWindersTotal=7',
+    manualEdgeOverrides: {
+      7: { inner: { x: 900, y: 1846.6666666666667 }, outer: { x: 0, y: 1954.9999999999998 } },
+      8: { inner: { x: 900, y: 2093.3333333333335 }, outer: { x: 0, y: 2260 } },
+      9: { inner: { x: 900, y: 2180 }, outer: { x: 0, y: 2806.5169992707088 } },
+      10: { inner: { x: 900, y: 2295 }, outer: { x: 235.73311280555822, y: 3304.5066611769184 } },
+    },
+  });
+  for (const side of ['inner', 'outer']) {
+    for (const s of b.stringerModels[side].segments) assert.ok(s.referenceLine.length >= 1 && s.treadBearings.length > 0, `${side} ${s.id}: ${s.referenceLine.length} mm`);
+    assert.doesNotThrow(() => buildProfileViewModel(b.stringerConstruction[side], b.stringerModels[side], b.fullConfig), side);
+  }
+  // and the view leaves out a board with no contour instead of throwing
+  assert.deepEqual(buildProfileViewModel([{ segmentId: 'x', outerContour: [] }], { segments: [] }, b.fullConfig), []);
+});

@@ -24,7 +24,8 @@ const DEPTH_SAMPLE_CHORD_MM = 25;
  */
 export function buildProfileViewModel(geometries, model, config) {
   const params = profileParamsFromConfig(config);
-  return geometries.map((g) => {
+  // (a board with no solved contour — no bearings — has nothing to show or edit)
+  return geometries.filter((g) => g?.ends && g.outerContour?.length).map((g) => {
     const segment = model.segments.find((s) => s.id === g.segmentId);
     const closed = g.constructionType === CONSTRUCTION_TYPES.CLOSED;
     const bearings = segment ? segment.treadBearings : [];
