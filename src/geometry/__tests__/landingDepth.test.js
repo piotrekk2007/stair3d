@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createDefaultConfig } from '../../config/schema.js';
 import { buildPlanLayout } from '../planLayout.js';
 import { buildStaircase } from '../buildStaircase.js';
+import { runTakeoffValidationGate } from '../../takeoff/validationGate.js';
 
 // the landing's depth (user request 2026-11-02: "a big landing 1800 x 900 — I need it 1080 deep to even out the
 // treads"): config.landingDepthMm along the flight entering the landing, null = the stair's width (the old square)
@@ -57,4 +58,26 @@ test('a U with two half landings: both 1080 deep, flight C starts where A ends',
   const aEnd = b.treads[4].backEdge[0].y;
   const cStart = b.treads[ls[1].index + 1].frontEdge[0].y;
   assert.ok(Math.abs(aEnd - cStart) < 25, `${aEnd} vs ${cStart}`);
+});
+
+test('a U with a big landing (user request 2026-11-02): flight C its own width, flights A and C apart — the landing A + gap + C wide, its free edge between them on the inner wanga, a corner post at each flight', () => {
+  const b = buildStaircase(cfg({ ...bigU, stairWidth: 780, stairWidthC: 1020, uFlightGapMm: 120 }));
+  const [L] = landingOf(b.planLayout);
+  assert.ok(Math.abs(span(L.outerChain, 'x') - (780 + 120 + 1020)) < 1e-6, `${span(L.outerChain, 'x')}`);
+  const raw = (t) => [t.innerChain[0], t.outerChain[0]];
+  const a0 = b.planLayout.treads[0];
+  const cLast = b.planLayout.treads.at(-1);
+  assert.ok(Math.abs(Math.hypot(raw(a0)[1].x - raw(a0)[0].x, raw(a0)[1].y - raw(a0)[0].y) - 780) < 1e-6, 'A 780 wide');
+  assert.ok(Math.abs(Math.hypot(raw(cLast)[1].x - raw(cLast)[0].x, raw(cLast)[1].y - raw(cLast)[0].y) - 1020) < 1e-6, 'C 1020 wide');
+  // the inner lines 120 apart: A's at x = 780, C's at x = 900
+  assert.ok(Math.abs(cLast.innerChain[0].x - a0.innerChain[0].x - 120) < 1e-6);
+  assert.ok(L.innerChain.length === 2 && b.stringerModels.inner.segments.some((s) => s.treadBearings.some((x) => x.treadIndex === L.index)), 'the free edge on the inner wanga');
+  assert.equal(b.postModels.filter((p) => p.kind === 'corner').length, 2);
+  // the stair pair spacing checks know both widths and the landing's depth
+  const ids = runTakeoffValidationGate(b).errors.map((d) => d.ruleId);
+  assert.ok(!ids.includes('CONSTRAINT-STRINGER-PAIR-SPACING') && !ids.includes('CONSTRAINT-STRINGER-PAIR-PARALLEL'), ids.join(' '));
+  // side by side (no gap): one corner post, no free edge
+  const side = buildStaircase(cfg({ ...bigU, stairWidth: 780, stairWidthC: 1020 }));
+  assert.equal(landingOf(side.planLayout)[0].innerChain.length, 0);
+  assert.equal(side.postModels.filter((p) => p.kind === 'corner').length, 1);
 });

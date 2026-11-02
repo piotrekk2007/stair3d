@@ -249,27 +249,39 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
       }
     }
   }
-  // ...carried on back along its line from where the concrete begins to the nearest wall across it: under every concrete
-  // step it passes, up to that step's soffit
-  const first = treads[fromIndex];
-  for (const side of wallSides) {
-    const chain = (side === 'inner' ? first?.innerChain : first?.outerChain) || [];
-    const k = chain.findIndex((q, j) => j > 0 && Math.hypot(q.x - chain[0].x, q.y - chain[0].y) >= 1);
-    if (k < 0 || !(wallSegments?.length > 0)) continue;
-    const p0 = chain[0];
-    const back = unit(sub(p0, chain[k]));
-    const reach = rayToSegments(p0, back, wallSegments, 1);
-    if (!(reach > 1 && reach < WALL_REACH_MM)) continue;
-    const band0 = strip(p0, { x: p0.x + back.x * reach, y: p0.y + back.y * reach }, wallThickness, centroid(fullFootprint(first)));
+  // ...carried on along its line wherever that line breaks off — back from where the concrete begins, and through a
+  // landing that has no line on that side (a U's big landing between flights A and C: user report 2026-11-02, "the wall
+  // under the landing to its end") — to the nearest wall across it: under every concrete step it passes, up to that
+  // step's soffit (never above: there the stair is walked on)
+  const lineOf = (t, side) => {
+    const c = (side === 'inner' ? t?.innerChain : t?.outerChain) || [];
+    return c.filter((q, j) => j === 0 || Math.hypot(q.x - c[j - 1].x, q.y - c[j - 1].y) >= 1);
+  };
+  const carry = (side, p0, dir, inside) => {
+    if (!(wallSegments?.length > 0)) return;
+    const reach = rayToSegments(p0, dir, wallSegments, 1);
+    if (!(reach > 1 && reach < WALL_REACH_MM)) return;
+    const band0 = strip(p0, { x: p0.x + dir.x * reach, y: p0.y + dir.y * reach }, wallThickness, inside);
     for (let i = fromIndex; i <= range.to; i++) {
       const soffitAt = soffitOf.get(i);
       if (!soffitAt) continue;
-      // (only under the steps: above, this line runs where the stair is walked on)
       const outline = clipToConvex(fullFootprint(treads[i]), band0);
       if (outline.length < 3 || polygonArea(outline) < 1) continue;
       const tops = outline.map(soffitAt);
       if (Math.max(...tops) < 1) continue;
       walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), toWall: true });
+    }
+  };
+  for (const side of wallSides) {
+    for (let i = fromIndex; i <= range.to; i++) {
+      const line = lineOf(treads[i], side);
+      if (line.length < 2) continue;
+      const inside = centroid(fullFootprint(treads[i]));
+      // back: at the concrete's start, or after a tread with no line on this side
+      if (i === fromIndex || lineOf(treads[i - 1], side).length < 2) carry(side, line[0], unit(sub(line[0], line[1])), inside);
+      // on: before a concrete tread with no line on this side
+      const next = treads[i + 1];
+      if (i < range.to && next?.onConcrete && lineOf(next, side).length < 2) carry(side, line[line.length - 1], unit(sub(line[line.length - 1], line[line.length - 2])), inside);
     }
   }
 

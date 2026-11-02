@@ -123,13 +123,15 @@ function mergeLandingPair(landingA, landingB) {
   }
   const outerChain = removeCollinearPoints(merged);
 
+  // its free dusza edge: between flights A and C when they stand apart (the halves' own inner chains), else none
+  const inner = [...(landingA.innerChain || []), ...(landingB.innerChain || [])].filter((p, i, all) => i === 0 || !pointsEqual(p, all[i - 1]));
   return {
     index: landingA.index,
     type: 'landing',
     outline: [...outerChain].reverse(),
     frontEdge: landingA.frontEdge,
     backEdge: landingB.backEdge,
-    innerChain: [],
+    innerChain: inner.length > 1 ? removeCollinearPoints(inner) : [],
     outerChain,
   };
 }
@@ -591,20 +593,21 @@ function buildTurnLocalProportional({ stairWidth, treadGoing, walklineOffset, wa
 // Buduje też, tak jak buildTurnLocal, proste stopnie WEJŚCIOWE (treadsIn) i WYJŚCIOWE
 // (treadsOut) w tym samym lokalnym układzie — inaczej ginęłyby (nie są budowane nigdzie indziej).
 //
-// Its size (user request 2026-11-02, "the landing's depth"): `depthIn` along the incoming flight, `depthOut` along the
-// exit flight — both the stair's width by default (the old square). A landing deeper than the width keeps the exit
-// flight against the OUTER side (the far wall); its dusza side then has a free edge between the incoming flight's inner
-// corner and the exit flight's (the inner wanga runs along it; the inner line turns where the exit flight begins). At
-// most one of the two is larger than the width (an L / U uses depthIn on its first turn, depthOut on the second — the
-// U's two halves of one platform stay equally deep).
-function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn, treadsOut, startIndex, { depthIn = stairWidth, depthOut = stairWidth } = {}) {
-  const W = stairWidth;
-  const Y = Math.max(W, depthIn);
-  const X = Y > W ? W : Math.max(W, depthOut);
+// Its size (user requests 2026-11-02: the landing's depth, flights of different widths, flights A and C apart):
+// `widthIn` / `widthOut` = the incoming / exit flight's width, `depthIn` = the landing along the incoming flight (at
+// least the exit's width), `depthOut` = along the exit flight (at least the incoming width) — all the stair's width by
+// default (the old square). The exit flight lies against the OUTER side (the far wall); where the landing is larger its
+// dusza side has a free edge between the incoming flight's inner corner and the exit flight's (an inner chain — the
+// inner wanga runs along it). An L / U uses depthIn on its first turn, depthOut on the second (the U's two halves
+// equally deep); a U's big landing is its two halves (planLayout.js buildMultiTurnLayout).
+function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn, treadsOut, startIndex, { widthIn = stairWidth, widthOut = stairWidth, depthIn = widthOut, depthOut = widthIn } = {}) {
+  const W = widthIn;
+  const Y = Math.max(widthOut, depthIn);
+  const X = Math.max(widthIn, depthOut);
   const Yc = treadsIn * treadGoing;
   const Ic = { x: W, y: Yc }; // the incoming flight's inner corner
   const nearInner = { x: X, y: Yc }; // (= Ic unless the landing runs on past it along the exit)
-  const exitInner = { x: X, y: Yc + Y - W }; // where the exit flight's inner line begins
+  const exitInner = { x: X, y: Yc + Y - widthOut }; // where the exit flight's inner line begins
   const IcFront = { x: X, y: Yc + Y };
   const Oc = { x: 0, y: Yc + Y };
   const rearOuterLanding = { x: 0, y: Yc };
@@ -661,9 +664,9 @@ function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn,
   const xEnd = X + treadsOut * treadGoing;
   const outerPath = [{ x: 0, y: 0 }, Oc, { x: xEnd, y: Yc + Y }];
   const innerPath = dedupe([{ x: W, y: 0 }, Ic, nearInner, exitInner, { x: xEnd, y: exitInner.y }]);
-  // where the inner line turns: at the exit flight's inner start when the landing is deeper along the incoming flight,
-  // else at the incoming flight's inner corner
-  const innerCorner = Y > W ? exitInner : Ic;
+  // where the inner line turns first: at the incoming flight's inner corner when the landing runs on past it along the
+  // exit, else (straight on along the incoming flight's line) where the exit flight begins
+  const innerCorner = X > W ? Ic : exitInner;
 
   return {
     outerPath,
@@ -679,7 +682,7 @@ function buildLandingLocal({ stairWidth, treadGoing, walklineOffset }, treadsIn,
       // w Ic, więc TO jest właściwy punkt do domknięcia zakładką przy braku słupa.
       outerBendPoint: Oc,
       innerBendPoint: innerCorner,
-      ...(Y > W || X > W ? { landingDepthMm: Y > W ? Y : X } : {}),
+      landingSizeMm: { alongIn: Y, alongOut: X },
     },
     // across the landing the walkline is the same quarter arc round the inner corner as in a winder turn (round the
     // exit flight's inner start, with a straight before it when the landing is deeper)
@@ -935,6 +938,17 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   // the landing's depth (config.landingDepthMm, null = the stair's width): the first turn's landing deeper along its
   // incoming flight, the second's (a U / S) along its exit — so both halves of a U reach equally far from flights A / C
   const landingDepth = Number(config.landingDepthMm) > stairWidth ? Number(config.landingDepthMm) : stairWidth;
+  // a U with landings (user request 2026-11-02): flight C its own width (`stairWidthC`, null = the stair's width; a
+  // winder turn keeps one width) and, on one big landing, flights A and C apart by `uFlightGapMm` (between their inner
+  // lines — a wall between them); the big landing is then A + gap + C wide, its free edge between them an inner chain
+  const widthC = numTurns === 2 && !reverseSecond && turn2Type === 'landing' && Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : stairWidth;
+  const flightGap = isBigLanding && Number(config.uFlightGapMm) > 0 ? Number(config.uFlightGapMm) : 0;
+  const landing1 = isBigLanding
+    ? { widthIn: stairWidth, widthOut: landingDepth, depthIn: landingDepth, depthOut: stairWidth + flightGap }
+    : { widthIn: stairWidth, widthOut: stairWidth, depthIn: landingDepth };
+  const landing2 = isBigLanding
+    ? { widthIn: landingDepth, widthOut: widthC, depthIn: widthC, depthOut: landingDepth }
+    : { widthIn: stairWidth, widthOut: widthC, depthOut: landingDepth };
 
   // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
   const half = numTurns === 2 && isHalfTurnU(config)
@@ -946,7 +960,7 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
   const call1 = buildTurnOrLanding(turn1Type, paramsOfTurn(0), treadsLegA, windersPerTurn, isBigLanding ? 0 : treadsLegB, 0, {
     startsFlight: treadsLegA === 0,
     endsFlight: numTurns === 1 && treadsLegB === 0,
-  }, { depthIn: landingDepth });
+  }, landing1);
 
   let outerFullPath = [...call1.outerPath];
   let innerFullPath = [...call1.innerPath];
@@ -999,12 +1013,11 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
     });
   } else if (numTurns === 2) {
     const frame2 = makeFrame(call1.exitOuterPoint, IDENTITY_FRAME.right);
-    const call2 = buildTurnOrLanding(turn2Type, paramsOfTurn(1), 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 }, { depthOut: landingDepth });
+    const call2 = buildTurnOrLanding(turn2Type, paramsOfTurn(1), 0, windersPerTurn, treadsLegC, call1.numTreadsUsed, { endsFlight: treadsLegC === 0 }, landing2);
 
     outerFullPath = outerFullPath.concat(transformPoints(call2.outerPath, frame2).slice(1));
     innerFullPath = innerFullPath.concat(transformPoints(call2.innerPath, frame2).slice(1));
     let call2Treads = call2.treads.map((t) => transformTread(t, frame2));
-    let landingCorner = null;
     const walk2 = transformWalkline(call2.walkline, frame2);
     walkPath = walkPath.concat(walk2.path.slice(1));
     walkPoints = walkPoints.concat(walk2.points.slice(1));
@@ -1015,25 +1028,16 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
       treads[treads.length - 1] = mergeLandingPair(landingA, landingB);
       call2Treads = call2Treads.slice(1).map((t) => ({ ...t, index: t.index - 1 }));
       walkPoints.splice(call1.numTreadsUsed, 1); // the boundary between the two halves is gone
-      // a deeper platform: the two halves' dusza edges lie on one line inside it (out and back along A's inner line) —
-      // the inner line goes from A's inner corner straight on to C's, the same point; both turns' corner is it
-      if (landingDepth > stairWidth) {
-        const corner = call1.innerPath[1];
-        const back = innerFullPath.findIndex((p, i) => i > 1 && pointsEqual(p, corner));
-        if (back > 0) innerFullPath = [...innerFullPath.slice(0, 2), ...innerFullPath.slice(back + 1)];
-        turns[0] = { ...turns[0], innerCorner: corner, innerBendPoint: corner };
-        landingCorner = corner;
-      }
     }
 
     treads = treads.concat(call2Treads);
     turns.push({
       type: call2.turnInfo.type,
-      innerCorner: landingCorner || toWorld(call2.turnInfo.innerCorner, frame2),
+      innerCorner: toWorld(call2.turnInfo.innerCorner, frame2),
       outerCorner: toWorld(call2.turnInfo.outerCorner, frame2),
       innerTurnSegmentLength: call2.turnInfo.innerTurnSegmentLength,
       outerBendPoint: call2.turnInfo.outerBendPoint ? toWorld(call2.turnInfo.outerBendPoint, frame2) : null,
-      innerBendPoint: landingCorner || (call2.turnInfo.innerBendPoint ? toWorld(call2.turnInfo.innerBendPoint, frame2) : null),
+      innerBendPoint: call2.turnInfo.innerBendPoint ? toWorld(call2.turnInfo.innerBendPoint, frame2) : null,
       ...(call2.turnInfo.method ? { method: call2.turnInfo.method } : {}),
       ...(call2.turnInfo.walklineOffsetMm !== undefined ? { walklineOffsetMm: call2.turnInfo.walklineOffsetMm } : {}),
     });

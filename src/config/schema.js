@@ -52,6 +52,10 @@ export function createDefaultConfig() {
     // exit flight stays at the outer side, a U's big landing becomes 2 widths x this (planLayout.js buildLandingLocal,
     // user request 2026-11-02)
     landingDepthMm: null,
+    // a U with landings: flight C's own width (null = stairWidth, which stays flight A's and B's) and, on one big landing,
+    // the distance between flights A and C (their inner lines; 0 = side by side) — planLayout.js, user request 2026-11-02
+    stairWidthC: null,
+    uFlightGapMm: 0,
 
     walklineOffset: 400, // mm, odsunięcie linii biegu od policzka wewnętrznego (duszy) — zgodnie z wymogiem 40-50cm
     // mm: ile z długości zabiegu (windersPerTurn * treadGoing, mierzonej NA LINII BIEGU) przypada przed środkiem

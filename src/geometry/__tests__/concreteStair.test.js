@@ -213,3 +213,17 @@ test('the LOWER part on concrete (user request 2026-11-02): from the floor to th
   assert.ok(c.blocks.filter((x) => x.treadIndex === 0).every((x) => x.bottomZ.every((z) => z === 0)), 'solid at the floor');
   assert.ok(!runTakeoffValidationGate(b).errors.some((d) => ['CONSTRAINT-TOPOLOGY-CONTINUITY', 'VALIDATOR-MISSING-SURFACE'].includes(d.ruleId)));
 });
+
+test('regression (user, 2026-11-02): the wall under the concrete flight runs on under a big landing (no line of its own there) to the wall across — not only back from where the concrete begins', () => {
+  const b = buildStaircase({
+    ...createDefaultConfig(), stairType: 'U', turn1Type: 'landing', turn2Type: 'landing', mergeLandings: true, treadsLegA: 6, treadsLegB: 0, treadsLegC: 6,
+    stairwellRoomEnabled: true, concreteEnabled: true, concreteFromTread: 7, concreteWallSide: 'inner',
+  });
+  const landing = b.treadModels.find((t) => t.type === 'landing');
+  const under = b.concrete.walls.filter((w) => w.treadIndex === landing.index);
+  assert.ok(under.length > 0, 'a wall under the landing');
+  const farWall = Math.max(...b.stairwellWalls.pieces.filter((p) => Math.abs(p.a.y - p.b.y) < 1).map((p) => p.a.y));
+  assert.ok(Math.abs(Math.max(...under.flatMap((w) => w.outline.map((p) => p.y))) - farWall) < 1, 'to the wall across');
+  const block = b.concrete.blocks.find((x) => x.treadIndex === landing.index);
+  assert.ok(under.every((w) => Math.max(...w.topZ) < block.topZ && w.bottomZ.every((z) => z === 0)));
+});

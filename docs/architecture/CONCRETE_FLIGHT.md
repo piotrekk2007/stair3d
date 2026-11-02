@@ -63,8 +63,9 @@ New optional fields — no project version bump.
   below the slab like a third step (user report 2026-11-02).
 - Walls (`walls`): along the chosen side's chain line of every concrete tread, the wall's thickness into the stair
   (the tread's outline clipped by a band per chain segment), from the floor up to the soffit (one height per outline
-  point; with `concreteWallAbove` up to the raw slab's top); a piece with no height (a step down at the floor) is dropped. From where the concrete begins the wall is
-  CARRIED ON BACK along its line (the first concrete tread's chain, backwards) to the nearest wall across it
+  point; with `concreteWallAbove` up to the raw slab's top); a piece with no height (a step down at the floor) is dropped. Wherever its line breaks off — where the concrete begins, and at a concrete
+  landing with no line on that side (a U's big landing: the wall runs on under it, user report 2026-11-02) — the wall is
+  CARRIED ON along its line (the first concrete tread's chain, backwards) to the nearest wall across it
   (`wallSegments` = walls.js allWallSegments: the stairwell's and the drawn ones; within 20 m), under every concrete
   step that strip passes, up to that step's soffit (`toWall: true`; user report 2026-11-02 — under the first concrete
   winder of a 180° zone the wall stopped short and the step hung over open space). Counted in `volumeM3`.

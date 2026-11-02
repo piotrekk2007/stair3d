@@ -575,6 +575,17 @@ export function createUI({
     },
   };
   const landingDepth = live(steps.add(landingProxy, 'd', 500, 2500, 1)).name('Głębokość podestu [mm]');
+  // a U with landings: flight C's own width, flights A and C apart on one big landing (planLayout.js)
+  const widthCProxy = {
+    get w() {
+      return config.stairWidthC ?? config.stairWidth;
+    },
+    set w(v) {
+      config.stairWidthC = v;
+    },
+  };
+  live(steps.add(widthCProxy, 'w', 500, 2000, 1)).name('Szerokość biegu C [mm] (U z podestem)').domElement.title = 'Bieg C może mieć inną szerokość niż bieg A (pole „Szerokość biegu” to szerokość biegu A). Działa przy U, którego drugi zakręt jest podestem; przy zabiegach obie szerokości są równe.';
+  live(steps.add(config, 'uFlightGapMm', 0, 1500, 1)).name('Odstęp między biegami A i C [mm] (duży podest)').domElement.title = 'Rozsunięcie biegów A i C na jednym dużym podeście (np. ściana między nimi): podest ma wtedy szerokość A + odstęp + C, a jego wolną krawędź między biegami niesie wanga.';
   landingDepth.domElement.title = 'Wymiar podestu wzdłuż biegu, który na niego wchodzi. Domyślnie = szerokość biegu (podest kwadratowy). Większa: bieg dalej odchodzi przy ścianie zewnętrznej; w U duży podest ma 2 szerokości × tę głębokość. Mniejsza niż szerokość biegu nie jest możliwa.';
   lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');
   // U with no straight tread in B and two winder turns: ONE 180° winder zone round one central post (winderArc.js

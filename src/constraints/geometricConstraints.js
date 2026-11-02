@@ -153,12 +153,16 @@ export function checkStringerReferenceLinesStraight(stringerModel, label) {
 // correspondence) — true for any all-straight flight and the common winder/landing cases this
 // project generates. When topology differs (a documented, currently-rare case) this check is
 // skipped rather than guessing at a correspondence — see docs/architecture/CONSTRAINTS_AND_VALIDATION.md.
+// (`stairWidth` may be a list: a U's flight C may have its own width — config.stairWidthC — and a big landing's free
+// edge between flights A and C pairs with its far side, the landing's depth apart — any of them is right)
 export function checkStringerPairInvariants(outerModel, innerModel, stairWidth) {
   const diags = [];
   if (outerModel.segments.length !== innerModel.segments.length) return diags;
+  const widths = [stairWidth].flat().filter((w) => Number(w) > 0);
   outerModel.segments.forEach((outerSeg, i) => {
     const innerSeg = innerModel.segments[i];
-    const result = checkParallelAndSpaced(outerSeg, innerSeg, stairWidth);
+    const results = widths.map((w) => checkParallelAndSpaced(outerSeg, innerSeg, w));
+    const result = results.find((r) => r.spacingOk) || results[0];
     if (!result.parallel) {
       diags.push(
         err('CONSTRAINT-STRINGER-PAIR-PARALLEL', 'stringer', `${outerSeg.id}/${innerSeg.id}`, `Wangi nie są równoległe (odchylenie ${result.angleDeltaDeg.toFixed(2)}°).`, {
@@ -174,7 +178,7 @@ export function checkStringerPairInvariants(outerModel, innerModel, stairWidth) 
         err('CONSTRAINT-STRINGER-PAIR-SPACING', 'stringer', `${outerSeg.id}/${innerSeg.id}`, `Odstęp między wangami nie odpowiada szerokości biegu.`, {
           parameter: 'stringerSpacing',
           value: result.spacing,
-          expected: stairWidth,
+          expected: widths.join(' / '),
           unit: 'mm',
         })
       );
@@ -312,7 +316,7 @@ export function evaluateGeometricConstraints({ treadModels, riserModels, stringe
   if (stringerModels) {
     diagnostics.push(...checkStringerReferenceLinesStraight(stringerModels.outer, 'StringerOuter'));
     diagnostics.push(...checkStringerReferenceLinesStraight(stringerModels.inner, 'StringerInner'));
-    diagnostics.push(...checkStringerPairInvariants(stringerModels.outer, stringerModels.inner, config.stairWidth));
+    diagnostics.push(...checkStringerPairInvariants(stringerModels.outer, stringerModels.inner, [config.stairWidth, config.stairWidthC, config.landingDepthMm]));
     diagnostics.push(...checkBearingAttachment(stringerModels.outer, treadModels.length, 'StringerOuter'));
     diagnostics.push(...checkBearingAttachment(stringerModels.inner, treadModels.length, 'StringerInner'));
   }
