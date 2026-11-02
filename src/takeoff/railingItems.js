@@ -261,7 +261,33 @@ export function buildWallCapRailItems(concrete, config, wasteFactors = {}) {
           wasteFactor: wasteFactorFor(ELEMENT_TYPES.HANDRAIL, RAILING_HANDRAIL_MATERIAL_ID, wasteFactors),
           optional: true,
           status: TAKEOFF_ITEM_STATUS.OK,
-          notes: [`Poręcz na murku nad biegiem betonowym (${sideLabel(run.side, config)}), odcinek ${k} — prosty element o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm, leży na murku.`],
+          notes: [`Poręcz ${run.mount === 'wall' ? 'przy ścianie (na uchwytach)' : 'na murku'} nad biegiem betonowym (${sideLabel(run.side, config)}), odcinek ${k} — prosty element o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`],
+        })
+      );
+    }
+    // its brackets (by the piece, like the wall handrail's)
+    const count = run.brackets?.length || 0;
+    if (count) {
+      items.push(
+        createTakeoffItem({
+          itemId: `wallcap-${run.side}-${r}-wall-brackets`,
+          elementType: ELEMENT_TYPES.HANDRAIL,
+          sourceElementId: `wallcap:${run.side}:${r}:wall-brackets`,
+          material: 'Wspornik poręczy ściennej',
+          materialId: RAILING_WALL_BRACKET_MATERIAL_ID,
+          quantity: count,
+          unit: 'szt',
+          nominalDimensions: {},
+          calculatedDimensions: {},
+          catalogStock: null,
+          netVolume: 0,
+          netArea: 0,
+          stockVolume: 0,
+          stockArea: 0,
+          wasteFactor: 0,
+          optional: true,
+          status: TAKEOFF_ITEM_STATUS.OK,
+          notes: [`Wsporniki poręczy przy ścianie nad biegiem betonowym (${sideLabel(run.side, config)}): ${count} szt., co maks. ${config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM} mm — dobór i mocowanie do ściany DO WERYFIKACJI.`],
         })
       );
     }

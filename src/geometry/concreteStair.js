@@ -169,6 +169,23 @@ function strip(p, q, w, inside) {
   if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
   return [p, q, { x: q.x + n.x * w, y: q.y + n.y * w }, { x: p.x + n.x * w, y: p.y + n.y * w }];
 }
+// the wall handrail's defaults — the same as railingSolver.js (RAILING_WALL_RAIL_CLEARANCE_MM etc.; not imported:
+// this module is read by planLayout.js, which the railing solver itself imports)
+const WALL_RAIL_CLEARANCE_MM = 50;
+const WALL_BRACKET_SPACING_MM = 1000;
+const WALL_BRACKET_FROM_END_MM = 150;
+// how far a wall carrying a handrail on brackets reaches above the rail's top (ASSUMPTION)
+const WALL_ABOVE_RAIL_MM = 100;
+
+/** How the handrail along the concrete flight's wall is mounted: 'wall' (brackets) | 'top' (on a low wall) | 'none'.
+ *  (`true` — the first version's switch — was the rail on the low wall.) */
+export function concreteWallHandrailMode(config) {
+  const v = config?.concreteWallHandrail;
+  if (v === true || v === 'top') return 'top';
+  if (v === 'wall') return 'wall';
+  return 'none';
+}
+
 // A 3D polyline with the points lying on a straight line between their neighbours left out (within 0.5 mm) — one
 // handrail piece per straight stretch.
 function straightPieces(points) {
@@ -233,11 +250,41 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   const railRun = { inner: null, outer: null };
   const closeRail = (side) => {
     const run = railRun[side];
-    if (run && run.points.length >= 2) capRails.push({ ...run, points: straightPieces(run.points) });
+    if (run && run.points.length >= 2) {
+      const points = straightPieces(run.points);
+      capRails.push({ ...run, points, ...(run.mount === 'wall' ? { brackets: wallBrackets(points) } : {}) });
+    }
     railRun[side] = null;
   };
   const { sides: wallSides, thickness: wallThickness, above: wallAbove, aboveHeightMm } = concreteWalls(config);
-  const railOnWall = config.concreteWallHandrail !== false;
+  // the handrail along that wall (user requests 2026-11-02): 'wall' — on brackets off the wall's face, like a wall
+  // handrail (railingSolver.js buildWallRail); 'top' — lying on a low wall; 'none'
+  const railMount = concreteWallHandrailMode(config);
+  const railWidth = Number(config.railingHandrailWidthMm) || 40;
+  const railHeight = Number(config.railingHandrailHeightMm) || 60;
+  const clearance = config.railingWallRailClearanceMm ?? WALL_RAIL_CLEARANCE_MM;
+  // brackets along a run: every `railingWallBracketSpacingMm` (plan), the first and last WALL_BRACKET_FROM_END_MM in
+  const wallBrackets = (points) => {
+    const spacing = Math.max(200, Number(config.railingWallBracketSpacingMm) || WALL_BRACKET_SPACING_MM);
+    const cum = [0];
+    for (let k = 1; k < points.length; k++) cum.push(cum[k - 1] + Math.hypot(points[k].x - points[k - 1].x, points[k].y - points[k - 1].y));
+    const total = cum[cum.length - 1];
+    const usable = total - 2 * WALL_BRACKET_FROM_END_MM;
+    const count = usable <= 0 ? 1 : Math.ceil(usable / spacing) + 1;
+    const out = [];
+    for (let j = 0; j < count; j++) {
+      const s = count === 1 ? total / 2 : WALL_BRACKET_FROM_END_MM + (usable * j) / (count - 1);
+      let k = 1;
+      while (k < points.length - 1 && cum[k] < s) k++;
+      const a = points[k - 1];
+      const b = points[k];
+      const f = cum[k] - cum[k - 1] > 0 ? (s - cum[k - 1]) / (cum[k] - cum[k - 1]) : 0;
+      const at = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+      const reach = clearance + railWidth / 2;
+      out.push({ position: at, z: a.z + (b.z - a.z) * f, wall: { x: at.x - a.n.x * reach, y: at.y - a.n.y * reach }, reachMm: reach });
+    }
+    return out;
+  };
   const wallTop = rawSlabTopZ(config); // a wall above the flight: up to the floor above
   const last = treads.length - 1;
   for (let i = fromIndex; i <= range.to; i++) {
@@ -283,12 +330,17 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
         if (outline.length < 3 || polygonArea(outline) < 1) continue;
         // (never above a landing: it would close the way onto it — only under it)
         const aboveHere = wallAbove && t.type !== 'landing';
-        const tops = aboveHere ? outline.map(aboveAt) : outline.map(soffitAt);
+        // (a handrail on brackets needs the wall behind it: at least up to the rail's top + WALL_ABOVE_RAIL_MM — at the top
+        // treads a wall "up to the floor above" ended below a rail standing the balustrade's height over them)
+        const railTop = (p) => (i + 1 + along(p)) * rise + (Number(config.railingHeightMm) || 900) + WALL_ABOVE_RAIL_MM;
+        const tops = aboveHere ? outline.map((p) => (railMount === 'wall' ? Math.max(aboveAt(p), railTop(p)) : aboveAt(p))) : outline.map(soffitAt);
         if (Math.max(...tops) < 1) continue;
         walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), ...(aboveHere ? { above: true } : {}) });
       }
-      // its handrail: along the wall's middle (half its thickness in from the line), on its top
-      if (!(railOnWall && wallAbove && aboveHeightMm && t.type !== 'landing')) {
+      // its handrail: on the wall's top along its middle (a low wall), or on brackets off its face (its top the
+      // balustrade's height above the nose line)
+      const railHere = wallAbove && t.type !== 'landing' && (railMount === 'wall' || (railMount === 'top' && aboveHeightMm));
+      if (!railHere) {
         closeRail(side);
         continue;
       }
@@ -299,12 +351,14 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
         const d = unit(sub(q, p));
         let n = { x: -d.y, y: d.x };
         if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
+        const inset = railMount === 'wall' ? wallThickness + clearance + railWidth / 2 : wallThickness / 2;
         for (const c of [p, q]) {
-          const at = { x: c.x + (n.x * wallThickness) / 2, y: c.y + (n.y * wallThickness) / 2 };
-          const z = aboveAt(at);
-          const run = railRun[side] || (railRun[side] = { side, points: [] });
+          const at = { x: c.x + n.x * inset, y: c.y + n.y * inset };
+          // (the rail's underside: on the wall's top, or the balustrade's height above the nose line less its own height)
+          const z = railMount === 'wall' ? (i + 1 + along(at)) * rise + (Number(config.railingHeightMm) || 900) - railHeight : aboveAt(at);
+          const run = railRun[side] || (railRun[side] = { side, mount: railMount, points: [] });
           const prev = run.points[run.points.length - 1];
-          if (!prev || Math.hypot(at.x - prev.x, at.y - prev.y) > 1) run.points.push({ ...at, z });
+          if (!prev || Math.hypot(at.x - prev.x, at.y - prev.y) > 1) run.points.push({ ...at, z, n });
         }
       }
     }

@@ -227,7 +227,7 @@ function mergedMesh(geometries, material, name, sourceId, sectionSide) {
 // sizes — the real fitting is chosen in the workshop).
 const BRACKET_BAR_MM = 12;
 const BRACKET_DROP_MM = 50;
-function wallBracketGeometries(b) {
+export function wallBracketGeometries(b) {
   const low = b.z - BRACKET_DROP_MM;
   const stem = new THREE.BoxGeometry(BRACKET_BAR_MM, BRACKET_DROP_MM, BRACKET_BAR_MM);
   stem.translate(0, BRACKET_DROP_MM / 2, 0);

@@ -169,8 +169,17 @@ export function createUI({
   concreteWallAbove.domElement.title = 'Bieg betonowy idzie między ścianami: ściana stoi nad biegiem, a stopnie i podstopnie na betonie dochodzą tylko do niej (krótsze o jej grubość). Nad podestem ściany nie ma (tylko pod nim).';
   const concreteWallH = live(stairFolder.add(config, 'concreteWallAboveHeightMm', 0, 2500, 10)).name('Wysokość ściany nad biegiem [mm] (0 = do stropu)');
   concreteWallH.domElement.title = 'Wysokość ściany ponad linią nosków stopni (równolegle do biegu) — np. murek pod poręcz. 0 = ściana do stropu.';
-  const concreteWallRail = live(stairFolder.add(config, 'concreteWallHandrail')).name('Poręcz na murku');
-  concreteWallRail.domElement.title = 'Poręcz leżąca na murku (na środku jego grubości), równolegle do biegu — przekrój jak poręcz balustrady (folder 9); w kosztorysie jak poręcz (cena za mb).';
+  const railProxy = {
+    get mode() {
+      const v = config.concreteWallHandrail;
+      return v === true ? 'top' : v === 'wall' || v === 'top' ? v : 'none';
+    },
+    set mode(v) {
+      config.concreteWallHandrail = v;
+    },
+  };
+  const concreteWallRail = live(stairFolder.add(railProxy, 'mode', { 'brak': 'none', 'na uchwytach przy ścianie': 'wall', 'leżąca na murku': 'top' })).name('Poręcz przy ścianie nad biegiem');
+  concreteWallRail.domElement.title = 'Na uchwytach: poręcz przyścienna wzdłuż lica ściany (odstęp i rozstaw uchwytów jak przy poręczy przyściennej, wysokość jak balustrada — folder 9). Leżąca na murku: na wierzchu murka (tylko gdy podana jest wysokość ściany). W kosztorysie jak poręcz (cena za mb) + uchwyty.';
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
@@ -183,7 +192,7 @@ export function createUI({
     // (always offered with the concrete part — it was hidden until a side was chosen, user report 2026-11-02)
     concreteWallAbove.show(on);
     concreteWallH.show(on && !!config.concreteWallAbove);
-    concreteWallRail.show(on && !!config.concreteWallAbove && Number(config.concreteWallAboveHeightMm) > 0);
+    concreteWallRail.show(on && !!config.concreteWallAbove).updateDisplay();
   };
   syncConcrete();
   lockSyncs.push(syncConcrete);

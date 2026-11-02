@@ -213,7 +213,7 @@ export function buildStaircase(rawConfig) {
   const concreteGroup = renderConcrete(concrete, concreteMaterial, concreteWallMaterial);
   if (concreteGroup) root.add(concreteGroup);
   // the handrail on the low wall above it (the balustrade layer — railing material)
-  const capRailGroup = renderConcreteCapRails(concrete, railingMaterial);
+  const capRailGroup = renderConcreteCapRails(concrete, railingMaterial, glassFixingMaterial);
   if (capRailGroup) root.add(capRailGroup);
 
   if (riserModels.length) {

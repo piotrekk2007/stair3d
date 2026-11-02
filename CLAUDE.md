@@ -401,7 +401,8 @@ tread, one smooth soffit at the slab's plumb thickness, never below the floor, a
 the opening runs on past the last step; optional walls under it `concreteWallSide` none / inner / outer / both, floor to
 soffit, carried back along their line under the concrete steps to the nearest wall across; `concreteWallAbove` = the
 wall above the flight too (`concreteWallAboveHeightMm` above the nose line up to the exit, 0 = to the floor above; never
-above a landing — no recess there; on a low wall a handrail `concreteWallHandrail` — `capRails`, priced as a handrail) and the concrete treads end at its face — `concreteTreadRecessMm`; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
+above a landing — no recess there; a handrail `concreteWallHandrail` wall (on brackets, default) / top (on a low wall) / none —
+`capRails`, priced as a handrail + brackets) and the concrete treads end at its face — `concreteTreadRecessMm`; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
 
 ## Validation
 

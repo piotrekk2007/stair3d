@@ -18,7 +18,7 @@ takeoff.
 | `concreteWallThicknessMm` | its thickness (null = `freeWallThicknessMm`) |
 | `concreteWallAbove` | that wall stands ABOVE the flight too (cast between walls): the treads / risers on the concrete end at its face (user request 2026-11-02); never above a landing (it closed the way onto it — the landing is not cut back, the wall stands only under it) |
 | `concreteWallAboveHeightMm` | its height above the nose line, parallel to the flight up to the exit (a low wall, past the floor's level like a balustrade); 0 = up to the floor above |
-| `concreteWallHandrail` | a handrail lying on that low wall (default on; only with a height) |
+| `concreteWallHandrail` | the handrail along that wall: `wall` (default — on brackets off its face, like a wall handrail: clearance / bracket spacing / height from folder 9) \| `top` (lying on a low wall, only with a height; `true` = the first version) \| `none` |
 
 New optional fields — no project version bump.
 
@@ -93,3 +93,10 @@ tread off the concrete); collinear points dropped (`straightPieces`) — one pie
 balustrade's handrail (`railingHandrail*`). Read by `concreteRenderer.js renderConcreteCapRails` (a box per piece, the
 railing material, the root's `Railing` layer), the plan (a brown line) and the takeoff (`railingItems.js
 buildWallCapRailItems`: a HANDRAIL item per piece, `railing-handrail`, priced per metre — part codes PR).
+
+A handrail on BRACKETS (`mount: 'wall'`, user request 2026-11-02 — "a handrail like the wall one"): its axis
+wall thickness + `railingWallRailClearanceMm` + half its width in from the line, its top `railingHeightMm` above the
+nose line; `brackets` every `railingWallBracketSpacingMm` (150 mm in from the ends), each `{position, z, wall,
+reachMm}` like railingSolver.js buildWallRail's (drawn by railingRenderer.js `wallBracketGeometries`, metal); the wall
+behind it reaches at least 100 mm above the rail's top (a wall "up to the floor above" ended below the rail at the top
+treads). Takeoff: the handrail pieces + one `…-wall-brackets` item per run (`railing-wall-bracket`, part code UP).

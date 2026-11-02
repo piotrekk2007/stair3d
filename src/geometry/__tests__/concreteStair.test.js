@@ -174,7 +174,7 @@ test('regression (user, 2026-11-02): the wall under the concrete flight runs on 
 test('a wall above the concrete flight (user request 2026-11-02, the flight cast between walls): full height, the treads and risers on the concrete end at its face — shorter by its thickness, not a manual edit; the wooden part keeps its housing', () => {
   const base = uCfg({ concreteEnabled: true, hasRiserBoards: true, riserBoardThickness: 20 });
   const plain = buildStaircase(base);
-  const walled = buildStaircase({ ...base, concreteWallSide: 'outer', concreteWallThicknessMm: 120, concreteWallAbove: true });
+  const walled = buildStaircase({ ...base, concreteWallSide: 'outer', concreteWallThicknessMm: 120, concreteWallAbove: true, concreteWallHandrail: 'none' });
   const k = walled.planLayout.concreteFromIndex;
   for (const t of walled.treadModels) {
     const before = plain.treadModels[t.index];
@@ -262,7 +262,7 @@ test('regression (user, 2026-11-02, "Schody_Pasek_V3_2podesty_c"): hand-moved wi
 test('a wall above the concrete flight (user report 2026-11-02): not above a landing — it closed 120 mm of the way onto it — the landing not cut back either; its height above the nose line settable (a low wall for a handrail)', () => {
   const landingU = {
     ...createDefaultConfig(), stairType: 'U', turn1Type: 'winder', turn2Type: 'landing', windersPerTurn: 3, treadsLegA: 6, treadsLegB: 0, treadsLegC: 5,
-    concreteEnabled: true, concreteFromTread: 10, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true,
+    concreteEnabled: true, concreteFromTread: 10, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true, concreteWallHandrail: 'none',
   };
   const b = buildStaircase(landingU);
   const landing = b.treadModels.find((t) => t.type === 'landing');
@@ -289,7 +289,7 @@ test('a wall above the concrete flight (user report 2026-11-02): not above a lan
 
 test('a handrail on the low wall above the concrete flight (user request 2026-11-02): along the wall’s middle, on its top, one piece per straight stretch, up to the exit; priced as a handrail; off without a height or when switched off', async () => {
   const { computeMaterialTakeoff } = await import('../../takeoff/materialTakeoff.js');
-  const cfg = uCfg({ concreteEnabled: true, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true, concreteWallAboveHeightMm: 850 });
+  const cfg = uCfg({ concreteEnabled: true, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true, concreteWallAboveHeightMm: 850, concreteWallHandrail: 'top' });
   const b = buildStaircase(cfg);
   const rails = b.concrete.capRails;
   assert.ok(rails.length > 0 && rails.every((r) => r.side === 'inner' && r.points.length >= 2));
@@ -305,6 +305,36 @@ test('a handrail on the low wall above the concrete flight (user request 2026-11
   assert.equal(items.length, rails.reduce((n, r) => n + r.points.length - 1, 0));
   assert.ok(items.every((i) => i.elementType === 'HANDRAIL' && i.materialId === 'railing-handrail'));
   assert.ok(b.root.getObjectByName('WallCapRail-inner-0-0'));
-  assert.deepEqual(buildStaircase({ ...cfg, concreteWallAboveHeightMm: 0 }).concrete.capRails, [], 'a wall up to the floor above: no rail on it');
+  assert.deepEqual(buildStaircase({ ...cfg, concreteWallAboveHeightMm: 0 }).concrete.capRails, [], 'a wall up to the floor above: no rail lying on it');
   assert.deepEqual(buildStaircase({ ...cfg, concreteWallHandrail: false }).concrete.capRails, []);
+  assert.equal(buildStaircase({ ...cfg, concreteWallHandrail: true }).concrete.capRails[0].mount, 'top', 'the first version’s switch: on the wall');
+});
+
+test('a wall handrail on brackets along the wall above the concrete flight (user request 2026-11-02, the default): off the wall’s face by the clearance, its top the balustrade’s height above the nose line, brackets every spacing; a bracket item in the takeoff', async () => {
+  const { computeMaterialTakeoff } = await import('../../takeoff/materialTakeoff.js');
+  const cfg = uCfg({ concreteEnabled: true, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true, railingHeightMm: 900, railingHandrailWidthMm: 40, railingHandrailHeightMm: 60, railingWallRailClearanceMm: 50, railingWallBracketSpacingMm: 800 });
+  const b = buildStaircase(cfg);
+  const rails = b.concrete.capRails;
+  assert.ok(rails.length > 0 && rails.every((r) => r.mount === 'wall' && r.brackets.length >= 1));
+  const h = b.derived.riserHeight;
+  // flight C's run (the last): axis 120 + 50 + 20 mm in from the inner line, underside 900 − 60 above the nose line
+  const run = rails[rails.length - 1];
+  const tread = b.planLayout.treads.at(-1);
+  const line = tread.innerChain;
+  const dir = { x: line[1].x - line[0].x, y: line[1].y - line[0].y };
+  const l = Math.hypot(dir.x, dir.y);
+  const dist = (p) => Math.abs((p.x - line[0].x) * dir.y - (p.y - line[0].y) * dir.x) / l;
+  assert.ok(run.points.slice(-2).every((p) => Math.abs(dist(p) - 190) < 1e-6), run.points.map(dist).join(","));
+  const end = run.points.at(-1);
+  assert.ok(Math.abs(end.z - ((b.treadModels.length + 1) * h + 900 - 60)) < 1, `${end.z}`);
+  for (const k of run.brackets) assert.ok(Math.abs(k.reachMm - 70) < 1e-6);
+  const items = computeMaterialTakeoff(b, b.fullConfig).filter((i) => i.itemId.startsWith('wallcap'));
+  const brackets = items.filter((i) => i.itemId.endsWith('-wall-brackets'));
+  assert.equal(brackets.reduce((n, i) => n + i.quantity, 0), rails.reduce((n, r) => n + r.brackets.length, 0));
+  assert.ok(b.root.getObjectByName(`WallCapRailBrackets-inner-${rails.length - 1}`));
+  // with a wall up to the floor above too (no height needed) — the wall reaching past the rail's top at the top treads
+  const full = buildStaircase({ ...cfg, concreteWallAboveHeightMm: 0 });
+  assert.ok(full.concrete.capRails.length > 0);
+  const topWall = full.concrete.walls.filter((w) => w.above && w.treadIndex === full.treadModels.length - 1);
+  assert.ok(topWall.length && topWall.every((w) => Math.max(...w.topZ) >= (full.treadModels.length + 1) * h + 900), 'the wall behind the rail');
 });

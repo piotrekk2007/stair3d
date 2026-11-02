@@ -219,8 +219,9 @@ export function createDefaultConfig() {
     concreteWallAbove: false,
     // its height above the flight's nose line (mm; 0 = up to the floor above) — a low wall for a handrail on it
     concreteWallAboveHeightMm: 0,
-    // a handrail lying on that low wall (only with a height > 0)
-    concreteWallHandrail: true,
+    // the handrail along that wall: 'wall' (on brackets off its face, like a wall handrail) | 'top' (lying on a low
+    // wall — only with a height > 0) | 'none'
+    concreteWallHandrail: 'wall',
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

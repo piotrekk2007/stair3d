@@ -3,6 +3,8 @@
 // Draws what the model gives, decides nothing.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { wallBracketGeometries } from './railingRenderer.js';
 
 function blockGeometry({ outline, topZ, bottomZ }) {
   // plan (x, y) at height z → three (x, z, −y); the outline made counter-clockwise in plan
@@ -61,8 +63,9 @@ function railPiece(a, b, w, h, material) {
   return mesh;
 }
 
-/** The handrail lying on the low wall above the concrete flight (concreteStair.js capRails) — its own group. */
-export function renderConcreteCapRails(concrete, material) {
+/** The handrail along the concrete flight's wall (concreteStair.js capRails): on a low wall, or on brackets off its
+ *  face (drawn like the wall handrail's — railingRenderer.js) — its own group. */
+export function renderConcreteCapRails(concrete, material, metalMaterial = material) {
   if (!concrete?.capRails?.length) return null;
   const group = new THREE.Group();
   group.name = 'Railing';
@@ -71,6 +74,11 @@ export function renderConcreteCapRails(concrete, material) {
       const mesh = railPiece(run.points[k - 1], run.points[k], run.widthMm, run.heightMm, material);
       mesh.name = `WallCapRail-${run.side}-${r}-${k - 1}`;
       group.add(mesh);
+    }
+    if (run.brackets?.length) {
+      const brackets = new THREE.Mesh(mergeGeometries(run.brackets.flatMap(wallBracketGeometries)), metalMaterial);
+      brackets.name = `WallCapRailBrackets-${run.side}-${r}`;
+      group.add(brackets);
     }
   });
   return group;
