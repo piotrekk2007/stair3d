@@ -70,12 +70,17 @@ export function concreteWalls(config) {
   const side = CONCRETE_WALL_SIDES.includes(config?.concreteWallSide) ? config.concreteWallSide : 'none';
   const sides = side === 'both' ? ['inner', 'outer'] : side === 'none' ? [] : [side];
   const thickness = Number(config?.concreteWallThicknessMm) > 0 ? Number(config.concreteWallThicknessMm) : Number(config?.freeWallThicknessMm) > 0 ? Number(config.freeWallThicknessMm) : 120;
-  return { sides, thickness, above: sides.length > 0 && !!config?.concreteWallAbove };
+  // its height above the flight's nose line (a low wall the handrail stands on — user request 2026-11-02); 0 / null =
+  // up to the floor above
+  const h = Number(config?.concreteWallAboveHeightMm);
+  return { sides, thickness, above: sides.length > 0 && !!config?.concreteWallAbove, aboveHeightMm: h > 0 ? h : null };
 }
 
 /** How far a tread on the concrete is cut back from each line: a wall standing above the flight there takes its
- *  thickness (user request 2026-11-02: "the treads only up to the wall"). {inner, outer} mm. */
-export function concreteTreadRecessMm(config) {
+ *  thickness (user request 2026-11-02: "the treads only up to the wall"). {inner, outer} mm. A landing: none — no wall
+ *  stands above a landing (it would close the way onto it — user report 2026-11-02), only under it. */
+export function concreteTreadRecessMm(config, tread = null) {
+  if (tread?.type === 'landing') return { inner: 0, outer: 0 };
   const { sides, thickness, above } = concreteWalls(config);
   return { inner: above && sides.includes('inner') ? thickness : 0, outer: above && sides.includes('outer') ? thickness : 0 };
 }
@@ -204,7 +209,7 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   const blocks = [];
   const walls = [];
   const soffitOf = new Map(); // tread index → its soffit height function
-  const { sides: wallSides, thickness: wallThickness, above: wallAbove } = concreteWalls(config);
+  const { sides: wallSides, thickness: wallThickness, above: wallAbove, aboveHeightMm } = concreteWalls(config);
   const wallTop = rawSlabTopZ(config); // a wall above the flight: up to the floor above
   const last = treads.length - 1;
   for (let i = fromIndex; i <= range.to; i++) {
@@ -219,12 +224,16 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
     const endShift = i < last ? rt : 0;
     const beyond = { x: 2 * t.backEdge[0].x - inside.x, y: 2 * t.backEdge[0].y - inside.y };
     const end = shiftedEdge(t.backEdge, endShift, beyond);
-    const soffitAt = (p) => {
+    // how far along this step a point lies: 0 where it begins, 1 where it ends (by the distance to each line)
+    const along = (p) => {
       const dF = Math.max(0, sideDistance(p, begin, inside));
       const dB = Math.max(0, sideDistance(p, end, inside));
-      const f = dF + dB > 1e-6 ? dF / (dF + dB) : 0.5;
-      return Math.max(0, topZ(i - 1) + (topZ(i) - topZ(i - 1)) * f - plumb);
+      return dF + dB > 1e-6 ? dF / (dF + dB) : 0.5;
     };
+    const soffitAt = (p) => Math.max(0, topZ(i - 1) + (topZ(i) - topZ(i - 1)) * along(p) - plumb);
+    // a wall above the flight: up to the floor above, or its height above the nose line (this tread's top at its front,
+    // the next one's at its back)
+    const aboveAt = (p) => (aboveHeightMm ? Math.min(wallTop, (i + 1 + along(p)) * rise + aboveHeightMm) : wallTop);
     soffitOf.set(i, soffitAt);
     const pieces = [clipToConvex(foot, halfPlane(begin[0], begin[1], inside))];
     // the strip of the next tread up to the next riser's back face carries this step's top too
@@ -243,9 +252,11 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
         if (Math.hypot(chain[k].x - chain[k - 1].x, chain[k].y - chain[k - 1].y) < 1) continue;
         const outline = clipToConvex(foot, band(chain[k - 1], chain[k], wallThickness, inside));
         if (outline.length < 3 || polygonArea(outline) < 1) continue;
-        const tops = wallAbove ? outline.map(() => wallTop) : outline.map(soffitAt);
+        // (never above a landing: it would close the way onto it — only under it)
+        const aboveHere = wallAbove && t.type !== 'landing';
+        const tops = aboveHere ? outline.map(aboveAt) : outline.map(soffitAt);
         if (Math.max(...tops) < 1) continue;
-        walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), ...(wallAbove ? { above: true } : {}) });
+        walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), ...(aboveHere ? { above: true } : {}) });
       }
     }
   }

@@ -217,6 +217,8 @@ export function createDefaultConfig() {
     concreteWallThicknessMm: null,
     // that wall stands above the flight too (cast between walls): full height, the treads end at its face
     concreteWallAbove: false,
+    // its height above the flight's nose line (mm; 0 = up to the floor above) — a low wall for a handrail on it
+    concreteWallAboveHeightMm: 0,
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

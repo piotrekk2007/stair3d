@@ -443,7 +443,7 @@ export function applyHousingRecess(treads, config) {
   const result = treads.map(cloneTread);
   for (const tread of result) {
     if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
-    const recessMm = tread.onConcrete ? onConcrete : housed;
+    const recessMm = tread.onConcrete ? concreteTreadRecessMm(config, tread) : housed;
     if (none(recessMm)) continue;
 
     // Oba cofnięcia razem muszą się zmieścić w krawędzi stopnia.

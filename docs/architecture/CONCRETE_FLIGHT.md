@@ -16,7 +16,8 @@ takeoff.
 | `concreteSlabThicknessMm` | the slab's thickness square to the pitch (150, ASSUMPTION) |
 | `concreteWallSide` | a wall under the flight: `none` / `inner` / `outer` / `both` (user request 2026-11-02 — a stairwell wall runs up to the slab, this one only to the stair) |
 | `concreteWallThicknessMm` | its thickness (null = `freeWallThicknessMm`) |
-| `concreteWallAbove` | that wall stands ABOVE the flight too (cast between walls): full height to the floor above, the treads / risers on the concrete end at its face (user request 2026-11-02) |
+| `concreteWallAbove` | that wall stands ABOVE the flight too (cast between walls): the treads / risers on the concrete end at its face (user request 2026-11-02); never above a landing (it closed the way onto it — the landing is not cut back, the wall stands only under it) |
+| `concreteWallAboveHeightMm` | its height above the nose line, parallel to the flight (a low wall for a handrail on it); 0 = up to the floor above |
 
 New optional fields — no project version bump.
 

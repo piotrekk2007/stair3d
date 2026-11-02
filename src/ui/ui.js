@@ -166,7 +166,9 @@ export function createUI({
   };
   const concreteWallT = live(stairFolder.add(wallProxy, 't', 60, 400, 5)).name('Grubość ściany [mm]');
   const concreteWallAbove = live(stairFolder.add(config, 'concreteWallAbove')).name('Ściana także nad biegiem (stopnie do ściany)');
-  concreteWallAbove.domElement.title = 'Bieg betonowy idzie między ścianami: ściana stoi na całą wysokość, a stopnie i podstopnie na betonie dochodzą tylko do niej (krótsze o jej grubość).';
+  concreteWallAbove.domElement.title = 'Bieg betonowy idzie między ścianami: ściana stoi nad biegiem, a stopnie i podstopnie na betonie dochodzą tylko do niej (krótsze o jej grubość). Nad podestem ściany nie ma (tylko pod nim).';
+  const concreteWallH = live(stairFolder.add(config, 'concreteWallAboveHeightMm', 0, 2500, 10)).name('Wysokość ściany nad biegiem [mm] (0 = do stropu)');
+  concreteWallH.domElement.title = 'Wysokość ściany ponad linią nosków stopni (równolegle do biegu) — np. murek pod poręcz. 0 = ściana do stropu.';
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
@@ -178,6 +180,7 @@ export function createUI({
     concreteWallT.show(on && (config.concreteWallSide || 'none') !== 'none').updateDisplay();
     // (always offered with the concrete part — it was hidden until a side was chosen, user report 2026-11-02)
     concreteWallAbove.show(on);
+    concreteWallH.show(on && !!config.concreteWallAbove);
   };
   syncConcrete();
   lockSyncs.push(syncConcrete);

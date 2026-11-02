@@ -249,6 +249,41 @@ test('regression (user, 2026-11-02, "Schody_Pasek_V3_2podesty_c"): hand-moved wi
     for (const s of b.stringerModels[side].segments) assert.ok(s.referenceLine.length >= 1 && s.treadBearings.length > 0, `${side} ${s.id}: ${s.referenceLine.length} mm`);
     assert.doesNotThrow(() => buildProfileViewModel(b.stringerConstruction[side], b.stringerModels[side], b.fullConfig), side);
   }
+  // with the wall above the flight (user report 2026-11-02): none along the landing's free dusza edge — it stood 120 mm
+  // into the way onto the landing — so the wall above begins flush with flight C's first tread
+  const walled = buildStaircase({ ...b.fullConfig, manualEdgeOverrides: b.fullConfig.manualEdgeOverrides, concreteWallAbove: true });
+  const landing = walled.treadModels.find((t) => t.type === 'landing');
+  assert.ok(walled.concrete.walls.some((w) => w.treadIndex === landing.index), 'the wall under the landing');
+  assert.ok(walled.concrete.walls.filter((w) => w.treadIndex === landing.index).every((w) => !w.above));
   // and the view leaves out a board with no contour instead of throwing
   assert.deepEqual(buildProfileViewModel([{ segmentId: 'x', outerContour: [] }], { segments: [] }, b.fullConfig), []);
+});
+
+test('a wall above the concrete flight (user report 2026-11-02): not above a landing — it closed 120 mm of the way onto it — the landing not cut back either; its height above the nose line settable (a low wall for a handrail)', () => {
+  const landingU = {
+    ...createDefaultConfig(), stairType: 'U', turn1Type: 'winder', turn2Type: 'landing', windersPerTurn: 3, treadsLegA: 6, treadsLegB: 0, treadsLegC: 5,
+    concreteEnabled: true, concreteFromTread: 10, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true,
+  };
+  const b = buildStaircase(landingU);
+  const landing = b.treadModels.find((t) => t.type === 'landing');
+  assert.ok(landing.onConcrete);
+  assert.ok(b.concrete.walls.filter((w) => w.treadIndex === landing.index).every((w) => !w.above), 'only under the landing');
+  assert.equal(landing.frontEdge.final.length, 2);
+  assert.deepEqual(landing.frontEdge.final, landing.frontEdge.nominal);
+  const free = buildStaircase({ ...landingU, concreteWallAbove: false });
+  assert.deepEqual(landing.outline, free.treadModels[landing.index].outline, 'the landing not cut back by the wall');
+  // a straight concrete tread is (by the wall's thickness)
+  const straight = b.treadModels.find((t) => t.onConcrete && t.type === 'straight');
+  const len = ([p, q]) => Math.hypot(q.x - p.x, q.y - p.y);
+  assert.ok(Math.abs(len(free.treadModels[straight.index].frontEdge.final) - len(straight.frontEdge.final) - 120) < 1e-6);
+  // the height: the wall's top that far above the nose line — this tread's top at its front
+  const low = buildStaircase({ ...landingU, concreteWallAboveHeightMm: 300 });
+  const h = low.derived.riserHeight;
+  for (const w of low.concrete.walls.filter((x) => x.above)) {
+    const nose = (w.treadIndex + 1) * h;
+    const cap = rawSlabTopZ(low.fullConfig);
+    assert.ok(w.topZ.every((z) => z >= Math.min(cap, nose + 300) - 1e-6 && z <= Math.min(cap, nose + h + 300) + 1e-6), `tread ${w.treadIndex}: ${w.topZ.map(Math.round)} vs ${nose + 300}`);
+    assert.ok(w.topZ.some((z) => z < cap - 1) || nose + 300 >= cap, `tread ${w.treadIndex} lower than the full wall`);
+  }
+  assert.ok(b.concrete.walls.filter((x) => x.above).every((w) => w.topZ.every((z) => Math.abs(z - rawSlabTopZ(b.fullConfig)) < 1e-6)), '0 = up to the floor above');
 });
