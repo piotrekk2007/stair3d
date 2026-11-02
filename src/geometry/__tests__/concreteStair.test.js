@@ -31,7 +31,12 @@ test('which treads lie on concrete: the tread number given (1-based), by default
   assert.equal(concreteFromIndex(uCfg({ concreteEnabled: true, concreteFromTread: 7 }), 15), 6);
   assert.equal(concreteFromIndex(uCfg({ concreteEnabled: true, concreteFromTread: 99 }), 15), 14, 'clamped to the stair');
   assert.equal(concreteFromIndex(uCfg({ concreteEnabled: true, stairConstruction: 'cantilever' }), 15), null);
-  assert.deepEqual(woodOnlyRailingSections([{ id: 'a', side: 'outer', fromStep: 0, toStep: null }, { id: 'b', side: 'inner', fromStep: 6, toStep: 9 }], 4), [{ id: 'a', side: 'outer', fromStep: 0, toStep: 3 }]);
+  const sections = [{ id: 'a', side: 'outer', fromStep: 0, toStep: null }, { id: 'b', side: 'inner', fromStep: 6, toStep: 9 }];
+  assert.deepEqual(woodOnlyRailingSections(sections, { from: 4, to: 14 }, 14), [{ id: 'a', side: 'outer', fromStep: 0, toStep: 3 }]);
+  // a lower concrete part: what lies above it stays
+  assert.deepEqual(woodOnlyRailingSections(sections, { from: 0, to: 6 }, 14), [{ id: 'a', side: 'outer', fromStep: 7, toStep: null }, { id: 'b', side: 'inner', fromStep: 7, toStep: 9 }]);
+  // concrete in the middle: a section across it in two
+  assert.deepEqual(woodOnlyRailingSections([sections[0]], { from: 4, to: 8 }, 14).map((s) => [s.id, s.fromStep, s.toStep]), [['a', 0, 3], ['a-b', 9, null]]);
 });
 
 test('a U wooden up to the turn, concrete from its first winder: wangi, posts and balustrade only on the wooden part; the concrete treads full width, not housed', () => {
@@ -164,4 +169,47 @@ test('regression (user, 2026-11-02): the wall under the concrete flight runs on 
   // no wall across → nothing carried on
   const open = buildStaircase(pasek({ concreteWallSide: 'inner', stairwellRoomEnabled: false }));
   assert.ok(open.concrete.walls.every((w) => !w.toWall));
+});
+
+test('a wall above the concrete flight (user request 2026-11-02, the flight cast between walls): full height, the treads and risers on the concrete end at its face — shorter by its thickness, not a manual edit; the wooden part keeps its housing', () => {
+  const base = uCfg({ concreteEnabled: true, hasRiserBoards: true, riserBoardThickness: 20 });
+  const plain = buildStaircase(base);
+  const walled = buildStaircase({ ...base, concreteWallSide: 'outer', concreteWallThicknessMm: 120, concreteWallAbove: true });
+  const k = walled.planLayout.concreteFromIndex;
+  for (const t of walled.treadModels) {
+    const before = plain.treadModels[t.index];
+    const d = len(before.frontEdge.final) - len(t.frontEdge.final);
+    if (t.onConcrete) {
+      if (t.type === 'straight') assert.ok(Math.abs(d - 120) < 1e-6, `tread ${t.index}: ${d}`);
+      assert.equal(t.frontEdge.overridden, false);
+    } else assert.ok(Math.abs(d) < 1e-6, `wooden tread ${t.index} unchanged`);
+  }
+  const walls = walled.concrete.walls;
+  assert.ok(walls.length > 0 && walls.filter((w) => !w.toWall).every((w) => w.above && w.topZ.every((z) => Math.abs(z - rawSlabTopZ(walled.fullConfig)) < 1e-6)), 'up to the floor above');
+  assert.ok(walls.every((w) => w.side === 'outer'));
+  assert.ok(runTakeoffValidationGate(walled).errors.every((d) => d.ruleId !== 'CONSTRAINT-TOPOLOGY-CONTINUITY'));
+  assert.ok(walled.treadModels[k].onConcrete);
+});
+
+test('the LOWER part on concrete (user request 2026-11-02): from the floor to the tread given, the wooden flight above standing on its last step; balustrade and posts on the wooden part only', () => {
+  const b = buildStaircase(uCfg({ concreteEnabled: true, concretePart: 'lower', concreteToTread: 4 }));
+  assert.deepEqual(b.planLayout.concreteRange, { from: 0, to: 3 });
+  assert.deepEqual(b.treadModels.filter((t) => t.onConcrete).map((t) => t.index), [0, 1, 2, 3]);
+  const h = b.derived.riserHeight;
+  for (const side of ['outer', 'inner']) {
+    const borne = b.stringerModels[side].segments.flatMap((s) => s.treadBearings.map((x) => x.treadIndex));
+    assert.ok(borne.length && borne.every((i) => i >= 4), side);
+    const first = b.stringerConstruction[side][0];
+    // the first board's foot stands on the top of the last concrete step, not on the floor
+    assert.ok(Math.abs(Math.min(...first.outerContour.map((p) => p.v)) - 4 * h) < 0.1, `${side} foot at ${Math.min(...first.outerContour.map((p) => p.v))}`);
+    // and no board of the wooden flight reaches below it
+    for (const g of b.stringerConstruction[side]) assert.ok(Math.min(...g.outerContour.map((p) => p.v)) > 4 * h - 0.1, `${side} ${g.segmentId}`);
+  }
+  assert.ok(!b.postModels.some((p) => p.postId === 'post-start'), 'no start newel down on the floor');
+  assert.ok(b.railingModel.sections.every((s) => s.fromStep >= 4));
+  const c = b.concrete;
+  assert.equal(c.part, 'lower');
+  assert.deepEqual([...new Set(c.blocks.map((x) => x.treadIndex))], [0, 1, 2, 3], 'no block into the slab: the flight goes on in wood');
+  assert.ok(c.blocks.filter((x) => x.treadIndex === 0).every((x) => x.bottomZ.every((z) => z === 0)), 'solid at the floor');
+  assert.ok(!runTakeoffValidationGate(b).errors.some((d) => ['CONSTRAINT-TOPOLOGY-CONTINUITY', 'VALIDATOR-MISSING-SURFACE'].includes(d.ruleId)));
 });

@@ -109,8 +109,8 @@ export function buildStaircase(rawConfig) {
   const fullConfig = metalConfig(cantileverConfig({ ...config, riserHeight: derived.riserHeight }));
   const planLayout = buildPlanLayout(fullConfig);
   // a part of the stair on a concrete flight (concreteStair.js): no balustrade there (user decision 2026-11-02)
-  if (planLayout.concreteFromIndex !== null && planLayout.concreteFromIndex !== undefined) {
-    fullConfig.railingSections = woodOnlyRailingSections(sanitizeRailingSections(fullConfig.railingSections), planLayout.concreteFromIndex);
+  if (planLayout.concreteRange) {
+    fullConfig.railingSections = woodOnlyRailingSections(sanitizeRailingSections(fullConfig.railingSections), planLayout.concreteRange, planLayout.treads.length - 1);
   }
   // the ceiling opening and the stairwell (they depend on the plan only): the balustrade round the opening stands on its
   // edges and leaves out the ones along the walls; where it ends at the stair's end newel that newel moves onto the slab

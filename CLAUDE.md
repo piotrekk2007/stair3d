@@ -383,14 +383,15 @@ and its profile in mb with the cut list + power supply — accessories). Folder 
 ## Concrete flight — `geometry/concreteStair.js`
 
 Docs: [CONCRETE_FLIGHT.md](docs/architecture/CONCRETE_FLIGHT.md) (user decisions 2026-11-02). `concreteEnabled` +
-`concreteFromTread` (plan number, null = flight A + 1) + `concreteSlabThicknessMm` (stringers only): `concreteFromIndex`
-is THE rule, `planLayout.js` marks those treads `onConcrete` — no housing recess (full width), no wanga bearings (the
+`concretePart` upper (`concreteFromTread`, null = flight A + 1, to the exit) / lower (floor to `concreteToTread`, wood
+above standing on its last step — `footZ`) + `concreteSlabThicknessMm` (stringers only): `concreteRange` is THE rule, `planLayout.js` marks those treads `onConcrete` — no housing recess (full width), no wanga bearings (the
 wangi end with a plumb cut at the concrete; the model's `lastTreadIndex` keeps them from being "the board at the slab"),
 no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnlyRailingSections`), skipped by the
 missing-support / continuity / structural checks. `buildConcreteModel` → `built.concrete` (a block per step under the
 tread, one smooth soffit at the slab's plumb thickness, never below the floor, a piece up to the slab's edge only where
 the opening runs on past the last step; optional walls under it `concreteWallSide` none / inner / outer / both, floor to
-soffit, carried back along their line under the concrete steps to the nearest wall across; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
+soffit, carried back along their line under the concrete steps to the nearest wall across; `concreteWallAbove` = the
+wall full height and the concrete treads end at its face — `concreteTreadRecessMm`; `volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
 
 ## Validation
 

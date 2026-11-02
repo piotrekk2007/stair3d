@@ -9,7 +9,7 @@
 // (edgeOverrides.js applyHousingRecess / treadSolver.js nominalEdgesOf) and the balustrade stops on the wooden part
 // (`woodOnlyRailingSections`).
 //
-// THE ONE RULE for "is this tread on concrete": `concreteFromIndex` (planLayout.js marks the treads `onConcrete`).
+// THE ONE RULE for "is this tread on concrete": `concreteRange` (planLayout.js marks the treads `onConcrete`).
 //
 // The concrete itself (`buildConcreteModel`): every concrete step a block under its tread — top at the tread's
 // underside, from its riser's back face (the front edge moved back by the riser board's thickness) to the next one's —
@@ -20,7 +20,11 @@
 // the last step — it used to be a 250 mm block hanging below the slab, user report 2026-11-02). Optionally a WALL under
 // the flight along its inner / outer edge (`concreteWallSide`), from the floor up to the soffit — carried on back along
 // its line, under the concrete steps, to the nearest wall across it (user report 2026-11-02: under the first concrete
-// winder it stopped short and the step hung over open space). Pure: no Three.js.
+// winder it stopped short and the step hung over open space). With `concreteWallAbove` that wall stands the full height
+// (the flight cast between walls) and the treads / risers on the concrete end at its face — shorter by its thickness
+// (`concreteTreadRecessMm`, applied like the housing recess). The concrete part is the UPPER one (`concreteFromTread` to
+// the exit) or the LOWER one (`concretePart: 'lower'`, from the floor to `concreteToTread`; the wooden flight above
+// stands on its last step — stringerSolver.js `footZ`). Pure: no Three.js.
 
 import { clipToConvex, polygonArea, pointInPolygon } from './polygonClip.js';
 import { rawSlabTopZ, slabSoffitZ } from './floors.js';
@@ -42,23 +46,51 @@ export function hasConcretePart(config) {
 }
 
 /**
- * The 0-based index of the first tread on concrete, or null (no concrete part). `concreteFromTread` is the plan's tread
- * NUMBER (1-based); null = the first tread of the first turn (flight A + 1), clamped to the stair.
+ * THE RULE: which treads lie on concrete — `{from, to}` (0-based, inclusive) or null. Tread NUMBERS (1-based, as the
+ * plan numbers them), clamped to the stair:
+ * - upper part (default): from `concreteFromTread` (null = the first tread of the first turn, flight A + 1) to the exit;
+ * - lower part (`concretePart: 'lower'`): from the floor to `concreteToTread` (null = the last tread of flight A).
  */
-export function concreteFromIndex(config, treadCount) {
+export function concreteRange(config, treadCount) {
   if (!hasConcretePart(config) || !(treadCount > 0)) return null;
-  const given = Number(config.concreteFromTread);
-  const number = Number.isFinite(given) && given >= 1 ? Math.round(given) : (Number(config.treadsLegA) || 0) + 1;
-  return Math.min(treadCount, Math.max(1, number)) - 1;
+  const legA = Number(config.treadsLegA) || 0;
+  const clamp = (n) => Math.min(treadCount, Math.max(1, n));
+  const numberOf = (v, fallback) => (Number.isFinite(Number(v)) && Number(v) >= 1 && v !== null && v !== '' ? Math.round(Number(v)) : fallback);
+  if (config.concretePart === 'lower') return { from: 0, to: clamp(numberOf(config.concreteToTread, Math.max(1, legA))) - 1 };
+  return { from: clamp(numberOf(config.concreteFromTread, legA + 1)) - 1, to: treadCount - 1 };
 }
 
-/** The balustrade sections cut back to the wooden part (no balustrade on the concrete — user decision 2026-11-02). */
-export function woodOnlyRailingSections(sections, fromIndex) {
-  if (fromIndex === null || fromIndex === undefined || !Array.isArray(sections)) return sections;
-  const lastWood = fromIndex - 1;
-  return sections
-    .filter((s) => s && Number.isInteger(s.fromStep) && s.fromStep <= lastWood)
-    .map((s) => ({ ...s, toStep: s.toStep === null || s.toStep === undefined ? lastWood : Math.min(s.toStep, lastWood) }));
+/** The 0-based index of the first tread on concrete, or null. */
+export function concreteFromIndex(config, treadCount) {
+  return concreteRange(config, treadCount)?.from ?? null;
+}
+
+/** The walls along the concrete part: the sides they stand on, their thickness, whether they rise above the flight. */
+export function concreteWalls(config) {
+  const side = CONCRETE_WALL_SIDES.includes(config?.concreteWallSide) ? config.concreteWallSide : 'none';
+  const sides = side === 'both' ? ['inner', 'outer'] : side === 'none' ? [] : [side];
+  const thickness = Number(config?.concreteWallThicknessMm) > 0 ? Number(config.concreteWallThicknessMm) : Number(config?.freeWallThicknessMm) > 0 ? Number(config.freeWallThicknessMm) : 120;
+  return { sides, thickness, above: sides.length > 0 && !!config?.concreteWallAbove };
+}
+
+/** How far a tread on the concrete is cut back from each line: a wall standing above the flight there takes its
+ *  thickness (user request 2026-11-02: "the treads only up to the wall"). {inner, outer} mm. */
+export function concreteTreadRecessMm(config) {
+  const { sides, thickness, above } = concreteWalls(config);
+  return { inner: above && sides.includes('inner') ? thickness : 0, outer: above && sides.includes('outer') ? thickness : 0 };
+}
+
+/** The balustrade sections cut to the wooden part(s) (no balustrade on the concrete — user decision 2026-11-02). */
+export function woodOnlyRailingSections(sections, range, lastIndex = Infinity) {
+  if (!range || !Array.isArray(sections)) return sections;
+  const out = [];
+  for (const s of sections) {
+    if (!s || !Number.isInteger(s.fromStep)) continue;
+    const toStep = s.toStep === null || s.toStep === undefined ? Infinity : s.toStep;
+    if (s.fromStep <= range.from - 1) out.push({ ...s, toStep: Math.min(toStep, range.from - 1) });
+    if (toStep >= range.to + 1 && range.to + 1 <= lastIndex) out.push({ ...s, id: s.fromStep <= range.from - 1 ? `${s.id}-b` : s.id, fromStep: Math.max(s.fromStep, range.to + 1), toStep: s.toStep ?? null });
+  }
+  return out;
 }
 
 // The half-plane on the side of `towards` of the line through a-b, as a big convex quad (for clipToConvex).
@@ -84,6 +116,16 @@ function shiftedEdge(edge, d, towards) {
 }
 
 const centroid = (poly) => ({ x: poly.reduce((s, p) => s + p.x, 0) / poly.length, y: poly.reduce((s, p) => s + p.y, 0) / poly.length });
+
+// The tread's footprint from line to line (its chains) — what the concrete fills and the walls stand on, before any
+// recess cut the tread itself back; the outline when the chains do not make one (a landing's empty inner chain).
+function fullFootprint(t) {
+  if (t.innerChain?.length > 1 && t.outerChain?.length > 1) {
+    const poly = [...t.innerChain, ...[...t.outerChain].reverse()].filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-6);
+    if (poly.length >= 3 && polygonArea(poly) > 1) return poly;
+  }
+  return t.outline;
+}
 
 // Signed distance of p from the line a-b, positive on the side of `towards`.
 function sideDistance(p, [a, b], towards) {
@@ -147,8 +189,9 @@ function band(p, q, w, inside) {
  */
 export function buildConcreteModel({ planLayout, treadModels, openingOutline = null, wallSegments = [] }, config) {
   const treads = planLayout?.treads || [];
-  const fromIndex = concreteFromIndex(config, treads.length);
-  if (fromIndex === null) return null;
+  const range = concreteRange(config, treads.length);
+  if (!range) return null;
+  const fromIndex = range.from;
   const rise = Number(config.riserHeight) || 0;
   const tt = Number(config.treadThickness) || 0;
   const rt = config.hasRiserBoards && Number(config.riserBoardThickness) > 0 ? Number(config.riserBoardThickness) : 0;
@@ -161,14 +204,14 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   const blocks = [];
   const walls = [];
   const soffitOf = new Map(); // tread index → its soffit height function
-  const wallSide = CONCRETE_WALL_SIDES.includes(config.concreteWallSide) ? config.concreteWallSide : 'none';
-  const wallSides = wallSide === 'both' ? ['inner', 'outer'] : wallSide === 'none' ? [] : [wallSide];
-  const wallThickness = Number(config.concreteWallThicknessMm) > 0 ? Number(config.concreteWallThicknessMm) : Number(config.freeWallThicknessMm) > 0 ? Number(config.freeWallThicknessMm) : 120;
+  const { sides: wallSides, thickness: wallThickness, above: wallAbove } = concreteWalls(config);
+  const wallTop = rawSlabTopZ(config); // a wall above the flight: up to the floor above
   const last = treads.length - 1;
-  for (let i = fromIndex; i <= last; i++) {
+  for (let i = fromIndex; i <= range.to; i++) {
     const t = treads[i];
     if (!t.frontEdge?.length || !t.backEdge?.length || !(t.outline?.length >= 3)) continue;
-    const inside = centroid(t.outline);
+    const foot = fullFootprint(t);
+    const inside = centroid(foot);
     // where this step begins (behind its riser) and ends (behind the next riser; the last one: at the back edge — the
     // top riser stands behind it, riserSolver.js)
     const begin = shiftedEdge(t.frontEdge, rt, inside);
@@ -183,25 +226,26 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
       return Math.max(0, topZ(i - 1) + (topZ(i) - topZ(i - 1)) * f - plumb);
     };
     soffitOf.set(i, soffitAt);
-    const pieces = [clipToConvex(t.outline, halfPlane(begin[0], begin[1], inside))];
+    const pieces = [clipToConvex(foot, halfPlane(begin[0], begin[1], inside))];
     // the strip of the next tread up to the next riser's back face carries this step's top too
     if (next && endShift > 0 && next.outline?.length >= 3) {
-      pieces.push(clipToConvex(next.outline, halfPlane(end[0], end[1], inside)));
+      pieces.push(clipToConvex(fullFootprint(next), halfPlane(end[0], end[1], inside)));
     }
     for (const outline of pieces) {
       if (outline.length < 3 || polygonArea(outline) < 1) continue;
       blocks.push({ treadIndex: i, outline, topZ: topZ(i), bottomZ: outline.map(soffitAt) });
     }
-    // the wall under the flight: along this tread's line(s), the wall's thickness into the stair, floor to soffit
+    // the wall along the flight: on this tread's line(s), the wall's thickness into the stair, from the floor to the
+    // soffit — or, standing above the flight too, to the floor above (the tread is then cut back to its face)
     for (const side of wallSides) {
       const chain = side === 'inner' ? t.innerChain : t.outerChain;
       for (let k = 1; k < (chain?.length || 0); k++) {
         if (Math.hypot(chain[k].x - chain[k - 1].x, chain[k].y - chain[k - 1].y) < 1) continue;
-        const outline = clipToConvex(t.outline, band(chain[k - 1], chain[k], wallThickness, inside));
+        const outline = clipToConvex(foot, band(chain[k - 1], chain[k], wallThickness, inside));
         if (outline.length < 3 || polygonArea(outline) < 1) continue;
-        const tops = outline.map(soffitAt);
+        const tops = wallAbove ? outline.map(() => wallTop) : outline.map(soffitAt);
         if (Math.max(...tops) < 1) continue;
-        walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0) });
+        walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), ...(wallAbove ? { above: true } : {}) });
       }
     }
   }
@@ -216,11 +260,12 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
     const back = unit(sub(p0, chain[k]));
     const reach = rayToSegments(p0, back, wallSegments, 1);
     if (!(reach > 1 && reach < WALL_REACH_MM)) continue;
-    const band0 = strip(p0, { x: p0.x + back.x * reach, y: p0.y + back.y * reach }, wallThickness, centroid(first.outline));
-    for (let i = fromIndex; i <= last; i++) {
+    const band0 = strip(p0, { x: p0.x + back.x * reach, y: p0.y + back.y * reach }, wallThickness, centroid(fullFootprint(first)));
+    for (let i = fromIndex; i <= range.to; i++) {
       const soffitAt = soffitOf.get(i);
       if (!soffitAt) continue;
-      const outline = clipToConvex(treads[i].outline, band0);
+      // (only under the steps: above, this line runs where the stair is walked on)
+      const outline = clipToConvex(fullFootprint(treads[i]), band0);
       if (outline.length < 3 || polygonArea(outline) < 1) continue;
       const tops = outline.map(soffitAt);
       if (Math.max(...tops) < 1) continue;
@@ -230,7 +275,7 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
 
   // past the last step, where the ceiling opening runs on: a piece at the floor up to the slab's edge, its soffit rising
   // to the slab's (none when the slab starts right behind the last step — the flight ends against its edge)
-  const lastTread = treads[last];
+  const lastTread = range.to === last ? treads[last] : null;
   if (lastTread?.backEdge?.length === 2 && lastTread.outline?.length >= 3 && openingOutline?.length >= 3) {
     const inside = centroid(lastTread.outline);
     const beyond = { x: 2 * lastTread.backEdge[0].x - inside.x, y: 2 * lastTread.backEdge[0].y - inside.y };
@@ -252,5 +297,5 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   // the volume (m³, information only): each block's area × its mean height
   const mean = (z) => (Array.isArray(z) ? z.reduce((x, v) => x + v, 0) / z.length : z);
   const volumeM3 = [...blocks, ...walls].reduce((s, b) => s + polygonArea(b.outline) * (mean(b.topZ) - mean(b.bottomZ)), 0) / 1e9;
-  return { fromIndex, fromTreadNo: fromIndex + 1, slabThicknessMm: slab, blocks, walls, volumeM3 };
+  return { fromIndex, fromTreadNo: fromIndex + 1, toIndex: range.to, toTreadNo: range.to + 1, part: range.from === 0 && range.to < last ? 'lower' : 'upper', slabThicknessMm: slab, blocks, walls, volumeM3 };
 }

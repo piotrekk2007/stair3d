@@ -1060,9 +1060,9 @@ function recheckSelfIntersection(geo) {
 // leave its `u` unchanged and can swing the boundary across the OTHER edge's own notch
 // pattern (a real, observed self-intersection). Trimming along the line's own true direction is
 // what "cut flush with the floor" actually means geometrically.
-function trimToFloor(a, b) {
-  const t = (0 - a.v) / (b.v - a.v);
-  return { u: a.u + (b.u - a.u) * t, v: 0 };
+function trimToFloor(a, b, floor = 0) {
+  const t = (floor - a.v) / (b.v - a.v);
+  return { u: a.u + (b.u - a.u) * t, v: floor };
 }
 
 // The very FIRST segment of a stringer run (the one starting at the bottom of the flight, no
@@ -1082,22 +1082,23 @@ function trimToFloor(a, b) {
 // is dropped (the profile's own first control point can be below it too, not just the
 // extrapolated boundary point) and the boundary becomes the crossing on the first edge that
 // rises through v=0. The curve is cut at that same u, so an arc near the floor stays an arc.
-function trimPolylineStartToFloor(polyline) {
-  if (polyline.length < 2 || polyline[0].v >= 0) return null;
+// (`floor`: the height the first board stands on — 0, or the top of a lower concrete part's last step)
+function trimPolylineStartToFloor(polyline, floor = 0) {
+  if (polyline.length < 2 || polyline[0].v >= floor) return null;
   let k = 1;
-  while (k < polyline.length && polyline[k].v < 0) k++;
+  while (k < polyline.length && polyline[k].v < floor) k++;
   if (k >= polyline.length) return null; // wholly below the floor — nothing sensible to cut
-  if (polyline[k].v === 0) return polyline.slice(k);
-  return [trimToFloor(polyline[k - 1], polyline[k]), ...polyline.slice(k)];
+  if (polyline[k].v === floor) return polyline.slice(k);
+  return [trimToFloor(polyline[k - 1], polyline[k], floor), ...polyline.slice(k)];
 }
 
-function clampFirstSegmentToFloor(orderedGeometries) {
+function clampFirstSegmentToFloor(orderedGeometries, floor = 0) {
   const first = orderedGeometries[0];
   if (!first || !first.bottomProfile || first.bottomProfile.length < 2) return;
   let changed = false;
   const oc = first.outerContour;
 
-  const trimmedBottom = trimPolylineStartToFloor(first.bottomProfile);
+  const trimmedBottom = trimPolylineStartToFloor(first.bottomProfile, floor);
   if (trimmedBottom) {
     // outerContour ends with the bottom edge, reversed (see buildGroupConstructionGeometry).
     oc.splice(oc.length - first.bottomProfile.length, first.bottomProfile.length, ...trimmedBottom.slice().reverse());
@@ -1106,7 +1107,7 @@ function clampFirstSegmentToFloor(orderedGeometries) {
     changed = true;
   }
 
-  const trimmedTop = first.topProfile ? trimPolylineStartToFloor(first.topProfile) : null;
+  const trimmedTop = first.topProfile ? trimPolylineStartToFloor(first.topProfile, floor) : null;
   if (trimmedTop) {
     // outerContour starts with the top edge for a closed board.
     oc.splice(0, first.topProfile.length, ...trimmedTop);
@@ -1124,8 +1125,8 @@ function clampFirstSegmentToFloor(orderedGeometries) {
     const startU = first.ends.start.u;
     const floorU = trimmedBottom[0].u;
     const topStartV = first.topProfile ? first.topProfile[0].v : oc[0].v;
-    if (floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS) oc.push({ u: startU, v: 0 });
-    first.ends.start = { ...first.ends.start, u: floorU > startU + GEOMETRY_EPS && topStartV > GEOMETRY_EPS ? startU : Math.min(floorU, trimmedTop ? trimmedTop[0].u : floorU), cut: 'FLOOR_HORIZONTAL', floorU };
+    if (floorU > startU + GEOMETRY_EPS && topStartV > floor + GEOMETRY_EPS) oc.push({ u: startU, v: floor });
+    first.ends.start = { ...first.ends.start, u: floorU > startU + GEOMETRY_EPS && topStartV > floor + GEOMETRY_EPS ? startU : Math.min(floorU, trimmedTop ? trimmedTop[0].u : floorU), cut: 'FLOOR_HORIZONTAL', floorU, ...(floor ? { floorZ: floor } : {}) };
   }
 
   if (changed) recheckSelfIntersection(first);
@@ -1193,7 +1194,18 @@ export function buildStringerConstructionGeometry(model, config) {
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));
   const ordered = model.segments.map((s) => bySegmentId.get(s.id));
-  clampFirstSegmentToFloor(ordered);
+  const footZ = Number(model.footZ) || 0;
+  clampFirstSegmentToFloor(ordered, footZ);
+  // Above a LOWER concrete part (concreteStair.js, stringerSolver.js footZ) the wooden flight stands on its last step:
+  // nothing of any board goes below its top (the short piece before a corner post, a board dipping under the post)
+  if (footZ > 0) {
+    for (const geo of ordered) {
+      if (!geo?.outerContour?.length || !geo.outerContour.some((p) => p.v < footZ - GEOMETRY_EPS)) continue;
+      geo.outerContour = cutRect(geo.outerContour, -1e7, 1e7, -1e7, footZ);
+      if (geo.bottomProfile) geo.bottomProfile = geo.bottomProfile.map((q) => (q.v < footZ ? { ...q, v: footZ } : q));
+      recheckSelfIntersection(geo);
+    }
+  }
   ordered.forEach(syncCurveStartsToPolylines);
   addButtHousings(model, ordered, butts);
   reportOutOfDateOverrides(ordered, profileOverrides, usedOverrideIds);

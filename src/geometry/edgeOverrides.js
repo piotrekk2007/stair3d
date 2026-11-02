@@ -1,4 +1,5 @@
 import { pointsEqual, signedPolygonArea, normalizeVector, cumulativeDistances, subPathPoints } from './pathUtils.js';
+import { concreteTreadRecessMm } from './concreteStair.js';
 import { CONSTRUCTION_TYPES, constructionTypeForSide, housingDepthMm } from './stringerModel.js';
 
 // Każda z (numTreads + 1) granic między stopniami jest adresowana "indeksem granicy":
@@ -432,13 +433,18 @@ export function recessedEdges(tread, depthMm) {
 // Ręczne wysunięcie (applyTreadOverhangs), jeśli jest, liczy się od już-wgłębionej krawędzi. Nigdy nie dotyka
 // innerChain/outerChain — wanga nie przesuwa się ani o milimetr tylko dlatego, że wyfrezowano w niej gniazdo.
 export function applyHousingRecess(treads, config) {
-  const recessMm = housingRecessMm(config);
-  if (recessMm.inner === 0 && recessMm.outer === 0) return treads;
+  const housed = housingRecessMm(config);
+  // a tread on the concrete flight (concreteStair.js) is housed in no wanga — but ends at the face of a wall standing
+  // above the flight there
+  const onConcrete = concreteTreadRecessMm(config);
+  const none = (r) => r.inner === 0 && r.outer === 0;
+  if (none(housed) && (none(onConcrete) || !treads.some((t) => t.onConcrete))) return treads;
 
   const result = treads.map(cloneTread);
   for (const tread of result) {
     if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
-    if (tread.onConcrete) continue; // on the concrete flight (concreteStair.js): no wanga to be housed in
+    const recessMm = tread.onConcrete ? onConcrete : housed;
+    if (none(recessMm)) continue;
 
     // Oba cofnięcia razem muszą się zmieścić w krawędzi stopnia.
     const edgeLen = (e) => Math.hypot(e[1].x - e[0].x, e[1].y - e[0].y);

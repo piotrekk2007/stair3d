@@ -140,10 +140,18 @@ export function createUI({
     set from(v) {
       config.concreteFromTread = v;
     },
+    get to() {
+      return config.concreteToTread ?? Math.max(1, Number(config.treadsLegA) || 0);
+    },
+    set to(v) {
+      config.concreteToTread = v;
+    },
   };
-  const concreteOn = live(stairFolder.add(config, 'concreteEnabled')).name('Górna część na biegu betonowym');
-  concreteOn.domElement.title = 'Od wskazanego stopnia do wyjścia schody leżą na wylanym biegu betonowym (okładziny na betonie); niżej — schody drewniane na wangach, wangi dochodzą do betonu. Tylko dla konstrukcji „Na wangach”.';
+  const concreteOn = live(stairFolder.add(config, 'concreteEnabled')).name('Część schodów na biegu betonowym');
+  concreteOn.domElement.title = 'Część schodów leży na wylanym biegu betonowym (okładziny na betonie); reszta — schody drewniane na wangach, wangi dochodzą do betonu (albo stoją na nim). Tylko dla konstrukcji „Na wangach”.';
+  const concretePart = live(stairFolder.add(config, 'concretePart', { 'górna (od stopnia do wyjścia)': 'upper', 'dolna (od posadzki do stopnia)': 'lower' })).name('Która część na betonie');
   const concreteFrom = live(stairFolder.add(concreteProxy, 'from', 1, 40, 1)).name('Beton od stopnia nr');
+  const concreteTo = live(stairFolder.add(concreteProxy, 'to', 1, 40, 1)).name('Beton do stopnia nr');
   const concreteSlab = live(stairFolder.add(config, 'concreteSlabThicknessMm', 80, 300, 5)).name('Grubość płyty betonowej [mm]');
   // a wall under the concrete flight along its edge, floor to soffit (concreteStair.js)
   const concreteWall = live(stairFolder.add(config, 'concreteWallSide', { 'brak': 'none', 'po stronie wewn. (duszy)': 'inner', 'po stronie zewn.': 'outer', 'po obu stronach': 'both' })).name('Ściana pod biegiem betonowym');
@@ -157,18 +165,23 @@ export function createUI({
     },
   };
   const concreteWallT = live(stairFolder.add(wallProxy, 't', 60, 400, 5)).name('Grubość ściany pod biegiem [mm]');
+  const concreteWallAbove = live(stairFolder.add(config, 'concreteWallAbove')).name('Ściana także nad biegiem (stopnie do ściany)');
+  concreteWallAbove.domElement.title = 'Bieg betonowy idzie między ścianami: ściana stoi na całą wysokość, a stopnie i podstopnie na betonie dochodzą tylko do niej (krótsze o jej grubość).';
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
-    concreteFrom.show(on).updateDisplay();
+    concretePart.show(on);
+    concreteFrom.show(on && config.concretePart !== 'lower').updateDisplay();
+    concreteTo.show(on && config.concretePart === 'lower').updateDisplay();
     concreteSlab.show(on);
     concreteWall.show(on);
     concreteWallT.show(on && (config.concreteWallSide || 'none') !== 'none').updateDisplay();
+    concreteWallAbove.show(on && (config.concreteWallSide || 'none') !== 'none');
   };
   syncConcrete();
   lockSyncs.push(syncConcrete);
   // (its rows appear / go as soon as the switch or the construction changes)
-  for (const c of [concreteOn, concreteWall, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
+  for (const c of [concreteOn, concretePart, concreteWall, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
     c.onChange((v) => {
       onChange(v);
       syncConcrete();

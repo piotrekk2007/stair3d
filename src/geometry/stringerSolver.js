@@ -319,7 +319,11 @@ export function buildStringerModel(planLayout, config, side) {
   // the stair's last tread — the board carrying it ends at the slab (stringerConstructionGeometry.js); a board ending at
   // the concrete flight does not
   const lastTreadIndex = planLayout.treads.length - 1;
-  return { side, segments, segmentJoints, topConnection, bottomConnection, intermediateSupports, material, manufacturing, lastTreadIndex };
+  // where the first board's foot stands: the floor, or — above a LOWER concrete part (concreteStair.js) — the top of
+  // its last step (that tread's top)
+  const below = planLayout.concreteRange;
+  const footZ = below && below.from === 0 && below.to < lastTreadIndex ? (below.to + 1) * riserHeight : 0;
+  return { side, segments, segmentJoints, topConnection, bottomConnection, intermediateSupports, material, manufacturing, lastTreadIndex, footZ };
 }
 
 export function buildStringerModelsForFlight(planLayout, config) {

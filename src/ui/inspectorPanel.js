@@ -3,6 +3,7 @@
 // już-rozwiązanych modeli (TreadModel/StringerModel/PostModel/Diagnostic) — nie liczy geometrii
 // (jedyna arytmetyka to różnica dwóch punktów modelu do wyświetlenia przesunięcia ręcznej edycji).
 import { stateBadgeHTML } from './valueState.js';
+import { concreteRangeText } from '../offer/offerModel.js';
 import { escapeHtml } from '../util/format.js';
 import { CONSTRUCTION_TYPE_LABELS_PL } from '../geometry/stringerModel.js';
 import { stepIndexFromElementId } from './selection.js';
@@ -311,8 +312,8 @@ function summaryHTML(ctx) {
   } else {
     rows.push(row('Typ wangi', outerType === innerType ? outerType : `${sideShort('outer', config)}: ${outerType} · ${sideShort('inner', config)}: ${innerType}`, 'user'));
   }
-  if (planLayout.concreteFromIndex !== null && planLayout.concreteFromIndex !== undefined) {
-    rows.push(row('Bieg betonowy', `od stopnia nr ${planLayout.concreteFromIndex + 1} (okładziny na betonie)`, 'user'));
+  if (planLayout.concreteRange) {
+    rows.push(row('Bieg betonowy', `${concreteRangeText(planLayout.concreteRange, planLayout.treads.length)} (okładziny na betonie)`, 'user'));
   }
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);

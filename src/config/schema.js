@@ -198,12 +198,17 @@ export function createDefaultConfig() {
     // wooden cladding on concrete steps — no wangi, posts or balustrade there; a slab with a smooth soffit
     // `concreteSlabThicknessMm` thick (ASSUMPTION). Only with stairConstruction 'stringers'.
     concreteEnabled: false,
+    // 'upper' (from concreteFromTread to the exit) | 'lower' (from the floor to concreteToTread, wood above it)
+    concretePart: 'upper',
     concreteFromTread: null,
+    concreteToTread: null,
     concreteSlabThicknessMm: 150,
     // a wall under the concrete flight along its edge, from the floor up to the soffit: 'none' | 'inner' | 'outer' |
     // 'both'; its thickness (null = freeWallThicknessMm)
     concreteWallSide: 'none',
     concreteWallThicknessMm: null,
+    // that wall stands above the flight too (cast between walls): full height, the treads end at its face
+    concreteWallAbove: false,
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

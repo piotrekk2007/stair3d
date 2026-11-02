@@ -10,20 +10,28 @@ takeoff.
 | field | meaning |
 | --- | --- |
 | `concreteEnabled` | the switch (only with `stairConstruction: 'stringers'`) |
+| `concretePart` | `upper` (from `concreteFromTread` to the exit) or `lower` (from the floor to `concreteToTread`, wood above — user request 2026-11-02) |
 | `concreteFromTread` | the first tread on concrete, its plan NUMBER (1-based); null = the first tread of the first turn (flight A + 1) |
+| `concreteToTread` | the lower part's last tread (1-based); null = the last tread of flight A |
 | `concreteSlabThicknessMm` | the slab's thickness square to the pitch (150, ASSUMPTION) |
 | `concreteWallSide` | a wall under the flight: `none` / `inner` / `outer` / `both` (user request 2026-11-02 — a stairwell wall runs up to the slab, this one only to the stair) |
 | `concreteWallThicknessMm` | its thickness (null = `freeWallThicknessMm`) |
+| `concreteWallAbove` | that wall stands ABOVE the flight too (cast between walls): full height to the floor above, the treads / risers on the concrete end at its face (user request 2026-11-02) |
 
 New optional fields — no project version bump.
 
 ## The one rule
 
-`concreteFromIndex(config, treadCount)` → the 0-based index or null. `planLayout.js` marks those treads `onConcrete`
-(and `planLayout.concreteFromIndex`); everything else reads the flag:
+`concreteRange(config, treadCount)` → `{from, to}` (0-based, inclusive) or null. `planLayout.js` marks those treads
+`onConcrete` (and `planLayout.concreteRange`, `concreteFromIndex`); everything else reads the flag:
 
 - `edgeOverrides.js applyHousingRecess` / `treadSolver.js nominalEdgesOf`: no housing recess — a concrete tread runs from
-  line to line (and is not reported as a manual edit); `TreadModel.onConcrete`.
+  line to line, or to the face of a wall standing above the flight (`concreteTreadRecessMm`: the wall's thickness on
+  that side, the same recess rule as a housed wanga, so not reported as a manual edit; risers follow the final front
+  edge); `TreadModel.onConcrete`.
+- A LOWER part: the wooden flight's wangi stand on its last step — `stringerSolver.js footZ` = that tread's top, the
+  first board's foot cut level there and nothing of any board below it (`stringerConstructionGeometry.js`; the short
+  piece before a corner post too). No start newel on the floor (it is not on a wooden line).
 - `stringerSolver.js buildRawWalks`: a concrete tread breaks the walk — the wangi carry the wooden treads only. The
   model carries the stair's `lastTreadIndex`, so the board ending at the concrete is NOT treated as the board ending at
   the slab (`stringerConstructionGeometry.js endsAtSlab`): it ends with the usual plumb cut at the concrete step's front.
@@ -31,8 +39,8 @@ New optional fields — no project version bump.
   (`splitWalkIntoRuns` — user report 2026-11-02: the empty board broke the profile editor for the inner wanga).
 - `postSolver.js`: only posts whose anchor lies on a wooden tread's line (a corner post of a concrete turn and the end
   newel are not made).
-- `buildStaircase.js`: the balustrade sections cut back to the wooden part (`woodOnlyRailingSections`); the opening's
-  balustrade is not affected.
+- `buildStaircase.js`: the balustrade sections cut to the wooden part(s) (`woodOnlyRailingSections` — a section across a
+  concrete part in the middle splits in two); the opening's balustrade is not affected.
 - Checks: `VALIDATOR-MISSING-SURFACE` skips concrete treads; `CONSTRAINT-TOPOLOGY-CONTINUITY` accepts the wood / concrete
   boundary when both edges lie on one line (the wooden one is shorter by the recess); the structural check skips
   concrete treads (they lie on the concrete over their whole area).
@@ -47,13 +55,15 @@ New optional fields — no project version bump.
 - The soffit: on the line where step i begins, step i−1's top less the slab's plumb thickness (`slab / cos(pitch)`); on
   the line where it ends, step i's top less it; between them by the distance to each line (a winder's soffit twists with
   it); never below the floor (a flight starting low is solid down to the floor).
-- Past the last step, only where the ceiling opening runs on beyond it: a piece at the floor (top = the raw slab's top)
+- Blocks and walls stand on each tread's footprint from line to line (its chains — `fullFootprint`), whatever the tread
+  itself is cut back to.
+- Past the last step (an upper part only), only where the ceiling opening runs on beyond it: a piece at the floor (top = the raw slab's top)
   up to the slab's edge (a ray from the back edge's middle to the opening's outline), its soffit rising to the slab's.
   None when the slab starts right behind the last step — it used to be a fixed 250 mm block whose soffit hung 190 mm
   below the slab like a third step (user report 2026-11-02).
 - Walls (`walls`): along the chosen side's chain line of every concrete tread, the wall's thickness into the stair
   (the tread's outline clipped by a band per chain segment), from the floor up to the soffit (one height per outline
-  point); a piece with no height (a step down at the floor) is dropped. From where the concrete begins the wall is
+  point; with `concreteWallAbove` up to the raw slab's top); a piece with no height (a step down at the floor) is dropped. From where the concrete begins the wall is
   CARRIED ON BACK along its line (the first concrete tread's chain, backwards) to the nearest wall across it
   (`wallSegments` = walls.js allWallSegments: the stairwell's and the drawn ones; within 20 m), under every concrete
   step that strip passes, up to that step's soffit (`toWall: true`; user report 2026-11-02 — under the first concrete

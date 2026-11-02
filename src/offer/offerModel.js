@@ -20,7 +20,7 @@
 // the project; the offer settings (client, number, amounts) are PROJECT data, saved in the project file.
 
 import { BLONDEL_RANGE_MM } from '../config/schema.js';
-import { concreteFromIndex } from '../geometry/concreteStair.js';
+import { concreteRange } from '../geometry/concreteStair.js';
 import { isHalfTurnU, halfTurnWinderCount } from '../geometry/winderArc.js';
 import { glassType } from '../geometry/railingGlass.js';
 import { round2 } from '../util/format.js';
@@ -136,6 +136,11 @@ const RAILING_INFILL_LABELS = {
 };
 const TYPE_LABELS = { straight: 'Proste (jednobiegowe)', L: 'Zabiegowe / kątowe L', U: 'Zabiegowe / kątowe U' };
 const CONSTRUCTION = { closed: 'wpuszczana', cut: 'nakładana' };
+// the concrete part's treads in words (geometry/concreteStair.js concreteRange)
+export function concreteRangeText({ from, to }, treadCount) {
+  if (from === 0 && to < treadCount - 1) return `od posadzki do stopnia nr ${to + 1}`;
+  return to >= treadCount - 1 ? `od stopnia nr ${from + 1} do wyjścia` : `stopnie nr ${from + 1}–${to + 1}`;
+}
 
 /**
  * The stair's basic data and comfort for the offer — read off the config and deriveStairData(); the limits quoted are
@@ -168,8 +173,8 @@ export function stairFacts(config, derived, extras = {}) {
           ? ['Konstrukcja', 'metalowa — stopnie drewniane na dwóch płaskownikach stalowych wycinanych w zęby']
           : ['Wangi', `${sideShort('outer', config)} ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, ${sideShort('inner', config)} ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
     // a part on a concrete flight (concreteStair.js)
-    concreteFromIndex(config, derived.numTreads) !== null
-      ? ['Bieg betonowy', `od stopnia nr ${concreteFromIndex(config, derived.numTreads) + 1} do wyjścia — stopnie drewniane (okładziny) na betonie`]
+    concreteRange(config, derived.numTreads)
+      ? ['Bieg betonowy', `${concreteRangeText(concreteRange(config, derived.numTreads), derived.numTreads)} — stopnie drewniane (okładziny) na betonie`]
       : null,
     ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,

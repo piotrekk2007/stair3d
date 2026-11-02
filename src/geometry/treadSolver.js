@@ -8,6 +8,7 @@
 // backEdge = tył stopnia (shared with the next tread).
 
 import { pointsEqual, normalizeVector } from './pathUtils.js';
+import { concreteTreadRecessMm } from './concreteStair.js';
 import { shiftFrontEdge } from './nosingUtils.js';
 import { computeWinderBlank } from './winderBlank.js';
 import { subtractConvex } from './polygonClip.js';
@@ -88,10 +89,8 @@ export function nominalEdgesOf(tread, config) {
   const front = [tread.innerChain[0], tread.outerChain[0]];
   const back = [tread.innerChain[tread.innerChain.length - 1], tread.outerChain[tread.outerChain.length - 1]];
   if (!config) return { front, back };
-  // (a tread on the concrete flight is not housed in a wanga — concreteStair.js)
-  if (tread.onConcrete) return { front, back };
-
-  const recessMm = housingRecessMm(config);
+  // (a tread on the concrete flight is not housed in a wanga, it ends at a wall standing above it — concreteStair.js)
+  const recessMm = tread.onConcrete ? concreteTreadRecessMm(config) : housingRecessMm(config);
   if (recessMm.inner === 0 && recessMm.outer === 0) return { front, back };
   return recessedEdges({ frontEdge: front, backEdge: back, innerChain: tread.innerChain, outerChain: tread.outerChain }, recessMm);
 }
