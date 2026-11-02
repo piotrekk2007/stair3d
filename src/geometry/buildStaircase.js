@@ -20,7 +20,7 @@ import { renderCantileverProfiles } from './cantileverRenderer.js';
 import { isMetal, metalConfig, buildMetalStructure } from './metalStructureModel.js';
 import { renderMetalStructure } from './metalStructureRenderer.js';
 import { buildConcreteModel, woodOnlyRailingSections } from './concreteStair.js';
-import { renderConcrete } from './concreteRenderer.js';
+import { renderConcrete, renderConcreteCapRails } from './concreteRenderer.js';
 import { checkStackedInnerStringers } from './stackedStringers.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
@@ -212,6 +212,9 @@ export function buildStaircase(rawConfig) {
   if (cantilever) root.add(renderCantileverProfiles(treadModels, steelMaterial));
   const concreteGroup = renderConcrete(concrete, concreteMaterial, concreteWallMaterial);
   if (concreteGroup) root.add(concreteGroup);
+  // the handrail on the low wall above it (the balustrade layer — railing material)
+  const capRailGroup = renderConcreteCapRails(concrete, railingMaterial);
+  if (capRailGroup) root.add(capRailGroup);
 
   if (riserModels.length) {
     root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));

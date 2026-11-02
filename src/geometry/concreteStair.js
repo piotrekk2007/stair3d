@@ -169,6 +169,24 @@ function strip(p, q, w, inside) {
   if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
   return [p, q, { x: q.x + n.x * w, y: q.y + n.y * w }, { x: p.x + n.x * w, y: p.y + n.y * w }];
 }
+// A 3D polyline with the points lying on a straight line between their neighbours left out (within 0.5 mm) — one
+// handrail piece per straight stretch.
+function straightPieces(points) {
+  const out = [points[0]];
+  for (let k = 1; k < points.length - 1; k++) {
+    const a = out[out.length - 1];
+    const b = points[k];
+    const c = points[k + 1];
+    const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const ac = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+    const l = Math.hypot(ac.x, ac.y, ac.z);
+    const cross = Math.hypot(ab.y * ac.z - ab.z * ac.y, ab.z * ac.x - ab.x * ac.z, ab.x * ac.y - ab.y * ac.x);
+    if (!(l > 0) || cross / l > 0.5) out.push(b);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
 // how far back a wall under the flight is carried to find a wall across it (mm)
 const WALL_REACH_MM = 20000;
 
@@ -209,7 +227,17 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   const blocks = [];
   const walls = [];
   const soffitOf = new Map(); // tread index → its soffit height function
+  // the handrail lying on a low wall above the flight (user request 2026-11-02): one run per side per stretch of the
+  // wall — along its middle, at its top; broken where the wall is not low (a landing, reaching the floor above)
+  const capRails = [];
+  const railRun = { inner: null, outer: null };
+  const closeRail = (side) => {
+    const run = railRun[side];
+    if (run && run.points.length >= 2) capRails.push({ ...run, points: straightPieces(run.points) });
+    railRun[side] = null;
+  };
   const { sides: wallSides, thickness: wallThickness, above: wallAbove, aboveHeightMm } = concreteWalls(config);
+  const railOnWall = config.concreteWallHandrail !== false;
   const wallTop = rawSlabTopZ(config); // a wall above the flight: up to the floor above
   const last = treads.length - 1;
   for (let i = fromIndex; i <= range.to; i++) {
@@ -232,8 +260,9 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
     };
     const soffitAt = (p) => Math.max(0, topZ(i - 1) + (topZ(i) - topZ(i - 1)) * along(p) - plumb);
     // a wall above the flight: up to the floor above, or its height above the nose line (this tread's top at its front,
-    // the next one's at its back)
-    const aboveAt = (p) => (aboveHeightMm ? Math.min(wallTop, (i + 1 + along(p)) * rise + aboveHeightMm) : wallTop);
+    // the next one's at its back) — a low wall runs on parallel to the flight up to the exit, past the floor's level like
+    // a balustrade (it was cut at the floor's level, so the top treads had no wall for the handrail to lie on)
+    const aboveAt = (p) => (aboveHeightMm ? (i + 1 + along(p)) * rise + aboveHeightMm : wallTop);
     soffitOf.set(i, soffitAt);
     const pieces = [clipToConvex(foot, halfPlane(begin[0], begin[1], inside))];
     // the strip of the next tread up to the next riser's back face carries this step's top too
@@ -258,8 +287,29 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
         if (Math.max(...tops) < 1) continue;
         walls.push({ treadIndex: i, side, outline, topZ: tops, bottomZ: outline.map(() => 0), ...(aboveHere ? { above: true } : {}) });
       }
+      // its handrail: along the wall's middle (half its thickness in from the line), on its top
+      if (!(railOnWall && wallAbove && aboveHeightMm && t.type !== 'landing')) {
+        closeRail(side);
+        continue;
+      }
+      for (let k = 1; k < (chain?.length || 0); k++) {
+        const p = chain[k - 1];
+        const q = chain[k];
+        if (Math.hypot(q.x - p.x, q.y - p.y) < 1) continue;
+        const d = unit(sub(q, p));
+        let n = { x: -d.y, y: d.x };
+        if (dot(sub(inside, p), n) < 0) n = { x: -n.x, y: -n.y };
+        for (const c of [p, q]) {
+          const at = { x: c.x + (n.x * wallThickness) / 2, y: c.y + (n.y * wallThickness) / 2 };
+          const z = aboveAt(at);
+          const run = railRun[side] || (railRun[side] = { side, points: [] });
+          const prev = run.points[run.points.length - 1];
+          if (!prev || Math.hypot(at.x - prev.x, at.y - prev.y) > 1) run.points.push({ ...at, z });
+        }
+      }
     }
   }
+  for (const side of ['inner', 'outer']) closeRail(side);
   // ...carried on along its line wherever that line breaks off — back from where the concrete begins, and through a
   // landing that has no line on that side (a U's big landing between flights A and C: user report 2026-11-02, "the wall
   // under the landing to its end") — to the nearest wall across it: under every concrete step it passes, up to that
@@ -320,5 +370,6 @@ export function buildConcreteModel({ planLayout, treadModels, openingOutline = n
   // the volume (m³, information only): each block's area × its mean height
   const mean = (z) => (Array.isArray(z) ? z.reduce((x, v) => x + v, 0) / z.length : z);
   const volumeM3 = [...blocks, ...walls].reduce((s, b) => s + polygonArea(b.outline) * (mean(b.topZ) - mean(b.bottomZ)), 0) / 1e9;
-  return { fromIndex, fromTreadNo: fromIndex + 1, toIndex: range.to, toTreadNo: range.to + 1, part: range.from === 0 && range.to < last ? 'lower' : 'upper', slabThicknessMm: slab, blocks, walls, volumeM3 };
+  return { fromIndex, fromTreadNo: fromIndex + 1, toIndex: range.to, toTreadNo: range.to + 1, part: range.from === 0 && range.to < last ? 'lower' : 'upper', slabThicknessMm: slab, blocks, walls, volumeM3,
+    capRails: capRails.map((r) => ({ ...r, widthMm: Number(config.railingHandrailWidthMm) || 40, heightMm: Number(config.railingHandrailHeightMm) || 60, shape: config.railingHandrailShape === 'round' ? 'round' : 'rect' })) };
 }

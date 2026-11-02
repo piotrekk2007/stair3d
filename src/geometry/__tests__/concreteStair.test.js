@@ -281,9 +281,30 @@ test('a wall above the concrete flight (user report 2026-11-02): not above a lan
   const h = low.derived.riserHeight;
   for (const w of low.concrete.walls.filter((x) => x.above)) {
     const nose = (w.treadIndex + 1) * h;
-    const cap = rawSlabTopZ(low.fullConfig);
-    assert.ok(w.topZ.every((z) => z >= Math.min(cap, nose + 300) - 1e-6 && z <= Math.min(cap, nose + h + 300) + 1e-6), `tread ${w.treadIndex}: ${w.topZ.map(Math.round)} vs ${nose + 300}`);
-    assert.ok(w.topZ.some((z) => z < cap - 1) || nose + 300 >= cap, `tread ${w.treadIndex} lower than the full wall`);
+    // (parallel to the flight up to the exit — not cut at the floor's level)
+    assert.ok(w.topZ.every((z) => z >= nose + 300 - 1e-6 && z <= nose + h + 300 + 1e-6), `tread ${w.treadIndex}: ${w.topZ.map(Math.round)} vs ${nose + 300}`);
   }
   assert.ok(b.concrete.walls.filter((x) => x.above).every((w) => w.topZ.every((z) => Math.abs(z - rawSlabTopZ(b.fullConfig)) < 1e-6)), '0 = up to the floor above');
+});
+
+test('a handrail on the low wall above the concrete flight (user request 2026-11-02): along the wall’s middle, on its top, one piece per straight stretch, up to the exit; priced as a handrail; off without a height or when switched off', async () => {
+  const { computeMaterialTakeoff } = await import('../../takeoff/materialTakeoff.js');
+  const cfg = uCfg({ concreteEnabled: true, concreteWallSide: 'inner', concreteWallThicknessMm: 120, concreteWallAbove: true, concreteWallAboveHeightMm: 850 });
+  const b = buildStaircase(cfg);
+  const rails = b.concrete.capRails;
+  assert.ok(rails.length > 0 && rails.every((r) => r.side === 'inner' && r.points.length >= 2));
+  const h = b.derived.riserHeight;
+  // on the wall's top: 850 above the nose line where the wall is
+  for (const r of rails) {
+    for (const p of r.points) assert.ok(p.z > 850 && p.z <= (b.treadModels.length + 1) * h + 850 + 1, `${p.z}`);
+  }
+  // the last straight flight (C) is ONE piece reaching the last tread's top + 850 at its end
+  const last = rails[rails.length - 1].points;
+  assert.ok(Math.abs(last[last.length - 1].z - (b.treadModels.length + 1) * h - 850) < 1, 'up to the exit');
+  const items = computeMaterialTakeoff(b, b.fullConfig).filter((i) => i.itemId.startsWith('wallcap'));
+  assert.equal(items.length, rails.reduce((n, r) => n + r.points.length - 1, 0));
+  assert.ok(items.every((i) => i.elementType === 'HANDRAIL' && i.materialId === 'railing-handrail'));
+  assert.ok(b.root.getObjectByName('WallCapRail-inner-0-0'));
+  assert.deepEqual(buildStaircase({ ...cfg, concreteWallAboveHeightMm: 0 }).concrete.capRails, [], 'a wall up to the floor above: no rail on it');
+  assert.deepEqual(buildStaircase({ ...cfg, concreteWallHandrail: false }).concrete.capRails, []);
 });

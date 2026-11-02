@@ -17,7 +17,8 @@ takeoff.
 | `concreteWallSide` | a wall under the flight: `none` / `inner` / `outer` / `both` (user request 2026-11-02 — a stairwell wall runs up to the slab, this one only to the stair) |
 | `concreteWallThicknessMm` | its thickness (null = `freeWallThicknessMm`) |
 | `concreteWallAbove` | that wall stands ABOVE the flight too (cast between walls): the treads / risers on the concrete end at its face (user request 2026-11-02); never above a landing (it closed the way onto it — the landing is not cut back, the wall stands only under it) |
-| `concreteWallAboveHeightMm` | its height above the nose line, parallel to the flight (a low wall for a handrail on it); 0 = up to the floor above |
+| `concreteWallAboveHeightMm` | its height above the nose line, parallel to the flight up to the exit (a low wall, past the floor's level like a balustrade); 0 = up to the floor above |
+| `concreteWallHandrail` | a handrail lying on that low wall (default on; only with a height) |
 
 New optional fields — no project version bump.
 
@@ -83,3 +84,12 @@ New optional fields — no project version bump.
   the concrete part; ticked with no side chosen it puts the wall on the outer side.
 - Inspektor summary and the offer's facts: „Bieg betonowy: od stopnia nr …”.
 - Takeoff / DXF / labels: the concrete is not there; the cladding treads are ordinary treads (no housing).
+
+## Handrail on the low wall (user request 2026-11-02)
+
+`capRails` (`buildConcreteModel`): per side, along the low wall's middle (the chain line moved half the wall's thickness
+into the stair), its points at the wall's top (nose line + height); broken where there is no low wall (a landing, a
+tread off the concrete); collinear points dropped (`straightPieces`) — one piece per straight stretch, the section of the
+balustrade's handrail (`railingHandrail*`). Read by `concreteRenderer.js renderConcreteCapRails` (a box per piece, the
+railing material, the root's `Railing` layer), the plan (a brown line) and the takeoff (`railingItems.js
+buildWallCapRailItems`: a HANDRAIL item per piece, `railing-handrail`, priced per metre — part codes PR).

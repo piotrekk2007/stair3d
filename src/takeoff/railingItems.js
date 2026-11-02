@@ -228,6 +228,47 @@ function wallBracketItems(section, config) {
   ];
 }
 
+/**
+ * The handrail lying on the low wall above a concrete flight (geometry/concreteStair.js capRails): one item per straight
+ * piece, like the balustrade's handrail (same material, priced per metre).
+ */
+export function buildWallCapRailItems(concrete, config, wasteFactors = {}) {
+  const items = [];
+  (concrete?.capRails || []).forEach((run, r) => {
+    const { widthMm, heightMm, shape } = run;
+    for (let k = 1; k < run.points.length; k++) {
+      const a = run.points[k - 1];
+      const b = run.points[k];
+      const lengthMm = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+      if (!(lengthMm > 1)) continue;
+      const volume = sectionArea(shape, widthMm, heightMm) * lengthMm * MM3_TO_M3;
+      items.push(
+        createTakeoffItem({
+          itemId: `wallcap-${run.side}-${r}-handrail-${k - 1}`,
+          elementType: ELEMENT_TYPES.HANDRAIL,
+          sourceElementId: `wallcap:${run.side}:${r}:${k - 1}`,
+          material: 'Poręcz',
+          materialId: RAILING_HANDRAIL_MATERIAL_ID,
+          quantity: 1,
+          unit: 'szt',
+          nominalDimensions: { lengthMm, widthMm, heightMm, shape },
+          calculatedDimensions: { lengthMm, widthMm, heightMm, shape },
+          catalogStock: null,
+          netVolume: volume,
+          netArea: 0,
+          stockVolume: volume,
+          stockArea: 0,
+          wasteFactor: wasteFactorFor(ELEMENT_TYPES.HANDRAIL, RAILING_HANDRAIL_MATERIAL_ID, wasteFactors),
+          optional: true,
+          status: TAKEOFF_ITEM_STATUS.OK,
+          notes: [`Poręcz na murku nad biegiem betonowym (${sideLabel(run.side, config)}), odcinek ${k} — prosty element o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm, leży na murku.`],
+        })
+      );
+    }
+  });
+  return items;
+}
+
 export function buildRailingItems(railingModel, config, wasteFactors = {}) {
   if (!railingModel || !railingModel.enabled) return [];
   return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors), ...glassItems(s, config, wasteFactors), ...wallBracketItems(s, config)]);

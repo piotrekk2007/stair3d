@@ -43,6 +43,39 @@ function blockGeometry({ outline, topZ, bottomZ }) {
   return g;
 }
 
+// One straight piece of the handrail on a low wall: its section (w × h, bottom on the wall's top) along a → b.
+function railPiece(a, b, w, h, material) {
+  const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  const geo = new THREE.BoxGeometry(len, h, w);
+  const mesh = new THREE.Mesh(geo, material);
+  const A = new THREE.Vector3(a.x, a.z + h / 2, -a.y);
+  const B = new THREE.Vector3(b.x, b.z + h / 2, -b.y);
+  mesh.position.copy(A).add(B).multiplyScalar(0.5);
+  // the box's x along the piece, kept upright (its y up as far as the slope allows)
+  const xAxis = B.clone().sub(A).normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, new THREE.Vector3(0, 1, 0)).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/** The handrail lying on the low wall above the concrete flight (concreteStair.js capRails) — its own group. */
+export function renderConcreteCapRails(concrete, material) {
+  if (!concrete?.capRails?.length) return null;
+  const group = new THREE.Group();
+  group.name = 'Railing';
+  concrete.capRails.forEach((run, r) => {
+    for (let k = 1; k < run.points.length; k++) {
+      const mesh = railPiece(run.points[k - 1], run.points[k], run.widthMm, run.heightMm, material);
+      mesh.name = `WallCapRail-${run.side}-${r}-${k - 1}`;
+      group.add(mesh);
+    }
+  });
+  return group;
+}
+
 /** @returns {THREE.Group|null} the layer "Concrete" (the flight and the walls under it) */
 export function renderConcrete(concrete, material, wallMaterial = material) {
   if (!concrete?.blocks?.length) return null;
