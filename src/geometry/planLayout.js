@@ -1,6 +1,7 @@
 import { cumulativeDistances, pointAtDistance, subPathPoints, pointsEqual, goesStraightThrough, normalizeVector } from './pathUtils.js';
 import { applyManualEdgeOverrides, applyHousingRecess, applyTreadOverhangs, edgeLayoutKey } from './edgeOverrides.js';
 import { applyStarterSteps } from './starterSteps.js';
+import { concreteFromIndex } from './concreteStair.js';
 import { arcWinderGeometry, landingArcPoints, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCount, halfTurnInnerGap, halfTurnWinderGeometry, fittingHalfTurnOffset } from './winderArc.js';
 
 // Buduje płaski (2D, mm) układ schodów: granicę zewnętrzną, wewnętrzną i zarysy stopni.
@@ -42,6 +43,11 @@ export function buildPlanLayout(config) {
     else layout.treads = applyManualEdgeOverrides(layout.treads, edits, status, { innerPath: layout.innerFullPath, outerPath: layout.outerFullPath });
   }
   layout.edgeOverrideStatus = status;
+  // A part of the stair on a concrete flight (concreteStair.js): its treads are marked here, once — no wanga carries
+  // them (no housing recess below, no bearings, no posts on their lines)
+  const concreteFrom = concreteFromIndex(config, layout.treads.length);
+  layout.concreteFromIndex = concreteFrom;
+  if (concreteFrom !== null) layout.treads = layout.treads.map((t) => (t.index >= concreteFrom ? { ...t, onConcrete: true } : t));
   // Automatyczne wgłębienie po stronie wpuszczanej — konsekwencja typu konstrukcji wangi, nie
   // ręczna edycja, więc stosowane zawsze, PO ręcznym przesunięciu wspólnego rogu (edytowany róg to
   // "prawdziwa" krawędź, którą dopiero wgłębiamy) i PRZED ewentualnym ręcznym wysunięciem stopnia

@@ -41,7 +41,8 @@ function buildRawWalks(treads, chainKey) {
   let current = null;
   for (const tread of treads) {
     const chain = tread[chainKey];
-    if (!chain || chain.length < 2) {
+    // a tread on the concrete flight (concreteStair.js) has no wanga: the walk — and the board — ends before it
+    if (!chain || chain.length < 2 || tread.onConcrete) {
       current = null;
       continue;
     }
@@ -313,7 +314,10 @@ export function buildStringerModel(planLayout, config, side) {
     tenonLength: MIN_NEWEL_TENON_LENGTH_MM,
   };
 
-  return { side, segments, segmentJoints, topConnection, bottomConnection, intermediateSupports, material, manufacturing };
+  // the stair's last tread — the board carrying it ends at the slab (stringerConstructionGeometry.js); a board ending at
+  // the concrete flight does not
+  const lastTreadIndex = planLayout.treads.length - 1;
+  return { side, segments, segmentJoints, topConnection, bottomConnection, intermediateSupports, material, manufacturing, lastTreadIndex };
 }
 
 export function buildStringerModelsForFlight(planLayout, config) {

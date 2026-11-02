@@ -438,6 +438,7 @@ export function applyHousingRecess(treads, config) {
   const result = treads.map(cloneTread);
   for (const tread of result) {
     if (!tread.frontEdge?.length || !tread.backEdge?.length) continue; // np. podest bez jednej strony
+    if (tread.onConcrete) continue; // on the concrete flight (concreteStair.js): no wanga to be housed in
 
     // Oba cofnięcia razem muszą się zmieścić w krawędzi stopnia.
     const edgeLen = (e) => Math.hypot(e[1].x - e[0].x, e[1].y - e[0].y);

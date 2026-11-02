@@ -88,6 +88,8 @@ export function nominalEdgesOf(tread, config) {
   const front = [tread.innerChain[0], tread.outerChain[0]];
   const back = [tread.innerChain[tread.innerChain.length - 1], tread.outerChain[tread.outerChain.length - 1]];
   if (!config) return { front, back };
+  // (a tread on the concrete flight is not housed in a wanga — concreteStair.js)
+  if (tread.onConcrete) return { front, back };
 
   const recessMm = housingRecessMm(config);
   if (recessMm.inner === 0 && recessMm.outer === 0) return { front, back };
@@ -233,6 +235,8 @@ export function buildTreadModel(tread, config) {
     winderInfo: tread.winderInfo || null,
     winderBlank: tread.type === 'winder' ? computeWinderBlank(tread, nosing) : null,
     overhang: tread.overhang ?? null,
+    // lies on the concrete flight (concreteStair.js): a cladding tread, no wanga under it
+    ...(tread.onConcrete ? { onConcrete: true } : {}),
     // a starter step (starterSteps.js): its outline is final (nosing included), no riser groove
     starter: tread.starter ? { ...tread.starter } : null,
     ...(() => {

@@ -103,6 +103,11 @@ export function checkTreads(treadModels, config) {
       skipped.push({ stepId: t.stepId, reason: 'stopień wspornikowy — nośność daje profil stalowy w ścianie (nie sprawdzany)' });
       continue;
     }
+    // a cladding tread on the concrete flight (concreteStair.js) lies on the concrete over its whole area
+    if (t.onConcrete) {
+      skipped.push({ stepId: t.stepId, reason: 'stopień na biegu betonowym — leży na betonie całą powierzchnią (nie sprawdzany)' });
+      continue;
+    }
     // a tread on a steel beam's support plate(s) is not a beam between two stringers either (metalStructureModel.js)
     if (config.stairConstruction === 'metal-profile') {
       skipped.push({ stepId: t.stepId, reason: 'stopień na podporach belki stalowej — nie jest belką między wangami (nie sprawdzany)' });

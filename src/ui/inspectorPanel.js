@@ -311,6 +311,9 @@ function summaryHTML(ctx) {
   } else {
     rows.push(row('Typ wangi', outerType === innerType ? outerType : `${sideShort('outer', config)}: ${outerType} · ${sideShort('inner', config)}: ${innerType}`, 'user'));
   }
+  if (planLayout.concreteFromIndex !== null && planLayout.concreteFromIndex !== undefined) {
+    rows.push(row('Bieg betonowy', `od stopnia nr ${planLayout.concreteFromIndex + 1} (okładziny na betonie)`, 'user'));
+  }
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);
   return rows.join('');

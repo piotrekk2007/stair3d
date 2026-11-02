@@ -132,6 +132,34 @@ export function createUI({
   const stairTypeCtrl = live(stairFolder.add(config, 'stairType', ['straight', 'L', 'U', 'S'])).name('Typ schodów');
   live(stairFolder.add(config, 'turnDirection', ['right', 'left'])).name('Kierunek skrętu (S: pierwszego)');
   live(stairFolder.add(config, 'stairConstruction', { 'Na wangach': 'stringers', 'Wspornikowe (profile w ścianie)': 'cantilever', 'Metalowa: wanga na profilu': 'metal-profile', 'Metalowa: płaskowniki w zęby': 'metal-flat' })).name('Konstrukcja schodów');
+  // part of the stair on a concrete flight (geometry/concreteStair.js): from tread no. … up, cladding on concrete
+  const concreteProxy = {
+    get from() {
+      return config.concreteFromTread ?? (Number(config.treadsLegA) || 0) + 1;
+    },
+    set from(v) {
+      config.concreteFromTread = v;
+    },
+  };
+  const concreteOn = live(stairFolder.add(config, 'concreteEnabled')).name('Górna część na biegu betonowym');
+  concreteOn.domElement.title = 'Od wskazanego stopnia do wyjścia schody leżą na wylanym biegu betonowym (okładziny na betonie); niżej — schody drewniane na wangach, wangi dochodzą do betonu. Tylko dla konstrukcji „Na wangach”.';
+  const concreteFrom = live(stairFolder.add(concreteProxy, 'from', 1, 40, 1)).name('Beton od stopnia nr');
+  const concreteSlab = live(stairFolder.add(config, 'concreteSlabThicknessMm', 80, 300, 5)).name('Grubość płyty betonowej [mm]');
+  const syncConcrete = () => {
+    const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
+    concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
+    concreteFrom.show(on).updateDisplay();
+    concreteSlab.show(on);
+  };
+  syncConcrete();
+  lockSyncs.push(syncConcrete);
+  // (its rows appear / go as soon as the switch or the construction changes)
+  for (const c of [concreteOn, stairFolder.controllers.find((c) => c.property === 'stairConstruction')]) {
+    c.onChange((v) => {
+      onChange(v);
+      syncConcrete();
+    });
+  }
 
 
   const building = gui.addFolder('2. Budynek');

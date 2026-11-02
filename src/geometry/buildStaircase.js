@@ -10,7 +10,7 @@ import { renderStringers } from './stringerRenderer.js';
 import { buildPostModels, buildAllPostModels, raisePostsToHandrail } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
-import { buildRailingModel, endNewelOntoSlab } from './railingSolver.js';
+import { buildRailingModel, endNewelOntoSlab, sanitizeRailingSections } from './railingSolver.js';
 import { renderRailing } from './railingRenderer.js';
 import { buildOpeningTrim, withTrimHoles } from './openingTrimModel.js';
 import { renderOpeningTrim } from './openingTrimRenderer.js';
@@ -19,6 +19,8 @@ import { isCantilever, cantileverConfig, buildCantileverBox } from './cantilever
 import { renderCantileverProfiles } from './cantileverRenderer.js';
 import { isMetal, metalConfig, buildMetalStructure } from './metalStructureModel.js';
 import { renderMetalStructure } from './metalStructureRenderer.js';
+import { buildConcreteModel, woodOnlyRailingSections } from './concreteStair.js';
+import { renderConcrete } from './concreteRenderer.js';
 import { checkStackedInnerStringers } from './stackedStringers.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { evaluateRailingChecks } from '../validator/railingChecks.js';
@@ -61,6 +63,8 @@ const metalStructureMaterial = new THREE.MeshStandardMaterial({ color: 0x565b61,
 const ledMaterial = new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffc23a, emissiveIntensity: 2.2, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
 // its glow on the wood round the groove (a soft additive band — presentation only)
 const ledGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xffb43c, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+// the concrete flight under part of the stair (concreteStair.js)
+const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b1aa, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -102,6 +106,10 @@ export function buildStaircase(rawConfig) {
   const noWangi = cantilever || metal;
   const fullConfig = metalConfig(cantileverConfig({ ...config, riserHeight: derived.riserHeight }));
   const planLayout = buildPlanLayout(fullConfig);
+  // a part of the stair on a concrete flight (concreteStair.js): no balustrade there (user decision 2026-11-02)
+  if (planLayout.concreteFromIndex !== null && planLayout.concreteFromIndex !== undefined) {
+    fullConfig.railingSections = woodOnlyRailingSections(sanitizeRailingSections(fullConfig.railingSections), planLayout.concreteFromIndex);
+  }
   // the ceiling opening and the stairwell (they depend on the plan only): the balustrade round the opening stands on its
   // edges and leaves out the ones along the walls; where it ends at the stair's end newel that newel moves onto the slab
   // (railingSolver.js endNewelOntoSlab) — decided before the posts and wangi are built, both read it from the config
@@ -137,6 +145,8 @@ export function buildStaircase(rawConfig) {
     }
   }
   const riserModels = buildRiserModels(planLayout, fullConfig);
+  // the concrete flight the upper treads lie on (concreteStair.js) — shown, not priced
+  const concrete = buildConcreteModel({ planLayout, treadModels }, fullConfig);
   const metalStructure = metal ? buildMetalStructure({ planLayout, treadModels }, fullConfig) : null;
   // A cantilever or metal stair has no wangi and no structural posts: empty models, so nothing downstream (render,
   // joints, takeoff, validation, the structural check) sees a board or a post that does not exist.
@@ -198,6 +208,8 @@ export function buildStaircase(rawConfig) {
   const postsGroup = renderPosts(postModels, postMaterial, joints.pocketsByPost);
   root.add(postsGroup);
   if (cantilever) root.add(renderCantileverProfiles(treadModels, steelMaterial));
+  const concreteGroup = renderConcrete(concrete, concreteMaterial);
+  if (concreteGroup) root.add(concreteGroup);
 
   if (riserModels.length) {
     root.add(renderRisers(riserModels, riserBoardMaterial, joints.riserCuts));
@@ -253,5 +265,5 @@ export function buildStaircase(rawConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, referenceMesh, reference, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure };
+  return { root, ceilingMesh, wallsMesh, referenceMesh, reference, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure, concrete };
 }

@@ -645,7 +645,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, reference = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, concrete = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, reference = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -698,7 +698,12 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
       return `<polygon class="metal-footprint" data-metal-id="${m.id}" points="${polygonPoints(corners)}" fill="#5f6368" fill-opacity="0.35" stroke="#33373b" stroke-width="1" stroke-dasharray="6,3" pointer-events="none" ${HAIR}/>`;
     })
     .join('');
-  const stringersXML = layers.stringers === false ? '' : stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath) + metalXML;
+  // The concrete flight (concreteStair.js): its steps' footprint, grey, under the treads.
+  const concreteXML = (concrete?.blocks || [])
+    .filter((b) => b.treadIndex !== null)
+    .map((b) => `<polygon class="concrete-footprint" points="${polygonPoints(b.outline)}" fill="#9e9a92" fill-opacity="0.35" stroke="#77736b" stroke-width="0.8" pointer-events="none" ${HAIR}/>`)
+    .join('');
+  const stringersXML = layers.stringers === false ? '' : concreteXML + stringerPath('outer', planLayout.outerFullPath) + stringerPath('inner', planLayout.innerFullPath) + metalXML;
 
   // ID słupa = ten sam co w postSolver.js (post-start / post-end / post-corner-<indeks zakrętu>;
   // przy "1 dużym podeście" drugi zakręt ma ten sam róg, więc dostaje ID pierwszego).

@@ -285,7 +285,8 @@ export function checkMissingStringerSupport(treadModels, stringerModels) {
       for (const b of seg.treadBearings) covered.add(b.treadIndex);
     }
     for (const t of treadModels) {
-      if (!covered.has(t.index)) {
+      // (a tread on the concrete flight has no wanga under it by design — concreteStair.js)
+      if (!covered.has(t.index) && !t.onConcrete) {
         diags.push(finding('ERROR', 'VALIDATOR-MISSING-SURFACE', 'stringer', t.stepId, 'bearing coverage', `${label}: brak wspornika (bearing) dla stopnia ${t.stepId} — wanga ma lukę dokładnie w miejscu tego stopnia.`, {}));
       }
     }

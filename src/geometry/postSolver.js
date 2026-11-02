@@ -317,7 +317,14 @@ export function buildAllPostModels(planLayout, config) {
   const overlaps = (a, b) => Math.abs(a.position.x - b.position.x) < (a.size + b.size) / 2 && Math.abs(a.position.y - b.position.y) < (a.size + b.size) / 2;
   const coveredByCornerPost = (post) => models.some((m) => m.kind === 'corner' && !overrides[m.postId]?.removed && ((m.anchors || [m.anchor]).some((a) => Math.hypot(a.x - post.anchor.x, a.y - post.anchor.y) < POST_COINCIDENCE_MM) || overlaps(m, post)));
 
-  const kept = models.filter((m) => !((m.postId === 'post-start' || m.postId === 'post-end') && coveredByCornerPost(m)));
+  let kept = models.filter((m) => !((m.postId === 'post-start' || m.postId === 'post-end') && coveredByCornerPost(m)));
+  // the concrete flight (concreteStair.js): only the posts standing on the wooden part's lines (a corner post in a
+  // concrete turn, the end newel are not made)
+  if (planLayout.concreteFromIndex !== null && planLayout.concreteFromIndex !== undefined) {
+    const woodLines = planLayout.treads.filter((t) => !t.onConcrete).flatMap((t) => [t.innerChain, t.outerChain]).filter((c) => c?.length > 1);
+    const onWood = (p) => woodLines.some((c) => c.some((q, k) => k > 0 && distanceToSegment(p, c[k - 1], q) < POST_COINCIDENCE_MM));
+    kept = kept.filter((m) => (m.anchors || [m.anchor]).some((a) => a && onWood(a)));
+  }
 
   return applyPostOverrides(kept, config.manualPostOverrides);
 }

@@ -209,6 +209,15 @@ export function checkBearingAttachment(stringerModel, numTreads, label) {
 // tread[i+1].frontEdge, on both inner and outer side) — this is what "continuous" means for a
 // chain of quads; a gap or overlap here would mean two adjacent treads don't actually share a
 // riser line.
+// Both ends of edge `e` on the line through edge `f` (within 0.01 mm).
+const SAME_LINE_MM = 0.01;
+function sameLine(e, f) {
+  const [p, q] = f;
+  const l = Math.hypot(q.x - p.x, q.y - p.y);
+  if (!(l > 0)) return false;
+  return e.every((r) => Math.abs((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)) / l < SAME_LINE_MM);
+}
+
 export function checkTopologicalContinuity(treadModels) {
   const diags = [];
   for (let i = 0; i < treadModels.length - 1; i++) {
@@ -218,8 +227,11 @@ export function checkTopologicalContinuity(treadModels) {
     // dzieli punktu z sąsiadem po tej stronie — to nie jest przerwa w ciągłości biegu.
     const innerOverhung = a.overhang?.side === 'inner' || b.overhang?.side === 'inner';
     const outerOverhung = a.overhang?.side === 'outer' || b.overhang?.side === 'outer';
-    const innerOk = innerOverhung || pointsEqual(a.backEdge.final[0], b.frontEdge.final[0]);
-    const outerOk = outerOverhung || pointsEqual(a.backEdge.final[1], b.frontEdge.final[1]);
+    // Where the wooden part meets the concrete flight (concreteStair.js) only the wooden tread is recessed into its
+    // wangi: the two edges lie on ONE line, the wooden one shorter by the recess — still one riser line.
+    const transition = !!a.onConcrete !== !!b.onConcrete && sameLine(a.backEdge.final, b.frontEdge.final);
+    const innerOk = innerOverhung || transition || pointsEqual(a.backEdge.final[0], b.frontEdge.final[0]);
+    const outerOk = outerOverhung || transition || pointsEqual(a.backEdge.final[1], b.frontEdge.final[1]);
     if (!innerOk || !outerOk) {
       diags.push(
         err('CONSTRAINT-TOPOLOGY-CONTINUITY', 'tread', b.stepId, `Granica między stopniem ${a.stepId} a ${b.stepId} nie jest ciągła (${!innerOk ? 'strona wewnętrzna' : ''}${!innerOk && !outerOk ? ' i ' : ''}${!outerOk ? 'strona zewnętrzna' : ''}).`, {

@@ -377,6 +377,17 @@ power + supply, `LED-*` findings in the gate) → 3D layer `LedLighting` (`ledRe
 layer „Oświetlenie LED”, DXF layer `LED` (tread / board grooves, balustrade note), takeoff `LED` items (strip per place
 and its profile in mb with the cut list + power supply — accessories). Folder „10. Oświetlenie LED”.
 
+## Concrete flight — `geometry/concreteStair.js`
+
+Docs: [CONCRETE_FLIGHT.md](docs/architecture/CONCRETE_FLIGHT.md) (user decisions 2026-11-02). `concreteEnabled` +
+`concreteFromTread` (plan number, null = flight A + 1) + `concreteSlabThicknessMm` (stringers only): `concreteFromIndex`
+is THE rule, `planLayout.js` marks those treads `onConcrete` — no housing recess (full width), no wanga bearings (the
+wangi end with a plumb cut at the concrete; the model's `lastTreadIndex` keeps them from being "the board at the slab"),
+no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnlyRailingSections`), skipped by the
+missing-support / continuity / structural checks. `buildConcreteModel` → `built.concrete` (a block per step under the
+tread, one smooth soffit at the slab's plumb thickness, never below the floor, a block into the slab at the top;
+`volumeM3` info only) → 3D layer `Concrete` („Beton”), plan footprint, Inspektor / offer row; not in the takeoff.
+
 ## Validation
 
 Docs: [CONSTRAINTS_AND_VALIDATION.md](docs/architecture/CONSTRAINTS_AND_VALIDATION.md).

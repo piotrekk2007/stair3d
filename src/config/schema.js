@@ -189,6 +189,13 @@ export function createDefaultConfig() {
     // skrzynka = profil + 40 + 20 + luz, szer. okładziny maks. ok. 1800 mm. Luz, szczelina przy ścianie i wysięg
     // profila — DO WERYFIKACJI (CO-MFG-J-CANTILEVER).
     stairConstruction: 'stringers',
+    // A part of the stair on a concrete flight cast on site (geometry/concreteStair.js, user request 2026-11-02): from
+    // tread number `concreteFromTread` (1-based; null = the first tread of the first turn) to the exit the treads are
+    // wooden cladding on concrete steps — no wangi, posts or balustrade there; a slab with a smooth soffit
+    // `concreteSlabThicknessMm` thick (ASSUMPTION). Only with stairConstruction 'stringers'.
+    concreteEnabled: false,
+    concreteFromTread: null,
+    concreteSlabThicknessMm: 150,
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

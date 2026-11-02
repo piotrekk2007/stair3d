@@ -20,6 +20,7 @@
 // the project; the offer settings (client, number, amounts) are PROJECT data, saved in the project file.
 
 import { BLONDEL_RANGE_MM } from '../config/schema.js';
+import { concreteFromIndex } from '../geometry/concreteStair.js';
 import { isHalfTurnU, halfTurnWinderCount } from '../geometry/winderArc.js';
 import { glassType } from '../geometry/railingGlass.js';
 import { round2 } from '../util/format.js';
@@ -166,6 +167,10 @@ export function stairFacts(config, derived, extras = {}) {
         : config.stairConstruction === 'metal-flat'
           ? ['Konstrukcja', 'metalowa — stopnie drewniane na dwóch płaskownikach stalowych wycinanych w zęby']
           : ['Wangi', `${sideShort('outer', config)} ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, ${sideShort('inner', config)} ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
+    // a part on a concrete flight (concreteStair.js)
+    concreteFromIndex(config, derived.numTreads) !== null
+      ? ['Bieg betonowy', `od stopnia nr ${concreteFromIndex(config, derived.numTreads) + 1} do wyjścia — stopnie drewniane (okładziny) na betonie`]
+      : null,
     ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);

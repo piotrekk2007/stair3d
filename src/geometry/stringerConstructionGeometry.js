@@ -1188,7 +1188,7 @@ export function buildStringerConstructionGeometry(model, config) {
   const profileOverrides = activeOverridesFor(config.manualStringerProfileOverrides, model.side);
   const usedOverrideIds = new Set();
   // the stair's last tread (the highest one this wanga carries) — the top riser butts into the board carrying it
-  const lastTreadIndex = Math.max(-1, ...model.segments.flatMap((s) => s.treadBearings.map((b) => b.treadIndex)));
+  const lastTreadIndex = Number.isInteger(model.lastTreadIndex) ? model.lastTreadIndex : Math.max(-1, ...model.segments.flatMap((s) => s.treadBearings.map((b) => b.treadIndex)));
   const results = groups.flatMap((group, g) => buildGroupConstructionGeometry(group, extendInfo, config, profileOverrides, usedOverrideIds, g === groups.length - 1, lastTreadIndex));
   // Preserve the model's own segment order regardless of grouping.
   const bySegmentId = new Map(results.map((r) => [r.segmentId, r]));

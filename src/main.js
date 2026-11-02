@@ -620,6 +620,7 @@ function offerPlanSVG() {
     stringerModels: lastModels.stringerModels,
     stringerConstruction: lastModels.stringerConstruction,
     metalStructure: lastModels.metalStructure || null,
+    concrete: lastModels.concrete || null,
     railingModel: lastModels.railingModel ?? null,
   });
 }
@@ -758,6 +759,7 @@ function regeneratePlan2D() {
     stringerModels: lastModels?.stringerModels || null,
     stringerConstruction: lastModels?.stringerConstruction || null,
     metalStructure: lastModels?.metalStructure || null,
+    concrete: lastModels?.concrete || null,
     railingModel: lastModels?.railingModel ?? null,
     opening: lastModels?.ceilingFit
       ? { outline: lastModels.ceilingFit.openingOutline, shape: lastModels.ceilingFit.openingShape, invalidReason: lastModels.ceilingFit.openingInvalidReason }

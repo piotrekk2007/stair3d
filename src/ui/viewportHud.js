@@ -15,6 +15,7 @@ export const LAYERS_3D = [
   ['Posts', 'Słupy'],
   ['Railing', 'Balustrada'],
   ['LedLighting', 'LED'],
+  ['Concrete', 'Beton'],
 ];
 
 const VIEWS = [
