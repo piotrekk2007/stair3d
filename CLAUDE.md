@@ -363,6 +363,13 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   smoothing (`runs[].key`, `runs[].profile`); `railingProfileView.js` (unfolded view model),
   `railingEditor/railingEditorRenderer.js` (pure SVG), `ui/railingEditorPanel.js` (drag vertically, double-click adds,
   right-click/Delete removes, arrows, numeric field). INFO `RAILING-PROFILE-EDITED` / `-POINT-SKIPPED`.
+- **Rods from the ceiling** (`ceilingRodsModel.js` → `built.ceilingRods`, user request 2026-11-03, docs in
+  RAILING_MODEL.md): `ceilingRodsEnabled` — steel rods along one side (`ceilingRodsSide`), n per tread
+  (`ceilingRodsPerTread`) evenly along its final side, `ceilingRodsInsetMm` in from its end, from the tread's underside
+  to the ceiling above (in the opening: totalRise + `ceilingRodsTopAboveFloorMm`, else the slab's soffit); WARNING
+  `CEILING-RODS-GAP` over `railingMaxClearMm`; 3D (`ceilingRodsRenderer.js`, `Railing` layer), plan dots, takeoff
+  (`buildCeilingRodItems`, BALUSTER items by length, `railing-ceiling-rod` per piece). A balustrade section with
+  `mount: 'wall'` is only a wall handrail on brackets along its whole path (`railingSolver.js wallOnlySection`).
 - Glass (`railingGlass.js`, `railingInfill` balusters | glass-side (rotule Ø30, handrail on the glass) | glass-posts
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));
   VSG 4.4.2/5.5.2, pane ≤ 1800 mm, tint clear/optiwhite/grey/bronze; other numbers DO WERYFIKACJI.
@@ -435,7 +442,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   from its contour as it is, the error on the item + a note; only a board with no contour is INVALID; railing/glass/connector
   items in their own modules; `wasteFactors.js`, `materialCatalog.js`.
 - Pricing: generic per-material list (`pricing.js`) and the DREWEX board price list (`boardPricing.js`: PLN/running
-  metre by depth range × length column × thickness class, waste already inside; CSV import/export; a board deeper than
+  metre by depth range × length column × thickness class 20 / 40 / 60 / 80 (80 = 66–85 mm, user request 2026-11-03 — no default rows, typed in by the user), waste already inside; CSV import/export; a board deeper than
   the largest range = glued pieces of the largest range + the rest, EACH priced in its own range — a rest narrower than
   every range at the nearest one, user decision 2026-10-23) — MATERIAL only;
   a wanga by `stringerPricingMode` (user decision 2026-10-16): `whole` (its minimal rectangle — default), `strips`

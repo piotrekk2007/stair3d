@@ -36,6 +36,8 @@ import { applyWoodGrainToTree, getOakTexture, getOakMeanLuminance, getOakPhotoTe
 import { withFloorRise } from './floors.js';
 import { buildLedModel } from './ledModel.js';
 import { renderLed } from './ledRenderer.js';
+import { buildCeilingRods } from './ceilingRodsModel.js';
+import { renderCeilingRods } from './ceilingRodsRenderer.js';
 import { buildReferenceModel } from './referenceStair.js';
 import { renderReferenceStair } from './referenceStairRenderer.js';
 import { resolveFreeWalls, allWallSegments, resolveWallOpenings, stairParts, wallChecks } from './walls.js';
@@ -67,6 +69,8 @@ const ledGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xffb43c, transpare
 const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b1aa, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 // the wall under the concrete flight (masonry, like the stairwell's walls but solid)
 const concreteWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+// the rods hung from the ceiling (ceilingRodsModel.js): black painted steel
+const ceilingRodMaterial = new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.45, metalness: 0.6 });
 const riserBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide });
 
 // Kolory prezentacji (scene/appearance.js) ustawiane na tych wspólnych materiałach; kolejny rebuild()
@@ -234,6 +238,11 @@ export function buildStaircase(rawConfig) {
     );
   }
 
+  // the rods from the ceiling through the treads' ends (ceilingRodsModel.js) — their own element, beside the balustrade
+  const ceilingRods = buildCeilingRods({ planLayout, treadModels, openingOutline: ceilingFit.openingOutline }, fullConfig);
+  const rodsGroup = renderCeilingRods(ceilingRods, ceilingRodMaterial);
+  if (rodsGroup) root.add(rodsGroup);
+
   const trimGroup = renderOpeningTrim(openingTrim, treadMaterial);
   if (trimGroup) root.add(trimGroup);
 
@@ -270,5 +279,5 @@ export function buildStaircase(rawConfig) {
   // src/takeoff/materialTakeoff.js (computeMaterialTakeoff) mogły ocenić/zestawić DOKŁADNIE tę
   // geometrię bez ponownego jej liczenia (patrz main.js/rebuild()) — nigdy nie licz jej drugi
   // raz tylko po to, żeby ją zwalidować albo zestawić materiałowo.
-  return { root, ceilingMesh, wallsMesh, referenceMesh, reference, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure, concrete };
+  return { root, ceilingMesh, wallsMesh, referenceMesh, reference, planLayout, derived, ceilingFit, headroom, stairwellWalls: walls, fullConfig, treadModels, riserModels, stringerModels, stringerConstruction, postModels, allPostModels, railingModel, openingTrim, wallsModel, led, stairwellFit, stairwell, joints, cantilever: cantilever ? cantileverResult : null, metalStructure, concrete, ceilingRods };
 }

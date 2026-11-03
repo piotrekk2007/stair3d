@@ -36,7 +36,11 @@ test('thickness classes follow the DREWEX ranges 10–20 / 21–40 / 41–65', (
   assert.equal(thicknessClassFor(40), 40);
   assert.equal(thicknessClassFor(41), 60);
   assert.equal(thicknessClassFor(65), 60);
-  assert.equal(thicknessClassFor(66), null);
+  // (user request 2026-11-03: treads up to 80 mm — a class of their own)
+  assert.equal(thicknessClassFor(66), 80);
+  assert.equal(thicknessClassFor(80), 80);
+  assert.equal(thicknessClassFor(85), 80);
+  assert.equal(thicknessClassFor(86), null);
   assert.equal(thicknessClassFor(0), null);
 });
 
@@ -100,10 +104,22 @@ test('regression (user, 2026-10-23): a 1076 x 1040 landing from an imported list
   assert.equal(lookupBoardPricePerMb(t, { species: 'Dąb', cls: 'Klasa Natura', thicknessMm: 40, depthMm: 105, lengthMm: 1000 }).viaNearestRange, false);
 });
 
-test('thickness above 65 mm cannot be priced from the table — reported, never guessed', () => {
+test('thickness above 85 mm cannot be priced from the table — reported, never guessed', () => {
+  const r = ask({ thicknessMm: 90 });
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /85 mm/);
+});
+
+test('an 80 mm board: the default list has no rows of its class (reported); priced from rows typed in for it', () => {
   const r = ask({ thicknessMm: 80 });
   assert.equal(r.ok, false);
-  assert.match(r.reason, /65 mm/);
+  assert.match(r.reason, /grubości 80 mm/);
+  const t = table();
+  t.boards.push({ thickness: 80, depthMin: 240, depthMax: 300, priceTo1500: 560, price1501to2000: 780, priceOver2000: 1090 });
+  const ok = lookupBoardPricePerMb(t, { species: 'Dąb', cls: 'Klasa Natura', thicknessMm: 80, depthMm: 280, lengthMm: 1000 });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.thicknessClass, 80);
+  assert.equal(ok.pricePerMb, 560);
 });
 
 test('an empty table for a thickness class is reported', () => {
@@ -304,8 +320,8 @@ test('oak risers are priced from the 20 mm table; MDF risers keep the sheet pric
   assert.ok(mdfRiser.calculatedCost > 0);
 });
 
-test('a tread thicker than 65 mm stays UNPRICED with an explanation (and is not re-priced generically)', () => {
-  const t = buildPricedMaterialTakeoff(models({ treadThickness: 70 }), { boardPricing: createDefaultBoardPricing() });
+test('a tread with no rows of its thickness class stays UNPRICED with an explanation (and is not re-priced generically)', () => {
+  const t = buildPricedMaterialTakeoff(models({ treadThickness: 80 }), { boardPricing: createDefaultBoardPricing() });
   const tread = t.items.find((i) => i.sourceElementId === 'tread:step-0');
   assert.equal(tread.calculatedCost, null);
   assert.ok(tread.notes.some((n) => n.startsWith('Brak ceny z cennika desek')));

@@ -1624,8 +1624,10 @@ code {
 
 .railing-sections { padding: 6px 8px; font-size: 11px; color: #c8ced4; }
 .railing-sections-title { margin-bottom: 4px; opacity: 0.8; }
-.railing-section-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+.railing-section-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 4px; }
 .railing-section-row input { width: 52px; }
+.railing-section-row > button { width: auto; flex: 0 0 auto; }
+.railing-section-row > select { max-width: 130px; }
 .railing-sections select, .railing-sections input, .railing-sections button { font: inherit; }
 .railing-sections button, .railing-sections select, .railing-sections input { color: #222; }
 

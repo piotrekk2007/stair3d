@@ -22,7 +22,7 @@ import { wasteFactorFor } from './wasteFactors.js';
 import { boundingRectAlong, minAreaRectUV, stringerStrips, stringerSplitBlanks } from './stockGeometry.js';
 import { profileLength } from '../geometry/polylineProfile.js';
 import { getMaterialCatalogEntry, roundUpToCatalogSize } from './materialCatalog.js';
-import { buildRailingItems, buildWallCapRailItems } from './railingItems.js';
+import { buildRailingItems, buildWallCapRailItems, buildCeilingRodItems } from './railingItems.js';
 import { buildConnectorItems } from './connectorItems.js';
 import { buildMetalItems } from './metalItems.js';
 import { buildLedItems } from './ledItems.js';
@@ -414,7 +414,7 @@ function buildOpeningTrimItems(trim, config, wasteFactors) {
   });
 }
 
-export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure, openingTrim, led, concrete }, config, options = {}) {
+export function computeMaterialTakeoff({ treadModels, riserModels, stringerModels, stringerConstruction, postModels, railingModel, joints, metalStructure, openingTrim, led, concrete, ceilingRods }, config, options = {}) {
   const wasteFactors = options.wasteFactors || {};
   return [
     ...buildOpeningTrimItems(openingTrim, config, wasteFactors),
@@ -425,6 +425,7 @@ export function computeMaterialTakeoff({ treadModels, riserModels, stringerModel
     ...buildPostItems(postModels, config, wasteFactors),
     ...buildRailingItems(railingModel, config, wasteFactors),
     ...buildWallCapRailItems(concrete, config, wasteFactors),
+    ...buildCeilingRodItems(ceilingRods, config),
     ...buildConnectorItems(joints, config, wasteFactors),
     ...buildMetalItems(metalStructure, config, wasteFactors),
     ...buildLedItems(led),

@@ -376,6 +376,17 @@ export function createDefaultConfig() {
     railingGlassClampsPerSide: 2, // uchwyty na każdą krawędź tafli przy słupku
     railingBaseRailWidthMm: 50, // mm, poprzecznie do biegu
     railingBaseRailHeightMm: 30, // mm, w pionie
+    // Rods hung from the ceiling down to the treads' ends (geometry/ceilingRodsModel.js, user request 2026-11-03 — a
+    // straight stair on a steel spine, the open side "fenced" by thin steel rods from the ceiling through every tread).
+    // Their own element, independent of the balustrade sections; the sizes are ASSUMPTION (DO WERYFIKACJI).
+    ceilingRodsEnabled: false,
+    ceilingRodsSide: 'inner', // 'outer' | 'inner' — the line the rods stand along
+    ceilingRodsFromTread: null, // the first tread with rods, plan number (1-based); null = 1
+    ceilingRodsToTread: null, // the last one; null = the last tread
+    ceilingRodsPerTread: 2, // rods per tread (a landing: as many at the same spacing)
+    ceilingRodDiameterMm: 12, // mm — ASSUMPTION
+    ceilingRodsInsetMm: 40, // mm, the rods' axis in from the tread's end — ASSUMPTION
+    ceilingRodsTopAboveFloorMm: 2600, // mm above the upper floor: where a rod inside the ceiling opening is hung (the upper storey's ceiling) — ASSUMPTION
 
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)
     hasCornerPost: true, // czy stawiać słup konstrukcyjny na zakrętach; gdy false, wangi łączą się bezpośrednio (zakładka na styk)

@@ -101,9 +101,9 @@ export function createPricingEditor(container, { settings, onChange }) {
 
     // Ogólny cennik dotyczy już tylko podstopni z płyty MDF (wangi i słupy mają własne cenniki).
     const priceRows = settings.priceList
-      .filter((price) => ['sheet-plywood-mdf', 'railing-baluster', 'railing-handrail', 'railing-baserail'].includes(price.materialId))
+      .filter((price) => ['sheet-plywood-mdf', 'railing-baluster', 'railing-handrail', 'railing-baserail', 'railing-ceiling-rod'].includes(price.materialId))
       .map((price) => {
-        const railingLabels = { 'railing-baluster': 'Tralka (cena za sztukę)', 'railing-handrail': 'Poręcz (cena za metr bieżący)', 'railing-baserail': 'Podporęcz (cena za metr bieżący)' };
+        const railingLabels = { 'railing-ceiling-rod': 'Pręt od sufitu z mocowaniem (cena za sztukę)', 'railing-baluster': 'Tralka (cena za sztukę)', 'railing-handrail': 'Poręcz (cena za metr bieżący)', 'railing-baserail': 'Podporęcz (cena za metr bieżący)' };
         const label = railingLabels[price.materialId] ?? DEFAULT_MATERIAL_CATALOG[price.materialId]?.label ?? price.materialId;
         const unit = price.unit === 'volume' ? 'zł/m³' : price.unit === 'area' ? 'zł/m²' : price.unit === 'length' ? 'zł/mb' : 'zł/szt.';
         return `<tr><td>${esc(label)}</td><td>${numInput(`data-kind="price" data-material="${esc(price.materialId)}"`, price.price)}</td><td>${unit}</td></tr>`;
@@ -176,7 +176,7 @@ export function createPricingEditor(container, { settings, onChange }) {
             <button type="button" data-action="csv-export">Pobierz CSV</button>
             <button type="button" data-action="reset-boards">Przywróć domyślne</button>
           </div>
-          <div class="tk-hint">Grubość 20 = materiał 10–20 mm, 40 = 21–40 mm, 60 = 41–65 mm. Głębokość (przedział od–do) to szerokość deski/formatki; kolumna ceny zależy od jej długości. Wartości domyślne pochodzą z kalkulatora DREWEX i mogą różnić się od aktualnych cen — wczytaj aktualny cennik z pliku CSV.</div>
+          <div class="tk-hint">Grubość 20 = materiał 10–20 mm, 40 = 21–40 mm, 60 = 41–65 mm, 80 = 66–85 mm (dopisz jej wiersze — domyślny cennik ich nie ma). Głębokość (przedział od–do) to szerokość deski/formatki; kolumna ceny zależy od jej długości. Wartości domyślne pochodzą z kalkulatora DREWEX i mogą różnić się od aktualnych cen — wczytaj aktualny cennik z pliku CSV.</div>
         </div>
 
         <div class="tkp-block">

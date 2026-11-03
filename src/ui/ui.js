@@ -647,7 +647,7 @@ export function createUI({
     typeOuterCtrl.name(`Typ wangi ${sideShort('outer', config)}`);
     typeInnerCtrl.name(`Typ wangi ${sideShort('inner', config)}`);
   };
-  lockable(build.add(config, 'treadThickness', 20, 60, 1).name('Grubość stopnia [mm]'), 'treadThickness');
+  lockable(build.add(config, 'treadThickness', 20, 80, 1).name('Grubość stopnia [mm]'), 'treadThickness');
   lockable(build.add(config, 'nosing', 0, 40, 1).name('Nosek [mm]'), 'nosing');
   lockable(build.add(config, 'minimumStringerDepthMm', 150, 600, 10).name('Min. głębokość wangi [mm]'), 'minimumStringerDepthMm');
   lockable(build.add(config, 'stringerProfileOffsetMm', 0, 200, 5).name('Pogłębienie profilu [mm]'), 'stringerProfileOffsetMm');
@@ -766,6 +766,34 @@ export function createUI({
   live(rail.add(config, 'railingGlassFixingsPerPane', 1, 6, 1)).name('Rotule na taflę');
   live(rail.add(config, 'railingGlassClampsPerSide', 1, 4, 1)).name('Uchwyty na krawędź tafli (słupki)');
 
+  // Rods hung from the ceiling through the treads' ends (geometry/ceilingRodsModel.js) — their own element, independent
+  // of the balustrade sections (the wall side gets a section "poręcz przy ścianie" below)
+  const rods = rail.addFolder('Pręty od sufitu (zamiast balustrady)');
+  const rodsProxy = {
+    get from() {
+      return config.ceilingRodsFromTread ?? 1;
+    },
+    set from(v) {
+      config.ceilingRodsFromTread = v > 1 ? v : null;
+    },
+    get to() {
+      return config.ceilingRodsToTread ?? 0;
+    },
+    set to(v) {
+      config.ceilingRodsToTread = v > 0 ? v : null;
+    },
+  };
+  const rodsOn = live(rods.add(config, 'ceilingRodsEnabled')).name('Pręty od sufitu do stopni');
+  rodsOn.domElement.title = 'Stalowe pręty z sufitu przez końce stopni (jak przy schodach na belce środkowej): bez słupków i poręczy po tej stronie. W otworze stropu sięgają do sufitu piętra, pod stropem — do jego spodu.';
+  live(rods.add(config, 'ceilingRodsSide', { zewnętrzna: 'outer', wewnętrzna: 'inner' })).name('Strona');
+  live(rods.add(rodsProxy, 'from', 1, 40, 1)).name('Od stopnia nr');
+  live(rods.add(rodsProxy, 'to', 0, 40, 1)).name('Do stopnia nr (0 = do końca)');
+  live(rods.add(config, 'ceilingRodsPerTread', 1, 6, 1)).name('Prętów na stopień');
+  live(rods.add(config, 'ceilingRodDiameterMm', 6, 30, 1)).name('Średnica pręta [mm]');
+  live(rods.add(config, 'ceilingRodsInsetMm', 10, 200, 1)).name('Oś pręta od końca stopnia [mm]');
+  live(rods.add(config, 'ceilingRodsTopAboveFloorMm', 500, 5000, 10)).name('W otworze: do wysokości nad podłogą piętra [mm]');
+  rods.close();
+
   const sectionsBox = document.createElement('div');
   sectionsBox.className = 'railing-sections';
   const commitSections = () => {
@@ -811,6 +839,15 @@ export function createUI({
         commitSections();
         renderSections();
       });
+      // a balustrade (posts + infill) or only a wall handrail on brackets (railingSolver.js wallOnlySection)
+      const mount = document.createElement('select');
+      mount.title = 'Balustrada albo sama poręcz przy ścianie (na wspornikach)';
+      [['', 'balustrada'], ['wall', 'poręcz przy ścianie']].forEach(([value, label]) => mount.add(new Option(label, value, false, (s.mount || '') === value)));
+      mount.addEventListener('change', () => {
+        if (mount.value === 'wall') s.mount = 'wall';
+        else delete s.mount;
+        commitSections();
+      });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = '✕';
@@ -820,7 +857,7 @@ export function createUI({
         commitSections();
         renderSections();
       });
-      row.append(side, from, document.createTextNode('–'), to, remove);
+      row.append(side, from, document.createTextNode('–'), to, mount, remove);
       sectionsBox.appendChild(row);
     });
     const add = document.createElement('button');

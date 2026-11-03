@@ -34,7 +34,9 @@ import { ELEMENT_TYPES } from './takeoffTypes.js';
 import { round2 } from '../util/format.js';
 import { LED_SUPPLY_MATERIAL_ID } from './ledItems.js';
 
-export const BOARD_THICKNESS_CLASSES_MM = Object.freeze([20, 40, 60]);
+// 80 = material 66–85 mm (user request 2026-11-03: treads up to 80 mm); the DREWEX calculator has no such rows, so a
+// fresh price list has none either — the user types them in (a tread in that class stays unpriced until then)
+export const BOARD_THICKNESS_CLASSES_MM = Object.freeze([20, 40, 60, 80]);
 export const BOARD_PRICING_SOURCE = 'board-table';
 export const RISER_MATERIALS = Object.freeze({ OAK: 'oak', MDF: 'mdf' });
 
@@ -115,12 +117,13 @@ export function createDefaultBoardPricing() {
 
 // --- Klasyfikacja i kolumny ---------------------------------------------------------------------
 
-/** Grubość materiału (mm) → klasa cennika 20/40/60; null gdy grubsze niż 65 mm. */
+/** Grubość materiału (mm) → klasa cennika 20/40/60/80; null gdy grubsze niż 85 mm. */
 export function thicknessClassFor(thicknessMm) {
   if (!(thicknessMm > 0)) return null;
   if (thicknessMm <= 20) return 20;
   if (thicknessMm <= 40) return 40;
   if (thicknessMm <= 65) return 60;
+  if (thicknessMm <= 85) return 80;
   return null;
 }
 
@@ -146,7 +149,7 @@ const round4 = (v) => Math.round(v * 10000) / 10000;
 export function lookupBoardPricePerMb(table, { species, cls, thicknessMm, depthMm, lengthMm }) {
   const thicknessClass = thicknessClassFor(thicknessMm);
   if (thicknessClass === null) {
-    return { ok: false, reason: `Grubość ${Math.round(thicknessMm)} mm jest poza zakresem cennika desek (do 65 mm).` };
+    return { ok: false, reason: `Grubość ${Math.round(thicknessMm)} mm jest poza zakresem cennika desek (do 85 mm).` };
   }
   const rows = (table.boards || []).filter((r) => r.thickness === thicknessClass);
   if (rows.length === 0) return { ok: false, reason: `W cenniku nie ma wierszy dla grubości ${thicknessClass} mm.` };

@@ -299,3 +299,42 @@ export function buildRailingItems(railingModel, config, wasteFactors = {}) {
   if (!railingModel || !railingModel.enabled) return [];
   return railingModel.sections.filter((s) => s.valid).flatMap((s) => [...handrailItems(s, config, wasteFactors), ...baseRailItems(s, config, wasteFactors), ...balusterItems(s, config, wasteFactors), ...glassItems(s, config, wasteFactors), ...wallBracketItems(s, config)]);
 }
+
+// The rods hung from the ceiling (geometry/ceilingRodsModel.js): one item per length (rounded to 1 mm) with the count —
+// the cut list, like the balusters'; priced per piece (`railing-ceiling-rod`, the fixings included).
+export const RAILING_CEILING_ROD_MATERIAL_ID = 'railing-ceiling-rod';
+export function buildCeilingRodItems(model, config) {
+  if (!model?.rods?.length) return [];
+  const byLength = new Map();
+  for (const rod of model.rods) {
+    const lengthMm = Math.round(rod.lengthMm);
+    byLength.set(lengthMm, [...(byLength.get(lengthMm) || []), rod]);
+  }
+  const d = model.diameterMm;
+  return [...byLength.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([lengthMm, rods]) => {
+      const volume = Math.PI * (d / 2) ** 2 * lengthMm * rods.length * MM3_TO_M3;
+      const treads = [...new Set(rods.map((r) => r.treadIndex + 1))];
+      return createTakeoffItem({
+        itemId: `ceiling-rods-${lengthMm}`,
+        elementType: ELEMENT_TYPES.BALUSTER,
+        sourceElementId: `ceiling-rods:${lengthMm}`,
+        material: `Pręt stalowy Ø${d}`,
+        materialId: RAILING_CEILING_ROD_MATERIAL_ID,
+        quantity: rods.length,
+        unit: 'szt',
+        nominalDimensions: { lengthMm, crossSectionMm: d, shape: 'round' },
+        calculatedDimensions: { lengthMm, crossSectionMm: d, shape: 'round' },
+        catalogStock: null,
+        netVolume: volume,
+        netArea: 0,
+        stockVolume: volume,
+        stockArea: 0,
+        wasteFactor: 0,
+        optional: true,
+        status: TAKEOFF_ITEM_STATUS.OK,
+        notes: [`Pręty od sufitu (${sideLabel(model.side, config)}): ${rods.length} szt. × ${lengthMm} mm (od spodu stopnia do sufitu), stopnie ${treads.join(', ')}; ${rods[0].hung === 'opening' ? 'zawieszone w otworze — sufit piętra' : 'pod stropem'}. Otwór Ø${Math.ceil(d + 2)} w stopniu, mocowanie do sufitu i nakrętka — DO WERYFIKACJI.`],
+      });
+    });
+}

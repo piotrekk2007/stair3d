@@ -35,6 +35,7 @@ export const DEFAULT_PRICE_LIST = Object.freeze([
   { materialId: 'railing-baluster', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę tralki za sztukę.' },
   { materialId: 'railing-handrail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę poręczy za metr bieżący.' },
   { materialId: 'railing-baserail', price: 0, currency: 'PLN', unit: PRICE_UNITS.LENGTH, source: 'Wpisz własną cenę podporęczy za metr bieżący.' },
+  { materialId: 'railing-ceiling-rod', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz cenę pręta balustrady od sufitu za sztukę (z mocowaniem do sufitu i nakrętką pod stopniem).' },
   { materialId: 'railing-glass', price: 0, currency: 'PLN', unit: PRICE_UNITS.AREA, source: 'Wpisz własną cenę szkła VSG za m² (prostokąt, z którego jest cięta tafla).' },
   { materialId: 'railing-glass-fixing', price: 0, currency: 'PLN', unit: PRICE_UNITS.PIECE, source: 'Wpisz własną cenę rotuli / uchwytu szyby za sztukę.' },
   // Accessories (user decisions 2026-10-28): 0 = not priced yet, the user types the real price; the LED power supply has

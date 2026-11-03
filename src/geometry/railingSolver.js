@@ -74,7 +74,8 @@ const MITER_LIMIT = 0.1; // 1 + cos(angle) below this: too sharp a turn to mitre
 
 /**
  * Cleans the section list: only known sides, integer step indices, unique ids. Anything else is dropped.
- * @returns {{id:string, side:'outer'|'inner', fromStep:number, toStep:number|null}[]}
+ * `mount: 'wall'` = the section is only a wall handrail on brackets (no posts, no infill — user request 2026-11-03).
+ * @returns {{id:string, side:'outer'|'inner', fromStep:number, toStep:number|null, mount?:'wall'}[]}
  */
 export function sanitizeRailingSections(raw) {
   if (!Array.isArray(raw)) return [];
@@ -87,7 +88,7 @@ export function sanitizeRailingSections(raw) {
     let id = typeof s.id === 'string' && s.id ? s.id : `railing-${i}`;
     while (seen.has(id)) id = `${id}-x`;
     seen.add(id);
-    out.push({ id, side: s.side, fromStep: s.fromStep, toStep: s.toStep ?? null });
+    out.push({ id, side: s.side, fromStep: s.fromStep, toStep: s.toStep ?? null, ...(s.mount === 'wall' ? { mount: 'wall' } : {}) });
   });
   return out;
 }
@@ -96,7 +97,8 @@ export function sanitizeRailingSections(raw) {
  * The pure edit behind the Inspektor's "Początek / Koniec / Nowy odcinek" buttons (a tread selected in the plan):
  * returns a NEW section list. `from`/`to` move that end of the section to `stepIndex` (the other end follows when
  * they would cross), `to-end` makes it run to the last tread, `remove` deletes it, `new` adds a section on `side`
- * that starts at `stepIndex` and runs to the end. An unknown section id changes nothing.
+ * that starts at `stepIndex` and runs to the end, `mount` switches it between a balustrade and a wall handrail only.
+ * An unknown section id changes nothing.
  */
 export function editRailingSections(sections, { action, sectionId, stepIndex, side }) {
   const next = (sections || []).map((s) => ({ ...s }));
@@ -114,6 +116,9 @@ export function editRailingSections(sections, { action, sectionId, stepIndex, si
     if (s.fromStep > stepIndex) s.fromStep = stepIndex;
   } else if (action === 'to-end') {
     s.toStep = null;
+  } else if (action === 'mount') {
+    if (s.mount === 'wall') delete s.mount;
+    else s.mount = 'wall';
   } else if (action === 'remove') {
     next.splice(next.indexOf(s), 1);
   }
@@ -869,6 +874,24 @@ function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight
   return { pieces, brackets };
 }
 
+// A section that is only a wall handrail (`mount: 'wall'`, user request 2026-11-03 — the wall side of a stair whose
+// open side has rods from the ceiling): its whole path on brackets like the wall handrail past a moved end
+// (buildWallRail), no posts, no infill.
+function wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, railTop }) {
+  const centre = (p) => ({ x: p.x, y: p.y, z: railTop(p.z) - handrailHeight / 2 });
+  const wallRail = buildWallRail({ path: nodes }, { config, sign, offsetMm, centre, handrailHeight });
+  Object.assign(base, { mount: 'wall', posts: [], postSpots: [], postTopNeeds: {}, wallRailEnds: { start: false, end: false }, baseRail: null });
+  if (!wallRail) {
+    base.diagnostics.push(diag(base.id, 'RAILING-SECTION-INVALID', `Poręcz przyścienna ${base.id}: brak długości do poprowadzenia poręczy — pominięta.`));
+    return base;
+  }
+  base.runs = [{ key: 'wall-all', startPostId: null, endPostId: null, pieces: wallRail.pieces, bent: false, wallRail: true, brackets: wallRail.brackets, startAtPostFace: false, endAtPostFace: false, startOffsetMm: 0, endOffsetMm: 0 }];
+  base.handrail = { pieces: wallRail.pieces, totalLengthMm: wallRail.pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
+  base.heightAboveNosing = { minMm: config.railingHeightMm, maxMm: config.railingHeightMm };
+  base.valid = true;
+  return base;
+}
+
 function buildSection(section, ctx) {
   const { config, planLayout, stringerModels, stringerConstruction, postModels, riserHeight } = ctx;
   const treadCount = planLayout.treads.length;
@@ -915,6 +938,7 @@ function buildSection(section, ctx) {
     return base;
   }
   base.path = nodes.map((n) => ({ x: n.x, y: n.y })); // the whole wanga-side path (plan), also where no handrail can follow it
+  if (section.mount === 'wall') return wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, railTop });
 
   const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
   const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;

@@ -645,7 +645,7 @@ export function starterHandlesXML(planLayout, selection) {
 }
 
 export function renderPlan2DSVG(planLayout, config, derived, options) {
-  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, concrete = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, reference = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
+  const { viewport, showWinderBlanks = true, editMode = false, selectedStepIndex = null, selection = null, layers = {}, postStates = {}, posts = null, extraPosts = [], railingModel = null, stringerModels = null, stringerConstruction = null, metalStructure = null, concrete = null, ceilingRods = null, opening = null, stairwell = null, openingEdit = false, railingPostEdit = false, wallEdit = false, openingTrim = null, trimEdit = false, wallsModel = null, led = null, reference = null, measures = [], measureDraft = null, activeBoundary = null, clientView = false } = options;
   // mm of the plan per screen pixel (main.js passes it from the panel size); a caller without a panel (the offer's
   // plan image) gets a reasonable value from the viewport, as if it were drawn about 1000 px wide.
   MM_PER_PX = options.mmPerPx > 0 ? options.mmPerPx : Number(viewport?.width) > 0 ? viewport.width / 1000 : 1;
@@ -729,6 +729,11 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   // Balustrade (geometry/railingSolver.js): the whole side path thin and dashed, the handrail runs on top of
   // it thick, balusters as dots; where the dashed line has no thick line on top, no handrail follows the path
   // (the dusza side of a winder). Section ends are marked with a ring. Plan y is flipped for SVG.
+  // the rods hung from the ceiling (geometry/ceilingRodsModel.js): a dark dot per rod, at its true diameter
+  const ceilingRodsXML =
+    layers.railing === false || !ceilingRods?.rods?.length
+      ? ''
+      : ceilingRods.rods.map((r) => `<circle class="ceiling-rod" cx="${fmt(r.position.x)}" cy="${fmt(-r.position.y)}" r="${fmt(Math.max(ceilingRods.diameterMm / 2, 6))}" fill="#232527" pointer-events="none"/>`).join('');
   const railingLayerXML = (() => {
     if (layers.railing === false || !railingModel?.enabled) return '';
     const size = config.railingBalusterSizeMm || 30;
@@ -843,6 +848,7 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
     ${runBoundariesXMLStr}
     ${postsXML}
     ${railingLayerXML}
+    ${ceilingRodsXML}
     ${layers.led === false ? '' : ledXML(led)}
     ${layers.reference === false ? '' : referenceXML(reference)}
     ${openingEdit ? '' : openingXMLStr}

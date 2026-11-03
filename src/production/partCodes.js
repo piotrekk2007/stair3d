@@ -121,7 +121,7 @@ export function buildPartList(models) {
         break;
       case 'BALUSTER':
         code = `TR-${next('TR')}`;
-        name = 'Tralki';
+        name = item.materialId === 'railing-ceiling-rod' ? 'Pręty od sufitu' : 'Tralki';
         break;
       case 'GLASS_PANE':
         code = `SZ-${next('SZ')}`;

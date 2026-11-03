@@ -61,7 +61,8 @@ function railingBlockHTML(config, stepIndex) {
   const rows = sections.map((s) => {
     const range = `${s.fromStep + 1}–${s.toStep === null ? 'koniec' : s.toStep + 1}`;
     const btn = (action, label) => `<button type="button" class="insp-btn" data-railing-action="${action}" data-section-id="${s.id}">${label}</button>`;
-    return `<div class="insp-railing"><div class="insp-railing-title">Odcinek ${sideLabel[s.side]} · stopnie ${range}</div><div class="insp-actions">${btn('from', `Początek: stopień ${stepIndex + 1}`)}${btn('to', `Koniec: stopień ${stepIndex + 1}`)}${s.toStep === null ? '' : btn('to-end', 'Do końca')}${btn('remove', 'Usuń')}</div></div>`;
+    const kind = s.mount === 'wall' ? ' · poręcz przy ścianie' : '';
+    return `<div class="insp-railing"><div class="insp-railing-title">Odcinek ${sideLabel[s.side]} · stopnie ${range}${kind}</div><div class="insp-actions">${btn('from', `Początek: stopień ${stepIndex + 1}`)}${btn('to', `Koniec: stopień ${stepIndex + 1}`)}${s.toStep === null ? '' : btn('to-end', 'Do końca')}${btn('mount', s.mount === 'wall' ? 'Zrób balustradą' : 'Tylko poręcz przy ścianie')}${btn('remove', 'Usuń')}</div></div>`;
   });
   const add = ['outer', 'inner'].map((side) => `<button type="button" class="insp-btn" data-railing-action="new" data-side="${side}">Nowy odcinek ${sideLabel[side]} od stopnia ${stepIndex + 1}</button>`).join('');
   return section('Balustrada') + rows.join('') + `<div class="insp-actions">${add}</div>`;

@@ -445,3 +445,34 @@ istniały też bez edycji:
 
 Testy: `railingRenderer.test.js` (słup sięga do poręczy dla obu stron i korekt ±150 mm; siatka poręczy kończy się
 dokładnie na licach). Oba potwierdzone, że bez poprawki nie przechodzą.
+
+## Rods from the ceiling and a wall-handrail-only section (user request 2026-11-03)
+
+The user's stair (a photo): straight, on one central steel beam, the open side closed off by thin steel rods hung from
+the ceiling through the end of every tread (no posts, no handrail on that side), a handrail on brackets along the
+wall on the other side.
+
+- **Rods** — `geometry/ceilingRodsModel.js buildCeilingRods` → `built.ceilingRods` `{side, diameterMm, rods: [{id,
+  treadIndex, k, position, bottomZ, topZ, lengthMm, hung}], maxClearMm, diagnostics}`; their own element, independent
+  of `railingEnabled` / the sections. Config `ceilingRodsEnabled`, `ceilingRodsSide` (outer / inner), `ceilingRodsFromTread`
+  / `ceilingRodsToTread` (plan numbers, null = first / last), `ceilingRodsPerTread` (2), `ceilingRodDiameterMm` (12),
+  `ceilingRodsInsetMm` (40 — axis in from the tread's end, square to its final side), `ceilingRodsTopAboveFloorMm`
+  (2600) — sizes ASSUMPTION. Per tread n rods at (k + ½) / n of its final side (front → back), so the spacing is even
+  within a tread and across to the next one; a landing gets as many as its side needs at that spacing; no rod on a
+  tread lying on concrete. Bottom = the tread's underside (through the tread, a nut under it); top = inside the ceiling
+  opening the upper storey's ceiling (totalRise + `ceilingRodsTopAboveFloorMm`), else the slab's soffit; a rod whose
+  ceiling is below its tread's top (a tread colliding with the slab — reported elsewhere) is not made. WARNING
+  `CEILING-RODS-GAP` (gate) when the clear gap between neighbours exceeds `railingMaxClearMm` (§ 298, as for balusters).
+  Consumers: `ceilingRodsRenderer.js` (cylinder + ceiling plate + nut, the root's `Railing` layer, black steel),
+  the plan (a dot per rod on the balustrade layer), the takeoff (`railingItems.js buildCeilingRodItems`: one BALUSTER
+  item per length with the count, material `railing-ceiling-rod` priced per piece, fixings included — part codes TR,
+  named „Pręty od sufitu”), the client's model (part of the root). Not in the DXF (the Ø hole in the tread is in the
+  takeoff note). Panel: folder 9 → „Pręty od sufitu (zamiast balustrady)”.
+- **Wall handrail only** — a section with `mount: 'wall'` (`sanitizeRailingSections` keeps it; the panel's section row
+  „balustrada / poręcz przy ścianie”, the Inspektor's „Tylko poręcz przy ścianie” = `editRailingSections` action
+  `mount`): `railingSolver.js wallOnlySection` — its whole path on brackets like the wall handrail past a moved end
+  (`buildWallRail`: `railingWallRailClearanceMm` off the wall, brackets every `railingWallBracketSpacingMm`), one run
+  `wall-all` with `wallRail: true`, no posts, no infill; read by every consumer of wall-rail runs (3D, plan, takeoff
+  handrail + brackets, structural spans). Allowed on either side, also without a stairwell wall.
+
+Tests: `geometry/__tests__/ceilingRods.test.js`.
