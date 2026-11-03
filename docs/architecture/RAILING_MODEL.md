@@ -466,8 +466,8 @@ wall on the other side.
   Consumers: `ceilingRodsRenderer.js` (cylinder + ceiling plate + nut, the root's `Railing` layer, black steel),
   the plan (a dot per rod on the balustrade layer), the takeoff (`railingItems.js buildCeilingRodItems`: one BALUSTER
   item per length with the count, material `railing-ceiling-rod` priced per piece, fixings included — part codes TR,
-  named „Pręty od sufitu”), the client's model (part of the root). Not in the DXF (the Ø hole in the tread is in the
-  takeoff note). Panel: folder 9 → „Pręty od sufitu (zamiast balustrady)”.
+  named „Pręty od sufitu”), the client's model (part of the root), the tread DXF (`dxfExport.js treadRodEntities`: a
+  through hole per rod, Ø rod + `ROD_HOLE_CLEARANCE_MM` (2, ASSUMPTION), layer JOINTS, one label per tread). Panel: folder 9 → „Pręty od sufitu (zamiast balustrady)”.
 - **Wall handrail only** — a section with `mount: 'wall'` (`sanitizeRailingSections` keeps it; the panel's section row
   „balustrada / poręcz przy ścianie”, the Inspektor's „Tylko poręcz przy ścianie” = `editRailingSections` action
   `mount`): `railingSolver.js wallOnlySection` — its whole path on brackets like the wall handrail past a moved end

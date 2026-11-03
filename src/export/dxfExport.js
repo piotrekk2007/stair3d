@@ -555,6 +555,26 @@ function treadLedEntities(tread, led, offsetU) {
   return out;
 }
 
+// The rods hung from the ceiling (geometry/ceilingRodsModel.js) go through the tread: a through hole per rod (the rod's
+// diameter + ROD_HOLE_CLEARANCE_MM — ASSUMPTION), layer JOINTS, one label.
+export const ROD_HOLE_CLEARANCE_MM = 2;
+export const rodHoleDiameterMm = (rodDiameterMm) => Math.ceil(rodDiameterMm + ROD_HOLE_CLEARANCE_MM);
+function treadRodEntities(tread, ceilingRods, offsetU) {
+  const rods = (ceilingRods?.rods || []).filter((r) => `step-${r.treadIndex}` === tread.stepId);
+  if (!rods.length) return [];
+  const toLocal = treadLocalFrame(tread);
+  const d = rodHoleDiameterMm(ceilingRods.diameterMm);
+  const out = [];
+  const centres = rods.map((r) => {
+    const l = toLocal(r.position);
+    return { u: l.u + offsetU, v: l.v };
+  });
+  for (const c of centres) out.push(circleEntity(c, d / 2, 'JOINTS'));
+  const at = centres.reduce((best, c) => (c.v > best.v ? c : best), centres[0]);
+  out.push(textEntity(`otwor przelotowy na pret ${rods.length} x O${d}`, { u: at.u + d, v: at.v + d }, 10, 'JOINTS'));
+  return out;
+}
+
 function isValidTread(tread) {
   return !!tread && Array.isArray(tread.outline) && tread.outline.length >= 3;
 }
@@ -619,15 +639,15 @@ function treadTitleLines(tread, joint = null) {
  * One tread, full size, as a standalone DXF: its real (nosed) outline — cut around a structural post it passes through
  * (`joint`, stage 2 of the joints) — + a title block.
  */
-export function buildTreadDXF(tread, joint = null, { led = null } = {}) {
+export function buildTreadDXF(tread, joint = null, { led = null, ceilingRods = null } = {}) {
   if (!isValidTread(tread)) return null;
   const local = localTreadOutline(tread);
-  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadLedEntities(tread, led, 0), ...treadJointEntities(tread, joint, 0), ...cantileverEntities(tread, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
+  const entities = [...treadCutOutline(tread, joint, 0), ...treadNotchEntities(tread, 0), ...treadLedEntities(tread, led, 0), ...treadRodEntities(tread, ceilingRods, 0), ...treadJointEntities(tread, joint, 0), ...cantileverEntities(tread, 0), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(local))];
   return wrapDxf(entities);
 }
 
 /** Every tread the stair has, laid out side by side on one sheet, each in its own local frame. */
-export function buildAllTreadsDXF(treads, jointsByStep = {}, { led = null } = {}) {
+export function buildAllTreadsDXF(treads, jointsByStep = {}, { led = null, ceilingRods = null } = {}) {
   const valid = (treads || []).filter(isValidTread);
   if (valid.length === 0) return null;
   const entities = [];
@@ -639,7 +659,7 @@ export function buildAllTreadsDXF(treads, jointsByStep = {}, { led = null } = {}
     cursor = offsetU + bounds.maxU + TREAD_GAP_MM;
     const shifted = local.map((p) => ({ u: p.u + offsetU, v: p.v }));
     const joint = jointsByStep[tread.stepId] || null;
-    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadLedEntities(tread, led, offsetU), ...treadJointEntities(tread, joint, offsetU), ...cantileverEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
+    entities.push(...treadCutOutline(tread, joint, offsetU), ...treadNotchEntities(tread, offsetU), ...treadLedEntities(tread, led, offsetU), ...treadRodEntities(tread, ceilingRods, offsetU), ...treadJointEntities(tread, joint, offsetU), ...cantileverEntities(tread, offsetU), ...titleEntities(treadTitleLines(tread, joint), boundsOfPoints(shifted)));
   }
   return wrapDxf(entities);
 }

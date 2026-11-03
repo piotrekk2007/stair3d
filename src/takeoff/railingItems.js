@@ -334,7 +334,7 @@ export function buildCeilingRodItems(model, config) {
         wasteFactor: 0,
         optional: true,
         status: TAKEOFF_ITEM_STATUS.OK,
-        notes: [`Pręty od sufitu (${sideLabel(model.side, config)}): ${rods.length} szt. × ${lengthMm} mm (od spodu stopnia do sufitu), stopnie ${treads.join(', ')}; ${rods[0].hung === 'opening' ? 'zawieszone w otworze — sufit piętra' : 'pod stropem'}. Otwór Ø${Math.ceil(d + 2)} w stopniu, mocowanie do sufitu i nakrętka — DO WERYFIKACJI.`],
+        notes: [`Pręty od sufitu (${sideLabel(model.side, config)}): ${rods.length} szt. × ${lengthMm} mm (od spodu stopnia do sufitu), stopnie ${treads.join(', ')}; ${rods[0].hung === 'opening' ? 'zawieszone w otworze — sufit piętra' : 'pod stropem'}. Otwór przelotowy Ø${Math.ceil(d + 2)} w stopniu (DXF stopni), mocowanie do sufitu i nakrętka — DO WERYFIKACJI.`],
       });
     });
 }

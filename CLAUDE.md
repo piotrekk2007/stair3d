@@ -368,7 +368,7 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   (`ceilingRodsPerTread`) evenly along its final side, `ceilingRodsInsetMm` in from its end, from the tread's underside
   to the ceiling above (in the opening: totalRise + `ceilingRodsTopAboveFloorMm`, else the slab's soffit); WARNING
   `CEILING-RODS-GAP` over `railingMaxClearMm`; 3D (`ceilingRodsRenderer.js`, `Railing` layer), plan dots, takeoff
-  (`buildCeilingRodItems`, BALUSTER items by length, `railing-ceiling-rod` per piece). A balustrade section with
+  (`buildCeilingRodItems`, BALUSTER items by length, `railing-ceiling-rod` per piece), tread DXF through holes (Ø + 2 mm). A balustrade section with
   `mount: 'wall'` is only a wall handrail on brackets along its whole path (`railingSolver.js wallOnlySection`).
 - Glass (`railingGlass.js`, `railingInfill` balusters | glass-side (rotule Ø30, handrail on the glass) | glass-posts
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));

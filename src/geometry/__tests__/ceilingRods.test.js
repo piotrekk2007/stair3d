@@ -108,3 +108,22 @@ test('treads up to 80 mm thick: the stair builds and the treads have that thickn
   assert.equal(Math.round(t.elevation.top - t.elevation.bottom), 80);
   assert.ok(b.ceilingRods.rods.every((r) => r.bottomZ === b.treadModels[r.treadIndex].elevation.bottom));
 });
+
+test('rods: a through hole per rod in the tread DXF (rod Ø + 2 mm), only on the treads that carry rods', async () => {
+  const { buildTreadDXF, buildAllTreadsDXF } = await import('../../export/dxfExport.js');
+  const b = buildStaircase(cfg({ ceilingRodsFromTread: 4 }));
+  const circles = (dxf) => (dxf.match(/\nCIRCLE\r?\n/g) || []).length;
+  // CIRCLE, 8, layer, 10, u, 20, v, 30, 0, 40, radius
+  const radii = (dxf) => {
+    const lines = dxf.split(/\r?\n/);
+    return lines.flatMap((l, i) => (l === 'CIRCLE' && lines[i + 9] === '40' ? [Number(lines[i + 10])] : []));
+  };
+  const opts = { ceilingRods: b.ceilingRods };
+  assert.equal(circles(buildTreadDXF(b.treadModels[0], null, opts)), 0, 'tread 1 has no rods');
+  const withRods = buildTreadDXF(b.treadModels[5], null, opts);
+  assert.equal(circles(withRods), 2);
+  assert.deepEqual(radii(withRods), [7, 7], 'Ø12 rod → Ø14 hole');
+  assert.match(withRods, /otwor przelotowy na pret 2 x O14/);
+  assert.equal(circles(buildTreadDXF(b.treadModels[5], null, {})), 0, 'without the rods model: none');
+  assert.equal(circles(buildAllTreadsDXF(b.treadModels, {}, opts)), b.ceilingRods.rods.length);
+});

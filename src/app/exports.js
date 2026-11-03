@@ -82,12 +82,12 @@ export function createExports(opts) {
     treadDXF(stepId) {
       const m = opts.getModels();
       const tread = m?.treadModels?.find((t) => t.stepId === stepId);
-      const text = tread ? buildTreadDXF(tread, treadJointsByStep(m?.joints, m?.postModels)[tread.stepId] || null, { led: m?.led }) : null;
+      const text = tread ? buildTreadDXF(tread, treadJointsByStep(m?.joints, m?.postModels)[tread.stepId] || null, { led: m?.led, ceilingRods: m?.ceilingRods }) : null;
       if (text) dxf(text, stepId);
     },
     allTreadsDXF() {
       const m = opts.getModels();
-      const text = m?.treadModels ? buildAllTreadsDXF(m.treadModels, treadJointsByStep(m?.joints, m?.postModels), { led: m?.led }) : null;
+      const text = m?.treadModels ? buildAllTreadsDXF(m.treadModels, treadJointsByStep(m?.joints, m?.postModels), { led: m?.led, ceilingRods: m?.ceilingRods }) : null;
       if (text) dxf(text, 'stopnie');
     },
     // The whole balustrade (handrail pieces with their cuts + the baluster cut list) on one 1:1 sheet. Nothing to draw
