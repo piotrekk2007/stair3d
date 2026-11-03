@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createDefaultConfig } from '../../config/schema.js';
 import { buildStaircase } from '../buildStaircase.js';
-import { slabSoffitZ } from '../floors.js';
+import { slabSoffitZ, rawSlabTopZ } from '../floors.js';
 import { pointInPolygon } from '../polygonClip.js';
 import { runTakeoffValidationGate } from '../../takeoff/validationGate.js';
 import { buildPricedMaterialTakeoff } from '../../takeoff/index.js';
@@ -26,7 +26,7 @@ const cfg = (patch = {}) => ({
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
 test('rods: n per tread along its end, inset from it, from the tread underside to the ceiling above (opening: the upper storey, else the soffit)', () => {
-  const b = buildStaircase(cfg({ ceilingRodsFromTread: 4 }));
+  const b = buildStaircase(cfg({ ceilingRodsFromTread: 4, ceilingRodsTop: 'ceiling' }));
   const { rods } = b.ceilingRods;
   const treads = b.planLayout.treads.length;
   assert.equal(rods.length, 2 * (treads - 3), 'two per tread from tread 4 on');
@@ -126,4 +126,61 @@ test('rods: a through hole per rod in the tread DXF (rod Ø + 2 mm), only on the
   assert.match(withRods, /otwor przelotowy na pret 2 x O14/);
   assert.equal(circles(buildTreadDXF(b.treadModels[5], null, {})), 0, 'without the rods model: none');
   assert.equal(circles(buildAllTreadsDXF(b.treadModels, {}, opts)), b.ceilingRods.rods.length);
+});
+
+// user report 2026-11-03: the rods in the opening stuck up above it — they end at the slab's top, fixed to its side
+test('rods in the opening (default): up to the slab top, a bracket square to the opening edge at mid slab; none above the floor', () => {
+  const b = buildStaircase(cfg());
+  const config = b.fullConfig;
+  const inOpening = b.ceilingRods.rods.filter((r) => r.hung === 'slab-edge');
+  assert.ok(inOpening.length > 0);
+  assert.ok(b.ceilingRods.rods.every((r) => r.hung !== 'opening'), 'nothing hung from the upper ceiling');
+  assert.ok(b.ceilingRods.rods.every((r) => r.topZ <= rawSlabTopZ(config) + 1e-9), 'no rod above the slab');
+  for (const r of inOpening) {
+    assert.equal(r.topZ, rawSlabTopZ(config));
+    assert.equal(r.bracket.z, (slabSoffitZ(config) + rawSlabTopZ(config)) / 2);
+    // the bracket ends ON the opening's outline, the nearest point of it
+    const o = b.ceilingFit.openingOutline;
+    const onEdge = o.some((a, i) => {
+      const c = o[(i + 1) % o.length];
+      const cross = (c.x - a.x) * (r.bracket.at.y - a.y) - (c.y - a.y) * (r.bracket.at.x - a.x);
+      return Math.abs(cross) / Math.hypot(c.x - a.x, c.y - a.y) < 1e-6;
+    });
+    assert.ok(onEdge);
+    assert.ok(Math.abs(Math.hypot(r.bracket.at.x - r.position.x, r.bracket.at.y - r.position.y) - r.bracket.reachMm) < 1e-9);
+  }
+  // the rods under the slab are as before, no bracket
+  assert.ok(b.ceilingRods.rods.filter((r) => r.hung === 'soffit').every((r) => !r.bracket && r.topZ === slabSoffitZ(config)));
+  // the derived opening lies along the stair: short brackets, no warning
+  assert.ok(!b.ceilingRods.diagnostics.some((d) => d.ruleId === 'CEILING-RODS-BRACKET'));
+  // 3D: a bar + plate per bracketed rod, no ceiling plate above the slab
+  let top = -Infinity;
+  b.root.traverse((m) => {
+    if (m.name?.startsWith('CeilingRod-')) {
+      m.geometry.computeBoundingBox();
+      top = Math.max(top, m.geometry.boundingBox.max.y);
+    }
+  });
+  assert.ok(top <= rawSlabTopZ(config) + 1e-6, `3D top ${top}`);
+});
+
+test('rods: a rod far from the opening edge reports its long bracket', async () => {
+  const { buildCeilingRods } = await import('../ceilingRodsModel.js');
+  const b = buildStaircase(cfg());
+  const rods = b.ceilingRods.rods.filter((r) => r.hung === 'slab-edge');
+  // the same opening, grown 400 mm past the rods' side: every rod in it stands 400+ mm from its nearest edge
+  const xs = b.ceilingFit.openingOutline.map((p) => p.x);
+  const ys = b.ceilingFit.openingOutline.map((p) => p.y);
+  const grow = 400 + Math.max(...rods.map((r) => r.bracket.reachMm));
+  const big = [
+    { x: Math.min(...xs) - grow, y: Math.min(...ys) - grow },
+    { x: Math.max(...xs) + grow, y: Math.min(...ys) - grow },
+    { x: Math.max(...xs) + grow, y: Math.max(...ys) + grow },
+    { x: Math.min(...xs) - grow, y: Math.max(...ys) + grow },
+  ];
+  const far = buildCeilingRods({ planLayout: b.planLayout, treadModels: b.treadModels, openingOutline: big }, b.fullConfig);
+  const d = far.diagnostics.find((x) => x.ruleId === 'CEILING-RODS-BRACKET');
+  assert.ok(d, 'reported');
+  assert.equal(d.severity, 'WARNING');
+  assert.ok(d.value >= 400);
 });

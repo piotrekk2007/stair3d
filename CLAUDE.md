@@ -366,7 +366,8 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
 - **Rods from the ceiling** (`ceilingRodsModel.js` → `built.ceilingRods`, user request 2026-11-03, docs in
   RAILING_MODEL.md): `ceilingRodsEnabled` — steel rods along one side (`ceilingRodsSide`), n per tread
   (`ceilingRodsPerTread`) evenly along its final side, `ceilingRodsInsetMm` in from its end, from the tread's underside
-  to the ceiling above (in the opening: totalRise + `ceilingRodsTopAboveFloorMm`, else the slab's soffit); WARNING
+  under the slab to its soffit, in the opening (`ceilingRodsTop`) to the slab's top fixed by a bracket to its side face
+  (default; WARNING `CEILING-RODS-BRACKET` > 250 mm) or to the upper ceiling (totalRise + `ceilingRodsTopAboveFloorMm`); WARNING
   `CEILING-RODS-GAP` over `railingMaxClearMm`; 3D (`ceilingRodsRenderer.js`, `Railing` layer), plan dots, takeoff
   (`buildCeilingRodItems`, BALUSTER items by length, `railing-ceiling-rod` per piece), tread DXF through holes (Ø + 2 mm). A balustrade section with
   `mount: 'wall'` is only a wall handrail on brackets along its whole path (`railingSolver.js wallOnlySection`).

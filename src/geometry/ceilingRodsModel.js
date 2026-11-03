@@ -10,18 +10,40 @@
 //    recess —, front to back), at (k + ½) / n of its length, so the spacing is the same within a tread and across the
 //    joint to the next one; a landing gets as many as its side needs at that spacing;
 //  * the axis `ceilingRodsInsetMm` in from the tread's end (square to the side);
-//  * bottom: the tread's underside (the rod goes through the tread, a nut under it); top: the ceiling above the rod —
-//    inside the ceiling opening the upper storey's ceiling (`ceilingRodsTopAboveFloorMm` above the upper floor), else
-//    the slab's soffit;
+//  * bottom: the tread's underside (the rod goes through the tread, a nut under it); top: under the slab its soffit;
+//    inside the ceiling opening (`ceilingRodsTop`) either the slab's raw top, the rod fixed to the slab's SIDE face — the
+//    opening's nearest edge — by a bracket at the middle of the slab's thickness ('slab', default: user request
+//    2026-11-03, nothing sticks up above the opening), or the upper storey's ceiling (`ceilingRodsTopAboveFloorMm` above
+//    the upper floor, 'ceiling');
+//  * WARNING `CEILING-RODS-BRACKET` when a bracket would reach farther than CEILING_ROD_MAX_BRACKET_MM (the rod stands
+//    far from the opening's edge);
 //  * WARNING `CEILING-RODS-GAP` when the clear gap between two neighbours exceeds `railingMaxClearMm` (§ 298 — the
 //    same limit as between balusters).
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { pointInPolygon } from './polygonClip.js';
 import { inwardNormal } from './planLayout.js';
-import { slabSoffitZ } from './floors.js';
+import { slabSoffitZ, rawSlabTopZ } from './floors.js';
 
 export const CEILING_ROD_SIDES = Object.freeze(['outer', 'inner']);
+export const CEILING_ROD_MAX_BRACKET_MM = 250; // a longer bracket from the slab's side to a rod — ASSUMPTION
+
+// The nearest point of a closed polygon's edges to p.
+function nearestOnOutline(p, outline) {
+  let best = null;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    const q = { x: a.x + dx * t, y: a.y + dy * t };
+    const d = Math.hypot(p.x - q.x, p.y - q.y);
+    if (!best || d < best.d) best = { point: q, d };
+  }
+  return best;
+}
 
 const finite = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
 
@@ -67,6 +89,8 @@ export function buildCeilingRods({ planLayout, treadModels, openingOutline = nul
   const inset = Math.max(0, finite(config.ceilingRodsInsetMm, 40));
   const upperCeilingZ = (Number(config.totalRise) || 0) + Math.max(0, finite(config.ceilingRodsTopAboveFloorMm, 2600));
   const soffitZ = slabSoffitZ(config);
+  const slabTopZ = rawSlabTopZ(config);
+  const toSlab = config.ceilingRodsTop !== 'ceiling';
   const handedness = planLayout.handedness ?? 1;
   const going = Number(config.treadGoing) > 0 ? Number(config.treadGoing) : 250;
   const rods = [];
@@ -90,10 +114,14 @@ export function buildCeilingRods({ planLayout, treadModels, openingOutline = nul
       const into = inwardNormal(at.dir, side, handedness);
       const position = { x: at.point.x + into.x * inset, y: at.point.y + into.y * inset };
       const inOpening = openingOutline?.length >= 3 && pointInPolygon(position, openingOutline);
-      const topZ = inOpening ? upperCeilingZ : soffitZ;
+      const hung = !inOpening ? 'soffit' : toSlab ? 'slab-edge' : 'opening';
+      const topZ = hung === 'soffit' ? soffitZ : hung === 'slab-edge' ? slabTopZ : upperCeilingZ;
       const bottomZ = tread.elevation.bottom;
       if (!(topZ > tread.elevation.top)) continue;
-      rods.push({ id: `rod-${i}-${k}`, treadIndex: i, k, position, bottomZ, topZ, lengthMm: topZ - bottomZ, hung: inOpening ? 'opening' : 'soffit' });
+      // the bracket to the slab's side face: from the rod square to the opening's nearest edge, mid-thickness
+      const edge = hung === 'slab-edge' ? nearestOnOutline(position, openingOutline) : null;
+      const bracket = edge ? { at: edge.point, z: (soffitZ + slabTopZ) / 2, reachMm: edge.d } : null;
+      rods.push({ id: `rod-${i}-${k}`, treadIndex: i, k, position, bottomZ, topZ, lengthMm: topZ - bottomZ, hung, bracket });
     }
   }
   const diagnostics = [];
@@ -103,6 +131,23 @@ export function buildCeilingRods({ planLayout, treadModels, openingOutline = nul
     const b = rods[r].position;
     const clear = Math.hypot(b.x - a.x, b.y - a.y) - diameterMm;
     if (maxClear === null || clear > maxClear) maxClear = clear;
+  }
+  const far = rods.filter((r) => r.bracket && r.bracket.reachMm > CEILING_ROD_MAX_BRACKET_MM);
+  if (far.length) {
+    const worst = Math.max(...far.map((r) => r.bracket.reachMm));
+    diagnostics.push(
+      createDiagnostic({
+        ruleId: 'CEILING-RODS-BRACKET',
+        severity: 'WARNING',
+        elementType: 'railing',
+        elementId: 'ceiling-rods',
+        parameter: 'ceilingRodsTop',
+        value: Math.round(worst),
+        expected: `<= ${CEILING_ROD_MAX_BRACKET_MM}`,
+        unit: 'mm',
+        message: `Pręty od sufitu: ${far.length} pręt(ów) stoi do ${Math.round(worst)} mm od krawędzi otworu — wspornik do boku stropu dłuższy niż ${CEILING_ROD_MAX_BRACKET_MM} mm. Dosuń otwór do schodów albo zawieś pręty pod sufitem piętra.`,
+      })
+    );
   }
   const limit = Number(config.railingMaxClearMm) || 120;
   if (maxClear !== null && maxClear > limit + 0.5) {

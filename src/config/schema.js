@@ -386,6 +386,9 @@ export function createDefaultConfig() {
     ceilingRodsPerTread: 2, // rods per tread (a landing: as many at the same spacing)
     ceilingRodDiameterMm: 12, // mm — ASSUMPTION
     ceilingRodsInsetMm: 40, // mm, the rods' axis in from the tread's end — ASSUMPTION
+    // inside the ceiling opening: 'slab' = up to the slab's top, fixed to its side face (the opening's edge) by a bracket
+    // (user request 2026-11-03 — the rods must not stick up above the opening); 'ceiling' = up to the upper storey's ceiling
+    ceilingRodsTop: 'slab',
     ceilingRodsTopAboveFloorMm: 2600, // mm above the upper floor: where a rod inside the ceiling opening is hung (the upper storey's ceiling) — ASSUMPTION
 
     postSize: 110, // mm, przekrój słupa narożnego (kwadrat)

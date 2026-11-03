@@ -791,7 +791,8 @@ export function createUI({
   live(rods.add(config, 'ceilingRodsPerTread', 1, 6, 1)).name('Prętów na stopień');
   live(rods.add(config, 'ceilingRodDiameterMm', 6, 30, 1)).name('Średnica pręta [mm]');
   live(rods.add(config, 'ceilingRodsInsetMm', 10, 200, 1)).name('Oś pręta od końca stopnia [mm]');
-  live(rods.add(config, 'ceilingRodsTopAboveFloorMm', 500, 5000, 10)).name('W otworze: do wysokości nad podłogą piętra [mm]');
+  live(rods.add(config, 'ceilingRodsTop', { 'do stropu (wspornik do boku stropu)': 'slab', 'do sufitu piętra': 'ceiling' })).name('W otworze: pręty');
+  live(rods.add(config, 'ceilingRodsTopAboveFloorMm', 500, 5000, 10)).name('Sufit piętra nad podłogą [mm]');
   rods.close();
 
   const sectionsBox = document.createElement('div');

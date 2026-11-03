@@ -733,7 +733,14 @@ export function renderPlan2DSVG(planLayout, config, derived, options) {
   const ceilingRodsXML =
     layers.railing === false || !ceilingRods?.rods?.length
       ? ''
-      : ceilingRods.rods.map((r) => `<circle class="ceiling-rod" cx="${fmt(r.position.x)}" cy="${fmt(-r.position.y)}" r="${fmt(Math.max(ceilingRods.diameterMm / 2, 6))}" fill="#232527" pointer-events="none"/>`).join('');
+      : ceilingRods.rods
+          .map(
+            (r) =>
+              // (its bracket to the slab's side: a line to the opening's edge)
+              (r.bracket ? `<line class="ceiling-rod-bracket" x1="${fmt(r.position.x)}" y1="${fmt(-r.position.y)}" x2="${fmt(r.bracket.at.x)}" y2="${fmt(-r.bracket.at.y)}" stroke="#232527" stroke-width="1.5" pointer-events="none" ${HAIR}/>` : '') +
+              `<circle class="ceiling-rod" cx="${fmt(r.position.x)}" cy="${fmt(-r.position.y)}" r="${fmt(Math.max(ceilingRods.diameterMm / 2, 6))}" fill="#232527" pointer-events="none"/>`
+          )
+          .join('');
   const railingLayerXML = (() => {
     if (layers.railing === false || !railingModel?.enabled) return '';
     const size = config.railingBalusterSizeMm || 30;

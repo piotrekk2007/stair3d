@@ -459,8 +459,12 @@ wall on the other side.
   `ceilingRodsInsetMm` (40 — axis in from the tread's end, square to its final side), `ceilingRodsTopAboveFloorMm`
   (2600) — sizes ASSUMPTION. Per tread n rods at (k + ½) / n of its final side (front → back), so the spacing is even
   within a tread and across to the next one; a landing gets as many as its side needs at that spacing; no rod on a
-  tread lying on concrete. Bottom = the tread's underside (through the tread, a nut under it); top = inside the ceiling
-  opening the upper storey's ceiling (totalRise + `ceilingRodsTopAboveFloorMm`), else the slab's soffit; a rod whose
+  tread lying on concrete. Bottom = the tread's underside (through the tread, a nut under it); top = under the slab its
+  soffit; inside the ceiling opening by `ceilingRodsTop`: `slab` (default, user report 2026-11-03 — the rods stuck up
+  above the opening) the slab's raw top, the rod fixed to the slab's SIDE face by a bracket square to the opening's
+  nearest edge at mid slab thickness (`rod.bracket {at, z, reachMm}`; 3D flat bar + plate, plan line; WARNING
+  `CEILING-RODS-BRACKET` over `CEILING_ROD_MAX_BRACKET_MM` 250, ASSUMPTION), or `ceiling` the upper storey's ceiling
+  (totalRise + `ceilingRodsTopAboveFloorMm`); a rod whose
   ceiling is below its tread's top (a tread colliding with the slab — reported elsewhere) is not made. WARNING
   `CEILING-RODS-GAP` (gate) when the clear gap between neighbours exceeds `railingMaxClearMm` (§ 298, as for balusters).
   Consumers: `ceilingRodsRenderer.js` (cylinder + ceiling plate + nut, the root's `Railing` layer, black steel),
