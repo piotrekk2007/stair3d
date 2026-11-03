@@ -369,3 +369,20 @@ test('catalog stock: risers and housings never get a catalogStock (sheet-nesting
   for (const riser of items.filter((i) => i.elementType === ELEMENT_TYPES.RISER)) assert.equal(riser.catalogStock, null);
   for (const housing of items.filter((i) => i.elementType === ELEMENT_TYPES.STRINGER_HOUSING)) assert.equal(housing.catalogStock, null);
 });
+
+test('regression (user, 2026-11-03): a landing is bought as the smallest rectangle round it — a 1020 × 1080 landing was priced as 1486 × 1483 (its walking direction ran diagonally)', async () => {
+  const { createDefaultConfig } = await import('../../config/schema.js');
+  const { buildStaircase } = await import('../../geometry/buildStaircase.js');
+  const { computeMaterialTakeoff } = await import('../materialTakeoff.js');
+  const b = buildStaircase({
+    ...createDefaultConfig(), stairType: 'U', turn1Type: 'winder', turn2Type: 'landing', mergeLandings: false, treadsLegA: 8, treadsLegB: 0, treadsLegC: 4, windersPerTurn: 3,
+    stairWidth: 900, stairWidthB: 1080, stairWidthC: 1020, landingDepthMm: 1080, uFlightGapMm: 120, hasCornerPost: false,
+  });
+  const landing = computeMaterialTakeoff(b, b.fullConfig).find((i) => i.elementType === 'LANDING');
+  const { lengthMm, widthMm } = landing.calculatedDimensions;
+  const L = b.treadModels.find((t) => t.type === 'landing');
+  const xs = L.outline.map((p) => p.x);
+  const ys = L.outline.map((p) => p.y);
+  const box = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)].sort((a, c) => c - a);
+  assert.ok(Math.abs(lengthMm - box[0]) < 0.01 && Math.abs(widthMm - box[1]) < 0.01, `${lengthMm} × ${widthMm} vs ${box}`);
+});

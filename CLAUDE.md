@@ -447,7 +447,10 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   (`pricing.js`, 0 = unpriced and flagged), LED power supplies by power (`boardPricing.js ledSupplyPrices`: the smallest
   priced one that is enough, else n × the largest) — editor block „Akcesoria”; a category line counts pieces only (not
   mb); manual extra rows (`manualItems.js`). Takeoff settings are NOT config (own state, saved in the
-  project). Summary per category (`ui/takeoffView.js summarizeByCategory`).
+  project); the WHOLE price list (general list, waste, board pricing incl. post profiles / LED supplies / species —
+  not the manual rows) saved / read as one file „💾 Zapisz / 📂 Wczytaj cały cennik” (`takeoff/priceListFile.js`, also
+  reads a project file's list; „Wczytaj CSV” stays the DREWEX board table only). A landing's stock = its smallest
+  rectangle (`minAreaRectUV` — its diagonal `direction` gave 1486 × 1483 for 1080 × 1020). Summary per category (`ui/takeoffView.js summarizeByCategory`).
 - **Part codes and labels** (`production/partCodes.js`, `labelSheet.js`, user decisions 2026-10-28, docs
   [PART_CODES.md](docs/architecture/PART_CODES.md)): every physical part (the ungated takeoff items) gets a code by type,
   numbered walking up — `ST-01` (= the plan's tread number), `PD`, `PS-01` (fan riser per panel `PS-06a`, top `PS-G`),

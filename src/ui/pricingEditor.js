@@ -14,6 +14,7 @@ import { DEFAULT_MATERIAL_CATALOG } from '../takeoff/materialCatalog.js';
 import { downloadTextFile } from '../export/downloadTextFile.js';
 import { elementLabelPl } from './takeoffView.js';
 import { escapeHtml as esc } from '../util/format.js';
+import { priceListToFile, applyPriceListFile } from '../takeoff/priceListFile.js';
 
 
 const numInput = (attrs, value, extra = '') => `<input type="number" step="any" min="0" value="${value}" ${attrs} ${extra} />`;
@@ -33,6 +34,12 @@ export function createPricingEditor(container, { settings, onChange }) {
   fileInput.accept = '.csv,text/csv';
   fileInput.hidden = true;
   container.appendChild(fileInput);
+  // the whole price list as one file (takeoff/priceListFile.js) — to carry it over to another project
+  const listInput = document.createElement('input');
+  listInput.type = 'file';
+  listInput.accept = '.json,application/json';
+  listInput.hidden = true;
+  container.appendChild(listInput);
 
   const bp = () => settings.boardPricing;
 
@@ -136,6 +143,14 @@ export function createPricingEditor(container, { settings, onChange }) {
     root.innerHTML = `
       <summary>⚙ Cennik i materiały <span class="tk-hint">— gatunek: <b>${esc(p.species)} ${esc(p.cls)}</b>${mult !== undefined ? ` (${mult}% ceny bazowej)` : ''}</span></summary>
       <div class="tk-pricing-body">
+        <div class="tkp-block">
+          <div class="tkp-title">Cały cennik — do przeniesienia do innego projektu</div>
+          <div class="tkp-actions">
+            <button type="button" data-action="list-export" title="Zapisuje do pliku wszystkie ceny: deski, gatunki, słupy (z dodanymi profilami), tralki, poręcze, podporęcze, szkło, akcesoria, zasilacze LED, odpady">💾 Zapisz cały cennik</button>
+            <button type="button" data-action="list-import" title="Wczytuje cennik zapisany przyciskiem obok — albo cennik z pliku innego projektu">📂 Wczytaj cały cennik</button>
+          </div>
+          <div class="tk-hint">Pozycje ręczne kosztorysu zostają w projekcie. „Wczytaj CSV” niżej czyta tylko tabelę desek (format kalkulatora DREWEX).</div>
+        </div>
         <div class="tkp-block">
           <div class="tkp-title">Materiał główny</div>
           <label>Gatunek <select data-kind="species">${species.map((s) => `<option ${s === p.species ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
@@ -288,6 +303,12 @@ export function createPricingEditor(container, { settings, onChange }) {
     } else if (action === 'csv-import') {
       fileInput.click();
       return;
+    } else if (action === 'list-export') {
+      downloadTextFile(JSON.stringify(priceListToFile(settings), null, 2), 'cennik-schody3d.json', 'application/json');
+      return;
+    } else if (action === 'list-import') {
+      listInput.click();
+      return;
     } else if (action === 'csv-export') {
       downloadTextFile(boardsToCSV(p.table.boards), 'cennik-desek.csv', 'text/csv');
       return;
@@ -322,6 +343,24 @@ export function createPricingEditor(container, { settings, onChange }) {
       render();
       onChange();
       if (skipped > 0) window.alert(`Wczytano ${boards.length} wierszy; pominięto ${skipped} niepoprawnych.`);
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  listInput.addEventListener('change', () => {
+    const file = listInput.files[0];
+    listInput.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const read = applyPriceListFile(settings, reader.result);
+        render();
+        onChange();
+        window.alert(`Wczytano cennik: ${read.prices} cen pozycji, ${read.boards} wierszy desek, ${read.posts} profili słupów.`);
+      } catch (e) {
+        window.alert(`Nie udało się wczytać cennika: ${e.message}`);
+      }
     };
     reader.readAsText(file, 'utf-8');
   });

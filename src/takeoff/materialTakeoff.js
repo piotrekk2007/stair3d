@@ -80,9 +80,15 @@ function buildTreadItem(t, config, wasteFactors) {
   const netAreaMm2 = Math.abs(signedPolygonArea(t.outline));
   const netVolumeMm3 = netAreaMm2 * t.thickness;
   // Winder treads are bought/cut as their PRODUCTION BLANK (the "formatka" shown on the 2D plan and
-  // in the 3D labels, TreadModel.winderBlank); every other tread as the bounding rectangle of its
-  // own outline in its walking direction.
-  const { lengthMm, widthMm } = t.winderBlank ? { lengthMm: t.winderBlank.length, widthMm: t.winderBlank.depth } : boundingRectAlong(t.outline, t.direction);
+  // in the 3D labels, TreadModel.winderBlank); a landing as the smallest rectangle round its outline (it has two
+  // walking directions — its `direction`, read off its L-shaped outer chain, ran diagonally and a 1080 × 1020 landing
+  // was priced as 1486 × 1483: user report 2026-11-03); every other tread as the bounding rectangle of its own
+  // outline in its walking direction.
+  const { lengthMm, widthMm } = t.winderBlank
+    ? { lengthMm: t.winderBlank.length, widthMm: t.winderBlank.depth }
+    : t.type === 'landing'
+      ? minAreaRectUV(t.outline.map((p) => ({ u: p.x, v: p.y })))
+      : boundingRectAlong(t.outline, t.direction);
   const stockAreaMm2 = lengthMm * widthMm;
   const stockVolumeMm3 = stockAreaMm2 * t.thickness;
   const elementType = t.type === 'landing' ? ELEMENT_TYPES.LANDING : ELEMENT_TYPES.TREAD;

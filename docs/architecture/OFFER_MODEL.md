@@ -61,3 +61,16 @@ Duża formatka w trybie `whole` bierze się zwykle z **załamania profilu** (bie
 tylko z szerszej końcówki — na domyślnych schodach L wangi ~352 mm głębokości mają formatki 506–521 mm. Kod:
 `takeoff/stockGeometry.js` (`stringerStrips`, `stringerSplitBlanks`), `takeoff/boardPricing.js`
 (`STRINGER_PRICING_MODES`, `priceStringerPieces`).
+
+## The whole price list as a file (user report 2026-11-03)
+
+„💾 Zapisz cały cennik” writes `takeoff/priceListFile.js priceListToFile(settings)` — `{_type: 'schody3d-cennik',
+_version: 1, priceList, wasteFactors, boardPricing}` (the general list's prices — balusters, handrail, base rail,
+glass, fittings, bolts, LED strip / profile, brackets, steel, MDF —, the waste factors, the whole board pricing: board
+table, species multipliers, post table with the profiles added by hand, LED supplies, the chosen species / class,
+riser material, wanga pricing mode); „📂 Wczytaj cały cennik” applies such a file or a project file's price list
+(`applyPriceListFile`: prices by `materialId`, known waste factors, `sanitizeBoardPricing`). The project's own extra rows
+(`manualItems`) are not part of it. „Wczytaj / Pobierz CSV” remain the DREWEX board table only.
+
+A landing's stock rectangle is the smallest one round its outline (`stockGeometry.js minAreaRectUV`): its `direction`
+(read off its L-shaped outer chain) ran diagonally and a 1080 × 1020 landing was priced as 1486 × 1483.
