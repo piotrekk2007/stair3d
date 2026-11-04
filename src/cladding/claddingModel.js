@@ -4,7 +4,6 @@
 // slab, and the FINISHED heights — what the installer checks before ordering. Pure, no Three.js.
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { planPoint } from './concreteModel.js';
 
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -27,8 +26,49 @@ export function riserOn(element, config) {
   return typeof own === 'boolean' ? own : !!config.riserBoards;
 }
 
-// "left" / "right" walking up are the u0 / u1 edges of a frame whose r points right
-const sideU = (e) => ({ left: e.u0, right: e.u1 });
+const unit = (a, b) => {
+  const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
+};
+// out of a CCW polygon: the edge direction turned clockwise
+const outward = (e) => {
+  const t = unit(e.a, e.b);
+  return { x: t.y, y: -t.x };
+};
+const add = (p, n, d) => ({ x: p.x + n.x * d, y: p.y + n.y * d });
+
+/** A CCW polygon given as edges, each moved outward by its own distance; neighbours meet at their lines' crossing, two
+ *  collinear neighbours with different distances step from one to the other. */
+export function offsetEdges(edges, distOf) {
+  const lines = edges.map((e) => {
+    const n = outward(e);
+    const d = distOf(e);
+    return { a: add(e.a, n, d), b: add(e.b, n, d), n, d, t: unit(e.a, e.b), from: e.a };
+  });
+  const out = [];
+  lines.forEach((L, j) => {
+    const P = lines[(j - 1 + lines.length) % lines.length];
+    const cross = P.t.x * L.t.y - P.t.y * L.t.x;
+    if (Math.abs(cross) < 1e-9) {
+      if (Math.abs(P.d - L.d) < 1e-9) out.push(L.a);
+      else out.push(add(L.from, P.n, P.d), L.a);
+      return;
+    }
+    // P.a + s·P.t = L.a + u·L.t
+    const w = { x: L.a.x - P.a.x, y: L.a.y - P.a.y };
+    const sParam = (w.x * L.t.y - w.y * L.t.x) / cross;
+    out.push({ x: P.a.x + P.t.x * sParam, y: P.a.y + P.t.y * sParam });
+  });
+  return out;
+}
+
+// the board's size: along the grain (the front edge) × across it
+function boardSize(outline, grain) {
+  const n = { x: -grain.y, y: grain.x };
+  const us = outline.map((p) => p.x * grain.x + p.y * grain.y);
+  const vs = outline.map((p) => p.x * n.x + p.y * n.y);
+  return { lengthMm: Math.max(...us) - Math.min(...us), depthMm: Math.max(...vs) - Math.min(...vs) };
+}
 
 /**
  * @param {object} concrete  buildConcreteModel's result
@@ -42,49 +82,11 @@ export function buildCladdingModel(concrete, config) {
   const risers = [];
   els.forEach((e, i) => {
     const riser = riserOn(e, config);
-    const front = config.nosingFrontMm + (riser ? r : 0);
-    const left = sideNosingOn(e, 'left', config) ? config.sideNosingMm : 0;
-    const right = sideNosingOn(e, 'right', config) ? config.sideNosingMm : 0;
-    const { left: uL, right: uR } = sideU(e);
-    let local;
-    if (e.kind === 'landing' && (e.turn === 'u-left' || e.turn === 'u-right')) {
-      // a U landing: the front nosing only where the incoming flight arrives and over the gap — the return flight's
-      // first riser stands on the rest of that line
-      const prev = els[i - 1];
-      const incoming = prev ? prev.u1 - prev.u0 : e.widthMm;
-      const gap = els[i].widthMm - incoming - (els[i + 1] ? els[i + 1].u1 - els[i + 1].u0 : 0);
-      if (e.turn === 'u-right') {
-        const cut = uL + incoming + Math.max(0, gap);
-        local = [
-          [uL - left, e.v0 - front],
-          [cut, e.v0 - front],
-          [cut, e.v0],
-          [uR, e.v0],
-          [uR, e.v1],
-          [uL - left, e.v1],
-        ];
-      } else {
-        const cut = uR - incoming - Math.max(0, gap);
-        local = [
-          [uL, e.v0],
-          [cut, e.v0],
-          [cut, e.v0 - front],
-          [uR + right, e.v0 - front],
-          [uR + right, e.v1],
-          [uL, e.v1],
-        ];
-      }
-    } else {
-      local = [
-        [uL - left, e.v0 - front],
-        [uR + right, e.v0 - front],
-        [uR + right, e.v1],
-        [uL - left, e.v1],
-      ];
-    }
-    let outline = local.map(([u, v]) => planPoint(e.frame, u, v));
-    const area = outline.reduce((s, p, k) => s + p.x * outline[(k + 1) % outline.length].y - outline[(k + 1) % outline.length].x * p.y, 0);
-    if (area < 0) outline = outline.reverse();
+    const nosing = { front: config.nosingFrontMm + (riser ? r : 0), left: sideNosingOn(e, 'left', config) ? config.sideNosingMm : 0, right: sideNosingOn(e, 'right', config) ? config.sideNosingMm : 0 };
+    const outline = offsetEdges(e.edges, (edge) => nosing[edge.role] ?? 0);
+    const fronts = e.edges.filter((edge) => edge.role === 'front');
+    const longest = fronts.reduce((best, edge) => (!best || Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y) > Math.hypot(best.b.x - best.a.x, best.b.y - best.a.y) ? edge : best), null);
+    const grain = longest ? unit(longest.a, longest.b) : { x: 1, y: 0 };
     treads.push({
       id: `${e.kind}-${e.index}`,
       index: e.index,
@@ -93,46 +95,69 @@ export function buildCladdingModel(concrete, config) {
       bottomZ: e.topZ,
       topZ: e.topZ + t,
       thicknessMm: t,
-      nosing: { frontMm: config.nosingFrontMm, leftMm: left, rightMm: right },
-      // the board's size: along the walking direction × across (the production blank, stage 4 prices it)
-      depthMm: e.v1 - e.v0 + front,
-      lengthMm: uR - uL + left + right,
-      grain: e.frame.r,
+      nosing: { frontMm: config.nosingFrontMm, leftMm: nosing.left, rightMm: nosing.right },
+      // the production blank (stage 4 prices it): along the grain × across
+      ...boardSize(outline, grain),
+      grain,
     });
     if (riser) {
       const below = i === 0 ? config.floorFinishBottomMm : els[i - 1].topZ + t;
-      risers.push({
-        id: `riser-${e.index}`,
-        index: e.index,
-        outline: [planPoint(e.frame, uL, e.v0 - r), planPoint(e.frame, uR, e.v0 - r), planPoint(e.frame, uR, e.v0), planPoint(e.frame, uL, e.v0)],
-        bottomZ: below,
-        topZ: e.topZ,
-        heightMm: e.topZ - below,
-        lengthMm: uR - uL,
-        thicknessMm: r,
-        grain: e.frame.r,
+      fronts.forEach((edge, k) => {
+        const n = outward(edge);
+        risers.push({
+          id: fronts.length > 1 ? `riser-${e.index}-${k}` : `riser-${e.index}`,
+          index: e.index,
+          outline: [edge.a, edge.b, add(edge.b, n, r), add(edge.a, n, r)].reverse(),
+          bottomZ: below,
+          topZ: e.topZ,
+          heightMm: e.topZ - below,
+          lengthMm: Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y),
+          thicknessMm: r,
+          grain: unit(edge.a, edge.b),
+        });
       });
     }
   });
   // the exit riser: on the last tread, in front of the slab's edge, up to the finished floor above
   const last = els.at(-1);
   if (last && config.riserBoards) {
-    const { left: uL, right: uR } = sideU(last);
     const topZ = concrete.exit.rawSlabTopZ + config.floorFinishTopMm;
-    risers.push({
-      id: 'riser-top',
-      index: els.length,
-      outline: [planPoint(last.frame, uL, last.v1 - r), planPoint(last.frame, uR, last.v1 - r), planPoint(last.frame, uR, last.v1), planPoint(last.frame, uL, last.v1)],
-      bottomZ: last.topZ + t,
-      topZ,
-      heightMm: topZ - last.topZ - t,
-      lengthMm: uR - uL,
-      thicknessMm: r,
-      grain: last.frame.r,
-    });
+    last.edges
+      .filter((edge) => edge.role === 'back')
+      .forEach((edge, k) => {
+        const n = outward(edge);
+        risers.push({
+          id: k ? `riser-top-${k}` : 'riser-top',
+          index: els.length,
+          outline: [edge.a, edge.b, add(edge.b, n, -r), add(edge.a, n, -r)],
+          bottomZ: last.topZ + t,
+          topZ,
+          heightMm: topZ - last.topZ - t,
+          lengthMm: Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y),
+          thicknessMm: r,
+          grain: unit(edge.a, edge.b),
+        });
+      });
   }
   const heights = finishedHeights(concrete, config);
-  return { treads, risers, heights, diagnostics: heightDiagnostics(heights, config) };
+  return { treads, risers, heights, diagnostics: [...heightDiagnostics(heights, config), ...zoneDiagnostics(concrete)] };
+}
+
+// a winder zone whose edges are out of order (crossing, or a wall end not further on than the previous one) cannot
+// be laid — an ERROR naming the zone
+function zoneDiagnostics(concrete) {
+  return (concrete.zones || [])
+    .filter((z) => !z.orderOk)
+    .map((z) =>
+      createDiagnostic({
+        ruleId: 'CLAD-WINDER-ORDER',
+        severity: 'ERROR',
+        elementType: 'tread',
+        elementId: `zone-${z.groupIndex}`,
+        parameter: 'edges',
+        message: `Zabiegi (grupa ${z.groupIndex + 1}): krawędzie są w złej kolejności — każda kolejna musi leżeć dalej od początku zabiegu i na ścianie, i przy duszy (krawędzie się krzyżują). Popraw pomiar.`,
+      })
+    );
 }
 
 /** The finished rise of every step (floor → first tread … last tread → floor above) and its concrete one. */
@@ -141,7 +166,7 @@ export function finishedHeights(concrete, config) {
   const els = concrete.elements;
   const rows = els.map((e, i) => {
     const below = i === 0 ? config.floorFinishBottomMm : els[i - 1].topZ + t;
-    return { index: e.index, kind: e.kind, label: `${e.kind === 'landing' ? 'Podest' : 'Stopień'} ${e.index + 1}`, concreteRiseMm: e.riseMm, finishedRiseMm: e.topZ + t - below, goingMm: e.kind === 'step' ? e.goingMm : null, finishedTopZ: e.topZ + t };
+    return { index: e.index, kind: e.kind, label: `${e.kind === 'landing' ? 'Podest' : e.kind === 'winder' ? 'Zabieg' : 'Stopień'} ${e.index + 1}`, concreteRiseMm: e.riseMm, finishedRiseMm: e.topZ + t - below, goingMm: e.kind === 'step' ? e.goingMm : e.kind === 'winder' ? e.walkGoingMm : null, finishedTopZ: e.topZ + t };
   });
   if (els.length) {
     const lastTop = els.at(-1).topZ + t;

@@ -3,7 +3,6 @@
 
 import * as THREE from 'three';
 import { applyWoodGrainToTree, getOakPhotoTexture } from '../scene/woodGrain.js';
-import { planPoint } from './concreteModel.js';
 
 // A solid between a plan outline's top and bottom heights (one height per outline point); plan (x, y) at z → three
 // (x, z, −y). The outline is made counter-clockwise.
@@ -63,8 +62,19 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null } = 
     const t = slab / Math.cos(pitch);
     const frontBottom = Math.max(0, (e.kind === 'step' ? e.bottomZ : e.topZ) - t);
     const backBottom = Math.max(0, e.topZ - t);
-    const outline = [planPoint(e.frame, e.u0, e.v0), planPoint(e.frame, e.u1, e.v0), planPoint(e.frame, e.u1, e.v1), planPoint(e.frame, e.u0, e.v1)];
-    const mesh = new THREE.Mesh(prismGeometry(outline, [frontBottom, frontBottom, backBottom, backBottom], e.topZ), concreteMaterial);
+    // a step: the soffit from its front line to its back line along the flight; a winder: level under its middle
+    // height (the zone's soffit is not modelled yet), a landing: level
+    const bottoms =
+      e.kind === 'step'
+        ? e.outline.map((p) => {
+            const v = (p.x - e.frame.o.x) * e.frame.f.x + (p.y - e.frame.o.y) * e.frame.f.y;
+            const k = e.v1 > e.v0 ? Math.min(1, Math.max(0, (v - e.v0) / (e.v1 - e.v0))) : 0;
+            return frontBottom + (backBottom - frontBottom) * k;
+          })
+        : e.kind === 'winder'
+          ? Math.max(0, (e.bottomZ + e.topZ) / 2 - t)
+          : backBottom;
+    const mesh = new THREE.Mesh(prismGeometry(e.outline, bottoms, e.topZ), concreteMaterial);
     mesh.name = `Concrete-${e.index}`;
     concreteGroup.add(mesh);
   }

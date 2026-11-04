@@ -34,7 +34,7 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
   const labels = concrete.elements
     .map((e) => {
       const c = centre(e.outline);
-      const text = e.kind === 'landing' ? `P${e.index + 1}` : String(e.index + 1);
+      const text = e.kind === 'landing' ? `P${e.index + 1}` : e.kind === 'winder' ? `Z${e.index + 1}` : String(e.index + 1);
       return `<text x="${fmt(c.x)}" y="${fmt(-c.y)}" font-size="90" text-anchor="middle" dominant-baseline="middle" fill="#3b2a1a" pointer-events="none">${escapeHtml(text)}</text>`;
     })
     .join('');
@@ -54,5 +54,24 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
     ];
     walkXML = `<polyline points="${pts(walk)}" fill="none" stroke="#c0392b" stroke-width="1.5" pointer-events="none" ${HAIR}/><polygon points="${pts(head)}" fill="#c0392b" pointer-events="none"/>`;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${concreteXML}${riserXML}${treadXML}${walkXML}${labels}</svg>`;
+  // the winder zones (stage 2): their walkline (dashed), the wall and dusza corners, a handle on both ends of every
+  // edge between two winders — dragged along the wall / the dusza line (claddingApp.js); a measured end is filled
+  const r = Math.max(18, (viewport?.width ?? 4000) / 160);
+  const zonesXML = (concrete.zones || [])
+    .map((z, zi) => {
+      const walkline = `<polyline points="${pts(z.walkline)}" fill="none" stroke="#c0392b" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" ${HAIR}/>`;
+      const corners = [z.wallCorner, z.duszaCorner].map((c) => `<circle cx="${fmt(c.x)}" cy="${fmt(-c.y)}" r="${fmt(r * 0.45)}" fill="#555" pointer-events="none"/>`).join('');
+      const handles = z.edges
+        .map((e, k) => {
+          if (e.boundary) return '';
+          const line = `<line x1="${fmt(e.outer.x)}" y1="${fmt(-e.outer.y)}" x2="${fmt(e.inner.x)}" y2="${fmt(-e.inner.y)}" stroke="#d35400" stroke-width="1.5" pointer-events="none" ${HAIR}/>`;
+          const h = (which, p, measured) =>
+            `<circle class="clad-edge-handle" data-zone="${zi}" data-edge="${k}" data-end="${which}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(r)}" fill="${measured ? '#d35400' : '#fff'}" stroke="#d35400" stroke-width="2" ${HAIR}><title>${which === 'outer' ? 'Koniec przy ścianie' : 'Koniec przy duszy'} — przeciągnij</title></circle>`;
+          return line + h('outer', e.outer, e.measuredOuter) + h('inner', e.inner, e.measuredInner);
+        })
+        .join('');
+      return walkline + corners + handles;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${concreteXML}${riserXML}${treadXML}${walkXML}${labels}${zonesXML}</svg>`;
 }

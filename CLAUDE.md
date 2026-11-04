@@ -533,7 +533,10 @@ measured concrete stair, quotation with labour later. Hard rule (user decision 2
 self-supporting engine — shared code read-only from the list in `src/cladding/__tests__/isolation.test.js`, outside
 edits only the hooks listed in the document. Stage 1 built: the sequence of measured concrete step groups / landings
 (L / U turns, flights apart, per-step overrides) → concrete + cladding treads (front / side nosings) + riser boards →
-plan, 3D, finished-heights table (WARNING `CLAD-RISE-UNEVEN`). Next: winders (stage 2).
+plan, 3D, finished-heights table (WARNING `CLAD-RISE-UNEVEN`). Stage 2 built: 90° winder zones (`winderZone`: A / B
+along the walls, edges measured from the wall / dusza corner or generated with equal walkline goings, dragged on the
+plan; every element an outline with named edges, the cladding by `offsetEdges`; ERROR `CLAD-WINDER-ORDER`). Next:
+surroundings (stage 3).
 
 ## Open items / known limitations
 

@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stage 1 BUILT (2026-11-04), stages 2–6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–2 BUILT (2026-11-04), stages 3–6 planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -134,9 +134,32 @@ only (as DREWEX).
   sanitize, file, plan), `__tests__/isolation.test.js` (imports only the module, the read-only list, packages; outside
   only `main.js`; models never import Three.js).
 
+## Stage 2 — winders, as built
+
+- Sequence group `{kind: 'winders', count 2–8, riseMm, turn left / right, spaceAMm, spaceBMm, walklineOffsetMm (null =
+  automatic), edges: [count − 1 × {outerMm?, innerMm?} | null]}`.
+- `concreteModel.js winderZone`: the zone in its own coordinates (x across from the OUTER line, y along the incoming
+  flight): wall corner O = (0, A), dusza corner C = (W, A − Wn); A ≥ Wn, B ≥ W (defaults: the corner square + 125 mm
+  per winder beyond the first on each side — ASSUMPTION, overwritten by the measured A / B). The edge between two
+  winders = two numbers measured FROM THE CORNERS (user decision 2026-11-04): on the wall signed from O (negative = on
+  the incoming wall), at the dusza signed from C. Unmeasured: the dusza ends evenly along the dusza line, the edge
+  through its walkline point (equal goings on a walkline `walklineOffsetMm` from the dusza — default half the
+  narrower width: a straight, a quarter arc round C, a straight) carried on to the wall (`hitOuter`); one end measured,
+  the other still generated. Each winder = a polygon (the corners included where its edges pass them) with named edges;
+  `walkGoingsMm` (where the edges cross the walkline) = the winder's going in the heights table; edges out of order →
+  ERROR `CLAD-WINDER-ORDER`. `signedOnZoneLine` = a plan point → the signed corner distance (dragging).
+- Every element now has `outline` + `edges [{a, b, role}]` (front / back / left / right / front-covered);
+  `claddingModel.js offsetEdges` moves each edge out by its role's nosing (front = nosing + riser board, a side = the
+  side nosing on an open side, a mitre where neighbours meet — round the dusza corner too), riser boards along every
+  front edge, the exit riser along the last back edge.
+- UI: „+ Zabiegi”, the zone row (count × rise, turn, A, B, walkline), folded „Krawędzie zabiegów z pomiaru” (per
+  edge: wall / dusza, before / past the corner, mm — empty = generated, the placeholder shows the generated value, ✕
+  clears), the plan's edge handles (white = generated, orange = measured) dragged along their line (1 mm), the zone's
+  walkline dashed, its corners as dots.
+- Tests: `__tests__/winders.test.js`.
+
 ## Open questions
 
-1. Winder edge measurement: from where are the two distances measured — the wall corner (outer) and the dusza corner,
-   or from the previous edge / the flight's last straight riser?
-2. The tolerance for uneven finished rises (warning) — e.g. 5 mm?
-3. Labour rates and the full item list (stage 4).
+1. (answered 2026-11-04) Winder edges are measured from the wall corner and the dusza corner; the uneven-rise
+   tolerance is 5 mm.
+2. Labour rates and the full item list (stage 4).

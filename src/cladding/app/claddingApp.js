@@ -5,9 +5,9 @@
 import * as THREE from 'three';
 import GUI from 'lil-gui';
 import './cladding.css';
-import { createDefaultCladdingConfig, sanitizeCladdingConfig, LANDING_TURNS, LANDING_TURN_LABELS } from '../schema.js';
+import { createDefaultCladdingConfig, sanitizeCladdingConfig, LANDING_TURNS, LANDING_TURN_LABELS, WINDER_TURN_LABELS } from '../schema.js';
 import { buildCladdingStair } from '../buildCladdingStair.js';
-import { expandSequence } from '../concreteModel.js';
+import { expandSequence, signedOnZoneLine } from '../concreteModel.js';
 import { renderCladdingStair } from '../claddingRenderer.js';
 import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
@@ -49,6 +49,7 @@ export function mountCladdingApp(rootEl) {
           <div class="clad-actions">
             <button type="button" data-add="steps">+ Stopnie proste</button>
             <button type="button" data-add="landing">+ Podest</button>
+            <button type="button" data-add="winders">+ Zabiegi</button>
           </div>
           <label class="clad-field">Ostatnia wysokość do stropu [mm] <input type="number" class="clad-exit" placeholder="jak ostatni stopień" /></label>
         </section>
@@ -99,6 +100,29 @@ export function mountCladdingApp(rootEl) {
 
   // --- the sequence editor -------------------------------------------------------------------------------------
   const numIn = (i, field, value, title, placeholder = '') => `<input type="number" data-i="${i}" data-f="${field}" value="${value ?? ''}" title="${title}" placeholder="${placeholder}" />`;
+  // a winder zone: its count, rise, turn, the sizes along the walls (A — from the zone start to the wall corner, B — from
+  // the wall corner to the zone end; empty = automatic) and, folded, the edges measured from the corners
+  const openEdges = new Set();
+  function windersRow(g, i, tools) {
+    const zone = state.built?.concrete.zones.find((z) => z.groupIndex === i);
+    const turn = `<select data-i="${i}" data-f="turn">${Object.entries(WINDER_TURN_LABELS).map(([v, l]) => `<option value="${v}" ${v === g.turn ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    const head = `<div class="clad-row clad-winders"><span class="clad-kind">Zabiegi</span>${numIn(i, 'count', g.count, 'Ilość zabiegów')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${turn}${tools}</div>`;
+    const sizes = `<div class="clad-row clad-winders-sizes"><label title="Od początku zabiegu do narożnika ściany, wzdłuż ściany wejściowej">A ${numIn(i, 'spaceAMm', g.spaceAMm, 'A [mm]', r0(zone?.A))}</label><label title="Od narożnika ściany do końca zabiegu, wzdłuż ściany wyjściowej">B ${numIn(i, 'spaceBMm', g.spaceBMm, 'B [mm]', r0(zone?.B))}</label><label title="Linia biegu — odległość od duszy (równe stopnie na niej przy krawędziach wyliczanych)">linia biegu ${numIn(i, 'walklineOffsetMm', g.walklineOffsetMm, 'od duszy [mm]', r0(zone?.walklineOffsetMm))}</label></div>`;
+    const sideSel = (k, end, v) =>
+      `<select data-i="${i}" data-edge="${k}" data-end="${end}" data-part="side" title="Po której stronie narożnika"><option value="in" ${v !== undefined && v < 0 ? 'selected' : ''}>przed narożnikiem</option><option value="out" ${v !== undefined && v >= 0 ? 'selected' : ''}>za narożnikiem</option></select>`;
+    const rows = Array.from({ length: g.count - 1 }, (_, k) => {
+      const own = g.edges?.[k] || {};
+      const auto = zone?.edges[k + 1];
+      const cell = (end, label) => {
+        const v = own[`${end}Mm`];
+        const shown = v ?? auto?.[`${end}Mm`];
+        return `<span class="clad-edge-cell">${label} ${sideSel(k, end, shown)}<input type="number" data-i="${i}" data-edge="${k}" data-end="${end}" data-part="mm" value="${v === undefined ? '' : r0(Math.abs(v))}" placeholder="${shown === undefined ? '' : r0(Math.abs(shown))}" title="mm od narożnika (puste = wyliczone)" /></span>`;
+      };
+      return `<div class="clad-edge-row"><b>${k + 1}.</b>${cell('outer', 'ściana')}${cell('inner', 'dusza')}<button type="button" data-clear-edge="${i}:${k}" title="Wyczyść pomiar tej krawędzi">✕</button></div>`;
+    }).join('');
+    const edges = `<details class="clad-edges" data-group="${i}" ${openEdges.has(i) ? 'open' : ''}><summary>Krawędzie zabiegów z pomiaru (od narożnika ściany / duszy)</summary>${rows}<div class="clad-hint">Puste = wyliczone (równe stopnie na linii biegu, równe odcinki przy duszy). Uchwyty krawędzi można też przeciągać na planie.</div></details>`;
+    return `<div class="clad-group-winders">${head}${sizes}${edges}</div>`;
+  }
   function renderSequence() {
     seqEl.innerHTML = state.config.sequence
       .map((g, i) => {
@@ -106,6 +130,7 @@ export function mountCladdingApp(rootEl) {
         if (g.kind === 'steps') {
           return `<div class="clad-row"><span class="clad-kind">Stopnie</span>${numIn(i, 'count', g.count, 'Ilość')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'goingMm', g.goingMm, 'Głębokość [mm]')}${numIn(i, 'widthMm', g.widthMm, 'Szerokość [mm]')}${tools}</div>`;
         }
+        if (g.kind === 'winders') return windersRow(g, i, tools);
         const turn = `<select data-i="${i}" data-f="turn">${LANDING_TURNS.map((t) => `<option value="${t}" ${t === g.turn ? 'selected' : ''}>${LANDING_TURN_LABELS[t]}</option>`).join('')}</select>`;
         const gap = g.turn === 'u-left' || g.turn === 'u-right' ? `<label>rozsunięcie ${numIn(i, 'gapMm', g.gapMm, 'Odstęp między biegami [mm]')}</label>` : '';
         return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${tools}</div>`;
@@ -119,20 +144,55 @@ export function mountCladdingApp(rootEl) {
   seqEl.addEventListener('change', (ev) => {
     const el = ev.target;
     const i = Number(el.dataset.i);
+    if (el.dataset.edge !== undefined && Number.isInteger(i)) {
+      // an edge measured from its corner: the side (before / past the corner) gives the sign
+      const k = Number(el.dataset.edge);
+      const end = el.dataset.end;
+      const row = el.closest('.clad-edge-row');
+      const side = row.querySelector(`select[data-end="${end}"]`).value;
+      const input = row.querySelector(`input[data-end="${end}"]`);
+      const raw = input.value === '' ? (el.dataset.part === 'side' && input.placeholder !== '' ? input.placeholder : '') : input.value;
+      change((c) => {
+        const g = c.sequence[i];
+        g.edges = Array.from({ length: g.count - 1 }, (_, j) => g.edges?.[j] ?? null);
+        const own = { ...(g.edges[k] || {}) };
+        if (raw === '') delete own[`${end}Mm`];
+        else own[`${end}Mm`] = (side === 'in' ? -1 : 1) * Math.abs(Number(raw));
+        g.edges[k] = Object.keys(own).length ? own : null;
+      });
+      renderSequence();
+      return;
+    }
     const f = el.dataset.f;
     if (!f || !Number.isInteger(i)) return;
     change((c) => {
       const g = c.sequence[i];
       if (f === 'turn') g.turn = el.value;
-      else if (f === 'depthMm' && el.value === '') g.depthMm = null;
+      else if ((f === 'depthMm' || f === 'spaceAMm' || f === 'spaceBMm' || f === 'walklineOffsetMm') && el.value === '') g[f] = null;
       else g[f] = Number(el.value);
     });
     renderSequence();
   });
+  seqEl.addEventListener(
+    'toggle',
+    (ev) => {
+      const d = ev.target.closest?.('details[data-group]');
+      if (!d) return;
+      const g = Number(d.dataset.group);
+      if (d.open) openEdges.add(g);
+      else openEdges.delete(g);
+    },
+    true
+  );
   seqEl.addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
-    if (b.dataset.del !== undefined) {
+    if (b.dataset.clearEdge) {
+      const [i, k] = b.dataset.clearEdge.split(':').map(Number);
+      change((c) => {
+        if (c.sequence[i].edges) c.sequence[i].edges[k] = null;
+      });
+    } else if (b.dataset.del !== undefined) {
       const i = Number(b.dataset.del);
       if (state.config.sequence.length <= 1) return;
       change((c) => c.sequence.splice(i, 1));
@@ -148,11 +208,14 @@ export function mountCladdingApp(rootEl) {
   rootEl.querySelectorAll('[data-add]').forEach((b) =>
     b.addEventListener('click', () => {
       const last = [...state.config.sequence].reverse().find((g) => g.kind === 'steps');
+      const rise = last?.riseMm ?? 180;
       change((c) =>
         c.sequence.push(
           b.dataset.add === 'steps'
-            ? { kind: 'steps', count: 3, riseMm: last?.riseMm ?? 180, goingMm: last?.goingMm ?? 270, widthMm: last?.widthMm ?? 1000 }
-            : { kind: 'landing', riseMm: last?.riseMm ?? 180, depthMm: null, turn: 'right', gapMm: 0 }
+            ? { kind: 'steps', count: 3, riseMm: rise, goingMm: last?.goingMm ?? 270, widthMm: last?.widthMm ?? 1000 }
+            : b.dataset.add === 'winders'
+              ? { kind: 'winders', count: 3, riseMm: rise, turn: 'right', spaceAMm: null, spaceBMm: null, walklineOffsetMm: null, edges: [] }
+              : { kind: 'landing', riseMm: rise, depthMm: null, turn: 'right', gapMm: 0 }
         )
       );
       renderSequence();
@@ -270,12 +333,37 @@ export function mountCladdingApp(rootEl) {
     renderPlan();
   }, { passive: false });
   let drag = null;
+  // a screen point → the plan (mm, y up)
+  const planAt = (ev) => {
+    const rect = planEl.getBoundingClientRect();
+    const { w, h } = panelSize();
+    return { x: viewport.x + ((ev.clientX - rect.left) / w) * viewport.width, y: -(viewport.y + ((ev.clientY - rect.top) / h) * viewport.height) };
+  };
   planEl.addEventListener('pointerdown', (ev) => {
-    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target };
+    const handle = ev.target.closest?.('.clad-edge-handle');
+    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
     planEl.setPointerCapture(ev.pointerId);
   });
   planEl.addEventListener('pointermove', (ev) => {
     if (!drag) return;
+    if (drag.handle) {
+      // an edge end slides along its wall / dusza line; the number = mm from that line's corner (whole mm)
+      const zone = state.built.concrete.zones[drag.handle.zone];
+      if (!zone) return;
+      const s = Math.round(signedOnZoneLine(zone, drag.handle.end, planAt(ev)));
+      const k = drag.handle.edge - 1;
+      const end = drag.handle.end;
+      drag.moved = true;
+      change(
+        (c) => {
+          const g = c.sequence[zone.groupIndex];
+          g.edges = Array.from({ length: g.count - 1 }, (_, j) => g.edges?.[j] ?? null);
+          g.edges[k] = { ...(g.edges[k] || {}), [`${end}Mm`]: s };
+        },
+        { record: false }
+      );
+      return;
+    }
     const dx = ev.clientX - drag.x;
     const dy = ev.clientY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;
@@ -287,7 +375,10 @@ export function mountCladdingApp(rootEl) {
     renderPlan();
   });
   planEl.addEventListener('pointerup', () => {
-    if (drag && !drag.moved) {
+    if (drag?.handle && drag.moved) {
+      commitHistory();
+      renderSequence();
+    } else if (drag && !drag.moved) {
       const idx = drag.target?.closest?.('[data-index]')?.dataset.index;
       if (idx !== undefined) select(Number(idx));
     }

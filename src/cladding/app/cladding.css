@@ -94,3 +94,13 @@
 .clad-finding.warning { background: #fff3cd; }
 .clad-finding.error { background: #f8d7da; }
 .clad-finding.info { background: #e8f1fb; }
+
+/* winder zones (stage 2) */
+.clad-group-winders { background: #fbf3ea; border-radius: 4px; padding: 2px; margin-bottom: 4px; }
+.clad-winders-sizes label { display: inline-flex; align-items: center; gap: 3px; margin-right: 6px; font-size: 12px; }
+.clad-edges summary { cursor: pointer; font-size: 12px; color: #6b4a1f; }
+.clad-edge-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 3px 0; font-size: 12px; }
+.clad-edge-cell { display: inline-flex; align-items: center; gap: 3px; }
+.clad-edge-cell select { max-width: 118px; font-size: 11px; }
+.clad-edge-cell input { width: 54px; }
+.clad-plan .clad-edge-handle { cursor: move; }
