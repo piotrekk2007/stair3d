@@ -5,7 +5,7 @@
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { clipToConvex } from '../geometry/polygonClip.js';
-import { edgeHasWall } from './surroundingsModel.js';
+import { edgeHasWall, edgeHasRakedCover } from './surroundingsModel.js';
 
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -20,7 +20,7 @@ export function sideNosingOn(element, side, config, edge = null) {
   const o = config.stepOverrides?.[element.index] || {};
   const own = side === 'left' ? o.nosingLeft : o.nosingRight;
   if (typeof own === 'boolean') return own;
-  if (edge && edgeHasWall(element, edge, config)) return false;
+  if (edge && (edgeHasWall(element, edge, config) || edgeHasRakedCover(element, edge, config))) return false;
   return side === 'left' ? !!config.sideNosingLeft : !!config.sideNosingRight;
 }
 

@@ -542,7 +542,9 @@ part 1 built: walls per flight / side (no side nosing there), floor-board landin
 antresola nosing, the slab with the opening the headroom needs (union of tread rectangles); linking floors both ways
 (`floorStair.js claddingAsFloor`, registered in `referenceStair.js registerReferenceBuilder` by `main.js`). Stage 4
 built: the quote (`quote/claddingQuote.js`: material from the shared board price list, labour per element from
-`quote/labour.js`, VAT 8 / 23 %, own items; saved in the project file, not in undo). Next: finishing elements (stage 5).
+`quote/labour.js`, VAT 8 / 23 %, own items; saved in the project file, not in undo). Stage 5 part 1 built: skirting
+boards on walled sides and cover stringers on open sides (`finishModel.js`, from `sideRuns.js`), the module's own
+balustrade with decorative posts and the antresola (`balustradeModel.js`), all priced. Next: starter steps, edge profiles.
 
 ## Open items / known limitations
 

@@ -65,6 +65,7 @@ export function mountCladdingApp(rootEl, host = {}) {
           <label class="clad-field">Ostatnia wysokość do stropu [mm] <input type="number" class="clad-exit" placeholder="jak ostatni stopień" /></label>
         </section>
         <section class="clad-box"><h3>Ściany przy biegach</h3><div class="clad-walls"></div></section>
+        <section class="clad-box"><h3>Listwy, wangi obiciowe, balustrada</h3><div class="clad-sides"></div></section>
         <section class="clad-box clad-floor-box"><h3>Piętro wyżej / niżej</h3><div class="clad-floor"></div></section>
         <section class="clad-box clad-gui"><h3>Wykończenie</h3></section>
       </aside>
@@ -275,6 +276,32 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(top.add(proxy, 'minHeadroomMm', 1500, 3000, 10).name('Skrajnia nad stopniami [mm]'));
   live(top.add(proxy, 'wallThicknessMm', 50, 600, 5).name('Grubość ścian (rysunek) [mm]'));
   top.close();
+  const fin = gui.addFolder('Listwy i wangi obiciowe');
+  live(fin.add(proxy, 'skirtingEnabled').name('Listwa przyścienna (przy ścianach)'));
+  live(fin.add(proxy, 'skirtingStyle', { pochyła: 'raked', schodkowa: 'stepped' }).name('Listwa: kształt'));
+  live(fin.add(proxy, 'skirtingHeightMm', 20, 300, 1).name('Listwa: wysokość nad noskami [mm]'));
+  live(fin.add(proxy, 'skirtingThicknessMm', 5, 60, 1).name('Listwa: grubość [mm]'));
+  live(fin.add(proxy, 'coverStringerTop', { 'schodkowa (pod stopniami)': 'stepped', 'pochyła (nad noskami)': 'raked' }).name('Wanga obiciowa: góra'));
+  live(fin.add(proxy, 'coverStringerAboveMm', 0, 300, 1).name('Wanga pochyła: nad noskami [mm]'));
+  live(fin.add(proxy, 'coverStringerThicknessMm', 10, 80, 1).name('Wanga obiciowa: grubość [mm]'));
+  fin.close();
+  const rail = gui.addFolder('Balustrada i słupy');
+  live(rail.add(proxy, 'railingAntresola').name('Balustrada na antresoli'));
+  live(rail.add(proxy, 'railingHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
+  live(rail.add(proxy, 'railingAntresolaHeightMm', 600, 1500, 10).name('Antresola: wysokość [mm]'));
+  live(rail.add(proxy, 'balustersPerTread', 0, 6, 1).name('Tralki na stopień'));
+  live(rail.add(proxy, 'balusterSizeMm', 10, 120, 1).name('Tralka: przekrój [mm]'));
+  live(rail.add(proxy, 'railingMaxClearMm', 50, 300, 5).name('Maks. prześwit (podest, antresola) [mm]'));
+  live(rail.add(proxy, 'handrailWidthMm', 20, 150, 1).name('Poręcz: szerokość [mm]'));
+  live(rail.add(proxy, 'handrailHeightMm', 20, 150, 1).name('Poręcz: wysokość [mm]'));
+  live(rail.add(proxy, 'railingInsetMm', 0, 300, 1).name('Oś od końca stopnia [mm]'));
+  live(rail.add(proxy, 'antresolaSetbackMm', 0, 300, 1).name('Antresola: oś od krawędzi [mm]'));
+  live(rail.add(proxy, 'postSizeMm', 40, 250, 1).name('Słup: przekrój [mm]'));
+  live(rail.add(proxy, 'postAboveHandrailMm', 0, 500, 5).name('Słup: ponad poręcz [mm]'));
+  live(rail.add(proxy, 'postCap', { płaska: 'flat', piramidka: 'pyramid', kula: 'ball' }).name('Słup: czapka'));
+  live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
+  live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
+  rail.close();
   const wind = gui.addFolder('Kontrola zabiegów');
   live(wind.add(proxy, 'winderLegalOffsetMm', 100, 1000, 10).name('Pomiar od duszy [mm]'));
   live(wind.add(proxy, 'winderLegalMinGoingMm', 0, 500, 5).name('Min. głębokość tam [mm]'));
@@ -329,6 +356,10 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Transport w cenie <input type="checkbox" data-lump="transport" ${s.lumps.transport ? 'checked' : ''} /></label>
       <label class="clad-field">Deska podłogowa [zł/m²] <input type="number" min="0" data-q="floorboardPerM2" value="${s.floorboardPerM2 || ''}" placeholder="0" /></label>
       <label class="clad-field">Płyta OSB [zł/m²] <input type="number" min="0" data-q="osbPerM2" value="${s.osbPerM2 || ''}" placeholder="0" /></label>
+      <label class="clad-field">Listwa przyścienna [zł/mb] <input type="number" min="0" data-q="skirtingPerMb" value="${s.skirtingPerMb || ''}" placeholder="0" /></label>
+      <label class="clad-field">Poręcz [zł/mb] <input type="number" min="0" data-q="handrailPerMb" value="${s.handrailPerMb || ''}" placeholder="0" /></label>
+      <label class="clad-field">Tralka [zł/szt.] <input type="number" min="0" data-q="balusterPerPiece" value="${s.balusterPerPiece || ''}" placeholder="0" /></label>
+      <label class="clad-field">Słup ozdobny [zł/szt.] <input type="number" min="0" data-q="postPerPiece" value="${s.postPerPiece || ''}" placeholder="0" /></label>
       <table class="clad-table clad-rates-table"><thead><tr><th>Robocizna</th><th>ilość</th><th>stawka</th><th></th></tr></thead><tbody>${s.labour.map(rateRow).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-own-add>+ Pozycja własna</button><button type="button" data-pricelist-load title="Plik „Zapisz cały cennik” z modułu samonośnego (albo jego projekt) — ceny desek DREWEX, gatunki">📂 Wczytaj cennik desek</button></div>
       <div class="clad-hint">Materiał stopni, podestów, podstopnic i nosków liczy się z cennika desek (jak w module samonośnym; ${escapeHtml(s.boardPricing ? 'wczytany cennik' : 'domyślny cennik DREWEX')}). Stawka 0 = bez ceny.</div>`;
@@ -447,6 +478,27 @@ export function mountCladdingApp(rootEl, host = {}) {
       state.floor = { reference: { error: e.message, diagnostics: [] }, group: null };
     }
   }
+
+  // the cover stringers and the balustrade: per flight and side (a walled side gets neither — the skirting there)
+  const sidesEl = $('.clad-sides');
+  function renderSides() {
+    const n = state.built?.concrete.flights ?? 1;
+    const c = state.config;
+    const box = (field, f, side) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${c.walls?.[f]?.[side] ? 'disabled title="przy ścianie"' : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
+    sidesEl.innerHTML =
+      `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th></tr></thead><tbody>` +
+      Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td></tr>`).join('') +
+      `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”).</div>`;
+  }
+  sidesEl.addEventListener('change', (ev) => {
+    const field = ev.target.dataset.sideField;
+    if (!field) return;
+    const [f, side] = ev.target.dataset.side.split(':');
+    change((c) => {
+      c[field] = { ...(c[field] || {}) };
+      c[field][f] = { ...(c[field][f] || {}), [side]: ev.target.checked };
+    });
+  });
 
   // the walls: per flight, left / right walking up (a walled side gets no side nosing)
   const wallsEl = $('.clad-walls');
@@ -670,6 +722,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderStepEditor();
     renderReport();
     renderWalls();
+    renderSides();
     renderFloorPanel();
     renderQuote();
   }

@@ -50,6 +50,69 @@ const osbMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a86a, roughness:
 const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e5de, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
 const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 
+const railingWood = () => wood();
+const grooveMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.8, metalness: 0 });
+
+// a board in its own vertical plane (finishModel.js): the polygon in (s along `dir`, z up), its thickness along
+// `normal`, s = 0 at `origin`
+function planeBoardGeometry(board) {
+  const shape = new THREE.Shape(board.polygon.map((p) => new THREE.Vector2(p.s, p.z)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: board.thicknessMm, bevelEnabled: false });
+  const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(board.dir.x, 0, -board.dir.y), new THREE.Vector3(0, 1, 0), new THREE.Vector3(board.normal.x, 0, -board.normal.y));
+  m.setPosition(board.origin.x, 0, -board.origin.y);
+  g.applyMatrix4(m);
+  return g;
+}
+// a box from plan point a (at za) to b (at zb), `w` wide across, `h` high (its centre line a → b)
+function beam(a, b, w, h, material) {
+  const A = new THREE.Vector3(a.x, a.z, -a.y);
+  const B = new THREE.Vector3(b.x, b.z, -b.y);
+  const len = A.distanceTo(B);
+  const g = new THREE.BoxGeometry(len, h, w);
+  const mesh = new THREE.Mesh(g, material);
+  mesh.position.copy(A).add(B).multiplyScalar(0.5);
+  const dir = B.clone().sub(A).normalize();
+  const flat = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), flat);
+  // pitched: turn about the beam's own horizontal across axis
+  const pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+  mesh.rotateZ(pitch);
+  return mesh;
+}
+function column(at, z0, z1, size, material) {
+  const g = new THREE.BoxGeometry(size, z1 - z0, size);
+  g.translate(at.x, (z0 + z1) / 2, -at.y);
+  return new THREE.Mesh(g, material);
+}
+// a decorative post (user, 2026-11-04): the square shaft, milled rings under the top, a flat / pyramid / ball cap
+function decorativePost(p) {
+  const group = new THREE.Group();
+  group.name = `Post-${p.id}`;
+  const shaftTop = p.topZ - p.capHeightMm;
+  group.add(column(p.at, p.bottomZ, shaftTop, p.size, railingWood()));
+  for (let k = 0; k < p.grooves; k++) {
+    const z = shaftTop - 40 - k * 30;
+    const ring = column(p.at, z - 4, z + 4, p.size + 4, grooveMaterial);
+    ring.name = 'Groove';
+    group.add(ring);
+  }
+  if (p.cap === 'pyramid') {
+    // (a 4-sided cone, its corners over the shaft's corners, a little wider)
+    const g = new THREE.ConeGeometry((p.size * 1.1) / Math.SQRT2, p.capHeightMm, 4);
+    g.rotateY(Math.PI / 4);
+    g.translate(p.at.x, shaftTop + p.capHeightMm / 2, -p.at.y);
+    group.add(new THREE.Mesh(g, railingWood()));
+  } else if (p.cap === 'ball') {
+    const r = Math.min(p.size * 0.6, p.capHeightMm);
+    const g = new THREE.SphereGeometry(r, 20, 14);
+    g.translate(p.at.x, shaftTop + r * 0.9, -p.at.y);
+    group.add(new THREE.Mesh(g, railingWood()));
+  } else {
+    group.add(column(p.at, shaftTop, shaftTop + Math.max(15, p.capHeightMm / 3), p.size * 1.25, railingWood()));
+  }
+  return group;
+}
+
 // the slab with its opening: a plan outline with a hole, from its soffit to its top (three: y up, plan y → −z)
 function slabGeometry(outline, hole, bottomZ, topZ) {
   const shape = new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, p.y)));
@@ -126,6 +189,24 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
     risers.add(mesh);
   }
   root.add(risers);
+  // stage 5: skirting boards, cover stringers, the balustrade with its decorative posts
+  const finish = new THREE.Group();
+  finish.name = 'Finish';
+  for (const b of [...(built.finish?.skirting || []), ...(built.finish?.coverStringers || [])]) {
+    const mesh = new THREE.Mesh(planeBoardGeometry(b), wood());
+    mesh.name = `${b.kind}-${b.id}`;
+    mesh.userData = { geometrySourceId: `cladding:${b.id}`, grainDirection: [b.dir.x, 0, -b.dir.y] };
+    finish.add(mesh);
+  }
+  root.add(finish);
+  const railing = new THREE.Group();
+  railing.name = 'Railing';
+  for (const s of built.balustrade?.sections || []) {
+    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(beam(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, railingWood()), { name: `Handrail-${s.id}-${k}` }));
+    for (const b of s.balusters) railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, railingWood()), { name: 'Baluster' }));
+    for (const p of s.posts) railing.add(decorativePost(p));
+  }
+  root.add(railing);
   applyWoodGrainToTree(root);
   // the surroundings (stage 3) — no wood grain: the walls see-through, the slab with its opening
   const room = new THREE.Group();

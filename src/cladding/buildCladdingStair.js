@@ -6,6 +6,8 @@ import { sanitizeCladdingConfig } from './schema.js';
 import { buildConcreteModel } from './concreteModel.js';
 import { buildCladdingModel } from './claddingModel.js';
 import { buildWalls, buildSlab } from './surroundingsModel.js';
+import { buildFinishBoards } from './finishModel.js';
+import { buildBalustrade } from './balustradeModel.js';
 
 export function buildCladdingStair(rawConfig) {
   const config = sanitizeCladdingConfig(rawConfig);
@@ -15,5 +17,10 @@ export function buildCladdingStair(rawConfig) {
   // the surroundings (stage 3): walls along the flights, the slab above with its opening
   const walls = buildWalls(concrete, config);
   const slab = buildSlab(concrete, cladding, config);
-  return { config, concrete, cladding, walls, slab, totalRise, diagnostics: [...cladding.diagnostics] };
+  // the finishing elements (stage 5): skirting boards, cover stringers, the balustrade with its decorative posts
+  const finish = buildFinishBoards(concrete, config);
+  const built = { config, concrete, cladding, walls, slab, totalRise, finish };
+  built.balustrade = buildBalustrade(built, config);
+  built.diagnostics = [...cladding.diagnostics];
+  return built;
 }

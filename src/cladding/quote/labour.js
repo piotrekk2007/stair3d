@@ -18,6 +18,8 @@ export const DEFAULT_LABOUR = Object.freeze([
   { id: 'landing-floorboard', label: 'Montaż podestu z deski podłogowej (OSB + deska + nosek)', unit: 'm2', rate: 0 },
   { id: 'nosing', label: 'Montaż noska (antresola / podest)', unit: 'szt', rate: 0 },
   { id: 'skirting', label: 'Montaż listwy schodowej', unit: 'mb', rate: 0 },
+  { id: 'cover-stringer', label: 'Montaż wangi obiciowej', unit: 'mb', rate: 0 },
+  { id: 'post', label: 'Montaż słupa ozdobnego', unit: 'szt', rate: 0 },
   { id: 'railing-stairs', label: 'Montaż balustrady na schodach (za stopień)', unit: 'szt', rate: 0 },
   { id: 'railing-antresola', label: 'Montaż balustrady na antresoli', unit: 'mb', rate: 0 },
   { id: 'measure', label: 'Pomiar', unit: 'ryczałt', rate: 0 },
@@ -32,6 +34,11 @@ export function createDefaultQuoteSettings() {
     // materials outside the board price list (PLN per m², 0 = not priced yet)
     floorboardPerM2: 0,
     osbPerM2: 0,
+    // finishing elements bought or made per unit (stage 5)
+    skirtingPerMb: 0,
+    handrailPerMb: 0,
+    balusterPerPiece: 0,
+    postPerPiece: 0,
     // VAT: 8 % for a service with installation (residential), 23 % for material only (as the DREWEX calculator)
     withInstallation: true,
     // the board price list (takeoff/boardPricing.js shape) — null = the default DREWEX table; a whole price list file
@@ -55,6 +62,10 @@ export function sanitizeQuoteSettings(raw) {
     lumps: { measure: s.lumps?.measure !== false, transport: s.lumps?.transport !== false },
     floorboardPerM2: Math.max(0, num(s.floorboardPerM2, 0)),
     osbPerM2: Math.max(0, num(s.osbPerM2, 0)),
+    skirtingPerMb: Math.max(0, num(s.skirtingPerMb, 0)),
+    handrailPerMb: Math.max(0, num(s.handrailPerMb, 0)),
+    balusterPerPiece: Math.max(0, num(s.balusterPerPiece, 0)),
+    postPerPiece: Math.max(0, num(s.postPerPiece, 0)),
     withInstallation: s.withInstallation !== false,
     boardPricing: s.boardPricing && typeof s.boardPricing === 'object' ? s.boardPricing : null,
   };

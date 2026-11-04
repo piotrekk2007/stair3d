@@ -36,6 +36,12 @@ export function edgeWallKey(element, edge) {
   return null;
 }
 
+/** Is this edge's side covered by a RAKED cover stringer (finishModel.js — the treads butt into it, no side nosing)? */
+export function edgeHasRakedCover(element, edge, config) {
+  const key = edgeWallKey(element, edge);
+  return !!key && config.coverStringerTop === 'raked' && !!config.coverStringers?.[key.flight]?.[key.side];
+}
+
 export function edgeHasWall(element, edge, config) {
   const key = edgeWallKey(element, edge);
   return !!key && !!config.walls?.[key.flight]?.[key.side];

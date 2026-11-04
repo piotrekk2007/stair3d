@@ -73,6 +73,23 @@ export function buildCladdingQuote(built, settings) {
     const blank = { lengthMm: n.lengthMm, depthMm: n.depthMm, thicknessMm: n.thicknessMm };
     lines.push({ id: n.id, group: 'Noski', name: 'Nosek antresoli', qty: 1, unit: 'szt.', dims: dims(blank, n.thicknessMm), material: board(blank), labour: labour('nosing') });
   }
+  // stage 5: skirting boards (per mb), cover stringers (a board from the price list), the balustrade
+  const perUnit = (price, qty, what) => (price > 0 ? { value: round2(price * qty), note: `${round2(price)} zł/${what}` } : { value: null, note: `brak ceny (${what})` });
+  for (const b of built.finish?.skirting || []) {
+    const mb = round2(b.lengthMm / 1000);
+    lines.push({ id: b.id, group: 'Listwy i wangi', name: `Listwa przyścienna — bieg ${b.key.flight + 1}, ${b.key.side === 'left' ? 'lewa' : 'prawa'} (${b.style === 'stepped' ? 'schodkowa' : 'pochyła'})`, qty: mb, unit: 'mb', dims: `${Math.round(b.lengthMm)} × ${Math.round(b.depthMm)} × ${Math.round(b.thicknessMm)} mm`, material: perUnit(settings.skirtingPerMb, mb, 'mb'), labour: labour('skirting', mb) });
+  }
+  for (const b of built.finish?.coverStringers || []) {
+    const mb = round2(b.lengthMm / 1000);
+    lines.push({ id: b.id, group: 'Listwy i wangi', name: `Wanga obiciowa — bieg ${b.key.flight + 1}, ${b.key.side === 'left' ? 'lewa' : 'prawa'}`, qty: 1, unit: 'szt.', dims: `${Math.round(b.lengthMm)} × ${Math.round(b.depthMm)} × ${Math.round(b.thicknessMm)} mm`, material: board({ lengthMm: b.lengthMm, depthMm: b.depthMm, thicknessMm: b.thicknessMm }), labour: labour('cover-stringer', mb) });
+  }
+  for (const s of built.balustrade?.sections || []) {
+    const where = s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${s.key.side === 'left' ? 'lewa' : 'prawa'}`;
+    const mb = round2(s.lengthMm / 1000);
+    lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(settings.handrailPerMb, mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
+    if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(settings.balusterPerPiece, s.balusters.length, 'szt.'), labour: null });
+    lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: perUnit(settings.postPerPiece, s.posts.length, 'szt.'), labour: labour('post', s.posts.length) });
+  }
   // lump sums and the user's own extra lines
   for (const id of ['measure', 'transport']) {
     if (settings.lumps?.[id] === false) continue;
@@ -84,7 +101,7 @@ export function buildCladdingQuote(built, settings) {
     lines.push({ id: r.id, group: 'Pozycje własne', name: r.label, qty: r.qty ?? 1, unit: UNIT_LABELS[r.unit] || r.unit, dims: '', material: null, labour: l });
   }
   // one block per group (walking order within it)
-  const GROUPS = ['Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Usługi', 'Pozycje własne'];
+  const GROUPS = ['Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Listwy i wangi', 'Balustrada', 'Usługi', 'Pozycje własne'];
   lines.sort((x, y) => GROUPS.indexOf(x.group) - GROUPS.indexOf(y.group));
   for (const l of lines) l.total = round2((l.material?.value ?? 0) + (l.labour?.value ?? 0));
   const materialNet = round2(lines.reduce((s, l) => s + (l.material?.value ?? 0), 0));

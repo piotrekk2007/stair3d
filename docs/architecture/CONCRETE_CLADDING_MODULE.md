@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–4 BUILT (2026-11-04), stages 5–6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–4 BUILT, stage 5 part 1 BUILT (2026-11-04; starter steps and edge profiles next), stage 6 planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -221,6 +221,32 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   its tooltip, `unpriced`).
 - UI: the right panel's tabs „Pomiar | Kosztorys” — the quote table, the totals, „Cennik robocizny i materiałów”.
 - Tests: `__tests__/quote.test.js`.
+
+## Stage 5, part 1 — skirting, cover stringers, balustrade, decorative posts (as built)
+
+- `sideRuns.js buildSideRuns` — every (flight, side) unfolded: the pieces of the stair's edge along that line (a
+  step's side, a landing's / zone's side by its direction, an L landing's back edge for the next flight; never the side
+  a turning landing's next flight leaves from) with s along the flight, the finished top, the height below, the
+  concrete's soffit (`soffitAt`); `walled` from the walls. One source for the three elements below.
+- `finishModel.js buildFinishBoards` — boards in their own vertical plane (polygon in s / z, `origin`, `dir`,
+  `normal`, thickness; blank along the top line): the SKIRTING on a walled side (`skirtingEnabled`, bottom cut to the
+  finished treads and risers, top raked through the noses + `skirtingHeightMm` or stepped; `skirtingThicknessMm` into the
+  stair) and the COVER STRINGER on an open side (`coverStringers {[flight]: {left, right}}`, bottom along the soffit,
+  top stepped under the treads — the side nosing over it — or raked `coverStringerAboveMm` over the noses — then no
+  side nosing there, `surroundingsModel.js edgeHasRakedCover`).
+- `balustradeModel.js buildBalustrade` — the module's own balustrade (the self-supporting railingSolver.js untouched):
+  `railingSides {[flight]: {left, right}}` (open sides only): a decorative post at each end, the handrail
+  `railingHeightMm` over the noses (level over a landing), `balustersPerTread` on the treads (on a landing ≤
+  `railingMaxClearMm` apart), the axis `railingInsetMm` in from the tread ends; `railingAntresola`: round the opening
+  on the floor above (`antresolaSetbackMm` back, `railingAntresolaHeightMm`), not on the exit edge, a post at every
+  corner. Decorative posts (user request): `postSizeMm`, `postAboveHandrailMm`, `postCap` flat / pyramid / ball,
+  `postCapHeightMm`, `postGrooves` (milled rings). All sizes ASSUMPTION / DO WERYFIKACJI.
+- 3D (`claddingRenderer.js`: boards extruded in their plane, handrail beams, balusters, posts with caps and rings), the
+  plan (boards, handrail, balusters, posts), the panel („Listwy, wangi obiciowe, balustrada” per flight / side;
+  „Wykończenie → Listwy i wangi obiciowe / Balustrada i słupy”), the quote (skirting per mb, the cover stringer as a
+  board from the price list, handrail per mb, balusters / posts per piece; labour skirting / cover-stringer per mb,
+  railing-stairs per tread, railing-antresola per mb, post per piece).
+- Tests: `__tests__/finish.test.js`.
 
 ## Open questions
 

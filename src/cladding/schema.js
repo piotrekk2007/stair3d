@@ -67,6 +67,36 @@ export function createDefaultCladdingConfig() {
     // self-supporting or a concrete one), dxMm, dyMm, rotationDeg 0/90/180/270, mirror} — placed and checked by the
     // shared reference check (main.js hook → geometry/referenceStair.js)
     referenceFloor: null,
+    // stage 5 — finishing elements (sizes ASSUMPTION, DO WERYFIKACJI with the workshop)
+    // the skirting board on every walled side: its bottom cut to the treads, its top raked (parallel to the noses) or
+    // stepped
+    skirtingEnabled: false,
+    skirtingStyle: 'raked', // 'raked' | 'stepped'
+    skirtingHeightMm: 80, // above the noses (vertical)
+    skirtingThicknessMm: 15,
+    // the cover stringer (wanga obiciowa) on the concrete's open side face: per flight and side
+    coverStringers: {},
+    coverStringerTop: 'stepped', // 'stepped' (under the treads, the side nosing over it) | 'raked' (above the noses)
+    coverStringerAboveMm: 60, // raked: above the noses
+    coverStringerThicknessMm: 20,
+    // the balustrade: per flight and open side; the antresola round the opening
+    railingSides: {},
+    railingAntresola: false,
+    railingHeightMm: 900, // the handrail's top above the noses (PL-LEGAL-H-01 0.9 m — DO WERYFIKACJI)
+    railingAntresolaHeightMm: 1100, // above the floor (WT § 298 — DO WERYFIKACJI)
+    railingInsetMm: 50, // the posts' / balusters' axis in from the tread's end
+    antresolaSetbackMm: 60, // the antresola's axis back from the opening's edge
+    balustersPerTread: 2,
+    balusterSizeMm: 40,
+    railingMaxClearMm: 120, // between balusters (§ 298 — DO WERYFIKACJI)
+    handrailWidthMm: 60,
+    handrailHeightMm: 50,
+    // decorative posts (user request 2026-11-04: "ozdobne słupy z czapkami i frezowaniami")
+    postSizeMm: 90,
+    postAboveHandrailMm: 120,
+    postCap: 'pyramid', // 'flat' | 'pyramid' | 'ball'
+    postCapHeightMm: 60,
+    postGrooves: 2, // milled rings round the post under its cap
   };
 }
 
@@ -153,5 +183,29 @@ export function sanitizeCladdingConfig(raw) {
     slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),
     minHeadroomMm: num(c.minHeadroomMm, d.minHeadroomMm, 1500, 3000),
     referenceFloor: sanitizeReferenceFloor(c.referenceFloor),
+    skirtingEnabled: !!c.skirtingEnabled,
+    skirtingStyle: c.skirtingStyle === 'stepped' ? 'stepped' : 'raked',
+    skirtingHeightMm: num(c.skirtingHeightMm, d.skirtingHeightMm, 20, 300),
+    skirtingThicknessMm: num(c.skirtingThicknessMm, d.skirtingThicknessMm, 5, 60),
+    coverStringers: sanitizeWalls(c.coverStringers),
+    coverStringerTop: c.coverStringerTop === 'raked' ? 'raked' : 'stepped',
+    coverStringerAboveMm: num(c.coverStringerAboveMm, d.coverStringerAboveMm, 0, 300),
+    coverStringerThicknessMm: num(c.coverStringerThicknessMm, d.coverStringerThicknessMm, 10, 80),
+    railingSides: sanitizeWalls(c.railingSides),
+    railingAntresola: !!c.railingAntresola,
+    railingHeightMm: num(c.railingHeightMm, d.railingHeightMm, 600, 1500),
+    railingAntresolaHeightMm: num(c.railingAntresolaHeightMm, d.railingAntresolaHeightMm, 600, 1500),
+    railingInsetMm: num(c.railingInsetMm, d.railingInsetMm, 0, 300),
+    antresolaSetbackMm: num(c.antresolaSetbackMm, d.antresolaSetbackMm, 0, 300),
+    balustersPerTread: Math.round(num(c.balustersPerTread, d.balustersPerTread, 0, 6)),
+    balusterSizeMm: num(c.balusterSizeMm, d.balusterSizeMm, 10, 120),
+    railingMaxClearMm: num(c.railingMaxClearMm, d.railingMaxClearMm, 50, 300),
+    handrailWidthMm: num(c.handrailWidthMm, d.handrailWidthMm, 20, 150),
+    handrailHeightMm: num(c.handrailHeightMm, d.handrailHeightMm, 20, 150),
+    postSizeMm: num(c.postSizeMm, d.postSizeMm, 40, 250),
+    postAboveHandrailMm: num(c.postAboveHandrailMm, d.postAboveHandrailMm, 0, 500),
+    postCap: ['flat', 'pyramid', 'ball'].includes(c.postCap) ? c.postCap : 'pyramid',
+    postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
+    postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
   };
 }

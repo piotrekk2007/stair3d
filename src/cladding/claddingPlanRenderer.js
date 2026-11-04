@@ -40,6 +40,22 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .join('');
   // the stair on the next floor (linked — its treads in this plan's frame, dashed purple)
   const otherXML = (otherFloor?.treads || []).map((t) => `<polygon class="clad-other-floor" points="${pts(t.outline)}" fill="#7b4ab3" fill-opacity="0.06" stroke="#7b4ab3" stroke-width="1" stroke-dasharray="6,4" pointer-events="none" ${HAIR}/>`).join('');
+  // stage 5: the finishing boards (a thick line on their side), the balustrade (handrail, balusters, posts)
+  const boardLine = (b, colour) => {
+    const s0 = Math.min(...b.polygon.map((p) => p.s));
+    const s1 = Math.max(...b.polygon.map((p) => p.s));
+    const at = (s, off) => ({ x: b.origin.x + b.dir.x * s + b.normal.x * off, y: b.origin.y + b.dir.y * s + b.normal.y * off });
+    return `<polygon class="clad-board" points="${pts([at(s0, 0), at(s1, 0), at(s1, b.thicknessMm), at(s0, b.thicknessMm)])}" fill="${colour}" stroke="#5a3d24" stroke-width="0.8" pointer-events="none" ${HAIR}/>`;
+  };
+  const finishXML = [...(built.finish?.skirting || []).map((b) => boardLine(b, '#b07a3a')), ...(built.finish?.coverStringers || []).map((b) => boardLine(b, '#8a5a34'))].join('');
+  const railingXML = (built.balustrade?.sections || [])
+    .map((s) => {
+      const rail = `<polyline class="clad-handrail" points="${pts(s.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>`;
+      const bal = s.balusters.map((b) => `<rect x="${fmt(b.at.x - b.size / 2)}" y="${fmt(-b.at.y - b.size / 2)}" width="${fmt(b.size)}" height="${fmt(b.size)}" fill="#7a4b22" pointer-events="none"/>`).join('');
+      const posts = s.posts.map((p) => `<rect class="clad-post" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="#5a3d24" stroke="#2b1a0c" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
+      return rail + bal + posts;
+    })
+    .join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
   const labels = concrete.elements
     .map((e) => {
@@ -83,5 +99,5 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
 }
