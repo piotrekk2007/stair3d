@@ -194,6 +194,7 @@ const ws = createWorkspace(app, {
   onRedo: handleRedo,
   onViewChange: (view) => setView(view),
   onToggleClientMode: () => setClientMode(!viewState.clientMode),
+  onModuleChange: (module) => setModule(module),
   onProjectNameChange: (name) => {
     projectMeta.name = name;
     document.title = name ? `${name} — Kalkulator schodów 3D` : 'Kalkulator schodów 3D';
@@ -241,7 +242,26 @@ function handleRedo() {
   restoreFromHistory(historyRedo(history));
 }
 
+// The concrete cladding module "Schody na beton" (src/cladding, docs/architecture/CONCRETE_CLADDING_MODULE.md): a
+// separate page with its own state, loaded on first use; nothing here reads it. The module last used is remembered.
+let claddingApp = null;
+async function setModule(module) {
+  ws.setModule(module);
+  try {
+    localStorage.setItem('stair3d.module', module);
+  } catch {
+    /* no storage — fine */
+  }
+  if (module === 'cladding' && !claddingApp) {
+    const { mountCladdingApp } = await import('./cladding/app/claddingApp.js');
+    claddingApp = mountCladdingApp(ws.claddingEl);
+  }
+  claddingApp?.setActive(module === 'cladding');
+}
+
 window.addEventListener('keydown', (e) => {
+  // (the cladding module has its own undo)
+  if (app.classList.contains('module-cladding')) return;
   // W polach tekstowych (nazwa/notatki projektu) Ctrl+Z ma cofać tekst, nie model schodów.
   const tag = e.target?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -1881,6 +1901,12 @@ setView(viewState.view);
 rebuild();
 updateHistoryButtons();
 ws.setProjectMeta({ name: '', notes: '', lastFileNote: '' });
+// back to the module used last time (the concrete cladding module, src/cladding)
+try {
+  if (localStorage.getItem('stair3d.module') === 'cladding') setModule('cladding');
+} catch {
+  /* no storage */
+}
 
 window.addEventListener('resize', () => {
   if (plan2dPanel.classList.contains('visible')) updateScaleReadout();

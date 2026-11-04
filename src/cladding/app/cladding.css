@@ -1,0 +1,96 @@
+/* The tab "Schody na beton" (src/cladding). With the module active the self-supporting panels are hidden and the
+   module's own page fills everything under the toolbar. */
+
+#app.workspace.module-cladding > #sidebar-left,
+#app.workspace.module-cladding > #main-view,
+#app.workspace.module-cladding > #sidebar-right,
+#app.workspace.module-cladding > #statusbar,
+#app.workspace.module-cladding #project-notes-popover,
+#app.workspace.module-cladding #toolbar > :not(#toolbar-brand):not(#module-switch) {
+  display: none !important;
+}
+
+#app.workspace.module-cladding #cladding-root {
+  display: block;
+  grid-row: 2 / 4;
+  grid-column: 1 / -1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.clad-app {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 420px minmax(0, 1fr) 360px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'bar bar bar'
+    'left main right';
+  font-size: 13px;
+  background: var(--c-bg, #f4f5f7);
+}
+
+.clad-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #d0d4da;
+  background: #fff;
+  flex-wrap: wrap;
+}
+.clad-title { margin-right: 6px; }
+.clad-name { width: 200px; }
+.clad-meta { color: #6b7280; font-size: 12px; }
+.clad-sep { width: 1px; height: 20px; background: #d0d4da; margin: 0 4px; }
+.clad-spacer { flex: 1; }
+.clad-views button.active { background: #1f6feb; color: #fff; }
+
+.clad-left,
+.clad-right {
+  overflow-y: auto;
+  padding: 8px;
+  min-height: 0;
+}
+.clad-left { grid-area: left; border-right: 1px solid #d0d4da; }
+.clad-right { grid-area: right; border-left: 1px solid #d0d4da; }
+.clad-main { grid-area: main; position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.clad-plan, .clad-3d { position: absolute; inset: 0; }
+.clad-plan[hidden], .clad-3d[hidden] { display: none; }
+.clad-plan { cursor: grab; touch-action: none; }
+.clad-plan svg { display: block; }
+.clad-plan-hint { position: absolute; left: 8px; bottom: 6px; color: #8b93a1; font-size: 11px; pointer-events: none; }
+
+.clad-box { background: #fff; border: 1px solid #dde1e6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.clad-box h3 { margin: 0 0 6px; font-size: 13px; }
+.clad-hint { color: #6b7280; font-size: 12px; margin: 4px 0; }
+
+.clad-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+.clad-row input[type='number'] { width: 56px; }
+.clad-row input[data-f='count'] { width: 42px; }
+.clad-row select { max-width: 150px; }
+.clad-row.clad-head { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
+.clad-row.clad-head span { width: 56px; }
+.clad-row.clad-head span:nth-child(2) { width: 42px; }
+.clad-row.clad-head span:nth-child(3) { width: 8px; }
+.clad-kind { width: 50px; font-weight: 600; }
+.clad-landing { background: #f2f6fb; border-radius: 4px; padding: 2px; }
+.clad-row-tools { margin-left: auto; display: inline-flex; gap: 2px; }
+.clad-row-tools button { padding: 0 4px; font-size: 11px; }
+.clad-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.clad-field { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 4px 0; }
+.clad-field input, .clad-field select { width: 100px; flex: none; }
+.clad-gui .lil-gui { --width: 100%; width: 100%; }
+.clad-badge { font-style: normal; font-size: 11px; background: #fdecc8; color: #8a5a00; border-radius: 3px; padding: 0 4px; }
+
+.clad-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.clad-table th, .clad-table td { padding: 2px 4px; text-align: right; border-bottom: 1px solid #eef0f3; }
+.clad-table th:first-child, .clad-table td:first-child { text-align: left; }
+.clad-table tr[data-row]:not([data-row='']) { cursor: pointer; }
+.clad-table tr.warn td { background: #fff3cd; }
+.clad-table tr.sel td { outline: 1px solid #1f6feb; }
+.clad-finding { padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+.clad-finding.warning { background: #fff3cd; }
+.clad-finding.error { background: #f8d7da; }
+.clad-finding.info { background: #e8f1fb; }

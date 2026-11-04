@@ -36,6 +36,10 @@ export function createWorkspace(app, handlers) {
   app.innerHTML = `
     <header id="toolbar">
       <span id="toolbar-brand">Stair3D</span>
+      <div id="module-switch" role="tablist" aria-label="Moduł">
+        <button type="button" role="tab" data-module="self-supporting" class="active" title="Schody samonośne (projekt dopasowany do otworu i klatki)">Samonośne</button>
+        <button type="button" role="tab" data-module="cladding" title="Schody na beton — okładziny na zmierzony bieg betonowy (osobny moduł)">Na beton</button>
+      </div>
       <input id="project-name" type="text" placeholder="Nazwa projektu" maxlength="80" aria-label="Nazwa projektu" />
       <button type="button" id="project-notes-toggle" title="Notatki do projektu">📝 Notatki</button>
       <span class="toolbar-sep"></span>
@@ -74,6 +78,7 @@ export function createWorkspace(app, handlers) {
       <span id="status-view"></span>
     </footer>
     <button type="button" id="client-mode-exit" hidden>✕ Wyjdź z trybu prezentacji</button>
+    <section id="cladding-root" hidden></section>
   `;
 
   const $ = (sel) => app.querySelector(sel);
@@ -86,6 +91,10 @@ export function createWorkspace(app, handlers) {
   toolbar.querySelector('[data-action="redo"]').addEventListener('click', () => handlers.onRedo());
   toolbar.querySelector('[data-action="client-mode"]').addEventListener('click', () => handlers.onToggleClientMode());
   $('#client-mode-exit').addEventListener('click', () => handlers.onToggleClientMode());
+
+  // the module switch (the concrete cladding module "Schody na beton" — src/cladding, a separate page)
+  const moduleButtons = [...toolbar.querySelectorAll('#module-switch [data-module]')];
+  for (const btn of moduleButtons) btn.addEventListener('click', () => handlers.onModuleChange?.(btn.dataset.module));
 
   const viewButtons = [...toolbar.querySelectorAll('#view-switch [data-view]')];
   for (const btn of viewButtons) btn.addEventListener('click', () => handlers.onViewChange(btn.dataset.view));
@@ -116,6 +125,12 @@ export function createWorkspace(app, handlers) {
 
   return {
     leftEl: $('#sidebar-left'),
+    claddingEl: $('#cladding-root'),
+    setModule(module) {
+      for (const b of moduleButtons) b.classList.toggle('active', b.dataset.module === module);
+      app.classList.toggle('module-cladding', module === 'cladding');
+      $('#cladding-root').hidden = module !== 'cladding';
+    },
     mainEl: $('#main-view'),
     tabBody: (id) => app.querySelector(`[data-tab-body="${id}"]`),
     selectTab,

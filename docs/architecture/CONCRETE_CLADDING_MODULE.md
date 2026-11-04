@@ -1,7 +1,7 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: PLANNED (user request 2026-11-04). Nothing of it is built yet; this document is the agreed direction and is
-updated as each stage lands.
+Status: stage 1 BUILT (2026-11-04), stages 2–6 planned (user request 2026-11-04). This document is the agreed
+direction and is updated as each stage lands.
 
 ## Purpose
 
@@ -26,8 +26,11 @@ The self-supporting engine must not be touched: it works and the user does not w
    behaviour it gets its own code, not a parameter in the shared one.
 3. The only edits outside `src/cladding/` are small hooks, each listed here when made and covered by the existing tests
    (all of which must stay green, unchanged):
-   - the toolbar's tab "Schody na beton" (workspace switch) — `ui/workspace.js` / `main.js`;
-   - linking floors (below): the reference-stair loader chooses the builder by the file type;
+   - (made, stage 1) the module switch „Samonośne | Na beton” in the toolbar and the page container `#cladding-root` —
+     `ui/workspace.js` (`onModuleChange`, `setModule`, `claddingEl`); `main.js setModule` (loads
+     `cladding/app/claddingApp.js` on first use, remembers the module in `localStorage` `stair3d.module`, the
+     self-supporting Ctrl+Z / Ctrl+Y skip while the module is shown); `style.css` (the switch's look);
+   - (planned, stage 3) linking floors: the reference-stair loader chooses the builder by the file type;
    - nothing else without asking the user first.
 4. The project file of the module is its own type (`_type: 'schody3d-beton'`, own version and migrations) — the
    self-supporting `projectIO.js` stays as it is.
@@ -103,6 +106,33 @@ only (as DREWEX).
    output in the shape the shared railing renderer and takeoff read), starter steps, edge profiles.
 6. **Offer documents** — a free-form offer editor, detailed estimate, contract from the company's template, payment
    schedule (user: last).
+
+## Stage 1 — as built
+
+- `schema.js` — `createDefaultCladdingConfig` / `sanitizeCladdingConfig`: `sequence` of `{kind: 'steps', count, riseMm,
+  goingMm, widthMm}` / `{kind: 'landing', riseMm, depthMm (null = auto: the next flight's width for an L, the flight's
+  for a straight landing, the larger for a U), turn none / left / right / u-left / u-right, gapMm (U)}`, `exitRiseMm`
+  (null = the last step's), `stepOverrides[i] {riseMm, goingMm, widthMm, nosingLeft, nosingRight, riser}`, the finish
+  (`treadThicknessMm`, `nosingFrontMm`, `sideNosingMm`, `sideNosingLeft/Right`, `riserBoards`, `riserThicknessMm`,
+  `floorFinishBottomMm/TopMm`, `concreteSlabThicknessMm` drawing only, `riseToleranceMm` 5 — ASSUMPTION).
+- `concreteModel.js buildConcreteModel` — every element a rectangle in its flight frame `{o, f, r}` (u across, v
+  along; `planPoint`), anchored on the OUTER line (away from the first / next turn), so measured widths keep the wall
+  side straight; tops cumulative from the raw floor; a landing's `exitSide`; the exit (`rawSlabTopZ`).
+- `claddingModel.js buildCladdingModel` — treads (front nosing past the riser board, side nosing on open sides, none
+  on a landing's exit side, a U landing's front nosing only over the incoming flight + the gap), riser boards (from the
+  tread / floor below up to the concrete top; the exit riser up to the finished floor above), `finishedHeights` (every
+  finished rise incl. the first and the exit) and WARNING `CLAD-RISE-UNEVEN` for a rise off the median by more than the
+  tolerance.
+- `buildCladdingStair.js` — the orchestrator (pure); `claddingRenderer.js` — 3D (concrete prisms with a soffit sloping
+  at the slab's plumb thickness, oak treads, risers); `claddingPlanRenderer.js` — plan SVG; `projectFile.js` — file
+  type `schody3d-beton` v1 (refuses a self-supporting file with a hint).
+- `app/claddingApp.js` + `cladding.css` — the page: own bar (Nowy / Zapisz / Wczytaj, undo / redo, Plan 2D / Widok
+  3D), the sequence editor (rows, ↑ ↓ ✕, + Stopnie / + Podest), the finish (lil-gui), the plan (wheel zoom, drag pan,
+  double click fit, click = select), the 3D (`scene/sceneSetup.js createScene`), the selected step's own values, the
+  finished-heights table (click = select) and the findings.
+- Tests: `__tests__/claddingModel.test.js` (sequence, overrides, L right / left, U with a gap, nosings, risers, heights,
+  sanitize, file, plan), `__tests__/isolation.test.js` (imports only the module, the read-only list, packages; outside
+  only `main.js`; models never import Three.js).
 
 ## Open questions
 
