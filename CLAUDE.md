@@ -544,7 +544,9 @@ antresola nosing, the slab with the opening the headroom needs (union of tread r
 built: the quote (`quote/claddingQuote.js`: material from the shared board price list, labour per element from
 `quote/labour.js`, VAT 8 / 23 %, own items; saved in the project file, not in undo). Stage 5 part 1 built: skirting
 boards on walled sides and cover stringers on open sides (`finishModel.js`, from `sideRuns.js`), the module's own
-balustrade with decorative posts and the antresola (`balustradeModel.js`), all priced. Next: starter steps, edge profiles.
+balustrade with decorative posts and the antresola (`balustradeModel.js`), all priced; starter steps (widened, rounded,
+bowed, bent riser, support block) and the treads' edge profiles (chamfer / round / bullnose, lofted) — `starterProfile.js`.
+Next: offer documents (stage 6).
 
 ## Open items / known limitations
 

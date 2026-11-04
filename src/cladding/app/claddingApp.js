@@ -15,6 +15,7 @@ import { claddingAsFloor } from '../floorStair.js';
 import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
+import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { applyPriceListFile } from '../../takeoff/priceListFile.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
@@ -253,6 +254,8 @@ export function mountCladdingApp(rootEl, host = {}) {
   const proxy = new Proxy({}, { get: (_, k) => state.config[k], set: (_, k, v) => ((state.config[k] = v), true) });
   live(gui.add(proxy, 'treadThicknessMm', 10, 100, 1).name('Grubość stopnia [mm]'));
   live(gui.add(proxy, 'nosingFrontMm', 0, 100, 1).name('Nosek z przodu [mm]'));
+  live(gui.add(proxy, 'edgeProfile', Object.fromEntries(Object.entries(EDGE_PROFILE_LABELS).map(([k, l]) => [l, k]))).name('Profil krawędzi stopni'));
+  live(gui.add(proxy, 'edgeProfileMm', 0, 30, 1).name('Profil: wymiar (fazka / R) [mm]'));
   live(gui.add(proxy, 'sideNosingMm', 0, 100, 1).name('Nosek boczny poza beton [mm]'));
   live(gui.add(proxy, 'sideNosingLeft').name('Nosek boczny z lewej'));
   live(gui.add(proxy, 'sideNosingRight').name('Nosek boczny z prawej'));
@@ -544,17 +547,41 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${tri('nosingLeft', 'Nosek boczny z lewej')}
       ${tri('nosingRight', 'Nosek boczny z prawej')}
       ${tri('riser', 'Podstopnica')}
+      <label class="clad-field">Profil krawędzi <select data-o="profile"><option value="" ${own.profile === undefined ? 'selected' : ''}>jak wszystkie</option>${Object.entries(EDGE_PROFILE_LABELS).map(([k, l]) => `<option value="${k}" ${own.profile === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${el.kind === 'step' ? starterBlock(own.starter) : ''}
       <div class="clad-actions"><button type="button" data-reset>Przywróć wymiary z grupy</button></div>`;
   }
+  // a starter step: widened past the concrete on its sides, rounded, bowed (starterProfile.js)
+  function starterBlock(s) {
+    const on = !!s;
+    const n = (f, label) => `<label class="clad-field">${label} <input type="number" min="0" data-starter="${f}" value="${on ? s[f] || 0 : 0}" ${on ? '' : 'disabled'} /></label>`;
+    return `<div class="clad-starter"><label class="clad-field"><b>Stopień zapraszający</b> <input type="checkbox" data-starter-on ${on ? 'checked' : ''} /></label>
+      ${n('leftMm', 'Poszerzenie z lewej [mm]')}${n('rightMm', 'Poszerzenie z prawej [mm]')}${n('radiusMm', 'Zaokrąglenie narożników R [mm]')}${n('bowMm', 'Łuk z przodu (strzałka) [mm]')}
+      <div class="clad-hint">Poszerzenie poza beton; pod nim podparcie, podstopnica gięta po obrysie.</div></div>`;
+  }
   $('.clad-step').addEventListener('change', (ev) => {
-    const f = ev.target.dataset.o;
     const i = state.selected;
-    if (!f || i === null) return;
+    if (i === null) return;
+    if (ev.target.dataset.starterOn !== undefined || ev.target.dataset.starter) {
+      change((c) => {
+        const o = { ...(c.stepOverrides[i] || {}) };
+        if (ev.target.dataset.starterOn !== undefined) {
+          if (ev.target.checked) o.starter = { leftMm: 300, rightMm: 0, radiusMm: 200, bowMm: 0 };
+          else delete o.starter;
+        } else o.starter = { ...(o.starter || {}), [ev.target.dataset.starter]: Number(ev.target.value) || 0 };
+        if (Object.keys(o).length) c.stepOverrides[i] = o;
+        else delete c.stepOverrides[i];
+      });
+      return;
+    }
+    const f = ev.target.dataset.o;
+    if (!f) return;
     change((c) => {
       const o = { ...(c.stepOverrides[i] || {}) };
       const v = ev.target.value;
       if (v === '') delete o[f];
       else if (f === 'nosingLeft' || f === 'nosingRight' || f === 'riser') o[f] = v === '1';
+      else if (f === 'profile') o[f] = v;
       else o[f] = Number(v);
       if (Object.keys(o).length) c.stepOverrides[i] = o;
       else delete c.stepOverrides[i];

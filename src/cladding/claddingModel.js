@@ -6,6 +6,7 @@
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { clipToConvex } from '../geometry/polygonClip.js';
 import { edgeHasWall, edgeHasRakedCover } from './surroundingsModel.js';
+import { isStarter, starterEdges, starterRiserStrip, EDGE_PROFILES } from './starterProfile.js';
 
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -48,26 +49,38 @@ const add = (p, n, d) => ({ x: p.x + n.x * d, y: p.y + n.y * d });
 /** A CCW polygon given as edges, each moved outward by its own distance; neighbours meet at their lines' crossing, two
  *  collinear neighbours with different distances step from one to the other. */
 export function offsetEdges(edges, distOf) {
+  return offsetEdgesDetailed(edges, distOf).points;
+}
+
+/** offsetEdges with, per output point, the edge that STARTS there (null for the step between two collinear edges). */
+export function offsetEdgesDetailed(edges, distOf) {
   const lines = edges.map((e) => {
     const n = outward(e);
     const d = distOf(e);
-    return { a: add(e.a, n, d), b: add(e.b, n, d), n, d, t: unit(e.a, e.b), from: e.a };
+    return { a: add(e.a, n, d), b: add(e.b, n, d), n, d, t: unit(e.a, e.b), from: e.a, edge: e };
   });
-  const out = [];
+  const points = [];
+  const starts = [];
   lines.forEach((L, j) => {
     const P = lines[(j - 1 + lines.length) % lines.length];
     const cross = P.t.x * L.t.y - P.t.y * L.t.x;
     if (Math.abs(cross) < 1e-9) {
-      if (Math.abs(P.d - L.d) < 1e-9) out.push(L.a);
-      else out.push(add(L.from, P.n, P.d), L.a);
+      if (Math.abs(P.d - L.d) < 1e-9) {
+        points.push(L.a);
+        starts.push(L.edge);
+      } else {
+        points.push(add(L.from, P.n, P.d), L.a);
+        starts.push(null, L.edge);
+      }
       return;
     }
     // P.a + s·P.t = L.a + u·L.t
     const w = { x: L.a.x - P.a.x, y: L.a.y - P.a.y };
     const sParam = (w.x * L.t.y - w.y * L.t.x) / cross;
-    out.push({ x: P.a.x + P.t.x * sParam, y: P.a.y + P.t.y * sParam });
+    points.push({ x: P.a.x + P.t.x * sParam, y: P.a.y + P.t.y * sParam });
+    starts.push(L.edge);
   });
-  return out;
+  return { points, starts };
 }
 
 // the board's size: along the grain (the front edge) × across it
@@ -87,6 +100,7 @@ export function buildCladdingModel(concrete, config) {
   const els = concrete.elements;
   const treads = [];
   const risers = [];
+  const starterBlocks = [];
   const thick = (e) => finishThicknessMm(e, config);
   els.forEach((e, i) => {
     const t = thick(e);
@@ -98,7 +112,24 @@ export function buildCladdingModel(concrete, config) {
       return 0;
     };
     const nosing = { left: e.edges.some((x) => x.role === 'left' && distOf(x) > 0) ? config.sideNosingMm : 0, right: e.edges.some((x) => x.role === 'right' && distOf(x) > 0) ? config.sideNosingMm : 0 };
-    const outline = offsetEdges(e.edges, distOf);
+    const own = config.stepOverrides?.[e.index] || {};
+    // a starter step (stage 5 part 2, starterProfile.js): its own widened / rounded / bowed outline
+    const starter = e.kind === 'step' && isStarter(own.starter) ? own.starter : null;
+    let outline;
+    let exposed;
+    if (starter) {
+      const reach = { front, left: nosing.left, right: nosing.right };
+      const { edges } = starterEdges(e, starter, reach, 0);
+      outline = edges.map((x) => x.a);
+      exposed = edges.map((x) => x.role === 'front' || (x.role === 'left' && (starter.leftMm > 0 || nosing.left > 0)) || (x.role === 'right' && (starter.rightMm > 0 || nosing.right > 0)));
+    } else {
+      const d = offsetEdgesDetailed(e.edges, distOf);
+      outline = d.points;
+      // the edges a profile is milled on: the front and every nosed side
+      exposed = d.starts.map((x) => !!x && (x.role === 'front' || ((x.role === 'left' || x.role === 'right') && distOf(x) > 0)));
+    }
+    const profileKind = EDGE_PROFILES.includes(own.profile) ? own.profile : config.edgeProfile;
+    const profiledLengthMm = outline.reduce((sum, p, k) => (exposed[k] ? sum + Math.hypot(outline[(k + 1) % outline.length].x - p.x, outline[(k + 1) % outline.length].y - p.y) : sum), 0);
     const fronts = e.edges.filter((edge) => edge.role === 'front');
     const longest = fronts.reduce((best, edge) => (!best || Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y) > Math.hypot(best.b.x - best.a.x, best.b.y - best.a.y) ? edge : best), null);
     const grain = longest ? unit(longest.a, longest.b) : { x: 1, y: 0 };
@@ -118,9 +149,24 @@ export function buildCladdingModel(concrete, config) {
       // a floor-board landing (user, 2026-11-04): a solid nosing piece along its front hiding the OSB, the rest OSB +
       // floor boards, all flush on top
       parts: e.kind === 'landing' && e.finish === 'floorboard' ? floorboardParts(e, outline, config) : null,
+      exposed,
+      profile: { kind: profileKind, sizeMm: config.edgeProfileMm },
+      profiledLengthMm: profileKind === 'square' ? 0 : profiledLengthMm,
+      starter: starter ? { ...starter } : null,
     });
+    const below = i === 0 ? config.floorFinishBottomMm : els[i - 1].topZ + thick(els[i - 1]);
+    if (starter) {
+      // the bent riser round its front, the support block under the widening (inside the riser)
+      const reach = { front, left: nosing.left, right: nosing.right };
+      if (riser) {
+        const strip = starterRiserStrip(e, starter, reach, config.nosingFrontMm, r);
+        if (strip) risers.push({ id: `riser-${e.index}`, index: e.index, outline: strip.outline, bottomZ: below, topZ: e.topZ, heightMm: e.topZ - below, lengthMm: strip.lengthMm, thicknessMm: r, grain: unit(fronts[0].a, fronts[0].b), bent: true });
+      }
+      const inner = starterEdges(e, starter, reach, config.nosingFrontMm + (riser ? r : 0)).edges.map((x) => x.a);
+      starterBlocks.push({ id: `starter-block-${e.index}`, index: e.index, outline: inner, bottomZ: e.bottomZ, topZ: e.topZ });
+      return;
+    }
     if (riser) {
-      const below = i === 0 ? config.floorFinishBottomMm : els[i - 1].topZ + thick(els[i - 1]);
       fronts.forEach((edge, k) => {
         const n = outward(edge);
         risers.push({
@@ -183,7 +229,7 @@ export function buildCladdingModel(concrete, config) {
       });
   }
   const heights = finishedHeights(concrete, config);
-  return { treads, risers, exitNosing, heights, diagnostics: [...heightDiagnostics(heights, config), ...zoneDiagnostics(concrete), ...winderDiagnostics(concrete, config)] };
+  return { treads, risers, exitNosing, starterBlocks, heights, diagnostics: [...heightDiagnostics(heights, config), ...zoneDiagnostics(concrete), ...winderDiagnostics(concrete, config)] };
 }
 
 function floorboardParts(e, outline, config) {

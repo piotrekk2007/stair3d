@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { applyWoodGrainToTree, getOakPhotoTexture } from '../scene/woodGrain.js';
+import { insetExposed, profileRings } from './starterProfile.js';
 
 // A solid between a plan outline's top and bottom heights (one height per outline point); plan (x, y) at z → three
 // (x, z, −y). The outline is made counter-clockwise.
@@ -37,6 +38,48 @@ export function prismGeometry(outline, bottomZ, topZ) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
   return g;
+}
+
+// A solid through rings of the same point count, bottom to top ({pts, z}): the side faces between consecutive rings, a
+// cap at each end — a tread with a milled edge (starterProfile.js profileRings)
+export function loftGeometry(rings) {
+  const ccw = (pts) => pts.reduce((s, p, k) => s + p.x * pts[(k + 1) % pts.length].y - pts[(k + 1) % pts.length].x * p.y, 0) >= 0;
+  const flip = !ccw(rings[0].pts);
+  const R = flip ? rings.map((r) => ({ ...r, pts: [...r.pts].reverse() })) : rings;
+  const pos = [];
+  const v = (p, z) => [p.x, z, -p.y];
+  const tri = (a, b, c) => pos.push(...a, ...b, ...c);
+  const n = R[0].pts.length;
+  for (let k = 0; k < R.length - 1; k++) {
+    const A = R[k];
+    const B = R[k + 1];
+    for (let j = 0; j < n; j++) {
+      const j1 = (j + 1) % n;
+      tri(v(A.pts[j], A.z), v(A.pts[j1], A.z), v(B.pts[j1], B.z));
+      tri(v(A.pts[j], A.z), v(B.pts[j1], B.z), v(B.pts[j], B.z));
+    }
+  }
+  const cap = (ring, up) => {
+    const faces = THREE.ShapeUtils.triangulateShape(ring.pts.map((p) => new THREE.Vector2(p.x, p.y)), []);
+    for (const [a, b, c] of faces) {
+      if (up) tri(v(ring.pts[a], ring.z), v(ring.pts[b], ring.z), v(ring.pts[c], ring.z));
+      else tri(v(ring.pts[a], ring.z), v(ring.pts[c], ring.z), v(ring.pts[b], ring.z));
+    }
+  };
+  cap(R[0], false);
+  cap(R[R.length - 1], true);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+// a tread: a plain prism, or (a milled edge) a loft through its profile's rings — the exposed edges moved in
+function treadGeometry(t) {
+  const kind = t.profile?.kind || 'square';
+  if (kind === 'square' || !t.exposed?.some(Boolean)) return prismGeometry(t.outline, t.bottomZ, t.topZ);
+  const rings = profileRings(kind, t.profile.sizeMm, t.topZ - t.bottomZ).map((r) => ({ pts: insetExposed(t.outline, t.exposed, r.inset), z: t.bottomZ + r.z }));
+  return loftGeometry(rings);
 }
 
 const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b1aa, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
@@ -155,6 +198,12 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
     mesh.name = `Concrete-${e.index}`;
     concreteGroup.add(mesh);
   }
+  // a starter step's support under its widening (inside its bent riser)
+  for (const b of cladding.starterBlocks || []) {
+    const mesh = new THREE.Mesh(prismGeometry(b.outline, b.bottomZ, b.topZ), concreteMaterial);
+    mesh.name = `StarterBlock-${b.index}`;
+    concreteGroup.add(mesh);
+  }
   root.add(concreteGroup);
   const treads = new THREE.Group();
   treads.name = 'Treads';
@@ -168,7 +217,7 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
       if (boards) treads.add(Object.assign(new THREE.Mesh(prismGeometry(boards.outline, boards.bottomZ, boards.topZ), wood()), { name: `LandingBoards-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:boards`, grainDirection: [t.grain.y, 0, t.grain.x] } }));
       continue;
     }
-    const mesh = new THREE.Mesh(prismGeometry(t.outline, t.bottomZ, t.topZ), wood());
+    const mesh = new THREE.Mesh(treadGeometry(t), wood());
     mesh.name = `Tread-${t.index}`;
     // the grain across the flight, along the tread's front (as the self-supporting treads)
     mesh.userData = { geometrySourceId: `cladding:${t.id}`, grainDirection: grainOf(t) };

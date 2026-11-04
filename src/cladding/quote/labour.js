@@ -13,6 +13,8 @@ export const DEFAULT_LABOUR = Object.freeze([
   { id: 'tread-straight-riser', label: 'Montaż stopnia prostego z podstopnicą', unit: 'szt', rate: 0 },
   { id: 'tread-winder', label: 'Montaż stopnia zabiegowego (bez podstopnicy)', unit: 'szt', rate: 0 },
   { id: 'tread-winder-riser', label: 'Montaż stopnia zabiegowego z podstopnicą', unit: 'szt', rate: 0 },
+  { id: 'tread-starter', label: 'Montaż stopnia zapraszającego (z podstopnicą giętą)', unit: 'szt', rate: 0 },
+  { id: 'edge-profile', label: 'Profilowanie krawędzi stopni', unit: 'mb', rate: 0 },
   { id: 'landing-half', label: 'Montaż półpodestu', unit: 'szt', rate: 0 },
   { id: 'landing-wood', label: 'Montaż podestu z drewna', unit: 'szt', rate: 0 },
   { id: 'landing-floorboard', label: 'Montaż podestu z deski podłogowej (OSB + deska + nosek)', unit: 'm2', rate: 0 },

@@ -68,6 +68,9 @@ export function createDefaultCladdingConfig() {
     // shared reference check (main.js hook → geometry/referenceStair.js)
     referenceFloor: null,
     // stage 5 — finishing elements (sizes ASSUMPTION, DO WERYFIKACJI with the workshop)
+    // the treads' exposed top edge (starterProfile.js): square / chamfer / round (R) / bullnose; a step may have its own
+    edgeProfile: 'round',
+    edgeProfileMm: 5,
     // the skirting board on every walled side: its bottom cut to the treads, its top raked (parallel to the noses) or
     // stepped
     skirtingEnabled: false,
@@ -150,6 +153,13 @@ export function sanitizeCladdingConfig(raw) {
     const o = {};
     for (const f of ['riseMm', 'goingMm', 'widthMm']) if (Number.isFinite(Number(v[f])) && v[f] !== null && v[f] !== '') o[f] = Number(v[f]);
     for (const f of ['nosingLeft', 'nosingRight', 'riser']) if (typeof v[f] === 'boolean') o[f] = v[f];
+    if (['square', 'chamfer', 'round', 'bullnose'].includes(v.profile)) o.profile = v.profile;
+    // a starter step: widened past the concrete on its sides, rounded, bowed (starterProfile.js)
+    if (v.starter && typeof v.starter === 'object') {
+      const s = {};
+      for (const f of ['leftMm', 'rightMm', 'radiusMm', 'bowMm']) s[f] = Math.max(0, Math.min(2000, Number(v.starter[f]) || 0));
+      o.starter = s;
+    }
     if (Object.keys(o).length) stepOverrides[k] = o;
   }
   return {
@@ -183,6 +193,8 @@ export function sanitizeCladdingConfig(raw) {
     slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),
     minHeadroomMm: num(c.minHeadroomMm, d.minHeadroomMm, 1500, 3000),
     referenceFloor: sanitizeReferenceFloor(c.referenceFloor),
+    edgeProfile: ['square', 'chamfer', 'round', 'bullnose'].includes(c.edgeProfile) ? c.edgeProfile : 'round',
+    edgeProfileMm: num(c.edgeProfileMm, d.edgeProfileMm, 0, 30),
     skirtingEnabled: !!c.skirtingEnabled,
     skirtingStyle: c.skirtingStyle === 'stepped' ? 'stepped' : 'raked',
     skirtingHeightMm: num(c.skirtingHeightMm, d.skirtingHeightMm, 20, 300),

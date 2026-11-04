@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–4 BUILT, stage 5 part 1 BUILT (2026-11-04; starter steps and edge profiles next), stage 6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–5 BUILT (2026-11-04), stage 6 (offer documents) planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -247,6 +247,21 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   board from the price list, handrail per mb, balusters / posts per piece; labour skirting / cover-stringer per mb,
   railing-stairs per tread, railing-antresola per mb, post per piece).
 - Tests: `__tests__/finish.test.js`.
+
+## Stage 5, part 2 — starter steps and edge profiles (as built)
+
+- `starterProfile.js` — a STARTER STEP = `stepOverrides[i].starter {leftMm, rightMm, radiusMm, bowMm}` on a straight
+  step: `starterEdges` — the tread widened past the concrete on its sides, the front corners of a widened side rounded,
+  the front bowed by its sagitta (edges with roles; `inset` gives the same shape further in); its riser BENT round the
+  front and the widened sides (`starterRiserStrip`, developed length priced), a support block inside the riser under the
+  widening (`cladding.starterBlocks`, drawn as concrete). Step editor „Stopień zapraszający” (default 300 left, R 200).
+- EDGE PROFILE — `edgeProfile` square / chamfer / round (R) / bullnose (`edgeProfileMm` 5; a step's own
+  `stepOverrides[i].profile`): only the tread's EXPOSED edges (the front, a nosed side, a starter's round — per outline
+  vertex `tread.exposed`, from `claddingModel.js offsetEdgesDetailed`) are milled; `profileRings` (inset, z) → the
+  renderer lofts the tread through them (`claddingRenderer.js loftGeometry`, `insetExposed` keeps the point count).
+- Quote: „Stopnie zapraszające” (labour `tread-starter`), the bent riser, „Profilowanie” per mb of every milled edge
+  (labour `edge-profile`).
+- Tests: `__tests__/starterProfile.test.js`.
 
 ## Open questions
 

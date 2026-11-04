@@ -61,17 +61,25 @@ export function buildCladdingQuote(built, settings) {
     }
     const winder = t.kind === 'winder';
     const withRiser = riserOn(e, config);
-    lines.push({ id: t.id, group: winder ? 'Stopnie zabiegowe' : 'Stopnie proste', name: `${winder ? 'Stopień zabiegowy' : 'Stopień'} ${no}`, qty: 1, unit: 'szt.', dims: dims(t, t.thicknessMm), material: board({ lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm }), labour: labour(`${winder ? 'tread-winder' : 'tread-straight'}${withRiser ? '-riser' : ''}`) });
+    const labourId = t.starter ? 'tread-starter' : `${winder ? 'tread-winder' : 'tread-straight'}${withRiser ? '-riser' : ''}`;
+    lines.push({ id: t.id, group: t.starter ? 'Stopnie zapraszające' : winder ? 'Stopnie zabiegowe' : 'Stopnie proste', name: `${t.starter ? 'Stopień zapraszający' : winder ? 'Stopień zabiegowy' : 'Stopień'} ${no}`, qty: 1, unit: 'szt.', dims: dims(t, t.thicknessMm), material: board({ lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm }), labour: labour(labourId) });
   }
   // the risers: their material (their fitting is in the tread's labour "z podstopnicą")
   for (const r of cladding.risers) {
     if (!(r.heightMm > 0)) continue;
     const blank = { lengthMm: r.lengthMm, depthMm: r.heightMm, thicknessMm: r.thicknessMm };
-    lines.push({ id: r.id, group: 'Podstopnice', name: r.id.startsWith('riser-top') ? 'Podstopnica pod antresolą' : `Podstopnica ${r.index + 1}`, qty: 1, unit: 'szt.', dims: dims(blank, r.thicknessMm), material: board(blank), labour: null });
+    lines.push({ id: r.id, group: 'Podstopnice', name: r.id.startsWith('riser-top') ? 'Podstopnica pod antresolą' : `Podstopnica ${r.bent ? 'gięta ' : ''}${r.index + 1}`, qty: 1, unit: 'szt.', dims: dims(blank, r.thicknessMm), material: board(blank), labour: null });
   }
   for (const n of cladding.exitNosing || []) {
     const blank = { lengthMm: n.lengthMm, depthMm: n.depthMm, thicknessMm: n.thicknessMm };
     lines.push({ id: n.id, group: 'Noski', name: 'Nosek antresoli', qty: 1, unit: 'szt.', dims: dims(blank, n.thicknessMm), material: board(blank), labour: labour('nosing') });
+  }
+  // the treads' milled edges (per mb of every profiled edge)
+  const profiled = cladding.treads.reduce((s, t) => s + (t.profiledLengthMm || 0), 0);
+  if (profiled > 0) {
+    const mb = round2(profiled / 1000);
+    const kinds = [...new Set(cladding.treads.filter((t) => t.profiledLengthMm > 0).map((t) => t.profile.kind))];
+    lines.push({ id: 'edge-profile', group: 'Profilowanie', name: `Profilowanie krawędzi (${kinds.map((k) => ({ chamfer: 'fazka', round: `zaokrąglenie R${config.edgeProfileMm}`, bullnose: 'półwałek' })[k]).join(', ')})`, qty: mb, unit: 'mb', dims: '', material: null, labour: labour('edge-profile', mb) });
   }
   // stage 5: skirting boards (per mb), cover stringers (a board from the price list), the balustrade
   const perUnit = (price, qty, what) => (price > 0 ? { value: round2(price * qty), note: `${round2(price)} zł/${what}` } : { value: null, note: `brak ceny (${what})` });
@@ -101,7 +109,7 @@ export function buildCladdingQuote(built, settings) {
     lines.push({ id: r.id, group: 'Pozycje własne', name: r.label, qty: r.qty ?? 1, unit: UNIT_LABELS[r.unit] || r.unit, dims: '', material: null, labour: l });
   }
   // one block per group (walking order within it)
-  const GROUPS = ['Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Listwy i wangi', 'Balustrada', 'Usługi', 'Pozycje własne'];
+  const GROUPS = ['Stopnie zapraszające', 'Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Profilowanie', 'Listwy i wangi', 'Balustrada', 'Usługi', 'Pozycje własne'];
   lines.sort((x, y) => GROUPS.indexOf(x.group) - GROUPS.indexOf(y.group));
   for (const l of lines) l.total = round2((l.material?.value ?? 0) + (l.labour?.value ?? 0));
   const materialNet = round2(lines.reduce((s, l) => s + (l.material?.value ?? 0), 0));
