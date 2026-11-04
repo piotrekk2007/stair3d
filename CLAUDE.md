@@ -525,6 +525,13 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   `waivers`, `offer`. Runtime `config` still nests `manualEdgeOverrides`/`manualStringerProfileOverrides`/
   `manualPostOverrides`. New optional fields need no version bump; a changed shape does (RULES #15).
 
+## Planned: concrete cladding module
+
+[CONCRETE_CLADDING_MODULE.md](docs/architecture/CONCRETE_CLADDING_MODULE.md) — a SEPARATE tool ("Schody na beton",
+own tab, own `src/cladding/`, own project file type) for wooden cladding of a measured concrete stair, quotation with
+labour. Hard rule (user decision 2026-11-04): it must not change the self-supporting engine — shared code used
+read-only, the only outside edits are the hooks listed in that document.
+
 ## Open items / known limitations
 
 - The default L stair (a new project, generated) still has 4 `STRINGER-MIN-SECTION` warnings (no errors).
