@@ -116,3 +116,13 @@
 .clad-totals td:last-child { text-align: right; }
 .clad-rates-table input[type='number'] { width: 64px; }
 .clad-quote-table td:first-child { text-align: left; }
+
+/* stage 6: the offer, the shared price list */
+.clad-subhead { margin: 8px 0 4px; font-weight: 600; font-size: 12px; color: #5a3d24; }
+.clad-posts-table input { width: 64px; }
+.clad-offer-rows input[type='text'] { width: 100%; }
+.clad-offer-rows .clad-small, .clad-offer .clad-small { width: 54px; }
+.clad-offer-rows td.n { text-align: right; white-space: nowrap; }
+.clad-hidden-row td { opacity: 0.45; }
+.clad-notes { flex-direction: column; align-items: stretch; }
+.clad-notes textarea { width: 100%; }

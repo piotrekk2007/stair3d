@@ -104,7 +104,11 @@ test('the quote: skirting per mb, the cover stringer as a board, the balustrade 
   const b = buildCladdingStair(straight({ walls: { 0: { left: true } }, skirtingEnabled: true, coverStringers: { 0: { right: true } }, railingSides: { 0: { right: true } } }));
   const s = createDefaultQuoteSettings();
   s.labour.forEach((r) => (r.rate = 10));
-  Object.assign(s, { skirtingPerMb: 30, handrailPerMb: 200, balusterPerPiece: 40, postPerPiece: 500 });
+  // (the SHARED price list: the handrail / baluster by material id, the posts from the post table by section)
+  s.skirtingPerMb = 30;
+  s.priceList.find((p) => p.materialId === 'railing-handrail').price = 200;
+  s.priceList.find((p) => p.materialId === 'railing-baluster').price = 40;
+  s.boardPricing.postPrices = [{ sectionMm: 100, price: 500, unit: 'szt' }];
   const q = buildCladdingQuote(b, s);
   const sk = q.lines.find((l) => l.id === 'skirting-0-left');
   near(sk.material.value, Math.round(30 * sk.qty * 100) / 100, 'skirting material per mb', 0.011);

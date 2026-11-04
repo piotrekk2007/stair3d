@@ -3,15 +3,16 @@
 
 import { sanitizeCladdingConfig } from './schema.js';
 import { sanitizeQuoteSettings } from './quote/labour.js';
+import { sanitizeCladdingOffer } from './quote/claddingOffer.js';
 
 export const CLADDING_PROJECT_TYPE = 'schody3d-beton';
 export const CLADDING_PROJECT_VERSION = 1;
 
-export function claddingProjectToFile({ config, projectName = '', notes = '', quote = null }) {
-  return { _type: CLADDING_PROJECT_TYPE, _version: CLADDING_PROJECT_VERSION, savedAt: new Date().toISOString(), projectName, notes, cladding: sanitizeCladdingConfig(config), quote: sanitizeQuoteSettings(quote) };
+export function claddingProjectToFile({ config, projectName = '', notes = '', quote = null, offer = null }) {
+  return { _type: CLADDING_PROJECT_TYPE, _version: CLADDING_PROJECT_VERSION, savedAt: new Date().toISOString(), projectName, notes, cladding: sanitizeCladdingConfig(config), quote: sanitizeQuoteSettings(quote), offer: sanitizeCladdingOffer(offer) };
 }
 
-/** @returns {{config, projectName, notes, quote}} — throws with a Polish message on a file of another kind */
+/** @returns {{config, projectName, notes, quote, offer}} — throws with a Polish message on a file of another kind */
 export function parseCladdingProjectFile(text) {
   let data;
   try {
@@ -22,5 +23,5 @@ export function parseCladdingProjectFile(text) {
   if (data?._type === 'schody3d-project') throw new Error('to projekt schodów samonośnych — wczytaj go w zakładce „Samonośne”');
   if (data?._type !== CLADDING_PROJECT_TYPE || typeof data.cladding !== 'object') throw new Error('to nie jest plik projektu schodów na beton');
   if (Number(data._version) > CLADDING_PROJECT_VERSION) throw new Error(`plik z nowszej wersji programu (${data._version})`);
-  return { config: sanitizeCladdingConfig(data.cladding), projectName: typeof data.projectName === 'string' ? data.projectName : '', notes: typeof data.notes === 'string' ? data.notes : '', quote: sanitizeQuoteSettings(data.quote) };
+  return { config: sanitizeCladdingConfig(data.cladding), projectName: typeof data.projectName === 'string' ? data.projectName : '', notes: typeof data.notes === 'string' ? data.notes : '', quote: sanitizeQuoteSettings(data.quote), offer: sanitizeCladdingOffer(data.offer) };
 }

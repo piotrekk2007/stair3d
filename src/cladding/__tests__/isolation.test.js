@@ -26,6 +26,9 @@ const ALLOWED_SHARED = new Set([
   'geometry/rectUnion.js',
   'takeoff/boardPricing.js',
   'takeoff/priceListFile.js',
+  'takeoff/pricing.js',
+  'offer/offerDocument.js',
+  'app/printHtml.js',
 ]);
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];
 // files outside the module allowed to import it (the hooks)

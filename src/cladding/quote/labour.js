@@ -1,7 +1,13 @@
-// The labour price list of the module "Schody na beton" (stage 4 — docs/architecture/CONCRETE_CLADDING_MODULE.md):
-// every installed element has its own labour price (user, 2026-11-04: "montaż każdego elementu ma swoją cenę"). The
-// rates are the user's — 0 = not priced yet (flagged on the quote). Plus the module's own material prices that are not
-// boards (floor boards, OSB per m²). Pure data.
+// The price list of the module "Schody na beton" (stages 4 / 6 — docs/architecture/CONCRETE_CLADDING_MODULE.md):
+// THE SAME material price list as the self-supporting takeoff (user, 2026-11-04: "cennik elementów powinien odnosić się
+// do tego co jest już w schodach samonośnych") — the general list by material id (balusters, handrail, glass, fittings,
+// LED, brackets…, takeoff/pricing.js) and the board pricing (DREWEX boards, species, the post table by section,
+// takeoff/boardPricing.js), read / saved as the same „cały cennik” file — plus what only this module has: the labour of
+// every installed element (user: "montaż każdego elementu ma swoją cenę") and a few materials per m² / mb (floor boards,
+// OSB, skirting). 0 = not priced yet (flagged on the quote). Pure data.
+
+import { DEFAULT_PRICE_LIST } from '../../takeoff/pricing.js';
+import { createDefaultBoardPricing, sanitizeBoardPricing } from '../../takeoff/boardPricing.js';
 
 export const LABOUR_UNITS = Object.freeze({ PIECE: 'szt', AREA: 'm2', LENGTH: 'mb', LUMP: 'ryczałt' });
 export const UNIT_LABELS = Object.freeze({ szt: 'szt.', m2: 'm²', mb: 'mb', 'ryczałt': 'ryczałt' });
@@ -36,20 +42,34 @@ export function createDefaultQuoteSettings() {
     // materials outside the board price list (PLN per m², 0 = not priced yet)
     floorboardPerM2: 0,
     osbPerM2: 0,
-    // finishing elements bought or made per unit (stage 5)
+    // the module's own materials per unit (stage 5)
     skirtingPerMb: 0,
-    handrailPerMb: 0,
-    balusterPerPiece: 0,
-    postPerPiece: 0,
+    // the SHARED material list (as the self-supporting takeoff settings): by material id, and the board pricing
+    priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
+    wasteFactors: {},
     // VAT: 8 % for a service with installation (residential), 23 % for material only (as the DREWEX calculator)
     withInstallation: true,
-    // the board price list (takeoff/boardPricing.js shape) — null = the default DREWEX table; a whole price list file
-    // read in replaces it (takeoff/priceListFile.js)
-    boardPricing: null,
+    // the board pricing (takeoff/boardPricing.js shape: boards, species, posts by section, LED supplies)
+    boardPricing: createDefaultBoardPricing(),
   };
 }
 
 const num = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
+
+// the shared list: every known material with the file's price; a project from before stage 6 carried the handrail /
+// baluster prices of its own — taken over
+function mergePriceList(s) {
+  const own = new Map((Array.isArray(s.priceList) ? s.priceList : []).filter((p) => p && typeof p.materialId === 'string').map((p) => [p.materialId, p]));
+  const legacy = { 'railing-handrail': s.handrailPerMb, 'railing-baluster': s.balusterPerPiece };
+  return DEFAULT_PRICE_LIST.map((p) => {
+    const price = Number(own.get(p.materialId)?.price);
+    const old = Number(legacy[p.materialId]);
+    return { ...p, price: Number.isFinite(price) && price >= 0 ? price : Number.isFinite(old) && old > 0 ? old : p.price };
+  });
+}
+
+/** A material's price from the shared list (0 = not priced). */
+export const priceOf = (settings, materialId) => Number(settings.priceList?.find((p) => p.materialId === materialId)?.price) || 0;
 
 export function sanitizeQuoteSettings(raw) {
   const d = createDefaultQuoteSettings();
@@ -65,10 +85,9 @@ export function sanitizeQuoteSettings(raw) {
     floorboardPerM2: Math.max(0, num(s.floorboardPerM2, 0)),
     osbPerM2: Math.max(0, num(s.osbPerM2, 0)),
     skirtingPerMb: Math.max(0, num(s.skirtingPerMb, 0)),
-    handrailPerMb: Math.max(0, num(s.handrailPerMb, 0)),
-    balusterPerPiece: Math.max(0, num(s.balusterPerPiece, 0)),
-    postPerPiece: Math.max(0, num(s.postPerPiece, 0)),
+    priceList: mergePriceList(s),
+    wasteFactors: s.wasteFactors && typeof s.wasteFactors === 'object' ? { ...s.wasteFactors } : {},
     withInstallation: s.withInstallation !== false,
-    boardPricing: s.boardPricing && typeof s.boardPricing === 'object' ? s.boardPricing : null,
+    boardPricing: s.boardPricing && typeof s.boardPricing === 'object' ? sanitizeBoardPricing(s.boardPricing) : createDefaultBoardPricing(),
   };
 }

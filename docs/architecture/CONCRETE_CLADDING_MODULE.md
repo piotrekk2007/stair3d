@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–5 BUILT (2026-11-04), stage 6 (offer documents) planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–5 BUILT, stage 6 part 1 (the offer and the estimate) BUILT (2026-11-04); the contract / payment schedule later (user decision); the gaps the user listed 2026-11-04 next (see the end) (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -262,6 +262,34 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
 - Quote: „Stopnie zapraszające” (labour `tread-starter`), the bent riser, „Profilowanie” per mb of every milled edge
   (labour `edge-profile`).
 - Tests: `__tests__/starterProfile.test.js`.
+
+## Stage 6, part 1 — the shared price list, the offer, the estimate (as built)
+
+- The price list is THE self-supporting one (user, 2026-11-04): `quote/labour.js` settings carry `priceList` (the
+  general list by material id — `takeoff/pricing.js DEFAULT_PRICE_LIST`; the balusters / handrail / glass / LED /
+  brackets read from it, `priceOf`), `wasteFactors` and the whole `boardPricing` (boards, species, the post table by
+  section — the decorative posts priced from it, per piece or per mb of their height); „💾 Zapisz / 📂 Wczytaj cały
+  cennik” = `takeoff/priceListFile.js` (the same file both modules read). The module's own: the labour list, floor
+  boards / OSB per m², skirting per mb. A project saved before took its handrail / baluster prices over.
+- `quote/claddingOffer.js` — the offer from the quote: `mode` groups / detailed / split (material + installation), a
+  line renamed or left out (`lineEdits`), extra rows, a discount spread over the quote's lines (not the extras, no line
+  of its own), the quote's VAT; `claddingFacts` (the stair's parameters, the comfort table with the self-supporting
+  offer's requirements); printed by the SHARED `offer/offerDocument.js buildOfferHTML` (the same look) through
+  `app/printHtml.js` — the 3D picture (`sceneApi.renderViewImage`, iso), the plan without editing aids
+  (`clientView`), the company data from the same browser setting (`stair3d.company`) and the presentation logo;
+  `buildEstimateHTML` — the internal estimate (material and labour per line). Saved in the project file (`offer`).
+- UI: the right panel's third tab „Oferta” (client, number, validity, mode, discount, comfort table, the lines with
+  their names / on-off, extra rows, notes, totals, „📄 Drukuj ofertę”, „🧾 Drukuj kosztorys”, the company data).
+- Tests: `__tests__/offer.test.js`.
+
+## Gaps listed by the user (2026-11-04) — the next batches
+
+1. Walls: a wall between flights set apart, a wall under the steps and over them (as the self-supporting concrete
+   flight's `concreteWallSide / concreteWallAbove`).
+2. Balustrade: the self-supporting types (glass, round balusters), adding / removing posts, editing the antresola's
+   edges and the opening.
+3. Colours of the treads, balusters, skirting; LED lighting.
+4. Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ.
 
 ## Open questions
 

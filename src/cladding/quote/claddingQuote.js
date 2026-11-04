@@ -6,7 +6,7 @@
 
 import { createDefaultBoardPricing, lookupBoardPricePerMb } from '../../takeoff/boardPricing.js';
 import { riserOn } from '../claddingModel.js';
-import { UNIT_LABELS } from './labour.js';
+import { UNIT_LABELS, priceOf } from './labour.js';
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const area = (o) => Math.abs(o.reduce((s, p, k) => s + p.x * o[(k + 1) % o.length].y - o[(k + 1) % o.length].x * p.y, 0) / 2);
@@ -16,6 +16,19 @@ function blankOf(outline, grain) {
   const us = outline.map((p) => p.x * grain.x + p.y * grain.y);
   const vs = outline.map((p) => p.x * n.x + p.y * n.y);
   return { lengthMm: Math.max(...us) - Math.min(...us), depthMm: Math.max(...vs) - Math.min(...vs) };
+}
+
+// the posts from the post table (the smallest section >= the post's; per piece, or per mb of its height)
+function postsMaterial(posts, pricing) {
+  if (!posts.length) return null;
+  const rows = [...(pricing.postPrices || [])].sort((a, b) => a.sectionMm - b.sectionMm);
+  let total = 0;
+  for (const p of posts) {
+    const row = rows.find((r) => r.sectionMm >= p.size - 1e-6);
+    if (!row || !(row.price > 0)) return { value: null, note: `brak ceny słupa ${Math.round(p.size)} × ${Math.round(p.size)} mm w cenniku słupów` };
+    total += row.unit === 'mb' ? (row.price * (p.topZ - p.bottomZ)) / 1000 : row.price;
+  }
+  return { value: round2(total), note: 'cennik słupów (wg przekroju)' };
 }
 
 /**
@@ -94,9 +107,11 @@ export function buildCladdingQuote(built, settings) {
   for (const s of built.balustrade?.sections || []) {
     const where = s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${s.key.side === 'left' ? 'lewa' : 'prawa'}`;
     const mb = round2(s.lengthMm / 1000);
-    lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(settings.handrailPerMb, mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
-    if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(settings.balusterPerPiece, s.balusters.length, 'szt.'), labour: null });
-    lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: perUnit(settings.postPerPiece, s.posts.length, 'szt.'), labour: labour('post', s.posts.length) });
+    // (the shared price list: the handrail per mb, a baluster per piece — takeoff/pricing.js; a post from the post
+    // table by its section, per piece or per mb of its height — takeoff/boardPricing.js postPrices)
+    lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
+    if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(priceOf(settings, 'railing-baluster'), s.balusters.length, 'szt.'), labour: null });
+    lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
   }
   // lump sums and the user's own extra lines
   for (const id of ['measure', 'transport']) {

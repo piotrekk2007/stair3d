@@ -16,7 +16,10 @@ import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
-import { applyPriceListFile } from '../../takeoff/priceListFile.js';
+import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
+import { buildOfferHTML } from '../../offer/offerDocument.js';
+import { printHtml } from '../../app/printHtml.js';
+import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
@@ -31,7 +34,7 @@ const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
  *   a floor file of either kind; without them the floor link is not offered
  */
 export function mountCladdingApp(rootEl, host = {}) {
-  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), pane: 'measure' };
+  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), offer: createDefaultCladdingOffer(), pane: 'measure' };
   let history = createHistory(state.config);
   let active = false;
 
@@ -75,7 +78,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <div class="clad-3d" hidden></div>
       </main>
       <aside class="clad-right">
-        <nav class="clad-tabs"><button type="button" data-pane="measure" class="active">Pomiar</button><button type="button" data-pane="quote">Kosztorys</button></nav>
+        <nav class="clad-tabs"><button type="button" data-pane="measure" class="active">Pomiar</button><button type="button" data-pane="quote">Kosztorys</button><button type="button" data-pane="offer">Oferta</button></nav>
         <div class="clad-pane" data-pane-body="measure">
           <section class="clad-box clad-step"></section>
           <section class="clad-box"><h3>Wysokości po wykończeniu</h3><div class="clad-heights"></div></section>
@@ -85,11 +88,16 @@ export function mountCladdingApp(rootEl, host = {}) {
           <section class="clad-box"><h3>Kosztorys</h3><div class="clad-quote"></div></section>
           <section class="clad-box"><h3>Cennik robocizny i materiałów</h3><div class="clad-rates"></div></section>
         </div>
+        <div class="clad-pane" data-pane-body="offer" hidden>
+          <section class="clad-box"><h3>Oferta dla klienta</h3><div class="clad-offer"></div></section>
+          <section class="clad-box"><h3>Dane firmy (w tej przeglądarce)</h3><div class="clad-company"></div></section>
+        </div>
       </aside>
     </div>
     <input type="file" accept=".json,application/json" class="clad-file" hidden />
     <input type="file" accept=".json,application/json" class="clad-floor-file" hidden />
     <input type="file" accept=".json,application/json" class="clad-pricelist-file" hidden />
+    <input type="file" accept=".json,application/json" class="clad-pricelist-all-file" hidden />
   `;
   const $ = (sel) => rootEl.querySelector(sel);
   const seqEl = $('.clad-seq');
@@ -360,22 +368,48 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Deska podłogowa [zł/m²] <input type="number" min="0" data-q="floorboardPerM2" value="${s.floorboardPerM2 || ''}" placeholder="0" /></label>
       <label class="clad-field">Płyta OSB [zł/m²] <input type="number" min="0" data-q="osbPerM2" value="${s.osbPerM2 || ''}" placeholder="0" /></label>
       <label class="clad-field">Listwa przyścienna [zł/mb] <input type="number" min="0" data-q="skirtingPerMb" value="${s.skirtingPerMb || ''}" placeholder="0" /></label>
-      <label class="clad-field">Poręcz [zł/mb] <input type="number" min="0" data-q="handrailPerMb" value="${s.handrailPerMb || ''}" placeholder="0" /></label>
-      <label class="clad-field">Tralka [zł/szt.] <input type="number" min="0" data-q="balusterPerPiece" value="${s.balusterPerPiece || ''}" placeholder="0" /></label>
-      <label class="clad-field">Słup ozdobny [zł/szt.] <input type="number" min="0" data-q="postPerPiece" value="${s.postPerPiece || ''}" placeholder="0" /></label>
+      <div class="clad-subhead">Wspólny cennik (jak w schodach samonośnych)</div>
+      ${SHARED_PRICES.map(([id, label, unit]) => `<label class="clad-field">${label} [zł/${unit}] <input type="number" min="0" data-price="${id}" value="${priceValue(s, id) || ''}" placeholder="0" /></label>`).join('')}
+      <div class="clad-subhead">Słupy — cena wg przekroju (najmniejszy przekrój ≥ słupa)</div>
+      <table class="clad-table clad-posts-table"><thead><tr><th>przekrój [mm]</th><th>cena [zł]</th><th>za</th><th></th></tr></thead><tbody>${(bp.postPrices || []).map((r, k) => `<tr><td><input type="number" data-post="${k}" data-post-f="sectionMm" value="${r.sectionMm}" /></td><td><input type="number" data-post="${k}" data-post-f="price" value="${r.price}" /></td><td><select data-post="${k}" data-post-f="unit"><option value="szt" ${r.unit === 'szt' ? 'selected' : ''}>szt.</option><option value="mb" ${r.unit === 'mb' ? 'selected' : ''}>mb</option></select></td><td><button type="button" data-post-del="${k}">✕</button></td></tr>`).join('')}</tbody></table>
+      <div class="clad-actions"><button type="button" data-post-add>+ Przekrój słupa</button></div>
       <table class="clad-table clad-rates-table"><thead><tr><th>Robocizna</th><th>ilość</th><th>stawka</th><th></th></tr></thead><tbody>${s.labour.map(rateRow).join('')}</tbody></table>
-      <div class="clad-actions"><button type="button" data-own-add>+ Pozycja własna</button><button type="button" data-pricelist-load title="Plik „Zapisz cały cennik” z modułu samonośnego (albo jego projekt) — ceny desek DREWEX, gatunki">📂 Wczytaj cennik desek</button></div>
+      <div class="clad-actions"><button type="button" data-own-add>+ Pozycja własna</button><button type="button" data-pricelist-save title="Ten sam plik co „Zapisz cały cennik” w schodach samonośnych">💾 Zapisz cały cennik</button><button type="button" data-pricelist-all title="Plik „Zapisz cały cennik” (albo projekt) — także z modułu samonośnego: deski, gatunki, słupy, tralki, poręcze, szkło, LED…">📂 Wczytaj cały cennik</button></div>
       <div class="clad-hint">Materiał stopni, podestów, podstopnic i nosków liczy się z cennika desek (jak w module samonośnym; ${escapeHtml(s.boardPricing ? 'wczytany cennik' : 'domyślny cennik DREWEX')}). Stawka 0 = bez ceny.</div>`;
   }
   const quoteChanged = () => {
     state.quote = sanitizeQuoteSettings(state.quote);
     renderQuote();
+    renderOffer();
+  };
+  // the shared material prices shown here (material id, label, unit) — the rest of the list travels with the file
+  const SHARED_PRICES = [
+    ['railing-handrail', 'Poręcz', 'mb'],
+    ['railing-baluster', 'Tralka', 'szt.'],
+    ['railing-glass', 'Szkło VSG', 'm²'],
+    ['railing-glass-fixing', 'Uchwyt / rotula szyby', 'szt.'],
+    ['railing-wall-bracket', 'Wspornik poręczy ściennej', 'szt.'],
+    ['led-strip', 'Taśma LED', 'mb'],
+    ['led-profile', 'Profil LED', 'mb'],
+  ];
+  const priceValue = (s, id) => s.priceList.find((p) => p.materialId === id)?.price;
+  const download = (text, name) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   $('.clad-rates').addEventListener('change', (ev) => {
     const el = ev.target;
     const s = state.quote;
     if (el.dataset.rate) s.labour.find((r) => r.id === el.dataset.rate).rate = Number(el.value) || 0;
     else if (el.dataset.ownQty) s.labour.find((r) => r.id === el.dataset.ownQty).qty = Number(el.value) || 0;
+    else if (el.dataset.price) s.priceList.find((p) => p.materialId === el.dataset.price).price = Number(el.value) || 0;
+    else if (el.dataset.post !== undefined) {
+      const row = s.boardPricing.postPrices[Number(el.dataset.post)];
+      row[el.dataset.postF] = el.dataset.postF === 'unit' ? el.value : Number(el.value) || 0;
+    }
     else if (el.dataset.lump) s.lumps[el.dataset.lump] = el.checked;
     else if (el.dataset.q === 'withInstallation') s.withInstallation = el.value === '1';
     else if (el.dataset.q === 'species') {
@@ -385,6 +419,24 @@ export function mountCladdingApp(rootEl, host = {}) {
     quoteChanged();
   });
   const priceListInput = $('.clad-pricelist-file');
+  // the WHOLE price list (the self-supporting file format): the general list, the board pricing with the posts
+  const priceListAllInput = $('.clad-pricelist-all-file');
+  priceListAllInput.addEventListener('change', () => {
+    const file = priceListAllInput.files?.[0];
+    priceListAllInput.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const read = applyPriceListFile(state.quote, reader.result);
+        quoteChanged();
+        meta(`Wczytano cennik: ${read.prices} cen, ${read.boards} wierszy desek, ${read.posts} przekrojów słupów`);
+      } catch (e) {
+        window.alert(`Nie można wczytać cennika: ${e.message}`);
+      }
+    };
+    reader.readAsText(file);
+  });
   $('.clad-rates').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
@@ -399,6 +451,16 @@ export function mountCladdingApp(rootEl, host = {}) {
       quoteChanged();
     } else if (b.dataset.pricelistLoad !== undefined) {
       priceListInput.click();
+    } else if (b.dataset.postAdd !== undefined) {
+      state.quote.boardPricing.postPrices.push({ sectionMm: 120, price: 0, unit: 'szt' });
+      quoteChanged();
+    } else if (b.dataset.postDel !== undefined) {
+      state.quote.boardPricing.postPrices.splice(Number(b.dataset.postDel), 1);
+      quoteChanged();
+    } else if (b.dataset.pricelistSave !== undefined) {
+      download(JSON.stringify(priceListToFile(state.quote), null, 2), 'cennik-schody.json');
+    } else if (b.dataset.pricelistAll !== undefined) {
+      priceListAllInput.click();
     }
   });
   priceListInput.addEventListener('change', () => {
@@ -420,6 +482,135 @@ export function mountCladdingApp(rootEl, host = {}) {
     };
     reader.readAsText(file);
   });
+
+  // --- the offer (stage 6): the quote as the client's offer — the SHARED offer document (offer/offerDocument.js) ---
+  const COMPANY_KEY = 'stair3d.company'; // the same company data as the self-supporting offer (this browser)
+  const readCompany = () => {
+    try {
+      const c = JSON.parse(localStorage.getItem(COMPANY_KEY) || 'null') || {};
+      return { name: '', address: '', nip: '', phone: '', email: '', www: '', ...Object.fromEntries(Object.entries(c).filter(([, v]) => typeof v === 'string')) };
+    } catch {
+      return { name: '', address: '', nip: '', phone: '', email: '', www: '' };
+    }
+  };
+  let company = readCompany();
+  const readLogo = () => {
+    try {
+      const l = JSON.parse(localStorage.getItem('stair3d.presentationLogo') || 'null');
+      return typeof l?.dataUrl === 'string' && /^data:image\/(png|jpeg|webp|gif|svg\+xml);/.test(l.dataUrl) ? l.dataUrl : null;
+    } catch {
+      return null;
+    }
+  };
+  function renderOffer() {
+    if (state.pane !== 'offer' || !state.built) return;
+    const o = state.offer;
+    const q = buildCladdingQuote(state.built, state.quote);
+    const offer = buildCladdingOffer(q, o);
+    const field = (path, label, value, type = 'text') => `<label class="clad-field">${label} <input type="${type}" data-offer="${path}" value="${escapeHtml(String(value ?? ''))}" /></label>`;
+    const rowHtml = (r) => `<tr class="${r.hidden ? 'clad-hidden-row' : ''}"><td><input type="checkbox" data-line-show="${escapeHtml(r.id)}" ${r.hidden ? '' : 'checked'} title="w ofercie" /></td><td><input type="text" data-line-label="${escapeHtml(r.id)}" value="${escapeHtml(r.label)}" /></td><td class="n">${money(r.net)}</td></tr>`;
+    const extraHtml = (x, k) => `<tr><td><button type="button" data-extra-del="${k}">✕</button></td><td><input type="text" data-extra="${k}" data-extra-f="label" value="${escapeHtml(x.label)}" /> <input type="number" data-extra="${k}" data-extra-f="qty" value="${x.qty}" class="clad-small" /> <input type="text" data-extra="${k}" data-extra-f="unit" value="${escapeHtml(x.unit)}" class="clad-small" /> × <input type="number" data-extra="${k}" data-extra-f="unitNet" value="${x.unitNet}" class="clad-small" /> zł</td><td class="n">${money(x.qty * x.unitNet)}</td></tr>`;
+    $('.clad-offer').innerHTML = `
+      ${field('client.name', 'Klient', o.client.name)}${field('client.address', 'Adres', o.client.address)}${field('client.phone', 'Telefon', o.client.phone)}${field('client.email', 'E-mail', o.client.email)}
+      <label class="clad-field">Nr oferty <span><input type="text" data-offer="offerNumber" value="${escapeHtml(o.offerNumber)}" /><button type="button" data-offer-number title="Zaproponuj numer">#</button></span></label>
+      ${field('validityDays', 'Ważna [dni]', o.validityDays, 'number')}
+      <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
+      <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
+      <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
+      <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
+      <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
+      <table class="clad-table clad-totals"><tbody><tr><td>Razem netto</td><td>${money(offer.totals.net)} zł</td></tr><tr><td>VAT ${offer.totals.vatRatePct}%</td><td>${money(offer.totals.vat)} zł</td></tr><tr><td><b>Razem brutto</b></td><td><b>${money(offer.totals.gross)} zł</b></td></tr></tbody></table>
+      ${q.unpriced ? `<div class="clad-finding warning">${q.unpriced} pozycji kosztorysu jest bez ceny — oferta ich nie liczy (zakładka Kosztorys).</div>` : ''}
+      <div class="clad-actions"><button type="button" data-print-offer>📄 Drukuj ofertę (PDF)</button><button type="button" data-print-estimate>🧾 Drukuj kosztorys</button></div>`;
+    const c = company;
+    const cf = (k, label) => `<label class="clad-field">${label} <input type="text" data-company="${k}" value="${escapeHtml(c[k] || '')}" /></label>`;
+    $('.clad-company').innerHTML = `${cf('name', 'Nazwa')}${cf('address', 'Adres')}${cf('nip', 'NIP')}${cf('phone', 'Telefon')}${cf('email', 'E-mail')}${cf('www', 'WWW')}<div class="clad-hint">Te same dane co w ofercie schodów samonośnych; logo — z trybu Prezentacji.</div>`;
+  }
+  const offerChanged = () => {
+    state.offer = sanitizeCladdingOffer(state.offer);
+    renderOffer();
+  };
+  $('.clad-offer').addEventListener('change', (ev) => {
+    const el = ev.target;
+    const o = state.offer;
+    if (el.dataset.offer) {
+      const path = el.dataset.offer.split('.');
+      const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
+      if (path.length === 2) o[path[0]] = { ...o[path[0]], [path[1]]: v };
+      else o[path[0]] = v;
+    } else if (el.dataset.lineShow) {
+      o.lineEdits = { ...o.lineEdits, [el.dataset.lineShow]: { ...(o.lineEdits[el.dataset.lineShow] || {}), hidden: !el.checked } };
+    } else if (el.dataset.lineLabel) {
+      o.lineEdits = { ...o.lineEdits, [el.dataset.lineLabel]: { ...(o.lineEdits[el.dataset.lineLabel] || {}), label: el.value } };
+    } else if (el.dataset.extra !== undefined) {
+      const x = o.extras[Number(el.dataset.extra)];
+      x[el.dataset.extraF] = el.type === 'number' ? Number(el.value) : el.value;
+    }
+    offerChanged();
+  });
+  $('.clad-offer').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.offerNumber !== undefined) {
+      state.offer.offerNumber = suggestOfferNumber();
+      offerChanged();
+    } else if (b.dataset.extraAdd !== undefined) {
+      state.offer.extras.push({ id: `extra-${Date.now().toString(36)}`, label: 'Pozycja dodatkowa', qty: 1, unit: 'szt.', unitNet: 0 });
+      offerChanged();
+    } else if (b.dataset.extraDel !== undefined) {
+      state.offer.extras.splice(Number(b.dataset.extraDel), 1);
+      offerChanged();
+    } else if (b.dataset.printOffer !== undefined) {
+      printOffer();
+    } else if (b.dataset.printEstimate !== undefined) {
+      printHtml(buildEstimateHTML({ quote: buildCladdingQuote(state.built, state.quote), projectName: state.projectName }));
+    }
+  });
+  $('.clad-company').addEventListener('change', (ev) => {
+    const k = ev.target.dataset.company;
+    if (!k) return;
+    company = { ...company, [k]: ev.target.value };
+    try {
+      localStorage.setItem(COMPANY_KEY, JSON.stringify(company));
+    } catch {
+      /* no storage — kept until the tab is closed */
+    }
+  });
+  // the offer's 3D picture: the module's own scene in the standard iso view (created if the 3D was never opened)
+  function offerImage3D() {
+    if (!sceneApi) {
+      const prev = state.view;
+      setView('3d');
+      setView(prev);
+    }
+    if (!sceneApi || !root) return null;
+    const box = new THREE.Box3().setFromObject(root);
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
+    return sceneApi.renderViewImage({ width: 1600, height: 1000, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+  }
+  function printOffer() {
+    const q = buildCladdingQuote(state.built, state.quote);
+    const offer = buildCladdingOffer(q, state.offer);
+    if (!offer.lines.length) {
+      window.alert('Brak pozycji z ceną — uzupełnij cennik w zakładce Kosztorys.');
+      return;
+    }
+    const facts = claddingFacts(state.built, state.quote);
+    const html = buildOfferHTML({
+      offer,
+      facts,
+      settings: state.offer,
+      company,
+      logoDataUrl: readLogo(),
+      image3d: offerImage3D(),
+      planSvg: renderCladdingPlanSVG(state.built, { clientView: true }),
+      projectName: state.projectName,
+    });
+    printHtml(html);
+  }
+  rootEl.querySelectorAll('[data-pane="offer"]').forEach((b) => b.addEventListener('click', () => renderOffer()));
 
   // --- the stair on the next floor (a self-supporting or a concrete project file) ---------------------------------
   const floorEl = $('.clad-floor');
@@ -752,6 +943,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderSides();
     renderFloorPanel();
     renderQuote();
+    renderOffer();
   }
   function refreshAll() {
     renderSequence();
@@ -776,7 +968,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     meta('');
   });
   $('[data-act="save"]').addEventListener('click', () => {
-    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes, quote: state.quote });
+    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes, quote: state.quote, offer: state.offer });
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -795,6 +987,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         const loaded = parseCladdingProjectFile(reader.result);
         state.config = loaded.config;
         state.quote = loaded.quote;
+        state.offer = loaded.offer;
         state.projectName = loaded.projectName;
         state.notes = loaded.notes;
         nameInput.value = loaded.projectName;

@@ -15,7 +15,7 @@ export function claddingPlanBounds(built) {
   return { minX: b.minX, maxX: b.maxX, minY: -b.maxY, maxY: -b.minY };
 }
 
-export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null } = {}) {
+export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false } = {}) {
   const { concrete, cladding } = built;
   const vb = viewport ? `${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}` : (() => {
     const b = claddingPlanBounds(built);
@@ -83,7 +83,8 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
   // the winder zones (stage 2): their walkline (dashed), the wall and dusza corners, a handle on both ends of every
   // edge between two winders — dragged along the wall / the dusza line (claddingApp.js); a measured end is filled
   const r = Math.max(18, (viewport?.width ?? 4000) / 160);
-  const zonesXML = (concrete.zones || [])
+  // (the client's offer: no editing aids)
+  const zonesXML = (clientView ? [] : concrete.zones || [])
     .map((z, zi) => {
       const walkline = `<polyline points="${pts(z.walkline)}" fill="none" stroke="#c0392b" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" ${HAIR}/>`;
       const corners = [z.wallCorner, z.duszaCorner].map((c) => `<circle cx="${fmt(c.x)}" cy="${fmt(-c.y)}" r="${fmt(r * 0.45)}" fill="#555" pointer-events="none"/>`).join('');
