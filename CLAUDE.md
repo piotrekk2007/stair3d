@@ -535,8 +535,10 @@ edits only the hooks listed in the document. Stage 1 built: the sequence of meas
 (L / U turns, flights apart, per-step overrides) → concrete + cladding treads (front / side nosings) + riser boards →
 plan, 3D, finished-heights table (WARNING `CLAD-RISE-UNEVEN`). Stage 2 built: 90° winder zones (`winderZone`: A / B
 along the walls, edges measured from the wall / dusza corner or generated with equal walkline goings, dragged on the
-plan; every element an outline with named edges, the cladding by `offsetEdges`; ERROR `CLAD-WINDER-ORDER`). Next:
-surroundings (stage 3).
+plan; every element an outline with named edges, the cladding by `offsetEdges`; ERROR `CLAD-WINDER-ORDER`; WARNINGs
+`PL-LEGAL-C-01` / `CO-MFG-J-04` / `CLAD-WINDER-GOING`; unmeasured A / B give the straight going on the walkline). Stage 3
+part 1 built: walls per flight / side (no side nosing there), floor-board landing (OSB + boards + nosing), the
+antresola nosing, the slab with the opening the headroom needs (union of tread rectangles). Next: linking floors.
 
 ## Open items / known limitations
 

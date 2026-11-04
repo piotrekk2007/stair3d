@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–2 BUILT (2026-11-04), stages 3–6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–2 BUILT, stage 3 part 1 BUILT (2026-11-04; linking floors next), stages 4–6 planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -157,6 +157,36 @@ only (as DREWEX).
   clears), the plan's edge handles (white = generated, orange = measured) dragged along their line (1 mm), the zone's
   walkline dashed, its corners as dots.
 - Tests: `__tests__/winders.test.js`.
+
+## Winder warnings (2026-11-04, user request)
+
+`claddingModel.js winderDiagnostics` — WARNINGs only (the concrete is already there): `PL-LEGAL-C-01` (WT § 69 ust. 5:
+a winder at least `winderLegalMinGoingMm` 250 deep `winderLegalOffsetMm` 400 from the dusza — `zone.legalGoingsMm`,
+the goings on the line that far from the dusza), `CO-MFG-J-04` (the dusza end at least `winderMinDuszaMm` 100 —
+`zone.duszaWidthsMm`; company placeholder), `CLAD-WINDER-GOING` (the walkline going within `winderGoingToleranceMm`
+20 of the straight steps' median — ASSUMPTION). The unmeasured A / B now default so the walkline goings EQUAL the
+straight going (`zoneSizes`: 2·ext + the drawn quarter arc = count × going), so a generated zone raises no going warning.
+
+## Stage 3, part 1 — as built
+
+- Walls (`surroundingsModel.js`): `config.walls = {[flight]: {left, right}}`; `edgeWallKey` — a step's side edge
+  belongs to its flight, a landing's / zone's side edge to the flight it runs along (by direction), an L landing's back
+  edge to the next flight's outer side, a U landing's back edge = the end wall (the incoming flight's outer side);
+  `buildWalls` → `built.walls` (a piece per walled edge, `wallThicknessMm` outward, floor to the raw slab). A walled
+  edge gets NO side nosing (`sideNosingOn(…, edge)`; a step's own override still wins). Panel „Ściany przy biegach”
+  (per flight, z lewej / z prawej), plan dark pieces, 3D see-through.
+- Floor-board landing (user, 2026-11-04): landing `finish: 'floorboard'` — OSB (`osbThicknessMm` 18) + floor boards
+  (`floorboardThicknessMm` 15) with a solid nosing piece along the front (`landingNosingDepthMm` 120 onto the
+  concrete) hiding the OSB, all flush (`tread.parts {nosing, osb, boards}`, `clipToConvex`); its build-up counts in the
+  finished heights (`finishThicknessMm`). Sizes ASSUMPTION.
+- The antresola nosing (`cladding.exitNosing`, `exitNosing` on by default): a solid piece along the last back edge,
+  over the exit riser by the front nosing, `exitNosingDepthMm` 120 onto the slab, top flush with the finished floor
+  above, the tread's thickness; the exit riser ends under it.
+- The slab (`buildSlab` → `built.slab`, „Pokaż strop z otworem”): the stair's extent + 1 m, `slabThicknessMm` 220;
+  the opening = the UNION of the rectangles round every tread whose finished top is closer than `minHeadroomMm` 2000
+  to the soffit (`geometry/rectUnion.js` — added to the read-only list), so an L stair gets an L opening; plan dashed
+  blue, 3D extruded with the hole.
+- Tests: `__tests__/surroundings.test.js`.
 
 ## Open questions
 

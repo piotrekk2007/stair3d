@@ -39,8 +39,42 @@ export function createDefaultCladdingConfig() {
     floorFinishBottomMm: 15, // finished floor above the raw floor at the foot
     floorFinishTopMm: 15, // finished floor above the raw slab at the exit
     concreteSlabThicknessMm: 150, // the concrete flight's slab, square to the pitch — drawing only (ASSUMPTION)
-    riseToleranceMm: 5, // finished rises differing by more than this → WARNING (ASSUMPTION, to be agreed with the user)
+    riseToleranceMm: 5, // finished rises differing by more than this → WARNING (user, 2026-11-04: 5 mm)
+    // winders (stage 2 warnings): PL-LEGAL-C-01 (§ 69 ust. 5 — a winder at least 0.25 m deep 0.4 m from the dusza),
+    // CO-MFG-J-04 (the narrowest dusza end a solid tread can have — company placeholder 80–100 mm), the goings on the
+    // walkline compared with the straight steps' (ASSUMPTION)
+    winderLegalOffsetMm: 400,
+    winderLegalMinGoingMm: 250,
+    winderMinDuszaMm: 100,
+    winderGoingToleranceMm: 20,
+    // stage 3 — the surroundings
+    // walls along the stair: per flight (0 = the first) and side walking up; a wall side gets no side nosing
+    walls: {},
+    wallThicknessMm: 120, // drawing only (ASSUMPTION)
+    // a landing finished with floor boards: OSB + boards, the front edge a solid nosing piece hiding the OSB (user,
+    // 2026-11-04) — sizes ASSUMPTION
+    osbThicknessMm: 18,
+    floorboardThicknessMm: 15,
+    landingNosingDepthMm: 120,
+    // the antresola nosing at the exit: a solid piece on the slab's edge, its top flush with the finished floor above
+    exitNosing: true,
+    exitNosingDepthMm: 120, // onto the slab, past the last back edge (ASSUMPTION)
+    // the slab above and its opening (drawing): the opening = the treads that need it for the headroom
+    showSlab: true,
+    slabThicknessMm: 220, // the raw slab (ASSUMPTION)
+    minHeadroomMm: 2000, // headroom over the treads (WT § 68 — DO WERYFIKACJI, as the self-supporting minHeadroom)
   };
+}
+
+// {[flight]: {left, right}} — booleans only
+function sanitizeWalls(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!/^\d+$/.test(k) || !v || typeof v !== 'object') continue;
+    const w = { left: v.left === true, right: v.right === true };
+    if (w.left || w.right) out[k] = w;
+  }
+  return out;
 }
 
 const nullableNum = (v, min, max) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.min(max, Math.max(min, Number(v))));
@@ -57,7 +91,7 @@ export function sanitizeCladdingConfig(raw) {
     .filter((g) => g && SEQUENCE_KINDS.includes(g.kind))
     .map((g) => {
       if (g.kind === 'steps') return { kind: 'steps', count: Math.round(num(g.count, 1, 1, 40)), riseMm: num(g.riseMm, 180, 50, 300), goingMm: num(g.goingMm, 270, 100, 500), widthMm: num(g.widthMm, 1000, 300, 3000) };
-      if (g.kind === 'landing') return { kind: 'landing', riseMm: num(g.riseMm, 180, 50, 300), depthMm: nullableNum(g.depthMm, 300, 5000), turn: LANDING_TURNS.includes(g.turn) ? g.turn : 'none', gapMm: num(g.gapMm, 0, 0, 3000) };
+      if (g.kind === 'landing') return { kind: 'landing', riseMm: num(g.riseMm, 180, 50, 300), depthMm: nullableNum(g.depthMm, 300, 5000), turn: LANDING_TURNS.includes(g.turn) ? g.turn : 'none', gapMm: num(g.gapMm, 0, 0, 3000), finish: g.finish === 'floorboard' ? 'floorboard' : 'wood' };
       // a 90° winder zone (concreteModel.js winderZone): its sizes A / B along the walls (null = automatic), the edges
       // between the winders as measured from the corners (null / a missing number = generated)
       const count = Math.round(num(g.count, 3, 2, 8));
@@ -93,5 +127,19 @@ export function sanitizeCladdingConfig(raw) {
     floorFinishTopMm: num(c.floorFinishTopMm, d.floorFinishTopMm, 0, 200),
     concreteSlabThicknessMm: num(c.concreteSlabThicknessMm, d.concreteSlabThicknessMm, 50, 500),
     riseToleranceMm: num(c.riseToleranceMm, d.riseToleranceMm, 0, 50),
+    winderLegalOffsetMm: num(c.winderLegalOffsetMm, d.winderLegalOffsetMm, 100, 1000),
+    winderLegalMinGoingMm: num(c.winderLegalMinGoingMm, d.winderLegalMinGoingMm, 0, 500),
+    winderMinDuszaMm: num(c.winderMinDuszaMm, d.winderMinDuszaMm, 0, 500),
+    winderGoingToleranceMm: num(c.winderGoingToleranceMm, d.winderGoingToleranceMm, 0, 200),
+    walls: sanitizeWalls(c.walls),
+    wallThicknessMm: num(c.wallThicknessMm, d.wallThicknessMm, 50, 600),
+    osbThicknessMm: num(c.osbThicknessMm, d.osbThicknessMm, 0, 60),
+    floorboardThicknessMm: num(c.floorboardThicknessMm, d.floorboardThicknessMm, 5, 40),
+    landingNosingDepthMm: num(c.landingNosingDepthMm, d.landingNosingDepthMm, 30, 500),
+    exitNosing: c.exitNosing !== false,
+    exitNosingDepthMm: num(c.exitNosingDepthMm, d.exitNosingDepthMm, 20, 500),
+    showSlab: c.showSlab !== false,
+    slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),
+    minHeadroomMm: num(c.minHeadroomMm, d.minHeadroomMm, 1500, 3000),
   };
 }

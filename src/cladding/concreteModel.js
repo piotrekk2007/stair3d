@@ -29,8 +29,8 @@ const signedArea = (pts) => pts.reduce((s, p, k) => s + p.x * pts[(k + 1) % pts.
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
 export const WINDER_TURNS = Object.freeze(['left', 'right']);
-// default reach of a winder zone past the corner square on each side, per winder beyond the first (ASSUMPTION — a
-// starting point the user overwrites with the measured A / B)
+// default reach of a winder zone past the corner square on each side when no straight step gives a going, per winder
+// beyond the first (ASSUMPTION — a starting point the user overwrites with the measured A / B)
 const ZONE_EXTENSION_PER_WINDER_MM = 125;
 const ARC_CHORDS = 16;
 
@@ -41,7 +41,7 @@ export function expandSequence(config) {
     if (g.kind === 'steps') {
       for (let k = 0; k < g.count; k++) out.push({ kind: 'step', groupIndex, riseMm: g.riseMm, goingMm: g.goingMm, widthMm: g.widthMm });
     } else if (g.kind === 'landing') {
-      out.push({ kind: 'landing', groupIndex, riseMm: g.riseMm, depthMm: g.depthMm, turn: g.turn, gapMm: g.gapMm || 0 });
+      out.push({ kind: 'landing', groupIndex, riseMm: g.riseMm, depthMm: g.depthMm, turn: g.turn, gapMm: g.gapMm || 0, finish: g.finish === 'floorboard' ? 'floorboard' : 'wood' });
     } else if (g.kind === 'winders') {
       for (let k = 0; k < g.count; k++) out.push({ kind: 'winder', groupIndex, k, riseMm: g.riseMm, turn: g.turn });
     }
@@ -75,6 +75,7 @@ export function buildConcreteModel(config) {
   let v = 0;
   let z = 0;
   let lastWidth = items.find((e) => e.kind === 'step')?.widthMm ?? 1000;
+  let lastGoing = items.find((e) => e.kind === 'step')?.goingMm ?? null;
   const across = (w) => (anchor === 'left' ? [0, w] : [-w, 0]);
   const nextWidth = (i) => items.slice(i + 1).find((e) => e.kind === 'step')?.widthMm ?? lastWidth;
   let i = 0;
@@ -87,6 +88,7 @@ export function buildConcreteModel(config) {
       elements.push(rectElement(item, { flight, frame, u0, u1, v0: v, v1: v + item.goingMm, topZ: z, bottomZ }));
       v += item.goingMm;
       lastWidth = item.widthMm;
+      lastGoing = item.goingMm;
       i += 1;
       continue;
     }
@@ -99,7 +101,7 @@ export function buildConcreteModel(config) {
       const [a0, a1] = across(W);
       const sign = item.turn === 'left' ? -1 : 1;
       const uOut = sign > 0 ? a0 : a1;
-      const zone = winderZone({ group, frame, uOut, sign, v0: v, W, Wn, groupIndex: item.groupIndex });
+      const zone = winderZone({ group, frame, uOut, sign, v0: v, W, Wn, going: lastGoing, groupIndex: item.groupIndex, legalOffsetMm: config.winderLegalOffsetMm ?? 400 });
       zones.push(zone);
       run.forEach((w, k) => {
         const bottomZ = z;
@@ -209,18 +211,23 @@ function rectElement(item, { flight, frame, u0, u1, v0, v1, topZ, bottomZ, exitS
     bottomZ,
     turn: item.turn ?? null,
     exitSide,
+    finish: item.finish ?? null,
     overridden: !!item.overridden,
   };
 }
 
 // --- the winder zone ------------------------------------------------------------------------------------------
 
-/** The zone's sizes as used: A, B (each at least the corner square), the walkline's distance from the dusza. */
-export function zoneSizes(group, W, Wn) {
-  const ext = ZONE_EXTENSION_PER_WINDER_MM * Math.max(0, group.count - 1);
+/** The zone's sizes as used: A, B (each at least the corner square), the walkline's distance from the dusza. Unmeasured
+ *  A / B reach past the corner square equally on both sides, so that the winders get the straight steps' `going` on the
+ *  walkline (its length = count × going: 2·ext + a quarter arc of radius d). */
+export function zoneSizes(group, W, Wn, going = null) {
+  const d = Math.min(W, Wn, Math.max(50, group.walklineOffsetMm ?? Math.min(W, Wn) / 2));
+  // (the quarter arc as drawn — ARC_CHORDS chords — so the goings come out exact)
+  const arc = 2 * d * Math.sin(Math.PI / 4 / ARC_CHORDS) * ARC_CHORDS;
+  const ext = going > 0 ? Math.max(0, (group.count * going - arc) / 2) : ZONE_EXTENSION_PER_WINDER_MM * Math.max(0, group.count - 1);
   const A = Math.max(Wn, group.spaceAMm ?? Wn + ext);
   const B = Math.max(W, group.spaceBMm ?? W + ext);
-  const d = Math.min(W, Wn, Math.max(50, group.walklineOffsetMm ?? Math.min(W, Wn) / 2));
   return { A, B, d };
 }
 
@@ -228,19 +235,33 @@ export function zoneSizes(group, W, Wn) {
 const outerAt = (s, { A }) => (s < 0 ? { x: 0, y: A + s } : { x: s, y: A });
 const innerAt = (s, { A, W, Wn }) => (s < 0 ? { x: W, y: A - Wn + s } : { x: W + s, y: A - Wn });
 
-function winderZone({ group, frame, uOut, sign, v0, W, Wn, groupIndex }) {
-  const { A, B, d } = zoneSizes(group, W, Wn);
+// the line `d` from the dusza through the zone (zone coordinates): a straight, a quarter arc round C, a straight
+function lineFromDusza({ A, B, W, Wn }, d) {
+  const C = { x: W, y: A - Wn };
+  const pts = [{ x: W - d, y: 0 }, { x: W - d, y: C.y }];
+  for (let j = 1; j <= ARC_CHORDS; j++) {
+    const t = Math.PI - (Math.PI / 2) * (j / ARC_CHORDS);
+    pts.push({ x: C.x + d * Math.cos(t), y: C.y + d * Math.sin(t) });
+  }
+  pts.push({ x: B, y: C.y + d });
+  return pts;
+}
+
+// every winder's going along a line: where its two edges cross it
+function goingsOn(line, edges, dims) {
+  const cum = cumulative(line);
+  const at = edges.map((e) => walklineCrossing(line, cum, outerAt(e.outerMm, dims), innerAt(e.innerMm, dims)));
+  return edges.slice(0, -1).map((_, k) => (at[k] !== null && at[k + 1] !== null ? at[k + 1] - at[k] : null));
+}
+
+function winderZone({ group, frame, uOut, sign, v0, W, Wn, going = null, groupIndex, legalOffsetMm = 400 }) {
+  const { A, B, d } = zoneSizes(group, W, Wn, going);
   const dims = { A, B, W, Wn };
   const toPlan = (p) => planPoint(frame, uOut + sign * p.x, v0 + p.y);
   const n = group.count;
   // the walkline (zone coordinates): straight at x = W − d, a quarter arc round C, straight at y = A − Wn + d
   const C = { x: W, y: A - Wn };
-  const walk = [{ x: W - d, y: 0 }, { x: W - d, y: C.y }];
-  for (let j = 1; j <= ARC_CHORDS; j++) {
-    const t = Math.PI - (Math.PI / 2) * (j / ARC_CHORDS);
-    walk.push({ x: C.x + d * Math.cos(t), y: C.y + d * Math.sin(t) });
-  }
-  walk.push({ x: B, y: C.y + d });
+  const walk = lineFromDusza(dims, d);
   const walkCum = cumulative(walk);
   const walkLen = walkCum.at(-1);
   const innerLen = A - Wn + (B - W);
@@ -286,9 +307,11 @@ function winderZone({ group, frame, uOut, sign, v0, W, Wn, groupIndex }) {
     if (signedArea(es.map((e) => e.a)) < 0) es = es.reverse().map((e) => ({ a: e.b, b: e.a, role: e.role }));
     winders.push({ outline: es.map((e) => e.a), edges: es });
   }
-  // the goings on the walkline (where each edge crosses it)
-  const crossings = edges.map((e) => walklineCrossing(walk, walkCum, outerAt(e.outerMm, dims), innerAt(e.innerMm, dims)));
-  const walkGoingsMm = edges.slice(0, -1).map((_, k) => (crossings[k] !== null && crossings[k + 1] !== null ? crossings[k + 1] - crossings[k] : null));
+  // the goings on the walkline and on the line 0.4 m from the dusza (PL-LEGAL-C-01), the width at the dusza
+  const walkGoingsMm = goingsOn(walk, edges, dims);
+  const legalD = Math.min(W, Wn, legalOffsetMm);
+  const legalGoingsMm = goingsOn(lineFromDusza(dims, legalD), edges, dims);
+  const duszaWidthsMm = edges.slice(0, -1).map((e, k) => edges[k + 1].innerMm - e.innerMm);
   // the order of the edges: each one further on along both lines (a dusza end may repeat — a triangle at the corner)
   const orderOk = edges.every((e, k) => k === 0 || (e.outerMm > edges[k - 1].outerMm + 1e-6 && e.innerMm >= edges[k - 1].innerMm - 1e-6));
   const exitFrame = { o: planPoint(frame, uOut + sign * B, v0 + A), f: sign > 0 ? frame.r : neg(frame.r) };
@@ -309,6 +332,9 @@ function winderZone({ group, frame, uOut, sign, v0, W, Wn, groupIndex }) {
     edges: edges.map((e) => ({ ...e, outer: toPlan(outerAt(e.outerMm, dims)), inner: toPlan(innerAt(e.innerMm, dims)) })),
     winders,
     walkGoingsMm,
+    legalOffsetMm: legalD,
+    legalGoingsMm,
+    duszaWidthsMm,
     orderOk,
     exitFrame,
   };

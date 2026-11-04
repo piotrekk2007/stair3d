@@ -91,7 +91,9 @@ test('cladding: a riser board per step from the tread below up to the tread abov
   const top = r.at(-1);
   assert.equal(top.id, 'riser-top');
   assert.equal(top.bottomZ, 950);
-  assert.equal(top.topZ, 910 + 185 + 20);
+  // (under the antresola nosing — stage 3 —, up to the floor without one)
+  assert.equal(top.topZ, 910 + 185 + 20 - 40);
+  assert.equal(buildCladdingStair(straight({ treadThicknessMm: 40, floorFinishBottomMm: 15, floorFinishTopMm: 20, exitNosing: false })).cladding.risers.at(-1).topZ, 910 + 185 + 20);
   assert.equal(buildCladdingStair(straight({ riserBoards: false })).cladding.risers.length, 0);
 });
 

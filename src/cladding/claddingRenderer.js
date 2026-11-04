@@ -46,6 +46,20 @@ function wood() {
   return woodMaterial;
 }
 const riserMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02 });
+const osbMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a86a, roughness: 0.9, metalness: 0 });
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e5de, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+
+// the slab with its opening: a plan outline with a hole, from its soffit to its top (three: y up, plan y → −z)
+function slabGeometry(outline, hole, bottomZ, topZ) {
+  const shape = new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, p.y)));
+  shape.holes.push(new THREE.Path([...hole].reverse().map((p) => new THREE.Vector2(p.x, p.y))));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: topZ - bottomZ, bevelEnabled: false });
+  // the shape lies in x / y, extruded along +z: turn it so plan y → −z and the extrusion goes up
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, bottomZ, 0);
+  return g;
+}
 
 /** @returns {THREE.Group} the stair: layers "Concrete", "Treads", "Risers" */
 export function renderCladdingStair(built, { riserMaterial: riserMat = null } = {}) {
@@ -81,12 +95,25 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null } = 
   root.add(concreteGroup);
   const treads = new THREE.Group();
   treads.name = 'Treads';
+  const grainOf = (t) => [t.grain.x, 0, -t.grain.y];
   for (const t of cladding.treads) {
+    if (t.parts) {
+      // a floor-board landing: the solid nosing, the OSB, the boards on it
+      const { nosing, osb, boards } = t.parts;
+      if (nosing) treads.add(Object.assign(new THREE.Mesh(prismGeometry(nosing.outline, nosing.bottomZ, nosing.topZ), wood()), { name: `LandingNosing-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:nosing`, grainDirection: grainOf(t) } }));
+      if (osb) treads.add(Object.assign(new THREE.Mesh(prismGeometry(osb.outline, osb.bottomZ, osb.topZ), osbMaterial), { name: `LandingOSB-${t.index}` }));
+      if (boards) treads.add(Object.assign(new THREE.Mesh(prismGeometry(boards.outline, boards.bottomZ, boards.topZ), wood()), { name: `LandingBoards-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:boards`, grainDirection: [t.grain.y, 0, t.grain.x] } }));
+      continue;
+    }
     const mesh = new THREE.Mesh(prismGeometry(t.outline, t.bottomZ, t.topZ), wood());
     mesh.name = `Tread-${t.index}`;
     // the grain across the flight, along the tread's front (as the self-supporting treads)
-    mesh.userData = { geometrySourceId: `cladding:${t.id}`, grainDirection: [t.grain.x, 0, -t.grain.y] };
+    mesh.userData = { geometrySourceId: `cladding:${t.id}`, grainDirection: grainOf(t) };
     treads.add(mesh);
+  }
+  // the antresola nosing at the exit
+  for (const n of cladding.exitNosing || []) {
+    treads.add(Object.assign(new THREE.Mesh(prismGeometry(n.outline, n.bottomZ, n.topZ), wood()), { name: `ExitNosing`, userData: { geometrySourceId: `cladding:${n.id}`, grainDirection: grainOf(n) } }));
   }
   root.add(treads);
   const risers = new THREE.Group();
@@ -100,5 +127,22 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null } = 
   }
   root.add(risers);
   applyWoodGrainToTree(root);
+  // the surroundings (stage 3) — no wood grain: the walls see-through, the slab with its opening
+  const room = new THREE.Group();
+  room.name = 'Room';
+  for (const w of built.walls || []) {
+    const mesh = new THREE.Mesh(prismGeometry(w.outline, w.bottomZ, w.topZ), wallMaterial);
+    mesh.name = `Wall-${w.id}`;
+    mesh.renderOrder = 2;
+    room.add(mesh);
+  }
+  if (built.slab && config.showSlab) {
+    const s = built.slab;
+    const mesh = new THREE.Mesh(slabGeometry(s.outline, s.opening, s.bottomZ, s.topZ), slabMaterial);
+    mesh.name = 'Slab';
+    mesh.receiveShadow = true;
+    room.add(mesh);
+  }
+  root.add(room);
   return root;
 }

@@ -23,6 +23,7 @@ const ALLOWED_SHARED = new Set([
   'geometry/pathUtils.js',
   'geometry/polygonClip.js',
   'geometry/tolerances.js',
+  'geometry/rectUnion.js',
 ]);
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];
 // files outside the module allowed to import it (the hooks)

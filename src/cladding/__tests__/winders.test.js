@@ -44,9 +44,9 @@ test('a right winder zone: the corners from A / B, the exit flight from the zone
 });
 
 test('generated edges: the dusza ends spread evenly, equal goings on the walkline', () => {
-  const b = buildCladdingStair(zoneCfg());
+  const b = buildCladdingStair(zoneCfg({ spaceAMm: 1250, spaceBMm: 1250 }));
   const z = b.concrete.zones[0];
-  // defaults: A = Wn + 250, B = W + 250 → dusza line 500 long, three equal pieces
+  // A = Wn + 250, B = W + 250 → dusza line 500 long, three equal pieces
   const inner = z.edges.map((e) => e.innerMm);
   near(inner[1] - inner[0], 500 / 3, 'dusza piece 1');
   near(inner[2] - inner[1], 500 / 3, 'dusza piece 2');
@@ -92,7 +92,7 @@ test('a left winder zone: mirrored — the exit flight along −x, the right lin
 });
 
 test('cladding on winders: front nosing past the riser board, the side nosing round the dusza corner, a riser per winder', () => {
-  const b = buildCladdingStair(zoneCfg({}, { sideNosingRight: true, sideNosingLeft: false, sideNosingMm: 30, nosingFrontMm: 30, riserThicknessMm: 20 }));
+  const b = buildCladdingStair(zoneCfg({ spaceAMm: 1250, spaceBMm: 1250 }, { sideNosingRight: true, sideNosingLeft: false, sideNosingMm: 30, nosingFrontMm: 30, riserThicknessMm: 20 }));
   const z = b.concrete.zones[0];
   const winders = b.cladding.treads.filter((t) => t.kind === 'winder');
   assert.equal(winders.length, 3);

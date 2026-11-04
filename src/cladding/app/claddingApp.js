@@ -53,6 +53,7 @@ export function mountCladdingApp(rootEl) {
           </div>
           <label class="clad-field">Ostatnia wysokość do stropu [mm] <input type="number" class="clad-exit" placeholder="jak ostatni stopień" /></label>
         </section>
+        <section class="clad-box"><h3>Ściany przy biegach</h3><div class="clad-walls"></div></section>
         <section class="clad-box clad-gui"><h3>Wykończenie</h3></section>
       </aside>
       <main class="clad-main">
@@ -133,7 +134,8 @@ export function mountCladdingApp(rootEl) {
         if (g.kind === 'winders') return windersRow(g, i, tools);
         const turn = `<select data-i="${i}" data-f="turn">${LANDING_TURNS.map((t) => `<option value="${t}" ${t === g.turn ? 'selected' : ''}>${LANDING_TURN_LABELS[t]}</option>`).join('')}</select>`;
         const gap = g.turn === 'u-left' || g.turn === 'u-right' ? `<label>rozsunięcie ${numIn(i, 'gapMm', g.gapMm, 'Odstęp między biegami [mm]')}</label>` : '';
-        return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${tools}</div>`;
+        const finish = `<select data-i="${i}" data-f="finish" title="Wykończenie podestu"><option value="wood" ${g.finish !== 'floorboard' ? 'selected' : ''}>drewno (jak stopnie)</option><option value="floorboard" ${g.finish === 'floorboard' ? 'selected' : ''}>deska podłogowa na OSB + nosek</option></select>`;
+        return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${finish}${tools}</div>`;
       })
       .join('');
     const head = `<div class="clad-row clad-head"><span class="clad-kind"></span><span>ile</span><span></span><span>wys.</span><span>głęb.</span><span>szer.</span></div>`;
@@ -167,7 +169,7 @@ export function mountCladdingApp(rootEl) {
     if (!f || !Number.isInteger(i)) return;
     change((c) => {
       const g = c.sequence[i];
-      if (f === 'turn') g.turn = el.value;
+      if (f === 'turn' || f === 'finish') g[f] = el.value;
       else if ((f === 'depthMm' || f === 'spaceAMm' || f === 'spaceBMm' || f === 'walklineOffsetMm') && el.value === '') g[f] = null;
       else g[f] = Number(el.value);
     });
@@ -238,6 +240,45 @@ export function mountCladdingApp(rootEl) {
   live(gui.add(proxy, 'floorFinishTopMm', 0, 200, 1).name('Posadzka na górze [mm]'));
   live(gui.add(proxy, 'concreteSlabThicknessMm', 50, 500, 5).name('Płyta betonu (rysunek) [mm]'));
   live(gui.add(proxy, 'riseToleranceMm', 0, 50, 1).name('Ostrzegaj przy różnicy wysokości [mm]'));
+  // stage 3: landing on floor boards, the antresola nosing, the slab, the walls; the winder checks
+  const land = gui.addFolder('Podest z deski podłogowej');
+  live(land.add(proxy, 'osbThicknessMm', 0, 60, 1).name('Płyta OSB [mm]'));
+  live(land.add(proxy, 'floorboardThicknessMm', 5, 40, 1).name('Deska podłogowa [mm]'));
+  live(land.add(proxy, 'landingNosingDepthMm', 30, 500, 5).name('Nosek podestu na beton [mm]'));
+  land.close();
+  const top = gui.addFolder('Antresola i strop');
+  live(top.add(proxy, 'exitNosing').name('Nosek antresoli na wyjściu'));
+  live(top.add(proxy, 'exitNosingDepthMm', 20, 500, 5).name('Nosek antresoli: na strop [mm]'));
+  live(top.add(proxy, 'showSlab').name('Pokaż strop z otworem'));
+  live(top.add(proxy, 'slabThicknessMm', 80, 600, 5).name('Grubość stropu [mm]'));
+  live(top.add(proxy, 'minHeadroomMm', 1500, 3000, 10).name('Skrajnia nad stopniami [mm]'));
+  live(top.add(proxy, 'wallThicknessMm', 50, 600, 5).name('Grubość ścian (rysunek) [mm]'));
+  top.close();
+  const wind = gui.addFolder('Kontrola zabiegów');
+  live(wind.add(proxy, 'winderLegalOffsetMm', 100, 1000, 10).name('Pomiar od duszy [mm]'));
+  live(wind.add(proxy, 'winderLegalMinGoingMm', 0, 500, 5).name('Min. głębokość tam [mm]'));
+  live(wind.add(proxy, 'winderMinDuszaMm', 0, 500, 5).name('Min. szerokość przy duszy [mm]'));
+  live(wind.add(proxy, 'winderGoingToleranceMm', 0, 200, 1).name('Różnica kroku na linii biegu [mm]'));
+  wind.close();
+
+  // the walls: per flight, left / right walking up (a walled side gets no side nosing)
+  const wallsEl = $('.clad-walls');
+  function renderWalls() {
+    const n = state.built?.concrete.flights ?? 1;
+    const w = state.config.walls || {};
+    wallsEl.innerHTML =
+      Array.from({ length: n }, (_, f) => `<div class="clad-row"><span class="clad-kind">Bieg ${f + 1}</span><label><input type="checkbox" data-wall="${f}:left" ${w[f]?.left ? 'checked' : ''}/> z lewej</label><label><input type="checkbox" data-wall="${f}:right" ${w[f]?.right ? 'checked' : ''}/> z prawej</label></div>`).join('') +
+      '<div class="clad-hint">Strony patrząc w górę biegu. Przy ścianie stopnie nie mają noska bocznego (chyba że stopień ma go ustawionego ręcznie).</div>';
+  }
+  wallsEl.addEventListener('change', (ev) => {
+    const key = ev.target.dataset.wall;
+    if (!key) return;
+    const [f, side] = key.split(':');
+    change((c) => {
+      c.walls = { ...(c.walls || {}) };
+      c.walls[f] = { ...(c.walls[f] || {}), [side]: ev.target.checked };
+    });
+  });
 
   // --- the selected step ---------------------------------------------------------------------------------------
   function renderStepEditor() {
@@ -435,6 +476,7 @@ export function mountCladdingApp(rootEl) {
     else render3D();
     renderStepEditor();
     renderReport();
+    renderWalls();
   }
   function refreshAll() {
     renderSequence();

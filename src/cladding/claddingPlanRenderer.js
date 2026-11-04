@@ -30,6 +30,14 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
       return `<polygon class="clad-tread${sel ? ' selected' : ''}" data-index="${t.index}" points="${pts(t.outline)}" fill="${sel ? '#f3c97a' : '#e6c99a'}" fill-opacity="0.85" stroke="${sel ? '#1f6feb' : '#8a5a34'}" stroke-width="${sel ? 2.5 : 1.2}" ${HAIR}/>`;
     })
     .join('');
+  // stage 3: the walls (dark), the ceiling opening (dashed blue), the antresola nosing, a floor-board landing's parts
+  const wallsXML = (built.walls || []).map((w) => `<polygon class="clad-wall" points="${pts(w.outline)}" fill="#6f6a62" stroke="#4d4943" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
+  const openingXML = built.slab ? `<polygon class="clad-opening" points="${pts(built.slab.opening)}" fill="none" stroke="#1f6feb" stroke-width="1.5" stroke-dasharray="8,5" pointer-events="none" ${HAIR}/>` : '';
+  const exitXML = (cladding.exitNosing || []).map((n) => `<polygon class="clad-exit-nosing" points="${pts(n.outline)}" fill="#c99d62" stroke="#8a5a34" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
+  const partsXML = cladding.treads
+    .filter((t) => t.parts)
+    .map((t) => [t.parts.nosing, t.parts.boards].filter(Boolean).map((p, k) => `<polygon points="${pts(p.outline)}" fill="${k ? '#d9bc8c' : '#c99d62'}" stroke="#8a5a34" stroke-width="0.8" ${k ? 'stroke-dasharray="3,3"' : ''} pointer-events="none" ${HAIR}/>`).join(''))
+    .join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
   const labels = concrete.elements
     .map((e) => {
@@ -73,5 +81,5 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${concreteXML}${riserXML}${treadXML}${walkXML}${labels}${zonesXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
 }
