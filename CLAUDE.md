@@ -540,7 +540,9 @@ plan; every element an outline with named edges, the cladding by `offsetEdges`; 
 `PL-LEGAL-C-01` / `CO-MFG-J-04` / `CLAD-WINDER-GOING`; unmeasured A / B give the straight going on the walkline). Stage 3
 part 1 built: walls per flight / side (no side nosing there), floor-board landing (OSB + boards + nosing), the
 antresola nosing, the slab with the opening the headroom needs (union of tread rectangles); linking floors both ways
-(`floorStair.js claddingAsFloor`, registered in `referenceStair.js registerReferenceBuilder` by `main.js`).
+(`floorStair.js claddingAsFloor`, registered in `referenceStair.js registerReferenceBuilder` by `main.js`). Stage 4
+built: the quote (`quote/claddingQuote.js`: material from the shared board price list, labour per element from
+`quote/labour.js`, VAT 8 / 23 %, own items; saved in the project file, not in undo). Next: finishing elements (stage 5).
 
 ## Open items / known limitations
 

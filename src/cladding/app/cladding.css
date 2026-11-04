@@ -104,3 +104,15 @@
 .clad-edge-cell select { max-width: 118px; font-size: 11px; }
 .clad-edge-cell input { width: 54px; }
 .clad-plan .clad-edge-handle { cursor: move; }
+
+/* stage 4: the right panel's tabs, the quote */
+.clad-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.clad-tabs button.active { background: #1f6feb; color: #fff; }
+.clad-pane[hidden] { display: none; }
+.clad-group-row td { background: #f2efe9; font-weight: 600; text-align: left !important; }
+.clad-dims { color: #6b7280; font-size: 11px; }
+.clad-unpriced { color: #b45309; cursor: help; }
+.clad-totals { margin-top: 6px; }
+.clad-totals td:last-child { text-align: right; }
+.clad-rates-table input[type='number'] { width: 64px; }
+.clad-quote-table td:first-child { text-align: left; }

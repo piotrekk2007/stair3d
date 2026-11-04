@@ -12,6 +12,10 @@ import { renderCladdingStair } from '../claddingRenderer.js';
 import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
 import { claddingAsFloor } from '../floorStair.js';
+import { buildCladdingQuote } from '../quote/claddingQuote.js';
+import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
+import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
+import { applyPriceListFile } from '../../takeoff/priceListFile.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
@@ -26,7 +30,7 @@ const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
  *   a floor file of either kind; without them the floor link is not offered
  */
 export function mountCladdingApp(rootEl, host = {}) {
-  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null };
+  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), pane: 'measure' };
   let history = createHistory(state.config);
   let active = false;
 
@@ -69,13 +73,21 @@ export function mountCladdingApp(rootEl, host = {}) {
         <div class="clad-3d" hidden></div>
       </main>
       <aside class="clad-right">
-        <section class="clad-box clad-step"></section>
-        <section class="clad-box"><h3>Wysokości po wykończeniu</h3><div class="clad-heights"></div></section>
-        <section class="clad-box"><h3>Uwagi</h3><div class="clad-findings"></div></section>
+        <nav class="clad-tabs"><button type="button" data-pane="measure" class="active">Pomiar</button><button type="button" data-pane="quote">Kosztorys</button></nav>
+        <div class="clad-pane" data-pane-body="measure">
+          <section class="clad-box clad-step"></section>
+          <section class="clad-box"><h3>Wysokości po wykończeniu</h3><div class="clad-heights"></div></section>
+          <section class="clad-box"><h3>Uwagi</h3><div class="clad-findings"></div></section>
+        </div>
+        <div class="clad-pane" data-pane-body="quote" hidden>
+          <section class="clad-box"><h3>Kosztorys</h3><div class="clad-quote"></div></section>
+          <section class="clad-box"><h3>Cennik robocizny i materiałów</h3><div class="clad-rates"></div></section>
+        </div>
       </aside>
     </div>
     <input type="file" accept=".json,application/json" class="clad-file" hidden />
     <input type="file" accept=".json,application/json" class="clad-floor-file" hidden />
+    <input type="file" accept=".json,application/json" class="clad-pricelist-file" hidden />
   `;
   const $ = (sel) => rootEl.querySelector(sel);
   const seqEl = $('.clad-seq');
@@ -269,6 +281,111 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(wind.add(proxy, 'winderMinDuszaMm', 0, 500, 5).name('Min. szerokość przy duszy [mm]'));
   live(wind.add(proxy, 'winderGoingToleranceMm', 0, 200, 1).name('Różnica kroku na linii biegu [mm]'));
   wind.close();
+
+  // --- the quote (stage 4): every element its material and labour; the rates (not undo history — as the
+  // self-supporting takeoff settings), saved in the project file ------------------------------------------------
+  const money = (v) => (v === null || v === undefined ? '—' : `${v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  rootEl.querySelectorAll('[data-pane]').forEach((b) =>
+    b.addEventListener('click', () => {
+      state.pane = b.dataset.pane;
+      rootEl.querySelectorAll('[data-pane]').forEach((x) => x.classList.toggle('active', x.dataset.pane === state.pane));
+      rootEl.querySelectorAll('[data-pane-body]').forEach((x) => (x.hidden = x.dataset.paneBody !== state.pane));
+      renderQuote();
+    })
+  );
+  function renderQuote() {
+    if (state.pane !== 'quote' || !state.built) return;
+    const q = buildCladdingQuote(state.built, state.quote);
+    const cell = (part) => (!part ? '' : `<span class="${part.value === null ? 'clad-unpriced' : ''}" title="${escapeHtml(part.note || '')}">${money(part.value)}</span>`);
+    let group = null;
+    const rows = q.lines
+      .map((l) => {
+        const head = l.group !== group ? `<tr class="clad-group-row"><td colspan="5">${escapeHtml((group = l.group))}</td></tr>` : '';
+        return `${head}<tr><td>${escapeHtml(l.name)}<div class="clad-dims">${escapeHtml(l.dims)}</div></td><td>${l.qty} ${escapeHtml(l.unit)}</td><td>${cell(l.material)}</td><td>${cell(l.labour)}</td><td><b>${money(l.total)}</b></td></tr>`;
+      })
+      .join('');
+    const t = q.totals;
+    $('.clad-quote').innerHTML = `<table class="clad-table clad-quote-table"><thead><tr><th>Element</th><th>ilość</th><th>materiał</th><th>robocizna</th><th>razem</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="clad-table clad-totals"><tbody>
+        <tr><td>Materiał netto</td><td>${money(t.materialNet)} zł</td></tr>
+        <tr><td>Robocizna netto</td><td>${money(t.labourNet)} zł</td></tr>
+        <tr><td><b>Razem netto</b></td><td><b>${money(t.net)} zł</b></td></tr>
+        <tr><td>VAT ${t.vatPct}%</td><td>${money(t.vat)} zł</td></tr>
+        <tr><td><b>Razem brutto</b></td><td><b>${money(t.gross)} zł</b></td></tr>
+      </tbody></table>
+      ${q.unpriced ? `<div class="clad-finding warning">${q.unpriced} pozycji bez ceny (—) — uzupełnij stawki w cenniku poniżej (najedź na „—”, żeby zobaczyć, czego brakuje).</div>` : ''}`;
+    renderRates();
+  }
+  function renderRates() {
+    const s = state.quote;
+    const bp = s.boardPricing || createDefaultBoardPricing();
+    const species = (bp.table?.speciesMultipliers || []).map((r) => `${r.species}|${r.cls}`);
+    const rateRow = (r) =>
+      `<tr><td>${escapeHtml(r.label)}${r.id.startsWith('own-') ? ` <button type="button" data-own-del="${r.id}" title="Usuń pozycję">✕</button>` : ''}</td>${r.id.startsWith('own-') ? `<td><input type="number" data-own-qty="${r.id}" value="${r.qty ?? 1}" /></td>` : '<td></td>'}<td><input type="number" min="0" step="1" data-rate="${r.id}" value="${r.rate || ''}" placeholder="0" /></td><td>zł/${UNIT_LABELS[r.unit]}</td></tr>`;
+    $('.clad-rates').innerHTML = `
+      <label class="clad-field">VAT <select data-q="withInstallation"><option value="1" ${s.withInstallation ? 'selected' : ''}>z montażem — 8%</option><option value="0" ${!s.withInstallation ? 'selected' : ''}>sam materiał — 23%</option></select></label>
+      <label class="clad-field">Drewno <select data-q="species">${species.map((k) => `<option value="${escapeHtml(k)}" ${k === `${bp.species}|${bp.cls}` ? 'selected' : ''}>${escapeHtml(k.replace('|', ', '))}</option>`).join('')}</select></label>
+      <label class="clad-field">Pomiar w cenie <input type="checkbox" data-lump="measure" ${s.lumps.measure ? 'checked' : ''} /></label>
+      <label class="clad-field">Transport w cenie <input type="checkbox" data-lump="transport" ${s.lumps.transport ? 'checked' : ''} /></label>
+      <label class="clad-field">Deska podłogowa [zł/m²] <input type="number" min="0" data-q="floorboardPerM2" value="${s.floorboardPerM2 || ''}" placeholder="0" /></label>
+      <label class="clad-field">Płyta OSB [zł/m²] <input type="number" min="0" data-q="osbPerM2" value="${s.osbPerM2 || ''}" placeholder="0" /></label>
+      <table class="clad-table clad-rates-table"><thead><tr><th>Robocizna</th><th>ilość</th><th>stawka</th><th></th></tr></thead><tbody>${s.labour.map(rateRow).join('')}</tbody></table>
+      <div class="clad-actions"><button type="button" data-own-add>+ Pozycja własna</button><button type="button" data-pricelist-load title="Plik „Zapisz cały cennik” z modułu samonośnego (albo jego projekt) — ceny desek DREWEX, gatunki">📂 Wczytaj cennik desek</button></div>
+      <div class="clad-hint">Materiał stopni, podestów, podstopnic i nosków liczy się z cennika desek (jak w module samonośnym; ${escapeHtml(s.boardPricing ? 'wczytany cennik' : 'domyślny cennik DREWEX')}). Stawka 0 = bez ceny.</div>`;
+  }
+  const quoteChanged = () => {
+    state.quote = sanitizeQuoteSettings(state.quote);
+    renderQuote();
+  };
+  $('.clad-rates').addEventListener('change', (ev) => {
+    const el = ev.target;
+    const s = state.quote;
+    if (el.dataset.rate) s.labour.find((r) => r.id === el.dataset.rate).rate = Number(el.value) || 0;
+    else if (el.dataset.ownQty) s.labour.find((r) => r.id === el.dataset.ownQty).qty = Number(el.value) || 0;
+    else if (el.dataset.lump) s.lumps[el.dataset.lump] = el.checked;
+    else if (el.dataset.q === 'withInstallation') s.withInstallation = el.value === '1';
+    else if (el.dataset.q === 'species') {
+      const [species, cls] = el.value.split('|');
+      s.boardPricing = { ...(s.boardPricing || createDefaultBoardPricing()), species, cls };
+    } else if (el.dataset.q) s[el.dataset.q] = Number(el.value) || 0;
+    quoteChanged();
+  });
+  const priceListInput = $('.clad-pricelist-file');
+  $('.clad-rates').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.ownAdd !== undefined) {
+      const label = window.prompt('Nazwa pozycji (np. „Demontaż starych okładzin”):');
+      if (!label) return;
+      const unit = window.prompt(`Jednostka (${Object.values(LABOUR_UNITS).join(' / ')}):`, 'szt') || 'szt';
+      state.quote.labour.push({ id: `own-${Date.now().toString(36)}`, label, unit, rate: 0, qty: 1 });
+      quoteChanged();
+    } else if (b.dataset.ownDel) {
+      state.quote.labour = state.quote.labour.filter((r) => r.id !== b.dataset.ownDel);
+      quoteChanged();
+    } else if (b.dataset.pricelistLoad !== undefined) {
+      priceListInput.click();
+    }
+  });
+  priceListInput.addEventListener('change', () => {
+    const file = priceListInput.files?.[0];
+    priceListInput.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        // the shared reader fills a settings object like the self-supporting one; the module keeps its board pricing
+        const tmp = { priceList: [], wasteFactors: {}, boardPricing: createDefaultBoardPricing() };
+        const read = applyPriceListFile(tmp, reader.result);
+        state.quote.boardPricing = tmp.boardPricing;
+        quoteChanged();
+        meta(`Wczytano cennik desek (${read.boards} wierszy)`);
+      } catch (e) {
+        window.alert(`Nie można wczytać cennika: ${e.message}`);
+      }
+    };
+    reader.readAsText(file);
+  });
 
   // --- the stair on the next floor (a self-supporting or a concrete project file) ---------------------------------
   const floorEl = $('.clad-floor');
@@ -554,6 +671,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderReport();
     renderWalls();
     renderFloorPanel();
+    renderQuote();
   }
   function refreshAll() {
     renderSequence();
@@ -578,7 +696,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     meta('');
   });
   $('[data-act="save"]').addEventListener('click', () => {
-    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes });
+    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes, quote: state.quote });
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -596,6 +714,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       try {
         const loaded = parseCladdingProjectFile(reader.result);
         state.config = loaded.config;
+        state.quote = loaded.quote;
         state.projectName = loaded.projectName;
         state.notes = loaded.notes;
         nameInput.value = loaded.projectName;

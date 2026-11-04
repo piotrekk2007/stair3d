@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–3 BUILT (2026-11-04), stage 4 in progress, stages 5–6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–4 BUILT (2026-11-04), stages 5–6 planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -202,8 +202,28 @@ or a concrete file (`config.referenceFloor {name, level, file, dxMm, dyMm, rotat
 niżej”): the other stair in 3D (raised by the bottom finish into the module's raw-floor frame) and on the plan (dashed
 purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. Tests: `__tests__/floorLink.test.js`.
 
+## Stage 4 — the quotation, as built
+
+- `quote/labour.js` — the labour list (user, 2026-11-04 — every installed element its own price): montaż stopnia
+  prostego / zabiegowego bez / z podstopnicą, półpodestu (a landing turning 90°), podestu z drewna, podestu z deski
+  podłogowej (per m²), noska, listwy schodowej (mb), balustrady na schodach (per tread) / na antresoli (mb), pomiar,
+  transport (lump sums, on / off); own items `own-…` (label, unit, quantity, rate); floor boards / OSB per m²; VAT 8 %
+  with installation / 23 % material only; the board price list (`boardPricing`, null = the default DREWEX table;
+  „📂 Wczytaj cennik desek” reads the self-supporting „Zapisz cały cennik” file through `takeoff/priceListFile.js`) and
+  the species / class. Rates 0 = unpriced. `sanitizeQuoteSettings`. Saved in the project file (`quote`), NOT in the
+  undo history (as the self-supporting takeoff settings); „Nowy” keeps them.
+- `quote/claddingQuote.js buildCladdingQuote(built, settings)` — a line per tread (its blank along the grain ×
+  across × thickness priced per running metre by `takeoff/boardPricing.js lookupBoardPricePerMb`; labour by its kind
+  and riser), per landing (wood: a board + montaż półpodestu / podestu; floor boards: labour per m², the boards and the
+  OSB per m², its nosing as a board), per riser board (material; its fitting in the tread's labour), the antresola
+  nosing (board + montaż noska), the lump sums, the own items; grouped (proste, zabiegowe, podesty, podstopnice, noski,
+  usługi, własne); totals material / labour / net / VAT / gross; a missing price is never invented (`—`, the reason in
+  its tooltip, `unpriced`).
+- UI: the right panel's tabs „Pomiar | Kosztorys” — the quote table, the totals, „Cennik robocizny i materiałów”.
+- Tests: `__tests__/quote.test.js`.
+
 ## Open questions
 
 1. (answered 2026-11-04) Winder edges are measured from the wall corner and the dusza corner; the uneven-rise
    tolerance is 5 mm.
-2. Labour rates and the full item list (stage 4).
+2. Labour rates (the user types them; the item list can grow with own items).
