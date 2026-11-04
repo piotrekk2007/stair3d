@@ -63,7 +63,18 @@ export function createDefaultCladdingConfig() {
     showSlab: true,
     slabThicknessMm: 220, // the raw slab (ASSUMPTION)
     minHeadroomMm: 2000, // headroom over the treads (WT § 68 — DO WERYFIKACJI, as the self-supporting minHeadroom)
+    // the stair on the next floor (stage 3 part 2): {name, level 'above' | 'below', file (its project file — a
+    // self-supporting or a concrete one), dxMm, dyMm, rotationDeg 0/90/180/270, mirror} — placed and checked by the
+    // shared reference check (main.js hook → geometry/referenceStair.js)
+    referenceFloor: null,
   };
+}
+
+function sanitizeReferenceFloor(ref) {
+  if (!ref || typeof ref !== 'object' || !ref.file || typeof ref.file !== 'object') return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const rot = (((Math.round(n(ref.rotationDeg) / 90) * 90) % 360) + 360) % 360;
+  return { name: String(ref.name ?? ''), level: ref.level === 'below' ? 'below' : 'above', file: ref.file, dxMm: n(ref.dxMm), dyMm: n(ref.dyMm), rotationDeg: rot, mirror: !!ref.mirror };
 }
 
 // {[flight]: {left, right}} — booleans only
@@ -141,5 +152,6 @@ export function sanitizeCladdingConfig(raw) {
     showSlab: c.showSlab !== false,
     slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),
     minHeadroomMm: num(c.minHeadroomMm, d.minHeadroomMm, 1500, 3000),
+    referenceFloor: sanitizeReferenceFloor(c.referenceFloor),
   };
 }

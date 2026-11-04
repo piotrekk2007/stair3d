@@ -213,6 +213,7 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   (above / below) + its placement (dx, dy, rotation 0/90/180/270, mirror) → built by the same `buildStaircase` →
   `built.reference` (plan drawing, clashes) / `built.referenceMesh` (own scene object): inside the lower stair's ceiling
   opening, every lower tread's clearance up to the upper stair's underside (`stairParts`) < `minHeadroom` → ERROR
+  (another project kind as the other floor: a builder per file `_type` — `registerReferenceBuilder`, the concrete module)
   `REFERENCE-STAIR-HEADROOM` on this project's element (gate); plan layer, panel folder 2 (load, place, „⇅ Zamień” =
   `inverseReference`, remove).
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
@@ -538,7 +539,8 @@ along the walls, edges measured from the wall / dusza corner or generated with e
 plan; every element an outline with named edges, the cladding by `offsetEdges`; ERROR `CLAD-WINDER-ORDER`; WARNINGs
 `PL-LEGAL-C-01` / `CO-MFG-J-04` / `CLAD-WINDER-GOING`; unmeasured A / B give the straight going on the walkline). Stage 3
 part 1 built: walls per flight / side (no side nosing there), floor-board landing (OSB + boards + nosing), the
-antresola nosing, the slab with the opening the headroom needs (union of tread rectangles). Next: linking floors.
+antresola nosing, the slab with the opening the headroom needs (union of tread rectangles); linking floors both ways
+(`floorStair.js claddingAsFloor`, registered in `referenceStair.js registerReferenceBuilder` by `main.js`).
 
 ## Open items / known limitations
 

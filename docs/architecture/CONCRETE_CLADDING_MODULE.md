@@ -1,6 +1,6 @@
 # Concrete cladding module ("Schody na beton") — plan
 
-Status: stages 1–2 BUILT, stage 3 part 1 BUILT (2026-11-04; linking floors next), stages 4–6 planned (user request 2026-11-04). This document is the agreed
+Status: stages 1–3 BUILT (2026-11-04), stage 4 in progress, stages 5–6 planned (user request 2026-11-04). This document is the agreed
 direction and is updated as each stage lands.
 
 ## Purpose
@@ -30,7 +30,11 @@ The self-supporting engine must not be touched: it works and the user does not w
      `ui/workspace.js` (`onModuleChange`, `setModule`, `claddingEl`); `main.js setModule` (loads
      `cladding/app/claddingApp.js` on first use, remembers the module in `localStorage` `stair3d.module`, the
      self-supporting Ctrl+Z / Ctrl+Y skip while the module is shown); `style.css` (the switch's look);
-   - (planned, stage 3) linking floors: the reference-stair loader chooses the builder by the file type;
+   - (made, stage 3) linking floors: `geometry/referenceStair.js registerReferenceBuilder(fileType, build)` — a
+     registry consulted by `buildReferenceModel` before the injected buildStaircase (the module is never imported
+     there); `main.js` registers `cladding/floorStair.js buildCladdingFloorFromFile` for `schody3d-beton`, reads a
+     floor file of either kind (`readFloorFile`, used by both the self-supporting „Wczytaj bieg wyżej / niżej” and the
+     module), and hands the module `linkFloor` (= `buildReferenceModel` + `renderReferenceStair`) on mounting;
    - nothing else without asking the user first.
 4. The project file of the module is its own type (`_type: 'schody3d-beton'`, own version and migrations) — the
    self-supporting `projectIO.js` stays as it is.
@@ -187,6 +191,16 @@ straight going (`zoneSizes`: 2·ext + the drawn quarter arc = count × going), s
   to the soffit (`geometry/rectUnion.js` — added to the read-only list), so an L stair gets an L opening; plan dashed
   blue, 3D extruded with the hole.
 - Tests: `__tests__/surroundings.test.js`.
+
+## Stage 3, part 2 — linking floors, as built
+
+`floorStair.js claddingAsFloor(built)` — the module's stair in the shape the shared check reads (heights from the
+FINISHED floor: z − `floorFinishBottomMm`; a tread's `elevation.bottom` = the concrete's underside under it; the
+opening = `built.slab.opening`; no posts; `root` without walls / slab). Both ways: a self-supporting project loads a
+concrete file as its floor above / below (built by the module through the registry), the module loads a self-supporting
+or a concrete file (`config.referenceFloor {name, level, file, dxMm, dyMm, rotationDeg, mirror}`, panel „Piętro wyżej /
+niżej”): the other stair in 3D (raised by the bottom finish into the module's raw-floor frame) and on the plan (dashed
+purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. Tests: `__tests__/floorLink.test.js`.
 
 ## Open questions
 

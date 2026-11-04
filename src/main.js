@@ -48,7 +48,12 @@ import { createStairwellVariantsPanel, renderStairwellVariants } from './ui/stai
 import { makeCollapsible } from './ui/panelBehaviour.js';
 import { attachPlanInteractions } from './plan2d/planInteractions.js';
 import { exportProjectJSON, parseProjectFile, buildProjectPayload, CURRENT_PROJECT_VERSION } from './project/projectIO.js';
-import { sanitizeReferenceStair, inverseReference } from './geometry/referenceStair.js';
+import { sanitizeReferenceStair, inverseReference, registerReferenceBuilder, buildReferenceModel } from './geometry/referenceStair.js';
+import { renderReferenceStair } from './geometry/referenceStairRenderer.js';
+// the concrete cladding module as a floor of a linked building (src/cladding/floorStair.js — docs/architecture/
+// CONCRETE_CLADDING_MODULE.md, hook 3b): a "schody3d-beton" file is built by the module itself
+import { buildCladdingFloorFromFile, CLADDING_PROJECT_TYPE } from './cladding/floorStair.js';
+import { parseCladdingProjectFile } from './cladding/projectFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
@@ -254,7 +259,14 @@ async function setModule(module) {
   }
   if (module === 'cladding' && !claddingApp) {
     const { mountCladdingApp } = await import('./cladding/app/claddingApp.js');
-    claddingApp = mountCladdingApp(ws.claddingEl);
+    // (the floor link: the concrete stair and its other floor placed and checked by the shared reference check)
+    claddingApp = mountCladdingApp(ws.claddingEl, {
+      linkFloor: (ownFloor) => {
+        const reference = buildReferenceModel(ownFloor, buildStaircase);
+        return { reference, group: renderReferenceStair(reference) };
+      },
+      readFloorFile: readFloorFile,
+    });
   }
   claddingApp?.setActive(module === 'cladding');
 }
@@ -1282,8 +1294,8 @@ referenceInput.addEventListener('change', (event) => {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const { meta } = parseProjectFile(reader.result); // validates (and migrates) the file
-      config.referenceStair = { name: meta.projectName || file.name.replace(/\.json$/i, ''), level: referenceLevel, file: JSON.parse(reader.result), dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false };
+      const { name, file: data } = readFloorFile(reader.result, file.name);
+      config.referenceStair = { name, level: referenceLevel, file: data, dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false };
       rebuild();
       uiRefresh?.();
       commitHistory();
@@ -1294,6 +1306,18 @@ referenceInput.addEventListener('change', (event) => {
   reader.readAsText(file);
 });
 document.body.appendChild(referenceInput);
+registerReferenceBuilder(CLADDING_PROJECT_TYPE, buildCladdingFloorFromFile);
+// a floor file of either kind (a self-supporting project or a concrete one) — validated, its name
+function readFloorFile(text, fileName = '') {
+  const data = JSON.parse(text);
+  const base = fileName.replace(/\.json$/i, '');
+  if (data?._type === CLADDING_PROJECT_TYPE) {
+    const { projectName } = parseCladdingProjectFile(data);
+    return { name: projectName || base, file: data };
+  }
+  const { meta } = parseProjectFile(text); // validates (and migrates) the file
+  return { name: meta.projectName || base, file: data };
+}
 function loadReferenceStair(level) {
   referenceLevel = level;
   referenceInput.click();

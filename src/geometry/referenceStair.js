@@ -18,6 +18,15 @@ import { stairParts } from './walls.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
 export const REFERENCE_ROTATIONS = Object.freeze([0, 90, 180, 270]);
+
+// Other project kinds as a floor (the concrete cladding module "Schody na beton", src/cladding — user decision
+// 2026-11-04: linked floors both ways): `_type` of the project file → a function building it into the shape read below
+// (fullConfig.totalRise / minHeadroom, treadModels, ceilingFit, postModels, root). Registered by main.js, so this module
+// never imports the other module; a self-supporting file is built by the injected buildStaircase as before.
+const FLOOR_BUILDERS = new Map();
+export function registerReferenceBuilder(fileType, build) {
+  FLOOR_BUILDERS.set(fileType, build);
+}
 const SAMPLE_MM = 50;
 
 /** The reference made valid (null when there is none / no file). */
@@ -126,7 +135,8 @@ export function buildReferenceModel(own, build) {
   if (!ref) return null;
   let other;
   try {
-    other = build(referenceConfig(ref));
+    const own = FLOOR_BUILDERS.get(ref.file?._type);
+    other = own ? own(ref.file) : build(referenceConfig(ref));
   } catch (e) {
     return { ref, error: `Nie da się zbudować schodów z pliku: ${e.message}`, diagnostics: [createDiagnostic({ ruleId: 'REFERENCE-STAIR-INVALID', severity: 'WARNING', elementType: 'stair', elementId: 'reference', parameter: null, message: `Bieg ${ref.level === 'above' ? 'wyżej' : 'niżej'} („${ref.name}”): ${e.message}` })] };
   }

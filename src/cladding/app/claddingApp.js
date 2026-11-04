@@ -11,6 +11,7 @@ import { expandSequence, signedOnZoneLine } from '../concreteModel.js';
 import { renderCladdingStair } from '../claddingRenderer.js';
 import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
+import { claddingAsFloor } from '../floorStair.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
@@ -18,7 +19,13 @@ import { escapeHtml } from '../../util/format.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
 
-export function mountCladdingApp(rootEl) {
+/**
+ * @param {HTMLElement} rootEl
+ * @param {{linkFloor?: Function, readFloorFile?: Function}} host  from the app shell (main.js): the shared check of a
+ *   linked floor (the other floor built, placed, the headroom checked — geometry/referenceStair.js) and the reading of
+ *   a floor file of either kind; without them the floor link is not offered
+ */
+export function mountCladdingApp(rootEl, host = {}) {
   const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null };
   let history = createHistory(state.config);
   let active = false;
@@ -54,6 +61,7 @@ export function mountCladdingApp(rootEl) {
           <label class="clad-field">Ostatnia wysokość do stropu [mm] <input type="number" class="clad-exit" placeholder="jak ostatni stopień" /></label>
         </section>
         <section class="clad-box"><h3>Ściany przy biegach</h3><div class="clad-walls"></div></section>
+        <section class="clad-box clad-floor-box"><h3>Piętro wyżej / niżej</h3><div class="clad-floor"></div></section>
         <section class="clad-box clad-gui"><h3>Wykończenie</h3></section>
       </aside>
       <main class="clad-main">
@@ -67,6 +75,7 @@ export function mountCladdingApp(rootEl) {
       </aside>
     </div>
     <input type="file" accept=".json,application/json" class="clad-file" hidden />
+    <input type="file" accept=".json,application/json" class="clad-floor-file" hidden />
   `;
   const $ = (sel) => rootEl.querySelector(sel);
   const seqEl = $('.clad-seq');
@@ -261,6 +270,67 @@ export function mountCladdingApp(rootEl) {
   live(wind.add(proxy, 'winderGoingToleranceMm', 0, 200, 1).name('Różnica kroku na linii biegu [mm]'));
   wind.close();
 
+  // --- the stair on the next floor (a self-supporting or a concrete project file) ---------------------------------
+  const floorEl = $('.clad-floor');
+  const floorFile = $('.clad-floor-file');
+  let floorLevel = 'above';
+  if (!host.linkFloor) $('.clad-floor-box').hidden = true;
+  function renderFloorPanel() {
+    const ref = state.config.referenceFloor;
+    if (!ref) {
+      floorEl.innerHTML = `<div class="clad-actions"><button type="button" data-floor-load="above">Wczytaj piętro wyżej…</button><button type="button" data-floor-load="below">Wczytaj piętro niżej…</button></div><div class="clad-hint">Projekt schodów samonośnych albo na beton (plik .json). Pokazany w 3D i na planie, sprawdzana skrajnia między biegami.</div>`;
+      return;
+    }
+    const n = (f, label) => `<label class="clad-field">${label} <input type="number" data-floor="${f}" value="${r0(ref[f])}" /></label>`;
+    floorEl.innerHTML = `<div><b>${escapeHtml(ref.name || 'piętro')}</b> — ${ref.level === 'above' ? 'wyżej' : 'niżej'}</div>
+      ${n('dxMm', 'Przesunięcie X [mm]')}${n('dyMm', 'Przesunięcie Y [mm]')}
+      <label class="clad-field">Obrót <select data-floor="rotationDeg">${[0, 90, 180, 270].map((d) => `<option value="${d}" ${d === ref.rotationDeg ? 'selected' : ''}>${d}°</option>`).join('')}</select></label>
+      <label class="clad-field">Lustro <input type="checkbox" data-floor="mirror" ${ref.mirror ? 'checked' : ''} /></label>
+      <div class="clad-actions"><button type="button" data-floor-remove>Usuń piętro</button></div>`;
+  }
+  floorEl.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.floorLoad) {
+      floorLevel = b.dataset.floorLoad;
+      floorFile.click();
+    } else if (b.dataset.floorRemove !== undefined) {
+      change((c) => (c.referenceFloor = null));
+    }
+  });
+  floorEl.addEventListener('change', (ev) => {
+    const f = ev.target.dataset.floor;
+    if (!f) return;
+    change((c) => {
+      c.referenceFloor = { ...c.referenceFloor, [f]: f === 'mirror' ? ev.target.checked : Number(ev.target.value) };
+    });
+  });
+  floorFile.addEventListener('change', () => {
+    const file = floorFile.files?.[0];
+    floorFile.value = '';
+    if (!file || !host.readFloorFile) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const { name, file: data } = host.readFloorFile(reader.result, file.name);
+        change((c) => (c.referenceFloor = { name, level: floorLevel, file: data, dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false }));
+      } catch (e) {
+        window.alert(`Nie udało się wczytać piętra: ${e.message}`);
+      }
+    };
+    reader.readAsText(file);
+  });
+  // the link: built on every rebuild (the shared check — its findings join the module's, its stair shown)
+  function linkFloor() {
+    state.floor = null;
+    if (!state.config.referenceFloor || !host.linkFloor) return;
+    try {
+      state.floor = host.linkFloor(claddingAsFloor(state.built));
+    } catch (e) {
+      state.floor = { reference: { error: e.message, diagnostics: [] }, group: null };
+    }
+  }
+
   // the walls: per flight, left / right walking up (a walled side gets no side nosing)
   const wallsEl = $('.clad-walls');
   function renderWalls() {
@@ -339,7 +409,8 @@ export function mountCladdingApp(rootEl) {
       .join('');
     $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="clad-hint">Wysokość gotowa = od posadzki / stopnia niżej do wierzchu okładziny [mm]. Wysokość całkowita: ${r0(state.built.totalRise)} mm.</div>`;
-    const diags = state.built.diagnostics;
+    const ref = state.floor?.reference;
+    const diags = [...state.built.diagnostics, ...(ref?.diagnostics || []), ...(ref?.error ? [{ severity: 'WARNING', message: ref.error }] : [])];
     $('.clad-findings').innerHTML = diags.length ? diags.map((d) => `<div class="clad-finding ${d.severity.toLowerCase()}">${escapeHtml(d.message)}</div>`).join('') : '<div class="clad-hint">Brak uwag.</div>';
   }
   $('.clad-heights').addEventListener('click', (ev) => {
@@ -364,7 +435,7 @@ export function mountCladdingApp(rootEl) {
   }
   function renderPlan() {
     if (!viewport) fitPlan();
-    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected }) + '<div class="clad-plan-hint">kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj</div>';
+    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null }) + '<div class="clad-plan-hint">kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj</div>';
   }
   planEl.addEventListener('wheel', (ev) => {
     ev.preventDefault();
@@ -448,6 +519,10 @@ export function mountCladdingApp(rootEl) {
       root.traverse((o) => o.geometry?.dispose?.());
     }
     root = renderCladdingStair(state.built);
+    if (state.floor?.group) {
+      state.floor.group.position.y += state.config.floorFinishBottomMm;
+      root.add(state.floor.group);
+    }
     sceneApi.scene.add(root);
     const box = new THREE.Box3().setFromObject(root);
     sceneApi.fitShadowToBox(box);
@@ -471,12 +546,14 @@ export function mountCladdingApp(rootEl) {
   // --- rebuild -------------------------------------------------------------------------------------------------
   function rebuild() {
     state.built = buildCladdingStair(state.config);
+    linkFloor();
     if (state.selected !== null && state.selected >= state.built.concrete.elements.length) state.selected = null;
     if (state.view === 'plan') renderPlan();
     else render3D();
     renderStepEditor();
     renderReport();
     renderWalls();
+    renderFloorPanel();
   }
   function refreshAll() {
     renderSequence();

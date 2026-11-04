@@ -15,7 +15,7 @@ export function claddingPlanBounds(built) {
   return { minX: b.minX, maxX: b.maxX, minY: -b.maxY, maxY: -b.minY };
 }
 
-export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } = {}) {
+export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null } = {}) {
   const { concrete, cladding } = built;
   const vb = viewport ? `${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}` : (() => {
     const b = claddingPlanBounds(built);
@@ -38,6 +38,8 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
     .filter((t) => t.parts)
     .map((t) => [t.parts.nosing, t.parts.boards].filter(Boolean).map((p, k) => `<polygon points="${pts(p.outline)}" fill="${k ? '#d9bc8c' : '#c99d62'}" stroke="#8a5a34" stroke-width="0.8" ${k ? 'stroke-dasharray="3,3"' : ''} pointer-events="none" ${HAIR}/>`).join(''))
     .join('');
+  // the stair on the next floor (linked — its treads in this plan's frame, dashed purple)
+  const otherXML = (otherFloor?.treads || []).map((t) => `<polygon class="clad-other-floor" points="${pts(t.outline)}" fill="#7b4ab3" fill-opacity="0.06" stroke="#7b4ab3" stroke-width="1" stroke-dasharray="6,4" pointer-events="none" ${HAIR}/>`).join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
   const labels = concrete.elements
     .map((e) => {
@@ -81,5 +83,5 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null } 
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
 }

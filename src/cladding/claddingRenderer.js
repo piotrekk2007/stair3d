@@ -62,7 +62,7 @@ function slabGeometry(outline, hole, bottomZ, topZ) {
 }
 
 /** @returns {THREE.Group} the stair: layers "Concrete", "Treads", "Risers" */
-export function renderCladdingStair(built, { riserMaterial: riserMat = null } = {}) {
+export function renderCladdingStair(built, { riserMaterial: riserMat = null, room: withRoom = true } = {}) {
   const root = new THREE.Group();
   root.name = 'CladdingStair';
   const { concrete, cladding, config } = built;
@@ -143,6 +143,6 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null } = 
     mesh.receiveShadow = true;
     room.add(mesh);
   }
-  root.add(room);
+  if (withRoom) root.add(room);
   return root;
 }
