@@ -403,7 +403,9 @@ Docs: [CONCRETE_FLIGHT.md](docs/architecture/CONCRETE_FLIGHT.md) (user decisions
 `concretePart` upper (`concreteFromTread`, null = flight A + 1, to the exit) / lower (floor to `concreteToTread`, wood
 above standing on its last step — `footZ`) + `concreteSlabThicknessMm` (stringers only): `concreteRange` is THE rule, `planLayout.js` marks those treads `onConcrete` — no housing recess (full width), no wanga bearings (the
 wangi end with a plumb cut at the concrete; the model's `lastTreadIndex` keeps them from being "the board at the slab"),
-no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnlyRailingSections`), skipped by the
+no posts off the wooden lines, balustrade cut back to the wooden part (`woodOnlyRailingSections`) unless
+`concreteRailingEnabled` (then it runs on, its posts / balusters standing on the cladding treads — `railingSolver.js
+onConcreteAt`), skipped by the
 missing-support / continuity / structural checks. `buildConcreteModel` → `built.concrete` (a block per step under the
 tread, one smooth soffit at the slab's plumb thickness, never below the floor, a piece up to the slab's edge only where
 the opening runs on past the last step; optional walls under it `concreteWallSide` none / inner / outer / both, floor to

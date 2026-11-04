@@ -113,7 +113,8 @@ export function buildStaircase(rawConfig) {
   const fullConfig = metalConfig(cantileverConfig({ ...config, riserHeight: derived.riserHeight }));
   const planLayout = buildPlanLayout(fullConfig);
   // a part of the stair on a concrete flight (concreteStair.js): no balustrade there (user decision 2026-11-02)
-  if (planLayout.concreteRange) {
+  // (unless the balustrade is to run on over the concrete too — railingSolver.js stands it on the cladding treads there)
+  if (planLayout.concreteRange && !fullConfig.concreteRailingEnabled) {
     fullConfig.railingSections = woodOnlyRailingSections(sanitizeRailingSections(fullConfig.railingSections), planLayout.concreteRange, planLayout.treads.length - 1);
   }
   // the ceiling opening and the stairwell (they depend on the plan only): the balustrade round the opening stands on its

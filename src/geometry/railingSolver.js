@@ -937,6 +937,19 @@ function buildSection(section, ctx) {
     base.diagnostics.push(diag(section.id, 'RAILING-SECTION-INVALID', `Odcinek balustrady ${section.id}: brak długości do poprowadzenia poręczy — odcinek pominięty.`));
     return base;
   }
+  // Treads lying on the concrete flight (concreteStair.js; a section reaches them only with `concreteRailingEnabled`,
+  // user request 2026-11-04): no wanga there — the posts and the balusters stand ON the cladding treads, as on an
+  // overlay wanga. `onConcreteAt` = the point belongs to such a tread (its nearest tread chain).
+  const concreteTreads = new Set(treadChains.filter((c) => planLayout.treads[c.index]?.onConcrete).map((c) => c.index));
+  const onConcreteAt = (p) => {
+    if (!concreteTreads.size) return false;
+    let best = null;
+    for (const c of treadChains) {
+      const d = distToPolyline(c.shifted, p);
+      if (!best || d < best.d) best = { d, index: c.index };
+    }
+    return !!best && concreteTreads.has(best.index);
+  };
   base.path = nodes.map((n) => ({ x: n.x, y: n.y })); // the whole wanga-side path (plan), also where no handrail can follow it
   if (section.mount === 'wall') return wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, railTop });
 
@@ -1024,7 +1037,8 @@ function buildSection(section, ctx) {
       kind: 'railing',
       ...(spot.kind === 'manual' ? { manual: true, sectionId: section.id, manualId: spot.manualId, s: spot.s } : {}),
       position: { x: spot.at.x, y: spot.at.y },
-      elevation: { bottom: Math.max(0, Math.min(...spot.zs) - stairDepth), top: railTop(Math.max(...spot.zs)) + (config.railingPostTopAboveHandrailMm || 0) },
+      // (on a concrete step the post stands on its cladding tread)
+      elevation: { bottom: onConcreteAt(spot.at) ? Math.min(...spot.zs) : Math.max(0, Math.min(...spot.zs) - stairDepth), top: railTop(Math.max(...spot.zs)) + (config.railingPostTopAboveHandrailMm || 0) },
       size: config.railingPostSizeMm,
     });
   }
@@ -1150,7 +1164,10 @@ function buildSection(section, ctx) {
     if (bareRun) return;
 
     if (baseRail) {
-      const railPieces = baseRailAlong(path, (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]), baseRail.heightMm);
+      // (none over the concrete flight — no wanga there)
+      const railPieces = baseRailAlong(path, (p) => (onConcreteAt(p) ? null : wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side])), baseRail.heightMm).filter(
+        (piece) => !onConcreteAt({ x: (piece.start.x + piece.end.x) / 2, y: (piece.start.y + piece.end.y) / 2 })
+      );
       baseRail.runs.push({ pieces: railPieces });
       baseRail.pieces.push(...railPieces);
     }
@@ -1163,8 +1180,9 @@ function buildSection(section, ctx) {
       const wangaTop = (p) => wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
       const cut = constructionType === CONSTRUCTION_TYPES.CUT;
       const groundAt = (p) => {
-        if (glassSide) return cut ? p.z - (riserHeight || 0) : (wangaTop(p) ?? p.z);
-        return cut ? p.z : (wangaTop(p) ?? p.z);
+        const overlay = cut || onConcreteAt(p);
+        if (glassSide) return overlay ? p.z - (riserHeight || 0) : (wangaTop(p) ?? p.z);
+        return overlay ? p.z : (wangaTop(p) ?? p.z);
       };
       const result = panesForRun(run, {
         config,
@@ -1190,6 +1208,8 @@ function buildSection(section, ctx) {
       for (let b = 0; b < n; b++) {
         const s = startHalf + gap * (b + 1) + balusterSize * b + balusterSize / 2;
         const p = pointAt(path, cumulative, s);
+        // (over the concrete flight the balusters stand on the treads — the overlay rhythm below)
+        if (onConcreteAt(p)) continue;
         const top = wangaTopAt(p, stringerModels?.[side], stringerConstruction?.[side]);
         // the wanga's own slope under it (its top at the baluster's two faces along the path): the bottom cut
         const p0 = pointAt(path, cumulative, Math.max(0, s - balusterSize / 2));
@@ -1204,9 +1224,11 @@ function buildSection(section, ctx) {
   });
 
   // --- overlay wanga: the same rhythm on every tread, along that tread's own chain
-  if (!glass && constructionType === CONSTRUCTION_TYPES.CUT) {
+  // (and on the treads of the concrete flight whatever the wanga's type)
+  if (!glass && (constructionType === CONSTRUCTION_TYPES.CUT || concreteTreads.size)) {
     for (const chain of treadChains) {
       if (!railedTreads.has(chain.index)) continue;
+      if (constructionType !== CONSTRUCTION_TYPES.CUT && !concreteTreads.has(chain.index)) continue;
       const path = chain.shifted;
       const cumulative = cumulativeLengths(path);
       const length = cumulative[cumulative.length - 1];
@@ -1281,7 +1303,7 @@ function buildSection(section, ctx) {
       const topCutDeg = under.deg;
       // (a housed wanga: its own top's slope where measured, else the handrail's)
       const { wangaSlope, ...rest } = b;
-      const bottomCutDeg = constructionType === CONSTRUCTION_TYPES.CUT ? 0 : wangaSlope ? wangaSlope.deg : topCutDeg;
+      const bottomCutDeg = constructionType === CONSTRUCTION_TYPES.CUT || b.treadIndex !== null ? 0 : wangaSlope ? wangaSlope.deg : topCutDeg;
       const heightMm = b.zTop - b.zBottom;
       const half = balusterSize / 2;
       const longPointMm = heightMm + half * (Math.tan(rad(topCutDeg)) + Math.tan(rad(bottomCutDeg)));

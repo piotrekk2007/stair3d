@@ -222,6 +222,9 @@ export function createDefaultConfig() {
     // the handrail along that wall: 'wall' (on brackets off its face, like a wall handrail) | 'top' (lying on a low
     // wall — only with a height > 0) | 'none'
     concreteWallHandrail: 'wall',
+    // the balustrade sections run on over the concrete flight too (user request 2026-11-04 — for the client's picture);
+    // there the posts and balusters stand on the cladding treads. false = cut back to the wooden part, as before
+    concreteRailingEnabled: false,
     cantileverProfileWidthMm: 40,
     cantileverProfileHeightMm: 60,
     cantileverProfileCount: 2,

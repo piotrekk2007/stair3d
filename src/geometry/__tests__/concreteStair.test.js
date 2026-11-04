@@ -338,3 +338,43 @@ test('a wall handrail on brackets along the wall above the concrete flight (user
   const topWall = full.concrete.walls.filter((w) => w.above && w.treadIndex === full.treadModels.length - 1);
   assert.ok(topWall.length && topWall.every((w) => Math.max(...w.topZ) >= (full.treadModels.length + 1) * h + 900), 'the wall behind the rail');
 });
+
+// user request 2026-11-04: the balustrade may run on over the concrete flight (a client's picture); there it stands on
+// the cladding treads (no wanga), on the wood as before
+test('balustrade over the concrete flight (concreteRailingEnabled): one section over both parts, posts / balusters on the concrete treads', () => {
+  const straight = (patch = {}) =>
+    buildStaircase({
+      ...createDefaultConfig(),
+      stairType: 'straight',
+      treadsLegA: 12,
+      openingMode: 'derived',
+      concreteEnabled: true,
+      concretePart: 'lower',
+      concreteToTread: 5,
+      railingEnabled: true,
+      railingSections: [{ id: 'r', side: 'inner', fromStep: 0, toStep: null }],
+      ...patch,
+    });
+  const off = straight();
+  const offSection = off.railingModel.sections.find((s) => s.id === 'r' || s.id === 'r-b');
+  assert.equal(offSection.fromStep, 5, 'off (default): cut back to the wood');
+  const b = straight({ concreteRailingEnabled: true });
+  const s = b.railingModel.sections.find((x) => x.id === 'r');
+  assert.equal(s.fromStep, 0);
+  assert.equal(s.valid, true);
+  const onConcrete = (i) => b.planLayout.treads[i].onConcrete;
+  // the balusters on the concrete treads stand on the treads (their top), the ones on the wood on the housed wanga
+  const concreteBalusters = s.balusters.filter((x) => x.treadIndex !== null && onConcrete(x.treadIndex));
+  assert.ok(concreteBalusters.length >= 5, `${concreteBalusters.length} balusters on the concrete`);
+  for (const x of concreteBalusters) {
+    assert.equal(x.zBottom, b.treadModels[x.treadIndex].elevation.top);
+    assert.equal(x.bottomCutDeg, 0);
+  }
+  assert.ok(s.balusters.some((x) => x.treadIndex === null), 'the wooden part keeps its housed balusters');
+  // every baluster under the handrail and above its ground
+  assert.ok(s.balusters.every((x) => x.zTop > x.zBottom));
+  // the start post stands on the first (concrete) tread, not down to the floor through it
+  const start = s.posts.find((p) => p.postId.endsWith('-start'));
+  assert.ok(start, 'own start post');
+  assert.equal(start.elevation.bottom, b.treadModels[0].elevation.top);
+});

@@ -41,7 +41,9 @@ New optional fields — no project version bump.
   (`splitWalkIntoRuns` — user report 2026-11-02: the empty board broke the profile editor for the inner wanga).
 - `postSolver.js`: only posts whose anchor lies on a wooden tread's line (a corner post of a concrete turn and the end
   newel are not made).
-- `buildStaircase.js`: the balustrade sections cut to the wooden part(s) (`woodOnlyRailingSections` — a section across a
+- `buildStaircase.js`: unless `concreteRailingEnabled` (user request 2026-11-04 — a balustrade on the concrete too, for
+  the client's picture; panel folder 1 „Balustrada także na biegu betonowym”, default off), the balustrade sections cut
+  to the wooden part(s) (`woodOnlyRailingSections` — a section across a
   concrete part in the middle splits in two); the opening's balustrade is not affected.
 - Checks: `VALIDATOR-MISSING-SURFACE` skips concrete treads; `CONSTRAINT-TOPOLOGY-CONTINUITY` accepts the wood / concrete
   boundary when both edges lie on one line (the wooden one is shorter by the recess); the structural check skips
@@ -100,3 +102,12 @@ nose line; `brackets` every `railingWallBracketSpacingMm` (150 mm in from the en
 reachMm}` like railingSolver.js buildWallRail's (drawn by railingRenderer.js `wallBracketGeometries`, metal); the wall
 behind it reaches at least 100 mm above the rail's top (a wall "up to the floor above" ended below the rail at the top
 treads). Takeoff: the handrail pieces + one `…-wall-brackets` item per run (`railing-wall-bracket`, part code UP).
+
+## Balustrade over the concrete (user request 2026-11-04)
+
+`concreteRailingEnabled`: the sections are NOT cut back — one section may run over the concrete and the wood. In
+`railingSolver.js buildSection` the treads `onConcrete` of the section (`concreteTreads`, `onConcreteAt(p)` = the
+nearest tread chain is one of them) have no wanga: a post spot there stands ON the cladding tread (bottom = its top,
+not the wanga's depth below), the balusters there follow the overlay rhythm per tread standing on it (bottom cut 0)
+whatever the wanga's type on the wood (housed balusters, base rail pieces and a housed glass ground are skipped / use the
+tread there). Test: `concreteStair.test.js` (balustrade over the concrete flight).

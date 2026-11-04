@@ -180,6 +180,8 @@ export function createUI({
   };
   const concreteWallRail = live(stairFolder.add(railProxy, 'mode', { 'brak': 'none', 'na uchwytach przy ścianie': 'wall', 'leżąca na murku': 'top' })).name('Poręcz przy ścianie nad biegiem');
   concreteWallRail.domElement.title = 'Na uchwytach: poręcz przyścienna wzdłuż lica ściany (odstęp i rozstaw uchwytów jak przy poręczy przyściennej, wysokość jak balustrada — folder 9). Leżąca na murku: na wierzchu murka (tylko gdy podana jest wysokość ściany). W kosztorysie jak poręcz (cena za mb) + uchwyty.';
+  const concreteRailing = live(stairFolder.add(config, 'concreteRailingEnabled')).name('Balustrada także na biegu betonowym');
+  concreteRailing.domElement.title = 'Odcinki balustrady (folder 9) biegną dalej po stopniach na betonie: słupki i tralki stoją tam na stopniach okładzinowych (jak przy wandze nakładanej). Wyłączone — balustrada tylko na części drewnianej.';
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
@@ -187,6 +189,7 @@ export function createUI({
     concreteFrom.show(on && config.concretePart !== 'lower').updateDisplay();
     concreteTo.show(on && config.concretePart === 'lower').updateDisplay();
     concreteSlab.show(on);
+    concreteRailing.show(on);
     concreteWall.show(on);
     concreteWallT.show(on && (config.concreteWallSide || 'none') !== 'none').updateDisplay();
     // (always offered with the concrete part — it was hidden until a side was chosen, user report 2026-11-02)
