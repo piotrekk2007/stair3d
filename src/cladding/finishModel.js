@@ -7,7 +7,7 @@
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 
-const dedupe = (pts) => pts.filter((p, k) => k === 0 || Math.abs(p.s - pts[k - 1].s) > 1e-6 || Math.abs(p.z - pts[k - 1].z) > 1e-6);
+export const dedupe = (pts) => pts.filter((p, k) => k === 0 || Math.abs(p.s - pts[k - 1].s) > 1e-6 || Math.abs(p.z - pts[k - 1].z) > 1e-6);
 
 // the board's blank in its plane: along its top line (first → last point of `top`) × across
 function blank(polygon, top) {
@@ -22,7 +22,7 @@ function blank(polygon, top) {
 }
 
 // a raked top: through every nose (a landing level along its length), `h` above, on to the run's end
-function rakedTop(pieces, h, topOf) {
+export function rakedTop(pieces, h, topOf) {
   const pts = [];
   for (const p of pieces) {
     pts.push({ s: p.s0, z: topOf(p) + h });

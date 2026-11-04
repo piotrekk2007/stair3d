@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import GUI from 'lil-gui';
 import './cladding.css';
-import { createDefaultCladdingConfig, sanitizeCladdingConfig, LANDING_TURNS, LANDING_TURN_LABELS, WINDER_TURN_LABELS } from '../schema.js';
+import { createDefaultCladdingConfig, sanitizeCladdingConfig, LANDING_TURNS, LANDING_TURN_LABELS, WINDER_TURN_LABELS, WALL_TYPE_LABELS } from '../schema.js';
 import { buildCladdingStair } from '../buildCladdingStair.js';
 import { expandSequence, signedOnZoneLine } from '../concreteModel.js';
 import { renderCladdingStair } from '../claddingRenderer.js';
@@ -164,7 +164,9 @@ export function mountCladdingApp(rootEl, host = {}) {
         }
         if (g.kind === 'winders') return windersRow(g, i, tools);
         const turn = `<select data-i="${i}" data-f="turn">${LANDING_TURNS.map((t) => `<option value="${t}" ${t === g.turn ? 'selected' : ''}>${LANDING_TURN_LABELS[t]}</option>`).join('')}</select>`;
-        const gap = g.turn === 'u-left' || g.turn === 'u-right' ? `<label>rozsunięcie ${numIn(i, 'gapMm', g.gapMm, 'Odstęp między biegami [mm]')}</label>` : '';
+        const u = g.turn === 'u-left' || g.turn === 'u-right';
+        const gapWall = u && g.gapMm > 0 ? `<label title="Ściana wypełnia odstęp między biegami"><input type="checkbox" data-i="${i}" data-f="gapWall" ${g.gapWall ? 'checked' : ''}/> ściana między biegami</label>${g.gapWall ? `<select data-i="${i}" data-f="gapWallTop"><option value="slab" ${g.gapWallTop !== 'nose' ? 'selected' : ''}>do stropu</option><option value="nose" ${g.gapWallTop === 'nose' ? 'selected' : ''}>nad noskami o</option></select>${g.gapWallTop === 'nose' ? numIn(i, 'gapWallAboveMm', g.gapWallAboveMm, 'Wysokość nad noskami wyższego biegu [mm]') : ''}` : ''}` : '';
+        const gap = u ? `<label>rozsunięcie ${numIn(i, 'gapMm', g.gapMm, 'Odstęp między biegami [mm]')}</label>${gapWall}` : '';
         const finish = `<select data-i="${i}" data-f="finish" title="Wykończenie podestu"><option value="wood" ${g.finish !== 'floorboard' ? 'selected' : ''}>drewno (jak stopnie)</option><option value="floorboard" ${g.finish === 'floorboard' ? 'selected' : ''}>deska podłogowa na OSB + nosek</option></select>`;
         return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${finish}${tools}</div>`;
       })
@@ -200,7 +202,8 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (!f || !Number.isInteger(i)) return;
     change((c) => {
       const g = c.sequence[i];
-      if (f === 'turn' || f === 'finish') g[f] = el.value;
+      if (f === 'turn' || f === 'finish' || f === 'gapWallTop') g[f] = el.value;
+      else if (f === 'gapWall') g.gapWall = el.checked;
       else if ((f === 'depthMm' || f === 'spaceAMm' || f === 'spaceBMm' || f === 'walklineOffsetMm') && el.value === '') g[f] = null;
       else g[f] = Number(el.value);
     });
@@ -678,7 +681,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderSides() {
     const n = state.built?.concrete.flights ?? 1;
     const c = state.config;
-    const box = (field, f, side) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${c.walls?.[f]?.[side] ? 'disabled title="przy ścianie"' : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
+    const box = (field, f, side) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${c.walls?.[f]?.[side] && c.walls[f][side].type !== 'under' ? 'disabled title="przy ścianie"' : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
     sidesEl.innerHTML =
       `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th></tr></thead><tbody>` +
       Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td></tr>`).join('') +
@@ -699,17 +702,28 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderWalls() {
     const n = state.built?.concrete.flights ?? 1;
     const w = state.config.walls || {};
+    const cell = (f, side) => {
+      const x = w[f]?.[side];
+      const type = x === true ? 'full' : x?.type || '';
+      const sel = `<select data-wall="${f}:${side}"><option value="" ${!type ? 'selected' : ''}>brak</option>${Object.entries(WALL_TYPE_LABELS).map(([k, l]) => `<option value="${k}" ${type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+      const h = type === 'low' ? ` <input type="number" class="clad-small" data-wall-h="${f}:${side}" value="${x.heightAboveMm}" title="Wysokość nad noskami [mm] (0 = do stropu)" /> mm` : '';
+      return `<label>${side === 'left' ? 'L' : 'P'} ${sel}${h}</label>`;
+    };
     wallsEl.innerHTML =
-      Array.from({ length: n }, (_, f) => `<div class="clad-row"><span class="clad-kind">Bieg ${f + 1}</span><label><input type="checkbox" data-wall="${f}:left" ${w[f]?.left ? 'checked' : ''}/> z lewej</label><label><input type="checkbox" data-wall="${f}:right" ${w[f]?.right ? 'checked' : ''}/> z prawej</label></div>`).join('') +
-      '<div class="clad-hint">Strony patrząc w górę biegu. Przy ścianie stopnie nie mają noska bocznego (chyba że stopień ma go ustawionego ręcznie).</div>';
+      Array.from({ length: n }, (_, f) => `<div class="clad-row clad-wall-row"><span class="clad-kind">Bieg ${f + 1}</span>${cell(f, 'left')}${cell(f, 'right')}</div>`).join('') +
+      '<div class="clad-hint">L / P patrząc w górę biegu. Pełna — obok schodów do stropu; nad stopniami — obok schodów do podanej wysokości nad noskami; pod biegiem — pod krawędzią biegu do spodu betonu (bok nad nią otwarty). Przy ścianie obok schodów stopnie nie mają noska bocznego. Ściana między rozsuniętymi biegami — przy podeście z zawrotem.</div>';
   }
   wallsEl.addEventListener('change', (ev) => {
-    const key = ev.target.dataset.wall;
+    const key = ev.target.dataset.wall || ev.target.dataset.wallH;
     if (!key) return;
     const [f, side] = key.split(':');
     change((c) => {
       c.walls = { ...(c.walls || {}) };
-      c.walls[f] = { ...(c.walls[f] || {}), [side]: ev.target.checked };
+      const cur = c.walls[f]?.[side];
+      let next;
+      if (ev.target.dataset.wallH) next = { ...(cur || {}), type: 'low', heightAboveMm: Number(ev.target.value) || 0 };
+      else next = ev.target.value ? { type: ev.target.value, ...(ev.target.value === 'low' ? { heightAboveMm: cur?.heightAboveMm ?? 900 } : {}) } : null;
+      c.walls[f] = { ...(c.walls[f] || {}), [side]: next };
     });
   });
 

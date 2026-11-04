@@ -8,19 +8,24 @@ import { buildCladdingModel } from './claddingModel.js';
 import { buildWalls, buildSlab } from './surroundingsModel.js';
 import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
+import { withGapWalls, buildSideWalls } from './sideWallsModel.js';
 
 export function buildCladdingStair(rawConfig) {
   const config = sanitizeCladdingConfig(rawConfig);
   const concrete = buildConcreteModel(config);
-  const cladding = buildCladdingModel(concrete, config);
+  // (the wall between two flights set apart walls their facing sides — the cladding, skirting and balustrade see it)
+  const cfg = withGapWalls(concrete, config);
+  const cladding = buildCladdingModel(concrete, cfg);
   const totalRise = concrete.exit.rawSlabTopZ + config.floorFinishTopMm - config.floorFinishBottomMm;
   // the surroundings (stage 3): walls along the flights, the slab above with its opening
-  const walls = buildWalls(concrete, config);
-  const slab = buildSlab(concrete, cladding, config);
+  const walls = buildWalls(concrete, cfg);
+  const slab = buildSlab(concrete, cladding, cfg);
+  // the walls that follow the stair: above the steps to a height, under the flight, between flights set apart
+  const sideWalls = buildSideWalls(concrete, cfg);
   // the finishing elements (stage 5): skirting boards, cover stringers, the balustrade with its decorative posts
-  const finish = buildFinishBoards(concrete, config);
-  const built = { config, concrete, cladding, walls, slab, totalRise, finish };
-  built.balustrade = buildBalustrade(built, config);
+  const finish = buildFinishBoards(concrete, cfg);
+  const built = { config, concrete, cladding, walls, sideWalls, slab, totalRise, finish };
+  built.balustrade = buildBalustrade(built, cfg);
   built.diagnostics = [...cladding.diagnostics];
   return built;
 }

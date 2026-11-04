@@ -49,6 +49,11 @@ export function createDefaultCladdingConfig() {
     winderGoingToleranceMm: 20,
     // stage 3 — the surroundings
     // walls along the stair: per flight (0 = the first) and side walking up; a wall side gets no side nosing
+    // (a side set to null / missing = no wall)
+    // per flight and side: true / {type: 'full'} = beside the stair, floor to slab (the concrete cast against it);
+    // {type: 'low', heightAboveMm} = beside the stair up to that height over the noses (ściana nad stopniami / murek);
+    // {type: 'under'} = under the flight's edge, floor to its soffit (the side above stays open). A walled side ('full',
+    // 'low', the wall between flights set apart) gets no side nosing; 'under' does not count as walled.
     walls: {},
     wallThicknessMm: 120, // drawing only (ASSUMPTION)
     // a landing finished with floor boards: OSB + boards, the front edge a solid nosing piece hiding the OSB (user,
@@ -111,6 +116,24 @@ function sanitizeReferenceFloor(ref) {
 }
 
 // {[flight]: {left, right}} — booleans only
+// the walls: {[flight]: {left, right}} — each true (= full), or {type: full | low | under, heightAboveMm}
+export const WALL_TYPES = Object.freeze(['full', 'low', 'under']);
+export const WALL_TYPE_LABELS = Object.freeze({ full: 'pełna (do stropu)', low: 'nad stopniami (do wysokości)', under: 'pod biegiem' });
+function sanitizeWallTypes(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!/^\d+$/.test(k) || !v || typeof v !== 'object') continue;
+    const w = {};
+    for (const side of ['left', 'right']) {
+      const x = v[side];
+      if (x === true) w[side] = { type: 'full' };
+      else if (x && typeof x === 'object' && WALL_TYPES.includes(x.type)) w[side] = { type: x.type, ...(x.type === 'low' ? { heightAboveMm: Math.max(0, Math.min(3000, Number(x.heightAboveMm) || 900)) } : {}) };
+    }
+    if (w.left || w.right) out[k] = w;
+  }
+  return out;
+}
+
 function sanitizeWalls(raw) {
   const out = {};
   for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
@@ -135,7 +158,9 @@ export function sanitizeCladdingConfig(raw) {
     .filter((g) => g && SEQUENCE_KINDS.includes(g.kind))
     .map((g) => {
       if (g.kind === 'steps') return { kind: 'steps', count: Math.round(num(g.count, 1, 1, 40)), riseMm: num(g.riseMm, 180, 50, 300), goingMm: num(g.goingMm, 270, 100, 500), widthMm: num(g.widthMm, 1000, 300, 3000) };
-      if (g.kind === 'landing') return { kind: 'landing', riseMm: num(g.riseMm, 180, 50, 300), depthMm: nullableNum(g.depthMm, 300, 5000), turn: LANDING_TURNS.includes(g.turn) ? g.turn : 'none', gapMm: num(g.gapMm, 0, 0, 3000), finish: g.finish === 'floorboard' ? 'floorboard' : 'wood' };
+      // (a U landing's flights set apart may have a wall between them: up to the slab or `gapWallAboveMm` over the higher
+      // flight's noses — sideWallsModel.js)
+      if (g.kind === 'landing') return { kind: 'landing', riseMm: num(g.riseMm, 180, 50, 300), depthMm: nullableNum(g.depthMm, 300, 5000), turn: LANDING_TURNS.includes(g.turn) ? g.turn : 'none', gapMm: num(g.gapMm, 0, 0, 3000), finish: g.finish === 'floorboard' ? 'floorboard' : 'wood', gapWall: g.gapWall === true, gapWallTop: g.gapWallTop === 'nose' ? 'nose' : 'slab', gapWallAboveMm: num(g.gapWallAboveMm, 900, 0, 3000) };
       // a 90° winder zone (concreteModel.js winderZone): its sizes A / B along the walls (null = automatic), the edges
       // between the winders as measured from the corners (null / a missing number = generated)
       const count = Math.round(num(g.count, 3, 2, 8));
@@ -182,7 +207,7 @@ export function sanitizeCladdingConfig(raw) {
     winderLegalMinGoingMm: num(c.winderLegalMinGoingMm, d.winderLegalMinGoingMm, 0, 500),
     winderMinDuszaMm: num(c.winderMinDuszaMm, d.winderMinDuszaMm, 0, 500),
     winderGoingToleranceMm: num(c.winderGoingToleranceMm, d.winderGoingToleranceMm, 0, 200),
-    walls: sanitizeWalls(c.walls),
+    walls: sanitizeWallTypes(c.walls),
     wallThicknessMm: num(c.wallThicknessMm, d.wallThicknessMm, 50, 600),
     osbThicknessMm: num(c.osbThicknessMm, d.osbThicknessMm, 0, 60),
     floorboardThicknessMm: num(c.floorboardThicknessMm, d.floorboardThicknessMm, 5, 40),

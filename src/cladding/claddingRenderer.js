@@ -91,6 +91,8 @@ function wood() {
 const riserMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02 });
 const osbMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a86a, roughness: 0.9, metalness: 0 });
 const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e5de, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+// a wall carrying the stair (under it, between its flights): solid masonry
+const concreteWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 
 const railingWood = () => wood();
@@ -101,6 +103,7 @@ const grooveMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughne
 function planeBoardGeometry(board) {
   const shape = new THREE.Shape(board.polygon.map((p) => new THREE.Vector2(p.s, p.z)));
   const g = new THREE.ExtrudeGeometry(shape, { depth: board.thicknessMm, bevelEnabled: false });
+  // (a mirrored basis turns the faces inside out — the materials are two-sided)
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(board.dir.x, 0, -board.dir.y), new THREE.Vector3(0, 1, 0), new THREE.Vector3(board.normal.x, 0, -board.normal.y));
   m.setPosition(board.origin.x, 0, -board.origin.y);
   g.applyMatrix4(m);
@@ -263,6 +266,13 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   for (const w of built.walls || []) {
     const mesh = new THREE.Mesh(prismGeometry(w.outline, w.bottomZ, w.topZ), wallMaterial);
     mesh.name = `Wall-${w.id}`;
+    mesh.renderOrder = 2;
+    room.add(mesh);
+  }
+  // the walls following the stair (sideWallsModel.js): above the steps, under the flight, between flights set apart
+  for (const w of built.sideWalls || []) {
+    const mesh = new THREE.Mesh(planeBoardGeometry(w), w.kind === 'wall-under' || w.kind === 'wall-gap' ? concreteWallMaterial : wallMaterial);
+    mesh.name = `${w.kind}-${w.id}`;
     mesh.renderOrder = 2;
     room.add(mesh);
   }

@@ -42,9 +42,17 @@ export function edgeHasRakedCover(element, edge, config) {
   return !!key && config.coverStringerTop === 'raked' && !!config.coverStringers?.[key.flight]?.[key.side];
 }
 
+/** The wall on a (flight, side): null, or {type: full | low | under | gap, …} (true = full, the older form). */
+export function wallOn(key, config) {
+  const w = key ? config.walls?.[key.flight]?.[key.side] : null;
+  if (!w) return null;
+  return w === true ? { type: 'full' } : w;
+}
+
+/** Does a wall stand along this edge, beside the stair (no side nosing, the skirting there)? */
 export function edgeHasWall(element, edge, config) {
-  const key = edgeWallKey(element, edge);
-  return !!key && !!config.walls?.[key.flight]?.[key.side];
+  const w = wallOn(edgeWallKey(element, edge), config);
+  return !!w && w.type !== 'under';
 }
 
 /** Every walled edge as a wall piece: its face on the concrete's edge, `wallThicknessMm` outward, floor to slab. */
@@ -52,7 +60,7 @@ export function buildWalls(concrete, config) {
   const pieces = [];
   for (const e of concrete.elements) {
     for (const edge of e.edges) {
-      if (!edgeHasWall(e, edge, config)) continue;
+      if (wallOn(edgeWallKey(e, edge), config)?.type !== 'full') continue;
       const n = outward(edge);
       const T = config.wallThicknessMm;
       pieces.push({ id: `wall-${e.index}-${pieces.length}`, key: edgeWallKey(e, edge), outline: [edge.a, edge.b, add(edge.b, n, T), add(edge.a, n, T)], bottomZ: 0, topZ: concrete.exit.rawSlabTopZ });

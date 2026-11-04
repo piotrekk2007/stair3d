@@ -47,6 +47,17 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     const at = (s, off) => ({ x: b.origin.x + b.dir.x * s + b.normal.x * off, y: b.origin.y + b.dir.y * s + b.normal.y * off });
     return `<polygon class="clad-board" points="${pts([at(s0, 0), at(s1, 0), at(s1, b.thicknessMm), at(s0, b.thicknessMm)])}" fill="${colour}" stroke="#5a3d24" stroke-width="0.8" pointer-events="none" ${HAIR}/>`;
   };
+  // the walls following the stair (sideWallsModel.js): their footprint — above the steps / between flights dark, under
+  // the flight dashed (it is below)
+  const sideWallsXML = (built.sideWalls || [])
+    .map((w) => {
+      const s0 = Math.min(...w.polygon.map((p) => p.s));
+      const s1 = Math.max(...w.polygon.map((p) => p.s));
+      const at = (s, off) => ({ x: w.origin.x + w.dir.x * s + w.normal.x * off, y: w.origin.y + w.dir.y * s + w.normal.y * off });
+      const under = w.kind === 'wall-under';
+      return `<polygon class="clad-side-wall" points="${pts([at(s0, 0), at(s1, 0), at(s1, w.thicknessMm), at(s0, w.thicknessMm)])}" fill="${under ? 'none' : '#6f6a62'}" stroke="#4d4943" stroke-width="${under ? 1.2 : 0.8}" ${under ? 'stroke-dasharray="6,4"' : ''} pointer-events="none" ${HAIR}/>`;
+    })
+    .join('');
   const finishXML = [...(built.finish?.skirting || []).map((b) => boardLine(b, '#b07a3a')), ...(built.finish?.coverStringers || []).map((b) => boardLine(b, '#8a5a34'))].join('');
   const railingXML = (built.balustrade?.sections || [])
     .map((s) => {
@@ -100,5 +111,5 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
 }

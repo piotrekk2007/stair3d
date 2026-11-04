@@ -282,10 +282,26 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   their names / on-off, extra rows, notes, totals, „📄 Drukuj ofertę”, „🧾 Drukuj kosztorys”, the company data).
 - Tests: `__tests__/offer.test.js`.
 
+## Walls following the stair (user request 2026-11-04, as built)
+
+- `walls[f][side]` is a TYPE (true in older files = full; `schema.js sanitizeWallTypes`): `full` (beside the stair,
+  floor to the slab — surroundingsModel.js `buildWalls`, unchanged), `low` + `heightAboveMm` (beside the stair, its top
+  raked that far over the noses, 0 = up to the slab), `under` (under the flight's edge, its thickness under the stair,
+  floor to the concrete's soffit — the side above stays OPEN: nosing, cover stringer, balustrade allowed). `wallOn(key)`;
+  `edgeHasWall` = full / low / gap (no side nosing, the skirting there).
+- The wall between flights set apart: a U landing with `gapMm > 0` and `gapWall` (+ `gapWallTop` slab / nose,
+  `gapWallAboveMm`): the landing element records its `gap` (`concreteModel.js`), `sideWallsModel.js withGapWalls` walls
+  both flights' facing sides (`{type: 'gap'}` — the config the cladding, skirting and balustrade read; the user's own
+  wall on a side wins), `buildSideWalls` → `built.sideWalls` (the low / under walls from the side runs, the gap wall
+  filling the gap from the flights' floor end to the landing, up to the slab or the higher flight's raked noses + the
+  height). 3D (the board geometry, a solid masonry colour for the carrying ones), plan (dark; under the flight dashed).
+- Panel: „Ściany przy biegach” — a type per flight side (+ the height of a wall above the steps); the U landing's row —
+  „ściana między biegami”, do stropu / nad noskami o … mm.
+- Tests: `__tests__/sideWalls.test.js`.
+
 ## Gaps listed by the user (2026-11-04) — the next batches
 
-1. Walls: a wall between flights set apart, a wall under the steps and over them (as the self-supporting concrete
-   flight's `concreteWallSide / concreteWallAbove`).
+1. (done) Walls between / above / under the flights.
 2. Balustrade: the self-supporting types (glass, round balusters), adding / removing posts, editing the antresola's
    edges and the opening.
 3. Colours of the treads, balusters, skirting; LED lighting.
