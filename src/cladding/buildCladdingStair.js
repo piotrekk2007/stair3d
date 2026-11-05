@@ -29,6 +29,6 @@ export function buildCladdingStair(rawConfig) {
   built.balustrade = buildBalustrade(built, cfg);
   // the LED lighting (under the noses, in the skirting, under the handrail)
   built.led = buildCladdingLed(built, cfg);
-  built.diagnostics = [...cladding.diagnostics];
+  built.diagnostics = [...cladding.diagnostics, ...built.balustrade.diagnostics];
   return built;
 }

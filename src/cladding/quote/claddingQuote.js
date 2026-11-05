@@ -119,6 +119,13 @@ export function buildCladdingQuote(built, settings) {
     }
     if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
   }
+  // the wall handrail: the handrail per mb, the brackets per piece (the shared list), its fitting per mb
+  for (const w of built.balustrade?.wallRails || []) {
+    const where = `bieg ${w.key.flight + 1}, ${w.key.side === 'left' ? 'lewa' : 'prawa'}`;
+    const mb = round2(w.lengthMm / 1000);
+    lines.push({ id: `${w.id}-handrail`, group: 'Balustrada', name: `Poręcz przyścienna — ${where}${config.wallRailReturn ? ' (końce do ściany)' : ''}`, qty: mb, unit: 'mb', dims: `${Math.round(w.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: labour('wall-rail', mb) });
+    lines.push({ id: `${w.id}-brackets`, group: 'Balustrada', name: `Uchwyty poręczy przyściennej — ${where}`, qty: w.brackets.length, unit: 'szt.', dims: `co maks. ${config.wallRailBracketSpacingMm} mm`, material: perUnit(priceOf(settings, 'railing-wall-bracket'), w.brackets.length, 'szt.'), labour: null });
+  }
   // the LED lighting: the strip and its profile per mb (the shared list), the power supply from the table by power
   // (the smallest priced one that is enough, else n × the largest — as takeoff/boardPricing.js), the fitting per mb
   const led = built.led;

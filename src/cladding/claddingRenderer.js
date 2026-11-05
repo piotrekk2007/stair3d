@@ -307,6 +307,21 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
       }
     }
   }
+  // the wall handrails (balustradeModel.js wallRail): the handrail, each bracket an arm off the wall under it + a stub
+  // up to its underside and a round plate on the wall
+  for (const w of built.balustrade?.wallRails || []) {
+    for (let k = 1; k < w.handrail.length; k++) railing.add(Object.assign(beam(w.handrail[k - 1], w.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing), { name: `WallRail-${w.id}-${k}` }));
+    for (const b of w.brackets) {
+      const armZ = b.z - 30;
+      railing.add(Object.assign(beam({ ...b.wall, z: armZ }, { ...b.rail, z: armZ }, 12, 12, steelFixing), { name: 'WallRailBracket' }));
+      railing.add(Object.assign(column(b.rail, armZ - 6, b.z, 12, steelFixing), { name: 'WallRailBracket' }));
+      const plate = new THREE.CylinderGeometry(30, 30, 8, 20);
+      plate.rotateZ(Math.PI / 2);
+      plate.rotateY(Math.atan2(w.outward.y, w.outward.x));
+      plate.translate(b.wall.x - w.outward.x * 4, armZ, -(b.wall.y - w.outward.y * 4));
+      railing.add(Object.assign(new THREE.Mesh(plate, steelFixing), { name: 'WallRailBracket' }));
+    }
+  }
   root.add(railing);
   // the LED lighting (ledModel.js): a thin glowing band along every strip
   const leds = new THREE.Group();

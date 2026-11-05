@@ -89,6 +89,14 @@ export function createDefaultCladdingConfig() {
     coverStringerThicknessMm: 20,
     // the balustrade: per flight and open side; the antresola round the opening
     railingSides: {},
+    // the wall handrail on brackets along a walled side (balustradeModel.js wallRail, user request 2026-11-05):
+    // per flight and walled side; clearance and bracket spacing as the self-supporting railingWallRail* (ASSUMPTION)
+    wallRails: {},
+    wallRailHeightMm: 900, // its top above the noses (DO WERYFIKACJI)
+    wallRailClearanceMm: 50, // free space between the wall and the handrail
+    wallRailBracketSpacingMm: 1000, // at most between brackets
+    wallRailBracketEndMm: 150, // the outer brackets in from the ends
+    wallRailReturn: false, // both ends turned into the wall
     railingAntresola: false,
     railingHeightMm: 900, // the handrail's top above the noses (PL-LEGAL-H-01 0.9 m — DO WERYFIKACJI)
     railingAntresolaHeightMm: 1100, // above the floor (WT § 298 — DO WERYFIKACJI)
@@ -271,6 +279,12 @@ export function sanitizeCladdingConfig(raw) {
     coverStringerAboveMm: num(c.coverStringerAboveMm, d.coverStringerAboveMm, 0, 300),
     coverStringerThicknessMm: num(c.coverStringerThicknessMm, d.coverStringerThicknessMm, 10, 80),
     railingSides: sanitizeWalls(c.railingSides),
+    wallRails: sanitizeWalls(c.wallRails),
+    wallRailHeightMm: num(c.wallRailHeightMm, d.wallRailHeightMm, 600, 1500),
+    wallRailClearanceMm: num(c.wallRailClearanceMm, d.wallRailClearanceMm, 20, 200),
+    wallRailBracketSpacingMm: num(c.wallRailBracketSpacingMm, d.wallRailBracketSpacingMm, 300, 2000),
+    wallRailBracketEndMm: num(c.wallRailBracketEndMm, d.wallRailBracketEndMm, 0, 500),
+    wallRailReturn: !!c.wallRailReturn,
     railingAntresola: !!c.railingAntresola,
     railingHeightMm: num(c.railingHeightMm, d.railingHeightMm, 600, 1500),
     railingAntresolaHeightMm: num(c.railingAntresolaHeightMm, d.railingAntresolaHeightMm, 600, 1500),

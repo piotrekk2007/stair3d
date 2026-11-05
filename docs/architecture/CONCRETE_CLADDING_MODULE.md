@@ -347,6 +347,22 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
 3. (done) Colours and LED lighting — below.
 4. (done) Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ — below.
 
+## The wall handrail (user request 2026-11-05, as built)
+
+`wallRails[flight][side]` (the column „poręcz przyścienna” in „Listwy, wangi obiciowe, balustrada” — only on a walled
+side, the balustrade only on an open one) → `balustradeModel.js wallRail` → `built.balustrade.wallRails[]` `{id
+'wall-rail-<flight>-<side>', key, handrail [{x, y, z}] (its centre line), brackets [{s, wall, rail, z}], lengthMm,
+treadCount, outward}`. Its top `wallRailHeightMm` (900, DO WERYFIKACJI) over every nose, level over a landing (the
+balustrade's own rule, `topOver`); its axis `wallRailClearanceMm` (50, the self-supporting
+`railingWallRailClearanceMm`) + half the handrail's width off the wall's face (= the concrete's side edge), the whole
+side long; `wallRailReturn` turns both ends into the wall. Brackets evenly ≤ `wallRailBracketSpacingMm` (1000, as the
+self-supporting) apart, the outer ones `wallRailBracketEndMm` (150, ASSUMPTION) in from the ends, at least two. A wall
+„above the steps” lower than the handrail + 50 mm carries none — WARNING `CLAD-WALL-RAIL-LOW`. 3D (the handrail, each
+bracket an arm + stub + wall plate, in the `Railing` group), plan (the line + a tick per bracket), LED under the handrail
+(`ledHandrailEnabled`), the quote („Poręcz przyścienna” per mb — `railing-handrail` —, „Uchwyty” per piece —
+`railing-wall-bracket` — from the shared list, labour `wall-rail` per mb). Folder „Poręcz przyścienna”. Tests:
+`__tests__/wallRail.test.js`.
+
 ## Export (user request 2026-11-04, as built 2026-11-05)
 
 Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the project).

@@ -29,6 +29,7 @@ export const DEFAULT_LABOUR = Object.freeze([
   { id: 'cover-stringer', label: 'Montaż wangi obiciowej', unit: 'mb', rate: 0 },
   { id: 'post', label: 'Montaż słupa ozdobnego', unit: 'szt', rate: 0 },
   { id: 'railing-stairs', label: 'Montaż balustrady na schodach (za stopień)', unit: 'szt', rate: 0 },
+  { id: 'wall-rail', label: 'Montaż poręczy przyściennej', unit: 'mb', rate: 0 },
   { id: 'railing-antresola', label: 'Montaż balustrady na antresoli', unit: 'mb', rate: 0 },
   { id: 'led', label: 'Montaż oświetlenia LED (profil + taśma)', unit: 'mb', rate: 0 },
   { id: 'measure', label: 'Pomiar', unit: 'ryczałt', rate: 0 },

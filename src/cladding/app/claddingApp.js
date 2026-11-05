@@ -330,6 +330,13 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
   rail.close();
+  const wallRailF = gui.addFolder('Poręcz przyścienna');
+  live(wallRailF.add(proxy, 'wallRailHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
+  live(wallRailF.add(proxy, 'wallRailClearanceMm', 20, 200, 1).name('Odstęp od ściany [mm]'));
+  live(wallRailF.add(proxy, 'wallRailBracketSpacingMm', 300, 2000, 10).name('Uchwyty co maks. [mm]'));
+  live(wallRailF.add(proxy, 'wallRailBracketEndMm', 0, 500, 5).name('Skrajny uchwyt od końca [mm]'));
+  live(wallRailF.add(proxy, 'wallRailReturn').name('Końce zawinięte do ściany'));
+  wallRailF.close();
   const glassF = gui.addFolder('Szkło balustrady');
   live(glassF.add(proxy, 'glassTint', Object.fromEntries(Object.entries(GLASS_TINTS).map(([k, t]) => [t.label, k]))).name('Kolor szkła'));
   live(glassF.add(proxy, 'glassThicknessMm', 6, 40, 0.5).name('Grubość [mm]'));
@@ -722,11 +729,13 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderSides() {
     const n = state.built?.concrete.flights ?? 1;
     const c = state.config;
-    const box = (field, f, side) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${c.walls?.[f]?.[side] && c.walls[f][side].type !== 'under' ? 'disabled title="przy ścianie"' : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
+    const walled = (f, side) => !!c.walls?.[f]?.[side] && c.walls[f][side].type !== 'under';
+    // (an open side: cover stringer / balustrade; a walled side: the wall handrail)
+    const box = (field, f, side, atWall = false) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${walled(f, side) !== atWall ? `disabled title="${atWall ? 'tylko przy ścianie' : 'przy ścianie'}"` : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
     sidesEl.innerHTML =
-      `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th></tr></thead><tbody>` +
-      Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td></tr>`).join('') +
-      `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”).</div>`;
+      `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th><th>poręcz przyścienna</th></tr></thead><tbody>` +
+      Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td><td>${box('wallRails', f, 'left', true)} ${box('wallRails', f, 'right', true)}</td></tr>`).join('') +
+      `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”) i poręcz przyścienna na uchwytach (ustawienia w „Poręcz przyścienna”).</div>`;
   }
   sidesEl.addEventListener('change', (ev) => {
     const field = ev.target.dataset.sideField;

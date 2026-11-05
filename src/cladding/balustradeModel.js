@@ -11,9 +11,12 @@
 //     ≤ `railingMaxClearMm` elsewhere), `glass-posts` (one pane per span between posts, clamps on the posts) or
 //     `glass-side` (panes on the concrete's / slab's side face on point fixings, the handrail on the glass);
 //   - the HANDRAIL from end to end.
+// A WALL HANDRAIL (`wallRails`, on a walled side) is no section: a handrail on brackets off the wall (`wallRails[]`).
 // Glass sizes ASSUMPTION / DO WERYFIKACJI (as the self-supporting railingGlass.js numbers). Pure.
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
+import { wallOn } from './surroundingsModel.js';
+import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
@@ -35,16 +38,21 @@ function zAt(line, s) {
 
 // --- the sections' lines ---------------------------------------------------------------------------------------
 
-// a stair side: one straight piece along the flight (s = the run's s), the ground = the tread under s
-function stairLine(run, config) {
-  const { pieces } = run;
-  const H = config.railingHeightMm;
+// a side's handrail top along s: `H` over every nose (a tread's front), level over a landing
+function topOver(pieces, H) {
   const top = [];
   for (const p of pieces) {
     top.push({ s: p.s0, z: p.top + H });
     if (p.flat) top.push({ s: p.s1, z: p.top + H });
   }
   top.push({ s: pieces[pieces.length - 1].s1, z: pieces[pieces.length - 1].top + H });
+  return top;
+}
+
+// a stair side: one straight piece along the flight (s = the run's s), the ground = the tread under s
+function stairLine(run, config) {
+  const { pieces } = run;
+  const top = topOver(pieces, config.railingHeightMm);
   const s0 = pieces[0].s0;
   const s1 = pieces[pieces.length - 1].s1;
   const glassSide = config.railingInfill === 'glass-side';
@@ -300,15 +308,59 @@ function section(line, config) {
   };
 }
 
-/** @returns {{sections: object[]}} */
+// --- the wall handrail (user request 2026-11-05) ----------------------------------------------------------------
+
+/**
+ * A handrail on brackets along a walled side (`wallRails[flight][side]`): its top `wallRailHeightMm` over the noses
+ * (level over a landing), its axis `wallRailClearanceMm` + half its width off the wall's face (= the concrete's side
+ * edge), over the side's whole length; optionally returned into the wall at both ends (`wallRailReturn`). Brackets
+ * evenly ≤ `wallRailBracketSpacingMm` apart, the outer ones `wallRailBracketEndMm` in from the ends (at least two).
+ * A wall "above the steps" lower than the handrail (+ 50 mm for the bracket) carries none — WARNING CLAD-WALL-RAIL-LOW.
+ */
+function wallRail(run, config) {
+  const { pieces } = run;
+  const id = `wall-rail-${run.key.flight}-${run.key.side}`;
+  const top = topOver(pieces, config.wallRailHeightMm);
+  const off = -(config.wallRailClearanceMm + config.handrailWidthMm / 2);
+  const s0 = pieces[0].s0;
+  const s1 = pieces[pieces.length - 1].s1;
+  const zc = (s) => zAt(top, s) - config.handrailHeightMm / 2;
+  const ss = [s0, ...top.map((q) => q.s).filter((s) => s > s0 + 1e-6 && s < s1 - 1e-6), s1];
+  let handrail = ss.map((s) => ({ ...runPoint(run, s, off), z: zc(s) }));
+  if (config.wallRailReturn) handrail = [{ ...runPoint(run, s0, 0), z: zc(s0) }, ...handrail, { ...runPoint(run, s1, 0), z: zc(s1) }];
+  const a = s0 + config.wallRailBracketEndMm;
+  const b = s1 - config.wallRailBracketEndMm;
+  const count = Math.max(2, Math.ceil((b - a) / config.wallRailBracketSpacingMm - 1e-9) + 1);
+  const spots = b - a <= 1 ? [(s0 + s1) / 2] : Array.from({ length: count }, (_, k) => a + ((b - a) * k) / (count - 1));
+  const brackets = spots.map((s) => ({ s, wall: runPoint(run, s, 0), rail: runPoint(run, s, off), z: zc(s) - config.handrailHeightMm / 2 }));
+  let lengthMm = 0;
+  for (let k = 1; k < handrail.length; k++) lengthMm += Math.hypot(handrail[k].x - handrail[k - 1].x, handrail[k].y - handrail[k - 1].y, handrail[k].z - handrail[k - 1].z);
+  return { id, kind: 'wall', key: run.key, handrail, brackets, lengthMm, treadCount: pieces.filter((p) => !p.flat).length, outward: runOutward(run) };
+}
+
+/** @returns {{sections: object[], wallRails: object[], diagnostics: object[]}} */
 export function buildBalustrade(built, config) {
   const lines = [];
+  const wallRails = [];
+  const diagnostics = [];
   for (const run of buildSideRuns(built.concrete, config)) {
-    if (run.walled || !config.railingSides?.[run.key.flight]?.[run.key.side] || !run.pieces.length) continue;
+    if (!run.pieces.length) continue;
+    if (run.walled) {
+      if (!config.wallRails?.[run.key.flight]?.[run.key.side]) continue;
+      const w = wallOn(run.key, config);
+      const need = config.wallRailHeightMm + 50;
+      if (w?.type === 'low' && w.heightAboveMm > 0 && w.heightAboveMm < need) {
+        diagnostics.push(createDiagnostic({ ruleId: 'CLAD-WALL-RAIL-LOW', severity: 'WARNING', elementType: 'railing', elementId: `wall-rail-${run.key.flight}-${run.key.side}`, parameter: 'heightAboveMm', value: w.heightAboveMm, expected: `>= ${need}`, unit: 'mm', message: `Bieg ${run.key.flight + 1}, strona ${run.key.side === 'left' ? 'lewa' : 'prawa'}: ściana ma tylko ${w.heightAboveMm} mm nad noskami — poręcz przyścienna (${config.wallRailHeightMm} mm + uchwyt) się na niej nie zmieści. Podnieś ścianę albo daj balustradę.` }));
+        continue;
+      }
+      wallRails.push(wallRail(run, config));
+      continue;
+    }
+    if (!config.railingSides?.[run.key.flight]?.[run.key.side]) continue;
     lines.push(stairLine(run, config));
   }
   if (config.railingAntresola) lines.push(...antresolaLines(built, config));
-  return { sections: lines.map((l) => section(l, config)) };
+  return { sections: lines.map((l) => section(l, config)), wallRails, diagnostics };
 }
 
 /** The nearest point of a section's line to a plan point → its s (for adding a post on the plan). */

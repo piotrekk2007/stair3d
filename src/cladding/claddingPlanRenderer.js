@@ -97,6 +97,10 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return line + rail + bal + glass + posts + ghosts;
     })
     .join('');
+  // the wall handrails: the handrail line and a tick per bracket to the wall
+  const wallRailXML = (built.balustrade?.wallRails || [])
+    .map((w) => `<polyline class="clad-wall-rail" points="${pts(w.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>` + w.brackets.map((b) => `<line x1="${fmt(b.wall.x)}" y1="${fmt(-b.wall.y)}" x2="${fmt(b.rail.x)}" y2="${fmt(-b.rail.y)}" stroke="#6b7177" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join(''))
+    .join('');
   // the LED strips (ledModel.js): a warm line
   const ledXML = (built.led?.strips || []).map((s) => `<polyline class="clad-led" points="${pts(s.points)}" fill="none" stroke="#f0b400" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
@@ -143,5 +147,5 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
 }

@@ -69,7 +69,7 @@ export function buildCladdingLed(built, config) {
     }
   }
   if (config.ledHandrailEnabled) {
-    for (const s of built.balustrade?.sections || []) {
+    for (const s of [...(built.balustrade?.sections || []), ...(built.balustrade?.wallRails || [])]) {
       const pts = trim(s.handrail.map((p) => ({ x: p.x, y: p.y, z: p.z - config.handrailHeightMm / 2 - 1 })), m);
       if (pts) strips.push({ id: `led-${s.id}`, kind: 'handrail', points: pts, lengthMm: len3(pts) });
     }
