@@ -366,6 +366,20 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## The production order (user request 2026-11-05, as built)
+
+„🏭 Zamówienie PDF” (`export/productionOrder.js`, printed by the shared `app/printHtml.js`): the blanks as the workshop
+writes them, large type (16–21 pt). Per group a heading = the element + its edges in the workshop's words
+(„Stopnie proste kr. R6 + kanał na LED + wpust pod podstopnicę 10 mm”; „fazka n”, „półwałek”, „kr. proste”) — the treads
+and the trim „fajka” with a SECTION DRAWING of the profile (`profileRings`: the front edge, the LED channel, the riser's
+groove / a carpet riser's tongue groove with their distances from the front; the trim's nose + board) —, then the lines
+„grubość x szerokość x długość - typ - n szt.” (identical pieces counted together, their codes under the line; the type
+L / P / CZ / PL — a riser takes its tread's). Groups: straight / starter / winder treads, landings, risers („Podstopnie
+dąb — za stopnicą, wpust …” / „dywanowe, na obce pióro”), noses, trims, skirting (stepped pieces with their mitres and
+notches), cover stringers, posts (cap, grooves), balusters (rounded up to 10 mm), handrails (wall handrails with their
+brackets), loose tongues. The both-sides tread type is now „PL” (the workshop's word, was LP). Tests:
+`__tests__/productionOrder.test.js`.
+
 ## The opening's trim „fajka”; the posts' tops (user request 2026-11-05, as built)
 
 `openingTrimModel.js buildOpeningTrim` → `built.openingTrim.pieces` (the module's own, as the self-supporting
@@ -443,9 +457,9 @@ top — `joinedStart`). The renderer shears the end's vertices by k × their dep
 ## The tread's type L / P / CZ (user request 2026-11-05, as built)
 
 Every tread / landing gets `sideType` from its side nosings (`claddingModel.js treadSideType`, `TREAD_SIDE_TYPES`):
-L = nosed on the left (walking up), P = on the right, CZ (czołowy) = between walls — no side nosing, LP = both sides
+L = nosed on the left (walking up), P = on the right, CZ (czołowy) = between walls — no side nosing, PL = both sides
 free. Automatic from the walls and the panel's „Nosek boczny z lewej / prawej”; the step editor's „Typ stopnia (nosek
-boczny)” sets it per tread (auto / L / P / CZ / LP = the own `nosingLeft` / `nosingRight`). Shown on the plan (under
+boczny)” sets it per tread (auto / L / P / CZ / PL = the own `nosingLeft` / `nosingRight`). Shown on the plan (under
 the number), in the heights table (column „typ”), in the quote's tread names, the DXF / cut list (name „Stopień n P” +
 a note). Tests: `__tests__/cornerType.test.js`.
 

@@ -33,6 +33,7 @@ import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../histo
 import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
 import { buildCutList, cutListToCSV } from '../export/cutList.js';
+import { buildProductionOrder, productionOrderHTML } from '../export/productionOrder.js';
 import { claddingClientScene, claddingClientFacts } from '../export/clientModel.js';
 import { sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML } from '../../export/clientModelExport.js';
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
@@ -65,6 +66,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <button type="button" data-act="dxf" title="Wszystkie elementy okładziny płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
         <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnice / Listwy i wangi / Balustrada / Beton">⬇ DAE</button>
         <button type="button" data-act="cutlist" title="Lista formatek dla warsztatu (CSV dla Excela): kod, element, ilość, wymiary formatki, grubość, materiał, uwagi — te same kody co w DXF">⬇ Formatki CSV</button>
+        <button type="button" data-act="order" title="Zamówienie na produkcję (PDF): elementy z krawędziami i rysunkami profili, wymiary grubość x szerokość x długość, typ L / P / CZ / PL, ilości — duża czcionka">🏭 Zamówienie PDF</button>
         <button type="button" data-act="obj" title="Model 3D okładziny z betonem (OBJ, mm — przy imporcie ustaw milimetry); grupy jak w DAE">⬇ OBJ</button>
         <span class="clad-meta"></span>
         <span class="clad-sep"></span>
@@ -949,10 +951,10 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${el.kind === 'step' ? starterBlock(own.starter) : ''}
       <div class="clad-actions"><button type="button" data-reset>Przywróć wymiary z grupy</button></div>`;
   }
-  // the tread's type by its side nosings: auto (from the walls and the panel) or the user's own L / P / CZ / LP
+  // the tread's type by its side nosings: auto (from the walls and the panel) or the user's own L / P / CZ / PL
   function sideTypeSelect(own, current) {
     const set = typeof own.nosingLeft === 'boolean' || typeof own.nosingRight === 'boolean';
-    const chosen = set ? (own.nosingLeft && own.nosingRight ? 'LP' : own.nosingLeft ? 'L' : own.nosingRight ? 'P' : 'CZ') : '';
+    const chosen = set ? (own.nosingLeft && own.nosingRight ? 'PL' : own.nosingLeft ? 'L' : own.nosingRight ? 'P' : 'CZ') : '';
     return `<label class="clad-field">Typ stopnia (nosek boczny) <select data-o="sideType"><option value="" ${!set ? 'selected' : ''}>auto (wg ścian)${!set && current ? ` — teraz ${current}` : ''}</option>${Object.entries(TREAD_SIDE_TYPES).map(([k, l]) => `<option value="${k}" ${chosen === k ? 'selected' : ''}>${k} — ${l}</option>`).join('')}</select></label>`;
   }
   // a starter step: widened past the concrete on its sides, rounded, bowed (starterProfile.js)
@@ -984,12 +986,12 @@ export function mountCladdingApp(rootEl, host = {}) {
       const o = { ...(c.stepOverrides[i] || {}) };
       const v = ev.target.value;
       if (f === 'sideType') {
-        // (auto = no own side nosings; L / P / CZ / LP = both set)
+        // (auto = no own side nosings; L / P / CZ / PL = both set)
         delete o.nosingLeft;
         delete o.nosingRight;
         if (v) {
-          o.nosingLeft = v === 'L' || v === 'LP';
-          o.nosingRight = v === 'P' || v === 'LP';
+          o.nosingLeft = v === 'L' || v === 'PL';
+          o.nosingRight = v === 'P' || v === 'PL';
         }
       } else if (v === '') delete o[f];
       else if (f === 'nosingLeft' || f === 'nosingRight' || f === 'riser') o[f] = v === '1';
@@ -1016,7 +1018,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         return `<tr class="${warned.has(id) ? 'warn' : ''}${h.index === state.selected ? ' sel' : ''}" data-row="${h.kind === 'exit' ? '' : h.index}"><td>${escapeHtml(h.kind === 'exit' ? 'wyjście' : h.kind === 'landing' ? `P${h.index + 1}` : String(h.index + 1))}</td><td>${r0(h.concreteRiseMm)}</td><td><b>${r0(h.finishedRiseMm)}</b></td><td>${h.goingMm ? r0(h.goingMm) : ''}</td><td>${blondel}</td><td title="${escapeHtml(TREAD_SIDE_TYPES[typeOf.get(h.index)] || '')}">${h.kind === 'exit' ? '' : typeOf.get(h.index) || ''}</td></tr>`;
       })
       .join('');
-    $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th><th title="Nosek boczny: L — z lewej, P — z prawej, CZ — czołowy (między ścianami, bez noska bocznego), LP — z obu stron">typ</th></tr></thead><tbody>${rows}</tbody></table>
+    $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th><th title="Nosek boczny: L — z lewej, P — z prawej, CZ — czołowy (między ścianami, bez noska bocznego), PL — z obu stron">typ</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="clad-hint">Wysokość gotowa = od posadzki / stopnia niżej do wierzchu okładziny [mm]. Wysokość całkowita: ${r0(state.built.totalRise)} mm.</div>`;
     const ref = state.floor?.reference;
     const diags = [...state.built.diagnostics, ...(ref?.diagnostics || []), ...(ref?.error ? [{ severity: 'WARNING', message: ref.error }] : [])];
@@ -1490,6 +1492,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (!dxf) return meta('Brak elementów do eksportu');
     downloadTextFile(dxf, `${fileBase()}-okladzina.dxf`, 'application/dxf');
   });
+  $('[data-act="order"]').addEventListener('click', () => printHtml(productionOrderHTML(buildProductionOrder(state.built, state.quote), { projectName: state.projectName })));
   $('[data-act="cutlist"]').addEventListener('click', () => {
     const bp = state.quote.boardPricing || {};
     downloadTextFile(cutListToCSV(buildCutList(state.built, { species: bp.species, cls: bp.cls }), { projectName: state.projectName }), `${fileBase()}-formatki.csv`, 'text/csv;charset=utf-8');

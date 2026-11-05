@@ -85,7 +85,7 @@ export function claddingPieces(built) {
     }
     // the milled edges (front, nosed sides) on their own layer when the tread is profiled
     const edgeLayers = t.profile?.kind && t.profile.kind !== 'square' ? (t.exposed || []).map((x) => (x ? 'PROFILE' : null)) : null;
-    const piece = { row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1} ${t.sideType}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes: [...notes, { L: 'nosek boczny z lewej', P: 'nosek boczny z prawej', CZ: 'czołowy', LP: 'noski boczne z obu stron' }[t.sideType]] };
+    const piece = { row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1} ${t.sideType}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes: [...notes, { L: 'nosek boczny z lewej', P: 'nosek boczny z prawej', CZ: 'czołowy', PL: 'noski boczne z obu stron' }[t.sideType]] };
     piece.notes.push(...grooveParts(piece, t, cladding.risers, t.index, built.config, concrete.elements.length - 1));
     pieces.push(piece);
   }

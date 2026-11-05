@@ -67,14 +67,14 @@ test('the corner cut in 3D (the end sheared), on the plan and noted in the DXF; 
   assert.equal(straight.finish.skirting[0].corners, undefined);
 });
 
-test('the tread type: L / P by the side nosing, CZ between walls, LP both free; the user\'s own; shown everywhere', () => {
+test('the tread type: L / P by the side nosing, CZ between walls, PL both free; the user\'s own; shown everywhere', () => {
   const cfg = (patch) => ({ ...createDefaultCladdingConfig(), sequence: [{ kind: 'steps', count: 3, riseMm: 180, goingMm: 270, widthMm: 1000 }], sideNosingLeft: false, sideNosingRight: true, ...patch });
   assert.deepEqual(buildCladdingStair(cfg({})).cladding.treads.map((t) => t.sideType), ['P', 'P', 'P']);
   assert.deepEqual(buildCladdingStair(cfg({ sideNosingLeft: true, sideNosingRight: false })).cladding.treads.map((t) => t.sideType), ['L', 'L', 'L']);
-  assert.deepEqual(buildCladdingStair(cfg({ sideNosingLeft: true })).cladding.treads.map((t) => t.sideType), ['LP', 'LP', 'LP']);
+  assert.deepEqual(buildCladdingStair(cfg({ sideNosingLeft: true })).cladding.treads.map((t) => t.sideType), ['PL', 'PL', 'PL']);
   // between walls: czołowy
   assert.deepEqual(buildCladdingStair(cfg({ sideNosingLeft: true, walls: { 0: { left: true, right: true } } })).cladding.treads.map((t) => t.sideType), ['CZ', 'CZ', 'CZ']);
-  // the user's own on one tread (the step editor's L / P / CZ / LP = both side nosings set)
+  // the user's own on one tread (the step editor's L / P / CZ / PL = both side nosings set)
   const own = buildCladdingStair(cfg({ stepOverrides: { 1: { nosingLeft: false, nosingRight: false } } }));
   assert.deepEqual(own.cladding.treads.map((t) => t.sideType), ['P', 'CZ', 'P']);
   assert.equal(own.cladding.treads[1].nosing.rightMm, 0, 'no side nosing on the CZ tread');

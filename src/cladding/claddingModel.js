@@ -31,14 +31,14 @@ export function finishThicknessMm(element, config) {
 }
 
 // a tread's type by its side nosings (user request 2026-11-05): L = nosed on the left (walking up), P = on the right,
-// CZ (czołowy) = between walls — no side nosing, LP = both sides free
+// CZ (czołowy) = between walls — no side nosing, PL = both sides free
 export const TREAD_SIDE_TYPES = Object.freeze({
   L: 'lewy — nosek boczny z lewej',
   P: 'prawy — nosek boczny z prawej',
   CZ: 'czołowy — między ścianami, bez noska bocznego',
-  LP: 'obustronny — nosek boczny z obu stron',
+  PL: 'obustronny — nosek boczny z obu stron',
 });
-export const treadSideType = (nosing) => (nosing.leftMm > 0 && nosing.rightMm > 0 ? 'LP' : nosing.leftMm > 0 ? 'L' : nosing.rightMm > 0 ? 'P' : 'CZ');
+export const treadSideType = (nosing) => (nosing.leftMm > 0 && nosing.rightMm > 0 ? 'PL' : nosing.leftMm > 0 ? 'L' : nosing.rightMm > 0 ? 'P' : 'CZ');
 
 /** The riser board's thickness: a carpet riser (between the treads) is as thick as a tread. */
 export const riserThicknessOf = (config) => (config.riserMount === 'carpet' ? config.treadThicknessMm : config.riserThicknessMm);

@@ -127,7 +127,7 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .map((e) => {
       const c = centre(e.outline);
       const text = e.kind === 'landing' ? `P${e.index + 1}` : e.kind === 'winder' ? `Z${e.index + 1}` : String(e.index + 1);
-      // (its type by the side nosings — L / P / CZ / LP — under the number)
+      // (its type by the side nosings — L / P / CZ / PL — under the number)
       const type = typeOf.get(e.index);
       return `<text x="${fmt(c.x)}" y="${fmt(-c.y)}" font-size="90" text-anchor="middle" dominant-baseline="middle" fill="#3b2a1a" pointer-events="none">${escapeHtml(text)}</text>${type ? `<text class="clad-type-label" x="${fmt(c.x)}" y="${fmt(-c.y + 85)}" font-size="60" text-anchor="middle" dominant-baseline="middle" fill="#8a5a34" font-weight="600" pointer-events="none">${type}</text>` : ''}`;
     })
