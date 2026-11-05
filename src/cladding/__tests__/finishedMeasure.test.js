@@ -43,3 +43,32 @@ test('carpet risers: the riser\'s thickness off the depth too; a landing\'s dept
   near(plain.concrete.elements[1].goingMm, 270, 'concrete as entered');
   assert.equal(sanitizeCladdingConfig({ sequence: [{ kind: 'steps', count: 2, measured: 'finished' }, { kind: 'steps', count: 2, measured: 'x' }] }).sequence.map((g) => g.measured ?? null).join(), 'finished,');
 });
+
+// user request 2026-11-05: the winders' edges measured on the FINISHED treads — where their noses meet the wall
+test('winders measured as finished: the treads\' noses meet the wall where measured (the concrete edges moved back)', async () => {
+  const { signedOnZoneLine } = await import('../concreteModel.js');
+  const seq = (measured) => [
+    { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+    { kind: 'winders', count: 3, riseMm: 180, turn: 'right', measured, edges: [{ outerMm: -300 }, { outerMm: 300 }] },
+    { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+  ];
+  const b = buildCladdingStair(cfg(null, { sequence: seq('finished') }));
+  const z = b.concrete.zones[0];
+  // the concrete edges further on along the wall: the nose (nosing + riser) stands out in front of each, toward the step below
+  assert.ok(z.edges[1].outerMm > -300 && z.edges[2].outerMm > 300, 'the concrete edges further on — the noses stand out in front of them');
+  const onPath = (p, path) => path.slice(1).some((b2, k) => {
+    const a = path[k];
+    const l = Math.hypot(b2.x - a.x, b2.y - a.y);
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b2.x - a.x) + (p.y - a.y) * (b2.y - a.y)) / (l * l)));
+    return Math.hypot(p.x - (a.x + (b2.x - a.x) * t), p.y - (a.y + (b2.y - a.y) * t)) < 0.5;
+  });
+  for (const [k, want] of [[1, -300], [2, 300]]) {
+    const el = b.concrete.elements.find((e) => e.kind === 'winder' && e.k === k);
+    const t = b.cladding.treads.find((x) => x.index === el.index);
+    const hits = t.outline.filter((p) => onPath(p, z.outerPath)).map((p) => signedOnZoneLine(z, 'outer', p));
+    assert.ok(hits.some((s) => Math.abs(s - want) < 0.5), `winder ${k + 1}: its nose at ${want} on the wall (${hits.map(Math.round)})`);
+  }
+  // measured on the concrete: the edges as entered
+  const c = buildCladdingStair(cfg(null, { sequence: seq(undefined) })).concrete.zones[0];
+  assert.deepEqual([c.edges[1].outerMm, c.edges[2].outerMm], [-300, 300]);
+});

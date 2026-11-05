@@ -3,8 +3,8 @@
 // result). Independent of the self-supporting geometry/buildStaircase.js.
 
 import { sanitizeCladdingConfig } from './schema.js';
-import { buildConcreteModel } from './concreteModel.js';
-import { buildCladdingModel } from './claddingModel.js';
+import { buildConcreteModel, signedOnZoneLine } from './concreteModel.js';
+import { buildCladdingModel, riserOn, riserThicknessOf } from './claddingModel.js';
 import { buildWalls, buildSlab, resolveWalls } from './surroundingsModel.js';
 import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
@@ -51,8 +51,86 @@ export function concreteFromFinished(config) {
   return out;
 }
 
+// the crossing of a line (p, q extended) with a polyline (its end pieces extended), nearest to `near`
+function crossPolyline(p, q, path, near) {
+  const d = { x: q.x - p.x, y: q.y - p.y };
+  let best = null;
+  for (let k = 1; k < path.length; k++) {
+    const a = path[k - 1];
+    const b = path[k];
+    const e = { x: b.x - a.x, y: b.y - a.y };
+    const den = d.x * e.y - d.y * e.x;
+    if (Math.abs(den) < 1e-9) continue;
+    const u = (d.x * (p.y - a.y) - d.y * (p.x - a.x)) / den; // along the piece
+    const lo = k === 1 ? -Infinity : 0;
+    const hi = k === path.length - 1 ? Infinity : 1;
+    if (u < lo - 1e-9 || u > hi + 1e-9) continue;
+    const x = { x: a.x + e.x * u, y: a.y + e.y * u };
+    const dd = Math.hypot(x.x - near.x, x.y - near.y);
+    if (!best || dd < best.dd) best = { x, dd };
+  }
+  return best?.x ?? null;
+}
+
+/**
+ * A winder zone measured as FINISHED treads (user request 2026-11-05): its edges' numbers are where the finished
+ * treads' NOSES meet the wall and the dusza line. A winder's nose line = its concrete front edge moved forward by the
+ * nosing + its riser board, so it meets the walls elsewhere (by that offset / the angle); the concrete edges are moved
+ * until the noses land on the measured numbers (a few rounds — the offset point depends on the edge's angle).
+ * @returns {object[]} the sequence with the concrete edges (the user's numbers where nothing is finished)
+ */
+export function concreteWinderEdges(config) {
+  const targets = config.sequence.map((g) => (g.kind === 'winders' && g.measured === 'finished' && g.edges?.some(Boolean) ? g.edges : null));
+  if (!targets.some(Boolean)) return config.sequence;
+  const seq = config.sequence.map((g) => (g.kind === 'winders' ? { ...g, edges: (g.edges || []).map((e) => (e ? { ...e } : e)) } : g));
+  const r = riserThicknessOf(config);
+  for (let round = 0; round < 6; round++) {
+    const concrete = buildConcreteModel({ ...config, sequence: seq });
+    let worst = 0;
+    for (const zone of concrete.zones || []) {
+      const want = targets[zone.groupIndex];
+      if (!want) continue;
+      for (let k = 1; k < zone.edges.length - 1; k++) {
+        const t = want[k - 1];
+        if (!t) continue;
+        // the winder whose front this edge is, its nose line
+        const el = concrete.elements.find((e) => e.groupIndex === zone.groupIndex && e.kind === 'winder' && e.k === k);
+        const front = el?.edges.find((e) => e.role === 'front');
+        if (!front) continue;
+        const l = Math.hypot(front.b.x - front.a.x, front.b.y - front.a.y) || 1;
+        const n = { x: (front.b.y - front.a.y) / l, y: -(front.b.x - front.a.x) / l };
+        const f = config.nosingFrontMm + (riserOn(el, config) ? r : 0);
+        const p = { x: front.a.x + n.x * f, y: front.a.y + n.y * f };
+        const q = { x: front.b.x + n.x * f, y: front.b.y + n.y * f };
+        const own = seq[zone.groupIndex].edges[k - 1] || (seq[zone.groupIndex].edges[k - 1] = {});
+        for (const [which, path, field] of [
+          ['outer', zone.outerPath, 'outerMm'],
+          ['inner', zone.innerPath, 'innerMm'],
+        ]) {
+          if (!Number.isFinite(t[field])) continue;
+          const near = which === 'outer' ? zone.edges[k].outer : zone.edges[k].inner;
+          const x = crossPolyline(p, q, path, near);
+          if (!x) continue;
+          const err = t[field] - signedOnZoneLine(zone, which, x);
+          // (kept within the line — a nose asked for where no edge can put it is reported by the zone's checks)
+          const lo = signedOnZoneLine(zone, which, path[0]);
+          const hi = signedOnZoneLine(zone, which, path[path.length - 1]);
+          const next = Math.max(lo, Math.min(hi, (own[field] ?? t[field]) + err));
+          worst = Math.max(worst, Math.abs(next - (own[field] ?? t[field])));
+          own[field] = next;
+        }
+      }
+    }
+    if (worst < 0.05) break;
+  }
+  return seq;
+}
+
 export function buildCladdingStair(rawConfig) {
-  const sanitized = sanitizeCladdingConfig(rawConfig);
+  const sanitized0 = sanitizeCladdingConfig(rawConfig);
+  // (winder zones measured as finished: their concrete edges first — the rest of the conversion reads the zones)
+  const winderSeq = concreteWinderEdges(sanitized0);
+  const sanitized = winderSeq === sanitized0.sequence ? sanitized0 : { ...sanitized0, sequence: winderSeq };
   const derived = concreteFromFinished(sanitized);
   const config = derived ? { ...sanitized, derivedConcrete: derived } : sanitized;
   const concrete = buildConcreteModel(config);

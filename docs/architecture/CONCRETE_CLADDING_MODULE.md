@@ -374,7 +374,11 @@ concrete; every element's finished − concrete size is its offset (the nosing, 
 finishes on the first rise — additive, so one pass is exact) and the concrete = the entered − the offset →
 `config.derivedConcrete {[index]: {riseMm, goingMm, widthMm, depthMm}}`, applied in `expandSequence` after the step's
 own sizes (not marked as own): a step's going from its tread's depth, its width from its length, a landing's depth,
-every element's rise from its finished rise. A winder zone's A / B and edges stay measured on the walls / the dusza.
+every element's rise from its finished rise. A winder zone measured so: its edges' numbers are where the finished
+treads' NOSES meet the wall and the dusza line (`concreteWinderEdges`: each winder's nose line = its concrete front
+edge moved forward by the nosing + its riser board, crossed with the zone's wall / dusza path; the concrete edge moved
+by the miss, a few rounds, kept within the line) — its A / B stay measured on the walls. (The plan's edge handles still
+show the concrete edges.)
 The heights table's „beton” / „głęb.” show the derived concrete. Tests: `__tests__/finishedMeasure.test.js`.
 
 ## Glass clamps (user request 2026-11-05, as built)

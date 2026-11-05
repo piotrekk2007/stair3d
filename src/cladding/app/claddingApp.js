@@ -179,7 +179,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   const openEdges = new Set();
   // how a group was measured: the raw concrete or the finished elements (the concrete derived — buildCladdingStair.js
   // concreteFromFinished)
-  const measuredSel = (g, i) => `<select data-i="${i}" data-f="measured" class="clad-measured" title="Wymiary betonu — albo gotowych stopni / podestów (beton wyliczony: głębokość bez noska, szerokość bez nosków bocznych, wysokość bez grubości okładzin)"><option value="concrete" ${g.measured !== 'finished' ? 'selected' : ''}>beton</option><option value="finished" ${g.measured === 'finished' ? 'selected' : ''}>gotowe</option></select>`;
+  const measuredSel = (g, i) => `<select data-i="${i}" data-f="measured" class="clad-measured" title="Wymiary betonu — albo gotowych stopni / podestów / zabiegów (beton wyliczony: głębokość bez noska, szerokość bez nosków bocznych, wysokość bez grubości okładzin; przy zabiegach krawędzie = gdzie nosek gotowego stopnia dochodzi do ściany / duszy)"><option value="concrete" ${g.measured !== 'finished' ? 'selected' : ''}>beton</option><option value="finished" ${g.measured === 'finished' ? 'selected' : ''}>gotowe</option></select>`;
   function windersRow(g, i, tools) {
     const zone = state.built?.concrete.zones.find((z) => z.groupIndex === i);
     const turn = `<select data-i="${i}" data-f="turn">${Object.entries(WINDER_TURN_LABELS).map(([v, l]) => `<option value="${v}" ${v === g.turn ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
