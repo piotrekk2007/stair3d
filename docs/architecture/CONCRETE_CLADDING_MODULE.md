@@ -22,7 +22,8 @@ The self-supporting engine must not be touched: it works and the user does not w
 2. Shared code is used READ-ONLY, only pure libraries: `geometry/pathUtils.js`, `polygonClip.js`, `tolerances.js`,
    `diagnostics/diagnostic.js`, `takeoff/takeoffTypes.js` (`createTakeoffItem`), `takeoff/boardPricing.js` (the board
    price lookup), `takeoff/pricing.js`, `util/format.js`, `util/sideNames.js`, `scene/` helpers (scene setup, wood grain,
-   appearance), `plan2d/viewport.js`, `export/` writers where the format fits. Where the module needs different
+   appearance), `plan2d/viewport.js`, `export/` writers where the format fits (`objExporter.js`, `daeExporter.js`,
+   `downloadTextFile.js` — the 3D export). Where the module needs different
    behaviour it gets its own code, not a parameter in the shared one.
 3. The only edits outside `src/cladding/` are small hooks, each listed here when made and covered by the existing tests
    (all of which must stay green, unchanged):
@@ -345,7 +346,27 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
 1. (done) Walls between / above / under the flights.
 2. (done) Balustrade types, posts by hand, the antresola per edge, the opening's editor — below.
 3. (done) Colours and LED lighting — below.
-4. Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ.
+4. (done) Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ — below.
+
+## Export (user request 2026-11-04, as built 2026-11-05)
+
+Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the project).
+- DXF (`export/claddingDxf.js buildCladdingDXF`, the module's own small R12 writer — ASCII, mm, no diacritics; the
+  self-supporting `dxfExport.js` is built round that engine's models and is not used): every cladding piece FLAT 1:1 on
+  one sheet, in rows — treads and noses (a tread in its own frame: grain along x = its longest front edge, the front at
+  the bottom; a floor-board landing only its nosing piece), landings, risers (length × height; a starter's bent riser
+  developed), skirting boards and cover stringers (their polygon in their own vertical plane), glass panes. Layers
+  `OUTLINE`, `PROFILE` (a profiled tread's milled edges — the front and the nosed sides, `tread.exposed`), `TEXT` (code,
+  name, size, thickness, notes: profile, starter, winder). Codes (`claddingPieces`): `ST-nn` tread, `PD-nn` landing
+  (`PD-nnN` its nosing), `PS-nn` riser (`PS-nna/b…` a winder's panels, `PS-G` the exit riser), `NA` antresola nosing,
+  `LS-<flight><L|P>` skirting, `WO-<flight><L|P>` cover stringer, `SZ-n` pane. Nothing to draw → `null`.
+- DAE / OBJ: the SHARED `export/daeExporter.js` / `objExporter.js` (read-only, three only) on a root built by
+  `export/claddingMeshExport.js claddingExportRoot`: every visible cladding mesh with its world transform baked into a
+  copy of its geometry, under the shared category groups — treads / landings / noses → „Stopnie”, risers →
+  „Podstopnie”, skirting + cover stringers → „Wangi”, the balustrade → „Slupy”. The concrete, the room, the LED strips
+  and a linked floor are not exported. The isolation test lets `*MeshExport.js` use Three.js (it works on the rendered
+  scene, like a renderer).
+- Tests: `__tests__/export.test.js`.
 
 ## Open questions
 

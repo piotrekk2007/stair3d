@@ -553,7 +553,10 @@ to a height / under the flight) and the wall between flights set apart (`sideWal
 (balusters square / round, glass between posts, glass on the concrete's side), posts by hand, the antresola per edge and
 the opening drawn by hand (plan edit modes „▮ Słupy” / „▭ Otwór i antresola”). Colours per element group through the
 shared `scene/appearance.js` (saved in the project file, not in undo) and LED lighting under the noses / in the skirting
-/ under the handrail (`ledModel.js`, priced). Next (user, 2026-11-04): DXF / DAE / OBJ export.
+/ under the handrail (`ledModel.js`, priced). Export: „⬇ DXF 1:1” (`export/claddingDxf.js`, the module's own R12
+writer: every piece flat with its code — ST / PD / PS / NA / LS / WO / SZ —, profiled edges on layer PROFILE), „⬇ DAE”
+/ „⬇ OBJ” (the shared writers on `export/claddingMeshExport.js claddingExportRoot` — world-baked cladding meshes in the
+groups Stopnie / Podstopnie / Wangi / Slupy, no concrete / room). Later (user): contract / payment-schedule documents.
 
 ## Open items / known limitations
 

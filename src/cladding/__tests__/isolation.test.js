@@ -30,6 +30,10 @@ const ALLOWED_SHARED = new Set([
   'takeoff/pricing.js',
   'offer/offerDocument.js',
   'app/printHtml.js',
+  // the OBJ / DAE writers (three only) — the module hands them its own export root (export/claddingMeshExport.js)
+  'export/objExporter.js',
+  'export/daeExporter.js',
+  'export/downloadTextFile.js',
 ]);
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];
 // files outside the module allowed to import it (the hooks)
@@ -76,7 +80,7 @@ test('outside the module only the hooks import it', () => {
 
 test('the module models never import Three.js (model → renderer direction)', () => {
   for (const file of jsFiles(MODULE)) {
-    if (/Renderer\.js$|[\\/]app[\\/]/.test(file)) continue;
+    if (/Renderer\.js$|MeshExport\.js$|[\\/]app[\\/]/.test(file)) continue; // the 3D export works on the rendered scene
     assert.equal(/from\s+['"]three['"]/.test(readFileSync(file, 'utf8')), false, `${path.relative(SRC, file)} is a model — no Three.js`);
   }
 });

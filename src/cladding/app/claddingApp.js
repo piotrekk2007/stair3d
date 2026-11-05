@@ -26,6 +26,11 @@ import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
 import { escapeHtml } from '../../util/format.js';
+import { buildCladdingDXF } from '../export/claddingDxf.js';
+import { claddingExportRoot } from '../export/claddingMeshExport.js';
+import { exportStaircaseToOBJ } from '../../export/objExporter.js';
+import { exportStaircaseToDAE } from '../../export/daeExporter.js';
+import { downloadTextFile } from '../../export/downloadTextFile.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
 
@@ -48,6 +53,10 @@ export function mountCladdingApp(rootEl, host = {}) {
         <button type="button" data-act="new">Nowy</button>
         <button type="button" data-act="save">Zapisz</button>
         <button type="button" data-act="load">Wczytaj</button>
+        <span class="clad-sep"></span>
+        <button type="button" data-act="dxf" title="Wszystkie elementy okładziny płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
+        <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnie / Wangi / Słupy">⬇ DAE</button>
+        <button type="button" data-act="obj" title="Model 3D okładziny (OBJ, mm — przy imporcie ustaw milimetry)">⬇ OBJ</button>
         <span class="clad-meta"></span>
         <span class="clad-sep"></span>
         <button type="button" data-act="undo" title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
@@ -1148,6 +1157,15 @@ export function mountCladdingApp(rootEl, host = {}) {
     meta(`Zapisano ${new Date().toLocaleTimeString('pl-PL')}`);
   });
   $('[data-act="load"]').addEventListener('click', () => fileInput.click());
+  // export (export/claddingDxf.js, claddingMeshExport.js + the shared OBJ / DAE writers): the cladding only
+  const fileBase = () => (state.projectName || 'schody-na-beton').replace(/[^\p{L}\p{N}_ -]+/gu, '').trim() || 'schody-na-beton';
+  $('[data-act="dxf"]').addEventListener('click', () => {
+    const dxf = buildCladdingDXF(state.built, { projectName: state.projectName });
+    if (!dxf) return meta('Brak elementów do eksportu');
+    downloadTextFile(dxf, `${fileBase()}-okladzina.dxf`, 'application/dxf');
+  });
+  $('[data-act="dae"]').addEventListener('click', () => exportStaircaseToDAE(claddingExportRoot(renderCladdingStair(state.built)), `${fileBase()}.dae`));
+  $('[data-act="obj"]').addEventListener('click', () => exportStaircaseToOBJ(claddingExportRoot(renderCladdingStair(state.built)), `${fileBase()}.obj`));
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
