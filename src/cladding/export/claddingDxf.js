@@ -40,6 +40,15 @@ const planeLocal = (poly) => {
 };
 const size = (pts) => ({ w: Math.max(...pts.map((p) => p.u)), h: Math.max(...pts.map((p) => p.v)) });
 
+// a skirting's end cut at a wall corner (finishModel.js cornerCuts), when this polygon reaches that end
+function cornerNotes(b, polygon) {
+  const ss = polygon.map((q) => q.s);
+  return ['start', 'end']
+    .map((w) => b.corners?.[w])
+    .filter((c) => c && ss.some((s) => Math.abs(s - c.s) < 0.5))
+    .map((c) => `narożnik: koniec cięty ${c.angleDeg}° przez grubość (${c.k < 0 ? 'wewnętrzny' : 'zewnętrzny'})`);
+}
+
 /** The pieces with their codes and Polish names (the DXF writes them in ASCII; the cut list as they are). */
 export function claddingPieces(built) {
   const { cladding, concrete } = built;
@@ -56,7 +65,7 @@ export function claddingPieces(built) {
     }
     // the milled edges (front, nosed sides) on their own layer when the tread is profiled
     const edgeLayers = t.profile?.kind && t.profile.kind !== 'square' ? (t.exposed || []).map((x) => (x ? 'PROFILE' : null)) : null;
-    pieces.push({ row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes });
+    pieces.push({ row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1} ${t.sideType}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes: [...notes, { L: 'nosek boczny z lewej', P: 'nosek boczny z prawej', CZ: 'czołowy', LP: 'noski boczne z obu stron' }[t.sideType]] });
   }
   for (const r of cladding.risers) {
     if (!(r.heightMm > 0)) continue;
@@ -79,11 +88,11 @@ export function claddingPieces(built) {
         const H = Math.max(...pts.map((q) => q.u));
         pts = pts.map((q) => ({ u: q.v, v: H - q.u }));
       }
-      const notes = [`${b.thicknessMm} mm`, p.part === 'horizontal' ? 'poziomy, końce 45°' : `pionowy, 45°${p.notch ? `, wycięcie pod nosek ${Math.round(p.notch.widthMm)} × ${Math.round(p.notch.heightMm)}` : ''}${p.exit ? ', przy wyjściu' : ''}`];
+      const notes = [`${b.thicknessMm} mm`, p.part === 'horizontal' ? 'poziomy, końce 45°' : `pionowy, 45°${p.notch ? `, wycięcie pod nosek ${Math.round(p.notch.widthMm)} × ${Math.round(p.notch.heightMm)}` : ''}${p.exit ? ', przy wyjściu' : ''}`, ...cornerNotes(b, p.polygon)];
       pieces.push({ row: 'boards', code: `${base}-${String(k + 1).padStart(2, '0')}`, name: `Listwa schodkowa bieg ${b.key.flight + 1} — ${p.part === 'horizontal' ? 'poziomy' : 'pionowy'}`, pts, notes });
     });
   }
-  for (const b of (built.finish?.skirting || []).filter((x) => !x.parts)) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyścienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyła'] });
+  for (const b of (built.finish?.skirting || []).filter((x) => !x.parts)) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyścienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyła', ...cornerNotes(b, b.polygon)] });
   for (const b of built.finish?.coverStringers || []) pieces.push({ row: 'boards', code: `WO-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Wanga obiciowa bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`] });
   let g = 0;
   for (const s of built.balustrade?.sections || []) for (const p of s.panes || []) pieces.push({ row: 'glass', code: `SZ-${++g}`, name: `Szyba (${s.infill === 'glass-side' ? 'na boku, rotule' : 'między słupami'})`, pts: planeLocal(p.polygon), notes: [`${p.thicknessMm} mm`, `${Math.round(p.widthMm)} x ${Math.round(p.heightMm)}`] });

@@ -20,6 +20,7 @@ import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
+import { TREAD_SIDE_TYPES } from '../claddingModel.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { printHtml } from '../../app/printHtml.js';
@@ -886,12 +887,17 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${numO('riseMm', 'Wysokość betonu [mm]')}
       ${el.kind === 'step' ? numO('goingMm', 'Głębokość betonu [mm]') : ''}
       ${el.kind === 'step' ? numO('widthMm', 'Szerokość betonu [mm]') : ''}
-      ${tri('nosingLeft', 'Nosek boczny z lewej')}
-      ${tri('nosingRight', 'Nosek boczny z prawej')}
+      ${sideTypeSelect(own, state.built.cladding.treads.find((t) => t.index === i)?.sideType)}
       ${tri('riser', 'Podstopnica')}
       <label class="clad-field">Profil krawędzi <select data-o="profile"><option value="" ${own.profile === undefined ? 'selected' : ''}>jak wszystkie</option>${Object.entries(EDGE_PROFILE_LABELS).map(([k, l]) => `<option value="${k}" ${own.profile === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${el.kind === 'step' ? starterBlock(own.starter) : ''}
       <div class="clad-actions"><button type="button" data-reset>Przywróć wymiary z grupy</button></div>`;
+  }
+  // the tread's type by its side nosings: auto (from the walls and the panel) or the user's own L / P / CZ / LP
+  function sideTypeSelect(own, current) {
+    const set = typeof own.nosingLeft === 'boolean' || typeof own.nosingRight === 'boolean';
+    const chosen = set ? (own.nosingLeft && own.nosingRight ? 'LP' : own.nosingLeft ? 'L' : own.nosingRight ? 'P' : 'CZ') : '';
+    return `<label class="clad-field">Typ stopnia (nosek boczny) <select data-o="sideType"><option value="" ${!set ? 'selected' : ''}>auto (wg ścian)${!set && current ? ` — teraz ${current}` : ''}</option>${Object.entries(TREAD_SIDE_TYPES).map(([k, l]) => `<option value="${k}" ${chosen === k ? 'selected' : ''}>${k} — ${l}</option>`).join('')}</select></label>`;
   }
   // a starter step: widened past the concrete on its sides, rounded, bowed (starterProfile.js)
   function starterBlock(s) {
@@ -921,7 +927,15 @@ export function mountCladdingApp(rootEl, host = {}) {
     change((c) => {
       const o = { ...(c.stepOverrides[i] || {}) };
       const v = ev.target.value;
-      if (v === '') delete o[f];
+      if (f === 'sideType') {
+        // (auto = no own side nosings; L / P / CZ / LP = both set)
+        delete o.nosingLeft;
+        delete o.nosingRight;
+        if (v) {
+          o.nosingLeft = v === 'L' || v === 'LP';
+          o.nosingRight = v === 'P' || v === 'LP';
+        }
+      } else if (v === '') delete o[f];
       else if (f === 'nosingLeft' || f === 'nosingRight' || f === 'riser') o[f] = v === '1';
       else if (f === 'profile') o[f] = v;
       else o[f] = Number(v);
@@ -938,14 +952,15 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderReport() {
     const { heights } = state.built.cladding;
     const warned = new Set(state.built.diagnostics.map((d) => d.elementId));
+    const typeOf = new Map(state.built.cladding.treads.map((t) => [t.index, t.sideType]));
     const rows = heights
       .map((h) => {
         const id = h.kind === 'exit' ? 'exit' : `${h.kind}-${h.index}`;
         const blondel = h.goingMm ? r0(2 * h.finishedRiseMm + h.goingMm) : '';
-        return `<tr class="${warned.has(id) ? 'warn' : ''}${h.index === state.selected ? ' sel' : ''}" data-row="${h.kind === 'exit' ? '' : h.index}"><td>${escapeHtml(h.kind === 'exit' ? 'wyjście' : h.kind === 'landing' ? `P${h.index + 1}` : String(h.index + 1))}</td><td>${r0(h.concreteRiseMm)}</td><td><b>${r0(h.finishedRiseMm)}</b></td><td>${h.goingMm ? r0(h.goingMm) : ''}</td><td>${blondel}</td></tr>`;
+        return `<tr class="${warned.has(id) ? 'warn' : ''}${h.index === state.selected ? ' sel' : ''}" data-row="${h.kind === 'exit' ? '' : h.index}"><td>${escapeHtml(h.kind === 'exit' ? 'wyjście' : h.kind === 'landing' ? `P${h.index + 1}` : String(h.index + 1))}</td><td>${r0(h.concreteRiseMm)}</td><td><b>${r0(h.finishedRiseMm)}</b></td><td>${h.goingMm ? r0(h.goingMm) : ''}</td><td>${blondel}</td><td title="${escapeHtml(TREAD_SIDE_TYPES[typeOf.get(h.index)] || '')}">${h.kind === 'exit' ? '' : typeOf.get(h.index) || ''}</td></tr>`;
       })
       .join('');
-    $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th></tr></thead><tbody>${rows}</tbody></table>
+    $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th><th title="Nosek boczny: L — z lewej, P — z prawej, CZ — czołowy (między ścianami, bez noska bocznego), LP — z obu stron">typ</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="clad-hint">Wysokość gotowa = od posadzki / stopnia niżej do wierzchu okładziny [mm]. Wysokość całkowita: ${r0(state.built.totalRise)} mm.</div>`;
     const ref = state.floor?.reference;
     const diags = [...state.built.diagnostics, ...(ref?.diagnostics || []), ...(ref?.error ? [{ severity: 'WARNING', message: ref.error }] : [])];

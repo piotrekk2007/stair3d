@@ -24,7 +24,7 @@ test('cut list: every DXF piece at its blank size and thickness, the wood specie
   assert.equal(riser.lengthMm, Math.round(b.cladding.risers[1].lengthMm));
   assert.equal(riser.widthMm, Math.round(b.cladding.risers[1].heightMm));
   assert.ok(rows.some((r) => /^LS-/.test(r.code) && r.name.startsWith('Listwa przyścienna')), 'Polish names');
-  assert.equal(rows[0].name, 'Stopień 1');
+  assert.equal(rows[0].name, 'Stopień 1 P', 'with its type');
 });
 
 test('cut list: the balustrade\'s wood — the handrail, balusters and posts per section, the wall handrail', () => {

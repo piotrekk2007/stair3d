@@ -75,7 +75,7 @@ export function buildCladdingQuote(built, settings) {
     const winder = t.kind === 'winder';
     const withRiser = riserOn(e, config);
     const labourId = t.starter ? 'tread-starter' : `${winder ? 'tread-winder' : 'tread-straight'}${withRiser ? '-riser' : ''}`;
-    lines.push({ id: t.id, group: t.starter ? 'Stopnie zapraszające' : winder ? 'Stopnie zabiegowe' : 'Stopnie proste', name: `${t.starter ? 'Stopień zapraszający' : winder ? 'Stopień zabiegowy' : 'Stopień'} ${no}`, qty: 1, unit: 'szt.', dims: dims(t, t.thicknessMm), material: board({ lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm }), labour: labour(labourId) });
+    lines.push({ id: t.id, group: t.starter ? 'Stopnie zapraszające' : winder ? 'Stopnie zabiegowe' : 'Stopnie proste', name: `${t.starter ? 'Stopień zapraszający' : winder ? 'Stopień zabiegowy' : 'Stopień'} ${no} ${t.sideType}`, qty: 1, unit: 'szt.', dims: dims(t, t.thicknessMm), material: board({ lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm }), labour: labour(labourId) });
   }
   // the risers: their material (their fitting is in the tread's labour "z podstopnicą")
   for (const r of cladding.risers) {

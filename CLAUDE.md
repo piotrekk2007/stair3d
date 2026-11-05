@@ -558,7 +558,8 @@ writer: every piece flat with its code — ST / PD / PS / NA / LS / WO / SZ —,
 / „⬇ OBJ” (the module's own writers in `export/claddingMeshExport.js` — world-baked meshes in the groups Stopnie /
 Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The stepped skirting is made of pieces as the
 joiners do (`finishModel.js steppedSkirtingParts`: horizontal on the treads, vertical at the risers, mitred 45°, the
-vertical ones notched for the noses). The wall handrail on brackets on a walled side
+vertical ones notched for the noses), cut through its thickness at a turn's wall corner (`cornerCuts`); every tread
+typed L / P / CZ / LP by its side nosings (`treadSideType`, settable per tread). The wall handrail on brackets on a walled side
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared

@@ -121,6 +121,17 @@ const grooveMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughne
 function planeBoardGeometry(board) {
   const shape = new THREE.Shape(board.polygon.map((p) => new THREE.Vector2(p.s, p.z)));
   const g = new THREE.ExtrudeGeometry(shape, { depth: board.thicknessMm, bevelEnabled: false });
+  // a corner cut (finishModel.js cornerCuts): the end's vertices moved along s by k × their depth from the wall's face
+  const cuts = [board.corners?.start, board.corners?.end].filter(Boolean);
+  if (cuts.length) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const cut = cuts.find((c) => Math.abs(pos.getX(i) - c.s) < 0.5);
+      if (cut) pos.setX(i, pos.getX(i) + cut.k * pos.getZ(i));
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+  }
   // (a mirrored basis turns the faces inside out — the materials are two-sided)
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(board.dir.x, 0, -board.dir.y), new THREE.Vector3(0, 1, 0), new THREE.Vector3(board.normal.x, 0, -board.normal.y));
   m.setPosition(board.origin.x, 0, -board.origin.y);

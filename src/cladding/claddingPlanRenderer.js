@@ -68,7 +68,9 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     const s0 = Math.min(...all.map((p) => p.s));
     const s1 = Math.max(...all.map((p) => p.s));
     const at = (s, off) => ({ x: b.origin.x + b.dir.x * s + b.normal.x * off, y: b.origin.y + b.dir.y * s + b.normal.y * off });
-    return `<polygon class="clad-board" points="${pts([at(s0, 0), at(s1, 0), at(s1, b.thicknessMm), at(s0, b.thicknessMm)])}" fill="${colour}" stroke="#5a3d24" stroke-width="0.8" pointer-events="none" ${HAIR}/>`;
+    const k0 = b.corners?.start?.k ?? 0;
+    const k1 = b.corners?.end?.k ?? 0;
+    return `<polygon class="clad-board" points="${pts([at(s0, 0), at(s1, 0), at(s1 + k1 * b.thicknessMm, b.thicknessMm), at(s0 + k0 * b.thicknessMm, b.thicknessMm)])}" fill="${colour}" stroke="#5a3d24" stroke-width="0.8" pointer-events="none" ${HAIR}/>`;
   };
   // the walls following the stair (sideWallsModel.js): their footprint — above the steps / between flights dark, under
   // the flight dashed (it is below)
@@ -107,11 +109,14 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
   // the LED strips (ledModel.js): a warm line
   const ledXML = (built.led?.strips || []).map((s) => `<polyline class="clad-led" points="${pts(s.points)}" fill="none" stroke="#f0b400" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
+  const typeOf = new Map(cladding.treads.map((t) => [t.index, t.sideType]));
   const labels = concrete.elements
     .map((e) => {
       const c = centre(e.outline);
       const text = e.kind === 'landing' ? `P${e.index + 1}` : e.kind === 'winder' ? `Z${e.index + 1}` : String(e.index + 1);
-      return `<text x="${fmt(c.x)}" y="${fmt(-c.y)}" font-size="90" text-anchor="middle" dominant-baseline="middle" fill="#3b2a1a" pointer-events="none">${escapeHtml(text)}</text>`;
+      // (its type by the side nosings — L / P / CZ / LP — under the number)
+      const type = typeOf.get(e.index);
+      return `<text x="${fmt(c.x)}" y="${fmt(-c.y)}" font-size="90" text-anchor="middle" dominant-baseline="middle" fill="#3b2a1a" pointer-events="none">${escapeHtml(text)}</text>${type ? `<text class="clad-type-label" x="${fmt(c.x)}" y="${fmt(-c.y + 85)}" font-size="60" text-anchor="middle" dominant-baseline="middle" fill="#8a5a34" font-weight="600" pointer-events="none">${type}</text>` : ''}`;
     })
     .join('');
   // the walking line: through the middle of every element, an arrow at its end

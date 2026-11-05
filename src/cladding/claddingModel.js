@@ -30,6 +30,16 @@ export function finishThicknessMm(element, config) {
   return element.kind === 'landing' && element.finish === 'floorboard' ? config.osbThicknessMm + config.floorboardThicknessMm : config.treadThicknessMm;
 }
 
+// a tread's type by its side nosings (user request 2026-11-05): L = nosed on the left (walking up), P = on the right,
+// CZ (czołowy) = between walls — no side nosing, LP = both sides free
+export const TREAD_SIDE_TYPES = Object.freeze({
+  L: 'lewy — nosek boczny z lewej',
+  P: 'prawy — nosek boczny z prawej',
+  CZ: 'czołowy — między ścianami, bez noska bocznego',
+  LP: 'obustronny — nosek boczny z obu stron',
+});
+export const treadSideType = (nosing) => (nosing.leftMm > 0 && nosing.rightMm > 0 ? 'LP' : nosing.leftMm > 0 ? 'L' : nosing.rightMm > 0 ? 'P' : 'CZ');
+
 export function riserOn(element, config) {
   const own = config.stepOverrides?.[element.index]?.riser;
   return typeof own === 'boolean' ? own : !!config.riserBoards;
@@ -142,6 +152,7 @@ export function buildCladdingModel(concrete, config) {
       topZ: e.topZ + t,
       thicknessMm: t,
       nosing: { frontMm: config.nosingFrontMm, leftMm: nosing.left, rightMm: nosing.right },
+      sideType: treadSideType({ leftMm: nosing.left, rightMm: nosing.right }),
       // the production blank (stage 4 prices it): along the grain × across
       ...boardSize(outline, grain),
       grain,

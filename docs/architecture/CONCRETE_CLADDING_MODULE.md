@@ -366,6 +366,27 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## The skirting at a turn's wall corner (user request 2026-11-05, as built)
+
+`finishModel.js buildFinishBoards`: two skirted runs where one ends at the point the next starts (a wall's end on the
+other wall's line — the outer corner of a landing turn, the wall corner inside a winder zone, both corners of a U) are
+JOINED: `cornerCuts` gives each board's end there `corners.end` / `corners.start` `{s, k, angleDeg}` — the end cut
+through the board's thickness so the two meet on the corner's bisector (k = (1 − nA·nB) / (dA·nB) for the ending
+board, (1 − nA·nB) / (dB·nA) for the starting one: −1 / +1 at a 90° inside corner = 45°; > 0 an outside corner); walls in
+line are not cut. The run going on at the same height starts like a landing (no vertical piece / raked bottom from its
+top — `joinedStart`). The renderer shears the end's vertices by k × their depth from the wall's face
+(`planeBoardGeometry`), the plan draws the cut footprint, the DXF notes „narożnik: koniec cięty 45° przez grubość
+(wewnętrzny / zewnętrzny)” on the board / the piece at the corner. Tests: `__tests__/cornerType.test.js`.
+
+## The tread's type L / P / CZ (user request 2026-11-05, as built)
+
+Every tread / landing gets `sideType` from its side nosings (`claddingModel.js treadSideType`, `TREAD_SIDE_TYPES`):
+L = nosed on the left (walking up), P = on the right, CZ (czołowy) = between walls — no side nosing, LP = both sides
+free. Automatic from the walls and the panel's „Nosek boczny z lewej / prawej”; the step editor's „Typ stopnia (nosek
+boczny)” sets it per tread (auto / L / P / CZ / LP = the own `nosingLeft` / `nosingRight`). Shown on the plan (under
+the number), in the heights table (column „typ”), in the quote's tread names, the DXF / cut list (name „Stopień n P” +
+a note). Tests: `__tests__/cornerType.test.js`.
+
 ## The wall handrail (user request 2026-11-05, as built)
 
 `wallRails[flight][side]` (the column „poręcz przyścienna” in „Listwy, wangi obiciowe, balustrada” — only on a walled

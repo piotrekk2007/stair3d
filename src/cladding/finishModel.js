@@ -55,7 +55,7 @@ export const boardPolygons = (b) => (b.parts ? b.parts.map((p) => p.polygon) : [
  * for the antresola nosing), else the last horizontal piece ends square. Each part a polygon in the run's plane
  * ({s, z}, CCW) with its blank (length along its grain × H).
  */
-function steppedSkirtingParts(run, concrete, config) {
+function steppedSkirtingParts(run, concrete, config, { joinedStart = false } = {}) {
   const H = config.skirtingHeightMm;
   const n = config.nosingFrontMm;
   const r = config.riserThicknessMm;
@@ -93,7 +93,8 @@ function steppedSkirtingParts(run, concrete, config) {
     const prev = levels[j - 1] || null;
     const next = levels[j + 1] || null;
     const F = face(lv);
-    const riserHere = !!prev || !lv.first.flat;
+    // (a run going on round a wall corner from the previous one at the same height starts like a landing — no riser)
+    const riserHere = !!prev || (!lv.first.flat && !joinedStart);
     // the vertical piece in front of this level's riser
     if (riserHere) {
       const notch = { overhang: n, under: lv.under, top: lv.top };
@@ -130,18 +131,27 @@ export function buildFinishBoards(concrete, config) {
   const runs = buildSideRuns(concrete, config);
   const skirting = [];
   const coverStringers = [];
+  // the wall corners at a turn (user request 2026-11-05): a skirted run ending where the next one starts (its wall's
+  // end on the other wall's line) — both boards cut through their thickness there (cornerCuts below); the next one going
+  // on at the same height starts without a riser piece
+  const skirted = config.skirtingEnabled ? runs.filter((r) => r.walled && r.pieces.length) : [];
+  const endOf = (r) => runPoint(r, r.pieces[r.pieces.length - 1].s1);
+  const startOf = (r) => runPoint(r, r.pieces[0].s0);
+  const joins = [];
+  for (const a of skirted) for (const b of skirted) if (a !== b && Math.hypot(endOf(a).x - startOf(b).x, endOf(a).y - startOf(b).y) < 1) joins.push({ a, b });
+  const joinedStart = new Set(joins.filter((j) => Math.abs(j.a.pieces[j.a.pieces.length - 1].top - j.b.pieces[0].top) < 1e-6).map((j) => j.b));
   for (const run of runs) {
     const { pieces } = run;
     if (!pieces.length) continue;
     const out = runOutward(run);
     if (run.walled && config.skirtingEnabled && config.skirtingStyle === 'stepped') {
       // stepped: horizontal + vertical pieces mitred at 45°, notched for the noses (steppedSkirtingParts)
-      const parts = steppedSkirtingParts(run, concrete, config);
+      const parts = steppedSkirtingParts(run, concrete, config, { joinedStart: joinedStart.has(run) });
       skirting.push({ id: `skirting-${run.key.flight}-${run.key.side}`, kind: 'skirting', key: run.key, polygon: null, parts, origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -out.x, y: -out.y }, thicknessMm: config.skirtingThicknessMm, lengthMm: parts.reduce((s, p) => s + p.lengthMm, 0), depthMm: config.skirtingHeightMm, style: 'stepped' });
     } else if (run.walled && config.skirtingEnabled) {
       // the bottom cut to the finished treads and risers (a run beginning on a landing starts at its top)
       const bottom = [];
-      let prev = pieces[0].flat ? pieces[0].top : pieces[0].below;
+      let prev = pieces[0].flat || joinedStart.has(run) ? pieces[0].top : pieces[0].below;
       for (const p of pieces) {
         bottom.push({ s: p.s0, z: prev }, { s: p.s0, z: p.top }, { s: p.s1, z: p.top });
         prev = p.top;
@@ -161,5 +171,40 @@ export function buildFinishBoards(concrete, config) {
       coverStringers.push(placed(run, `cover-${run.key.flight}-${run.key.side}`, 'cover-stringer', polygon, raked ? top : [top[0], top[top.length - 1]], out, config.coverStringerThicknessMm, { top: config.coverStringerTop }));
     }
   }
+  cornerCuts(joins, skirting);
   return { skirting, coverStringers };
+}
+
+/**
+ * The corner cut of two skirting boards meeting at a wall corner: each board's end there cut through its thickness so
+ * that the two meet on the corner's bisector (a 90° corner: 45°) — at the wall's face the board reaches the corner, at its
+ * face toward the stair it is `k` × its thickness longer / shorter (k < 0 an inside corner, k > 0 an outside one).
+ * `board.corners = {start?, end?: {s, k, angleDeg}}` (s = the board's end in its plane); the renderer shears the
+ * board's end vertices by k × their depth, the plan draws the cut, the DXF notes it.
+ */
+function cornerCuts(joins, skirting) {
+  const dot = (u, v) => u.x * v.x + u.y * v.y;
+  const boardOf = (run) => skirting.find((b) => b.key.flight === run.key.flight && b.key.side === run.key.side);
+  const ends = (b) => {
+    const ss = boardPolygons(b).flat().map((p) => p.s);
+    return { min: Math.min(...ss), max: Math.max(...ss) };
+  };
+  for (const { a, b } of joins) {
+    const A = boardOf(a);
+    const B = boardOf(b);
+    if (!A || !B) continue;
+    const dA = a.frame.f;
+    const dB = b.frame.f;
+    const across = dot(dA, B.normal);
+    if (Math.abs(across) < 0.2) continue; // (walls in line — nothing to cut)
+    const c = 1 - dot(A.normal, B.normal);
+    const kA = c / across;
+    const kB = c / dot(dB, A.normal);
+    const angleDeg = Math.round((Math.atan(Math.abs(kA)) * 180) / Math.PI);
+    const eA = ends(A);
+    const eB = ends(B);
+    // (only where the board's end is at the corner — a vertical piece standing short of it is left as it is)
+    if (Math.abs(eA.max - a.pieces[a.pieces.length - 1].s1) < 1) A.corners = { ...A.corners, end: { s: eA.max, k: kA, angleDeg } };
+    if (Math.abs(eB.min - b.pieces[0].s0) < 1) B.corners = { ...B.corners, start: { s: eB.min, k: kB, angleDeg } };
+  }
 }
