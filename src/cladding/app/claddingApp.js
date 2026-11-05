@@ -27,9 +27,7 @@ import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
 import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
-import { claddingExportRoot } from '../export/claddingMeshExport.js';
-import { exportStaircaseToOBJ } from '../../export/objExporter.js';
-import { exportStaircaseToDAE } from '../../export/daeExporter.js';
+import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
@@ -55,8 +53,8 @@ export function mountCladdingApp(rootEl, host = {}) {
         <button type="button" data-act="load">Wczytaj</button>
         <span class="clad-sep"></span>
         <button type="button" data-act="dxf" title="Wszystkie elementy okładziny płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
-        <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnie / Wangi / Słupy">⬇ DAE</button>
-        <button type="button" data-act="obj" title="Model 3D okładziny (OBJ, mm — przy imporcie ustaw milimetry)">⬇ OBJ</button>
+        <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnice / Listwy i wangi / Balustrada / Beton">⬇ DAE</button>
+        <button type="button" data-act="obj" title="Model 3D okładziny z betonem (OBJ, mm — przy imporcie ustaw milimetry); grupy jak w DAE">⬇ OBJ</button>
         <span class="clad-meta"></span>
         <span class="clad-sep"></span>
         <button type="button" data-act="undo" title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
@@ -1164,8 +1162,9 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (!dxf) return meta('Brak elementów do eksportu');
     downloadTextFile(dxf, `${fileBase()}-okladzina.dxf`, 'application/dxf');
   });
-  $('[data-act="dae"]').addEventListener('click', () => exportStaircaseToDAE(claddingExportRoot(renderCladdingStair(state.built)), `${fileBase()}.dae`));
-  $('[data-act="obj"]').addEventListener('click', () => exportStaircaseToOBJ(claddingExportRoot(renderCladdingStair(state.built)), `${fileBase()}.obj`));
+  // the 3D with the concrete as its own group „Beton” (user request 2026-11-05)
+  $('[data-act="dae"]').addEventListener('click', () => downloadTextFile(buildCladdingDAE(claddingExportRoot(renderCladdingStair(state.built))), `${fileBase()}.dae`, 'model/vnd.collada+xml'));
+  $('[data-act="obj"]').addEventListener('click', () => downloadTextFile(buildCladdingOBJ(claddingExportRoot(renderCladdingStair(state.built))), `${fileBase()}.obj`, 'text/plain'));
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;

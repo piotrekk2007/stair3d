@@ -30,9 +30,7 @@ const ALLOWED_SHARED = new Set([
   'takeoff/pricing.js',
   'offer/offerDocument.js',
   'app/printHtml.js',
-  // the OBJ / DAE writers (three only) — the module hands them its own export root (export/claddingMeshExport.js)
-  'export/objExporter.js',
-  'export/daeExporter.js',
+  // the browser download of a text file (the module writes its own DXF / OBJ / DAE text — export/)
   'export/downloadTextFile.js',
 ]);
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];

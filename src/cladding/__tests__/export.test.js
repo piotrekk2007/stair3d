@@ -6,7 +6,7 @@ import { createDefaultCladdingConfig } from '../schema.js';
 import { buildCladdingStair } from '../buildCladdingStair.js';
 import { renderCladdingStair } from '../claddingRenderer.js';
 import { buildCladdingDXF, claddingPieces } from '../export/claddingDxf.js';
-import { claddingExportRoot } from '../export/claddingMeshExport.js';
+import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 
 // export (user request 2026-11-04): the cladding flat 1:1 in a DXF, the 3D for SketchUp / OBJ
 const near = (a, b, msg, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${msg}: ${a} vs ${b}`);
@@ -66,19 +66,38 @@ test('DXF: a winder\'s fan riser panels get a / b codes; nothing to draw → nul
   assert.equal(buildCladdingDXF({ cladding: { treads: [], risers: [], exitNosing: [] }, concrete: { elements: [] } }), null);
 });
 
-test('3D export root: the cladding only, world-baked, in the shared exporters\' groups', () => {
+test('3D export root: world-baked meshes, one group per category, the concrete as its own group "Beton"', () => {
   const b = buildCladdingStair(straight({ walls: { 0: { left: true } }, skirtingEnabled: true, railingSides: { 0: { right: true } } }));
   const root = renderCladdingStair(b);
   root.position.set(100, 0, 0); // a transform on the way must be baked in
   const out = claddingExportRoot(root);
-  assert.deepEqual(out.children.map((g) => g.name), ['Treads', 'RiserBoards', 'StringerOuter', 'Posts']);
+  assert.deepEqual(out.children.map((g) => g.name), ['Stopnie', 'Podstopnice', 'Listwy_i_wangi', 'Balustrada', 'Beton']);
   const meshes = (g) => { let n = 0; g.traverse((o) => { if (o.isMesh) n++; }); return n; };
   assert.equal(meshes(out.children[0]), meshes(root.getObjectByName('Treads')));
   assert.equal(meshes(out.children[3]), meshes(root.getObjectByName('Railing')));
+  assert.equal(meshes(out.children[4]), meshes(root.getObjectByName('Concrete')));
   for (const g of out.children) for (const m of g.children) assert.ok(m.isMesh && m.matrixWorld.equals(new THREE.Matrix4()), 'flat, no transforms');
-  const a = new THREE.Box3().setFromObject(root.getObjectByName('Treads'));
-  const c = new THREE.Box3().setFromObject(out.children[0]);
-  near(c.min.x, a.min.x, 'baked x', 1e-6);
-  near(c.max.y, a.max.y, 'baked y', 1e-6);
-  assert.equal(out.getObjectByName('Concrete'), undefined, 'no concrete');
+  for (const [name, k] of [['Treads', 0], ['Concrete', 4]]) {
+    const a = new THREE.Box3().setFromObject(root.getObjectByName(name));
+    const c = new THREE.Box3().setFromObject(out.children[k]);
+    near(c.min.x, a.min.x, `${name} baked x`, 1e-6);
+    near(c.max.y, a.max.y, `${name} baked y`, 1e-6);
+  }
+  assert.equal(claddingExportRoot(root, { concrete: false }).getObjectByName('Beton'), undefined, 'concrete can be left out');
+  assert.equal(out.getObjectByName('Room'), undefined, 'no room');
+});
+
+test('OBJ / DAE text: the groups, every triangle, mm declared in the DAE', () => {
+  const b = buildCladdingStair(straight());
+  const out = claddingExportRoot(renderCladdingStair(b));
+  const tris = out.children.reduce((n, g) => n + g.children.reduce((m, x) => m + x.geometry.attributes.position.count / 3, 0), 0);
+  const obj = buildCladdingOBJ(out);
+  assert.deepEqual(obj.match(/^g .*/gm), out.children.map((g) => `g ${g.name}`));
+  assert.ok(obj.includes('g Beton'));
+  assert.equal((obj.match(/^f /gm) || []).length, tris);
+  const dae = buildCladdingDAE(out);
+  assert.match(dae, /<unit name="millimeter" meter="0.001"\/>/);
+  for (const g of out.children) assert.ok(dae.includes(`<node id="group_${g.name}" name="${g.name}">`), g.name);
+  const count = [...dae.matchAll(/<triangles material="mat" count="(\d+)"/g)].reduce((n, m) => n + Number(m[1]), 0);
+  assert.equal(count, tris);
 });

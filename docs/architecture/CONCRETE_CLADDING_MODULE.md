@@ -22,8 +22,7 @@ The self-supporting engine must not be touched: it works and the user does not w
 2. Shared code is used READ-ONLY, only pure libraries: `geometry/pathUtils.js`, `polygonClip.js`, `tolerances.js`,
    `diagnostics/diagnostic.js`, `takeoff/takeoffTypes.js` (`createTakeoffItem`), `takeoff/boardPricing.js` (the board
    price lookup), `takeoff/pricing.js`, `util/format.js`, `util/sideNames.js`, `scene/` helpers (scene setup, wood grain,
-   appearance), `plan2d/viewport.js`, `export/` writers where the format fits (`objExporter.js`, `daeExporter.js`,
-   `downloadTextFile.js` — the 3D export). Where the module needs different
+   appearance), `plan2d/viewport.js`, `export/downloadTextFile.js` (the module writes its own DXF / OBJ / DAE). Where the module needs different
    behaviour it gets its own code, not a parameter in the shared one.
 3. The only edits outside `src/cladding/` are small hooks, each listed here when made and covered by the existing tests
    (all of which must stay green, unchanged):
@@ -360,12 +359,16 @@ Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the p
   name, size, thickness, notes: profile, starter, winder). Codes (`claddingPieces`): `ST-nn` tread, `PD-nn` landing
   (`PD-nnN` its nosing), `PS-nn` riser (`PS-nna/b…` a winder's panels, `PS-G` the exit riser), `NA` antresola nosing,
   `LS-<flight><L|P>` skirting, `WO-<flight><L|P>` cover stringer, `SZ-n` pane. Nothing to draw → `null`.
-- DAE / OBJ: the SHARED `export/daeExporter.js` / `objExporter.js` (read-only, three only) on a root built by
-  `export/claddingMeshExport.js claddingExportRoot`: every visible cladding mesh with its world transform baked into a
-  copy of its geometry, under the shared category groups — treads / landings / noses → „Stopnie”, risers →
-  „Podstopnie”, skirting + cover stringers → „Wangi”, the balustrade → „Slupy”. The concrete, the room, the LED strips
-  and a linked floor are not exported. The isolation test lets `*MeshExport.js` use Three.js (it works on the rendered
-  scene, like a renderer).
+- DAE / OBJ: the module's OWN small writers (`export/claddingMeshExport.js buildCladdingDAE` / `buildCladdingOBJ`,
+  pure text) — the shared `export/daeExporter.js` / `objExporter.js` have the self-supporting categories built in (an
+  unknown group falls into „Stopnie”), so the concrete could not be a group of its own there (user request
+  2026-11-05). `claddingExportRoot(root, {concrete = true})`: every visible mesh with its world transform baked into
+  a copy of its geometry, one group per category (`EXPORT_GROUPS`): „Stopnie” (treads, landings, noses),
+  „Podstopnice”, „Listwy_i_wangi” (skirting, cover stringers), „Balustrada”, „Beton” (the concrete steps / landings,
+  the starter blocks). The room, the LED strips and a linked floor are not exported. DAE: COLLADA 1.4.1, mm declared,
+  Y up, a colour per material (glass with its transparency); OBJ: mm (set on import). Only
+  `export/downloadTextFile.js` is shared. The isolation test lets `*MeshExport.js` use Three.js (it works on the
+  rendered scene, like a renderer).
 - Tests: `__tests__/export.test.js`.
 
 ## Open questions
