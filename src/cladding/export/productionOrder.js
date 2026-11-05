@@ -62,9 +62,11 @@ export function buildProductionOrder(built, quoteSettings = {}) {
     const extras = [config.ledTreadEnabled ? 'kanał na LED' : '', t.grooves?.length ? `wpust pod podstopnicę ${t.grooves[0].depthMm} mm` : '', carpet && config.riserBoards ? 'rowki na obce pióro' : ''].filter(Boolean);
     const title = `${kindName(t)} ${edgeWords(prof, t.profile?.sizeMm)}${extras.length ? ` + ${extras.join(' + ')}` : ''}`;
     if (!byHead.has(title)) byHead.set(title, { title, items: [], drawing: { kind: 'tread', profile: prof, sizeMm: t.profile?.sizeMm, thicknessMm: t.thicknessMm, cuts: treadCuts(t, config) } });
-    byHead.get(title).items.push({ dims: dims3(t.thicknessMm, t.depthMm, t.lengthMm), type: t.sideType, code: `ST-${pad(t.index + 1)}`, note: t.kind === 'winder' ? 'kształt wg rysunku DXF' : t.starter ? 'kształt wg rysunku DXF' : '' });
+    byHead.get(title).items.push({ dims: dims3(t.thicknessMm, t.depthMm, t.lengthMm), type: t.sideType, code: `ST-${pad(t.index + 1)}` });
+    // (winders and starter steps: their shape from the workshop's templates — user request 2026-11-05)
+    if (t.kind === 'winder' || t.starter) byHead.get(title).note = 'kształt wg szablonów';
   }
-  for (const g of byHead.values()) groups.push({ title: g.title, drawing: g.drawing, lines: grouped(g.items) });
+  for (const g of byHead.values()) groups.push({ title: g.title, ...(g.note ? { note: g.note } : {}), drawing: g.drawing, lines: grouped(g.items) });
   // --- the landings
   const landings = cladding.treads.filter((x) => x.kind === 'landing' && !x.parts);
   if (landings.length) groups.push({ title: `Podesty ${edgeWords(landings[0].profile?.kind, landings[0].profile?.sizeMm)}`, lines: grouped(landings.map((t) => ({ dims: dims3(t.thicknessMm, t.depthMm, t.lengthMm), type: t.sideType, code: `PD-${pad(t.index + 1)}` }))) });
@@ -94,10 +96,11 @@ export function buildProductionOrder(built, quoteSettings = {}) {
   const trim = built.openingTrim;
   if (trim?.pieces?.length) {
     groups.push({
-      title: `Fajki — obróbka otworu ${edgeWords(config.edgeProfile, config.edgeProfileMm)}`,
-      note: 'końce przy sąsiedniej fajce cięte na 45°',
+      // (the workshop's name — user request 2026-11-05: „Nosek wyk.”, nosek wykończeniowy)
+      title: `Noski wyk. — obróbka otworu ${edgeWords(config.edgeProfile, config.edgeProfileMm)}`,
+      note: 'końce przy sąsiednim nosku (i nosku antresoli) cięte na 45°',
       drawing: { kind: 'trim', noseWidthMm: trim.noseWidthMm, noseHeightMm: trim.noseHeightMm, boardThicknessMm: trim.boardThicknessMm, boardDepthMm: trim.boardDepthMm, profile: config.edgeProfile, sizeMm: config.edgeProfileMm },
-      lines: grouped(trim.pieces.map((t) => ({ dims: dims3(t.thicknessMm, t.depthMm, t.lengthMm), code: `FJ-${t.edge + 1}` }))),
+      lines: grouped(trim.pieces.map((t) => ({ dims: dims3(t.thicknessMm, t.depthMm, t.lengthMm), code: `NW-${t.edge + 1}` }))),
     });
   }
   // --- the skirting and the cover stringers
@@ -170,7 +173,8 @@ export function productionOrderHTML(order, { projectName = '', date = new Date()
   const body = order.groups
     .map((g) => {
       const draw = g.drawing ? (g.drawing.kind === 'trim' ? trimSVG(g.drawing) : treadSVG(g.drawing)) : '';
-      const lines = g.lines.map((l) => `<div class="l"><b>${esc(l.dims)}</b>${l.type ? ` - <b>${esc(l.type)}</b>` : ''} - <b>${l.qty} szt.</b>${l.note ? ` <span class="nt">(${esc(l.note)})</span>` : ''}${l.codes.length ? `<div class="c">${esc(l.codes.join(', '))}</div>` : ''}</div>`).join('');
+      // (a box per line to tick off when it is made — user request 2026-11-05)
+      const lines = g.lines.map((l) => `<div class="l"><span class="box"></span><b>${esc(l.dims)}</b>${l.type ? ` - <b>${esc(l.type)}</b>` : ''} - <b>${l.qty} szt.</b>${l.note ? ` <span class="nt">(${esc(l.note)})</span>` : ''}${l.codes.length ? `<div class="c">${esc(l.codes.join(', '))}</div>` : ''}</div>`).join('');
       return `<section><h2>${esc(g.title)}</h2>${g.note ? `<div class="gn">${esc(g.note)}</div>` : ''}${draw}${lines}</section>`;
     })
     .join('');
@@ -181,7 +185,8 @@ export function productionOrderHTML(order, { projectName = '', date = new Date()
   .cols { column-count: 2; column-gap: 7mm; }
   section { break-inside: avoid; border-top: 1.5px solid #000; padding: 1.5mm 0 2mm; }
   h2 { font-size: 13pt; margin: 0 0 1mm; } .gn { font-size: 10pt; margin-bottom: 1mm; }
-  .l { font-size: 15pt; margin: 1mm 0 1mm 2mm; line-height: 1.15; } .nt { font-size: 10pt; font-weight: normal; } .c { font-size: 7.5pt; color: #555; margin-left: 1mm; line-height: 1.1; }
+  .l { font-size: 15pt; margin: 1mm 0 1mm 2mm; line-height: 1.15; padding-left: 8mm; text-indent: -8mm; }
+  .box { display: inline-block; width: 5mm; height: 5mm; border: 1.6px solid #000; margin-right: 3mm; vertical-align: -0.6mm; text-indent: 0; } .nt { font-size: 10pt; font-weight: normal; } .c { font-size: 7.5pt; color: #555; margin-left: 1mm; line-height: 1.1; }
   svg.draw { display: block; margin: 1mm 0 1.5mm 2mm; font-size: 12px; font-family: Arial, sans-serif; }
   </style></head><body><h1>Zamówienie na produkcję</h1><div class="meta">${projectName ? `<b>${esc(projectName)}</b> · ` : ''}${d}${order.wood ? ` · ${esc(order.wood)}` : ''}${thicknessNote ? ` · ${esc(thicknessNote)}` : ''}<br>Wymiary: grubość x szerokość x długość [mm]. Typ: L — nosek / koniec widoczny z lewej, P — z prawej, CZ — czołowy (między ścianami), PL — z obu stron.</div><div class="cols">${body}</div></body></html>`;
 }

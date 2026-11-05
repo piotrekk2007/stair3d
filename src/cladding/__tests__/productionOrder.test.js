@@ -40,10 +40,14 @@ test('the other groups: noses, the trim with its drawing, skirting, posts, balus
   const b = buildCladdingStair(cfg({ walls: { 0: { left: true } }, skirtingEnabled: true, railingSides: { 0: { right: true } }, openingTrimEnabled: true, stepOverrides: { 2: { nosingLeft: false, nosingRight: false } } }));
   const o = buildProductionOrder(b, createDefaultQuoteSettings());
   const titles = o.groups.map((g) => g.title.split(' ')[0]);
-  for (const t of ['Stopnie', 'Podstopnie', 'Noski', 'Fajki', 'Listwy', 'Słupy', 'Tralki', 'Poręcze']) assert.ok(titles.includes(t), t);
+  for (const t of ['Stopnie', 'Podstopnie', 'Noski', 'Listwy', 'Słupy', 'Tralki', 'Poręcze']) assert.ok(titles.includes(t), t);
   const st = o.groups.find((x) => x.title.startsWith('Stopnie proste'));
   assert.deepEqual(st.lines.map((l) => [l.type, l.qty]).sort(), [['CZ', 1], ['P', 4]]);
-  assert.equal(o.groups.find((g) => g.title.startsWith('Fajki')).drawing.kind, 'trim');
+  // the trim under the workshop's name „Nosek wyk.” (user request 2026-11-05), its profile drawn
+  const nw = o.groups.find((g) => g.title.startsWith('Noski wyk.'));
+  assert.equal(nw.drawing.kind, 'trim');
+  assert.ok(nw.lines.every((l) => l.codes.every((c) => /^NW-\d+$/.test(c))));
+  assert.ok(!JSON.stringify(o).includes('Fajk'), 'no „fajka” on the workshop\'s paper');
   const html = productionOrderHTML(o, { projectName: 'Kowalski' });
   assert.match(html, /<h1>Zamówienie na produkcję<\/h1>/);
   assert.match(html, /<b>40x300x1030<\/b> - <b>P<\/b> - <b>4 szt\.<\/b>/);
@@ -77,4 +81,23 @@ test('the section drawings are simple polygons — the tread\'s and the trim\'s 
         assert.ok(!cross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]), `edges ${i} and ${j} cross`);
       }
   }
+});
+
+// user request 2026-11-05: "w zamówieniu produkcyjnym kratka na odznaczenie, czy już wykonane"
+test('winders noted „kształt wg szablonów”; every line of the order has a box to tick off', () => {
+  const b = buildCladdingStair({
+    ...createDefaultCladdingConfig(),
+    sequence: [
+      { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+      { kind: 'winders', count: 3, riseMm: 180, turn: 'right' },
+      { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+    ],
+  });
+  const o = buildProductionOrder(b, createDefaultQuoteSettings());
+  const g = o.groups.find((x) => x.title.startsWith('Stopnie zabiegowe'));
+  assert.equal(g.note, 'kształt wg szablonów');
+  assert.ok(g.lines.every((l) => !l.note));
+  const html = productionOrderHTML(o);
+  const lines = o.groups.reduce((n, x) => n + x.lines.length, 0);
+  assert.equal((html.match(/<div class="l"><span class="box"><\/span>/g) || []).length, lines, 'a box per line');
 });

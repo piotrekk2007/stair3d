@@ -42,7 +42,7 @@ test('the trim per edge (the plan\'s mode „▬ Fajka”), in 3D, on the plan, 
   assert.ok(root.getObjectByName(`OpeningTrim-${b.openingTrim.pieces[0].edge}-nose`));
   const q = buildCladdingQuote(b, createDefaultQuoteSettings());
   assert.equal(q.lines.filter((l) => l.id.startsWith('trim-')).length, b.openingTrim.pieces.length);
-  assert.ok(claddingPieces(b).some((p) => p.code.startsWith('FJ-')));
+  assert.ok(claddingPieces(b).some((p) => p.code.startsWith('NW-') && p.name.startsWith('Nosek wyk.')));
   assert.equal(buildCladdingStair(cfg()).openingTrim.pieces.length, 0, 'off by default');
 });
 

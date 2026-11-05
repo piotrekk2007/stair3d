@@ -99,10 +99,11 @@ export function claddingPieces(built) {
     const pts = [{ u: 0, v: 0 }, { u: r.lengthMm, v: 0 }, { u: r.lengthMm, v: r.heightMm }, { u: 0, v: r.heightMm }];
     pieces.push({ row: 'risers', code, name: r.bent ? 'Podstopnica gięta (rozwinięcie)' : 'Podstopnica', pts, notes: [`${r.thicknessMm} mm`] });
   }
-  // the opening's trim („fajka”): flat, its grain along its edge, mitres at the corners
+  // the opening's trim („fajka”; on the workshop's papers „nosek wyk.” — nosek wykończeniowy, NW-n): flat, its grain
+  // along its edge, mitres at the corners
   for (const t of built.openingTrim?.pieces || []) {
     const tr = built.openingTrim;
-    pieces.push({ row: 'treads', code: `FJ-${t.edge + 1}`, name: `Fajka otworu, krawędź ${t.edge + 1}`, pts: toLocal(t.outline, t.grain), notes: [`${Math.round(t.thicknessMm)} mm`, `nosek ${Math.round(tr.noseWidthMm)} × ${Math.round(tr.noseHeightMm)}, deska ${Math.round(tr.boardDepthMm)} × ${Math.round(tr.boardThicknessMm)}`] });
+    pieces.push({ row: 'treads', code: `NW-${t.edge + 1}`, name: `Nosek wyk. otworu, krawędź ${t.edge + 1}`, pts: toLocal(t.outline, t.grain), notes: [`${Math.round(t.thicknessMm)} mm`, `nosek ${Math.round(tr.noseWidthMm)} × ${Math.round(tr.noseHeightMm)}, deska ${Math.round(tr.boardDepthMm)} × ${Math.round(tr.boardThicknessMm)}`] });
   }
   for (const n of cladding.exitNosing || []) {
     const piece = { row: 'treads', code: 'NA', name: 'Nosek antresoli', pts: toLocal(n.outline, n.grain), notes: [`${n.thicknessMm} mm`] };

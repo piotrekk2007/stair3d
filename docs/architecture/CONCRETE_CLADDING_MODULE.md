@@ -404,7 +404,10 @@ dąb — za stopnicą, wpust …” / „dywanowe, na obce pióro”), noses, tr
 notches), cover stringers, posts (cap, grooves), balusters (rounded up to 10 mm), handrails (wall handrails with their
 brackets), loose tongues. The both-sides tread type is now „PL” (the workshop's word, was LP). Layout (user request
 2026-11-05): two columns, the drawings half size (1.5 px/mm), the sizes 15 pt — the order on one or two A4 pages; the
-section outlines run the profile bottom → top (a crossing outline reported and fixed). Tests:
+section outlines run the profile bottom → top (a crossing outline reported and fixed). The workshop's names: the
+trim „fajka” is „Nosek wyk.” (nosek wykończeniowy) on the order, the DXF and the cut list (code `NW-n`; the app and the
+client's offer keep „fajka”); winders / starter steps noted once per group „kształt wg szablonów”; a box to tick off
+in front of every line. Tests:
 `__tests__/productionOrder.test.js`.
 
 ## The opening's trim „fajka”; the posts' tops (user request 2026-11-05, as built)
@@ -417,7 +420,7 @@ section outlines run the profile bottom → top (a crossing outline reported and
 with the finished floor; mitred at a corner with the next trimmed edge, square where it has none. Plan mode „▬ Fajka”
 (a click on an opening edge = trim there or not — the first click switches the trim on, on that edge only), 3D (nose +
 board), the plan, the quote (a board per edge from the board price list, labour „nosing”), the DXF / cut list
-(`FJ-n`). The decorative posts' tops (`POST_CAPS`): flat, pyramid, ball, `round` (turned — a lathe profile: collar,
+(`NW-n`). The decorative posts' tops (`POST_CAPS`): flat, pyramid, ball, `round` (turned — a lathe profile: collar,
 neck, dome) and `none` (the shaft to the top). Tests: `__tests__/trimCaps.test.js`.
 - The trim meets the ANTRESOLA NOSING at the exit corner (user report 2026-11-05): the exit edge counts as a trimmed
   neighbour with the nosing's own lines (its overhang `overMm`, its depth on the slab `onSlabMm` — `exitNosing[].edge`);
