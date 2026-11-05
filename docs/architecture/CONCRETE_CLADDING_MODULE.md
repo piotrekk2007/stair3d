@@ -396,7 +396,10 @@ neck, dome) and `none` (the shaft to the top). Tests: `__tests__/trimCaps.test.j
   neighbour with the nosing's own lines (its overhang `overMm`, its depth on the slab `onSlabMm` — `exitNosing[].edge`);
   both are cut on the corner's diagonal (through the crossings of their inner / outer lines — exactly 45° when the two
   overhangs are equal); a nosing ending short of the opening's corner along its line (≤ 200 mm — the opening wider than
-  the stair by its side nosing) is carried on to it. The trim model returns the nosing's mitred outline
+  the stair by its side nosing) is carried on to it. By default (user decision 2026-11-05) the trim's nose reach and
+  board depth are the nosing's (`openingTrimNoseWidthMm` / `openingTrimBoardDepthMm` null → `trimNoseWidthMm` = front
+  nosing + riser board, `trimBoardDepthMm` = `exitNosingDepthMm`), so the corner cut is one straight 45° line; the panel's
+  „Wymiary jak nosek antresoli (45°)” switches back to them, the sliders set own values. The trim model returns the nosing's mitred outline
   (`exitNosingOutlines`), the orchestrator puts it on the nosing (`mitred`, its length anew).
 - The 3D view's layers (bottom right, „Warstwy”, as the self-supporting HUD): concrete, treads (+ noses, trims),
   risers, skirting / cover stringers, balustrade, LED, walls, slab, the linked floor — view state only, remembered in

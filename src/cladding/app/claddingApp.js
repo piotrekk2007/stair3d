@@ -34,6 +34,7 @@ import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
 import { buildCutList, cutListToCSV } from '../export/cutList.js';
 import { buildProductionOrder, productionOrderHTML } from '../export/productionOrder.js';
+import { trimNoseWidthMm, trimBoardDepthMm } from '../openingTrimModel.js';
 import { claddingClientScene, claddingClientFacts } from '../export/clientModel.js';
 import { sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML } from '../../export/clientModelExport.js';
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
@@ -364,8 +365,31 @@ export function mountCladdingApp(rootEl, host = {}) {
   rail.close();
   const trimF = gui.addFolder('Obróbka otworu (fajka)');
   live(trimF.add(proxy, 'openingTrimEnabled').name('Fajka przy otworze / antresoli'));
-  live(trimF.add(proxy, 'openingTrimNoseWidthMm', 0, 200, 1).name('Nosek: wysięg w otwór [mm]'));
-  live(trimF.add(proxy, 'openingTrimBoardDepthMm', 0, 600, 5).name('Deska: na strop [mm]'));
+  // (the reach: as the antresola nosing — null — or the user's own; the slider shows the one in use)
+  const trimProxy = {
+    get asNosing() {
+      return state.config.openingTrimNoseWidthMm === null && state.config.openingTrimBoardDepthMm === null;
+    },
+    set asNosing(v) {
+      state.config.openingTrimNoseWidthMm = v ? null : trimNoseWidthMm(state.config);
+      state.config.openingTrimBoardDepthMm = v ? null : trimBoardDepthMm(state.config);
+    },
+    get depth() {
+      return trimBoardDepthMm(state.config);
+    },
+    set depth(v) {
+      state.config.openingTrimBoardDepthMm = v;
+    },
+    get reach() {
+      return trimNoseWidthMm(state.config);
+    },
+    set reach(v) {
+      state.config.openingTrimNoseWidthMm = v;
+    },
+  };
+  live(trimF.add(trimProxy, 'asNosing').name('Wymiary jak nosek antresoli (45°)'));
+  live(trimF.add(trimProxy, 'reach', 0, 200, 1).name('Nosek: wysięg w otwór [mm]'));
+  live(trimF.add(trimProxy, 'depth', 0, 600, 5).name('Deska: na strop [mm]'));
   trimF.close();
   const wallRailF = gui.addFolder('Poręcz przyścienna');
   live(wallRailF.add(proxy, 'wallRailHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));

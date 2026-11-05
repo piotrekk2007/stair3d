@@ -78,3 +78,21 @@ test('the trim meets the antresola nosing on the corner\'s diagonal, the nosing 
   // without the trim: as before
   assert.equal(buildCladdingStair(cfg()).cladding.exitNosing[0].mitred, undefined);
 });
+
+// user decision 2026-11-05: the trim's reach by default as the antresola nosing's → the two meet at exactly 45°
+test('the trim\'s reach by default = the antresola nosing\'s (front nosing + riser): the corner cut one straight 45° line', () => {
+  const b = buildCladdingStair(cfg({ openingTrimEnabled: true, nosingFrontMm: 30, riserThicknessMm: 20, riserBoards: true }));
+  assert.equal(b.config.openingTrimNoseWidthMm, null);
+  assert.equal(b.config.openingTrimBoardDepthMm, null);
+  assert.equal(b.openingTrim.boardDepthMm, b.config.exitNosingDepthMm, 'the board as deep as the nosing');
+  assert.equal(b.openingTrim.noseWidthMm, 50);
+  const [nz] = b.cladding.exitNosing;
+  near(nz.overMm, 50, 'the nosing\'s reach');
+  // at the opening's corner on the nosing's left end: inner mitre point, the corner, outer mitre point on one 45° line
+  const o = b.slab.opening;
+  const corner = o.find((p) => nz.outline.some((q) => Math.abs(q.x - p.x) < 200 && Math.abs(q.y - p.y) < 200));
+  const pts = nz.outline.filter((q) => Math.hypot(q.x - corner.x, q.y - corner.y) < 300);
+  for (const q of pts) near(Math.abs(q.x - corner.x), Math.abs(q.y - corner.y), '45° — as far along x as along y', 1e-6);
+  // the user's own reach stays
+  assert.equal(buildCladdingStair(cfg({ openingTrimEnabled: true, openingTrimNoseWidthMm: 25 })).openingTrim.noseWidthMm, 25);
+});

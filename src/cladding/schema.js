@@ -77,10 +77,10 @@ export function createDefaultCladdingConfig() {
     // the self-supporting defaults (ASSUMPTION)
     openingTrimEnabled: false,
     openingTrimEdges: {},
-    openingTrimNoseWidthMm: 20, // into the opening
+    openingTrimNoseWidthMm: null, // into the opening (null = as the antresola nosing: the front nosing + the riser board — user decision 2026-11-05, so the two meet at exactly 45°)
     openingTrimNoseHeightMm: null, // null = the tread's thickness
     openingTrimBoardThicknessMm: null, // null = the top floor finish (else 15)
-    openingTrimBoardDepthMm: 100, // onto the floor
+    openingTrimBoardDepthMm: null, // onto the floor (null = as the antresola nosing's `exitNosingDepthMm`)
     exitNosingDepthMm: 120, // onto the slab, past the last back edge (ASSUMPTION)
     // the slab above and its opening (drawing): the opening = the treads that need it for the headroom
     showSlab: true,
@@ -307,10 +307,10 @@ export function sanitizeCladdingConfig(raw) {
     exitNosing: c.exitNosing !== false,
     openingTrimEnabled: !!c.openingTrimEnabled,
     openingTrimEdges: Object.fromEntries(Object.entries(c.openingTrimEdges && typeof c.openingTrimEdges === 'object' ? c.openingTrimEdges : {}).filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'boolean')),
-    openingTrimNoseWidthMm: num(c.openingTrimNoseWidthMm, d.openingTrimNoseWidthMm, 0, 200),
+    openingTrimNoseWidthMm: c.openingTrimNoseWidthMm === null || c.openingTrimNoseWidthMm === undefined || c.openingTrimNoseWidthMm === '' ? null : num(c.openingTrimNoseWidthMm, 20, 0, 200),
     openingTrimNoseHeightMm: c.openingTrimNoseHeightMm === null || c.openingTrimNoseHeightMm === undefined || c.openingTrimNoseHeightMm === '' ? null : num(c.openingTrimNoseHeightMm, 40, 5, 300),
     openingTrimBoardThicknessMm: c.openingTrimBoardThicknessMm === null || c.openingTrimBoardThicknessMm === undefined || c.openingTrimBoardThicknessMm === '' ? null : num(c.openingTrimBoardThicknessMm, 15, 3, 100),
-    openingTrimBoardDepthMm: num(c.openingTrimBoardDepthMm, d.openingTrimBoardDepthMm, 0, 600),
+    openingTrimBoardDepthMm: c.openingTrimBoardDepthMm === null || c.openingTrimBoardDepthMm === undefined || c.openingTrimBoardDepthMm === '' ? null : num(c.openingTrimBoardDepthMm, 100, 0, 600),
     exitNosingDepthMm: num(c.exitNosingDepthMm, d.exitNosingDepthMm, 20, 500),
     showSlab: c.showSlab !== false,
     slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),

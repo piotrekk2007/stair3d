@@ -1,7 +1,8 @@
 // The opening's trim — „fajka” — of the module "Schody na beton" (user request 2026-11-05, as the self-supporting
 // openingTrimModel.js; docs/architecture/CONCRETE_CLADDING_MODULE.md): along the chosen edges of the ceiling opening
 // (`openingTrimEdges[k]`, toggled on the plan — mode „▬ Fajka”; never the stair's exit edge, the antresola nosing is
-// there) a NOSE standing out into the opening (`openingTrimNoseWidthMm` × `openingTrimNoseHeightMm`, default the tread's
+// there) a NOSE standing out into the opening (`openingTrimNoseWidthMm`, null = as the antresola nosing — so the two
+// meet at exactly 45° — × `openingTrimNoseHeightMm`, default the tread's
 // thickness) and a BOARD lying on the slab behind it (`openingTrimBoardThicknessMm`, default the top floor finish, else
 // 15; `openingTrimBoardDepthMm` onto the floor), their top flush with the finished floor; mitred at a corner with the
 // next trimmed edge — and with the ANTRESOLA NOSING at the stair's exit (user request 2026-11-05: „przy fajkach na
@@ -9,7 +10,14 @@
 // overhangs kept — the nosing's mitred outline returned as `exitNosingOutlines`) —, square where the next edge has
 // none. Sizes ASSUMPTION (as the self-supporting defaults). Pure.
 
+import { riserThicknessOf } from './claddingModel.js';
+
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+
+/** The nose's reach into the opening: the user's own, else as the antresola nosing's (front nosing + riser board). */
+/** The board's depth onto the floor: the user's own, else as the antresola nosing's. */
+export const trimBoardDepthMm = (config) => config.openingTrimBoardDepthMm ?? config.exitNosingDepthMm;
+export const trimNoseWidthMm = (config) => config.openingTrimNoseWidthMm ?? config.nosingFrontMm + (config.riserBoards ? riserThicknessOf(config) : 0);
 const add = (p, n, d) => ({ x: p.x + n.x * d, y: p.y + n.y * d });
 
 function crossing(a1, b1, a2, b2) {
@@ -41,8 +49,8 @@ export function trimEdges(built, config) {
 export function buildOpeningTrim(built, config) {
   const empty = { pieces: [] };
   if (!config.openingTrimEnabled || !built.slab?.opening?.length) return empty;
-  const W = config.openingTrimNoseWidthMm;
-  const D = config.openingTrimBoardDepthMm;
+  const W = trimNoseWidthMm(config);
+  const D = trimBoardDepthMm(config);
   const T = config.openingTrimBoardThicknessMm ?? (config.floorFinishTopMm > 0 ? config.floorFinishTopMm : 15);
   const H = Math.max(T, config.openingTrimNoseHeightMm ?? config.treadThicknessMm);
   const slabTop = built.concrete.exit.rawSlabTopZ;
