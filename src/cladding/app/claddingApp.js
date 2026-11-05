@@ -29,6 +29,8 @@ import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 import { downloadTextFile } from '../../export/downloadTextFile.js';
+import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
+import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../../scene/presentationImage.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
 
@@ -60,6 +62,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <button type="button" data-act="undo" title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
         <button type="button" data-act="redo" title="Ponów (Ctrl+Y)">↷ Ponów</button>
         <span class="clad-spacer"></span>
+        <button type="button" data-act="present" title="Czysty widok 3D dla klienta: bez paneli i siatki, logo firmy, „Zapisz zdjęcie” (Esc — koniec)">🎬 Prezentacja</button>
         <div class="clad-views">
           <button type="button" data-view="plan" class="active">Plan 2D</button>
           <button type="button" data-view="3d">Widok 3D</button>
@@ -87,6 +90,20 @@ export function mountCladdingApp(rootEl, host = {}) {
         <div class="clad-plan"></div>
         <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button></div>
         <div class="clad-3d" hidden></div>
+        <div class="clad-present-bar">
+          <button type="button" data-present="photo" title="Widok 3D w podwójnej rozdzielczości z logo — plik PNG">📷 Zapisz zdjęcie</button>
+          <label title="Strop nad schodami"><input type="checkbox" data-present="slab" /> Strop</label>
+          <label title="Ściany przy schodach"><input type="checkbox" data-present="walls" checked /> Ściany</label>
+          <span class="clad-sep"></span>
+          <button type="button" data-present="logo" title="Logo firmy na ekranie i na zdjęciach (to samo co w schodach samonośnych — zapamiętane w tej przeglądarce)">Logo…</button>
+          <select data-present="corner" title="Róg logo">${LOGO_CORNERS.map((c) => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
+          <input type="range" data-present="size" min="${LOGO_SIZE_PCT.min}" max="${LOGO_SIZE_PCT.max}" step="1" title="Wielkość logo [% szerokości]" />
+          <button type="button" data-present="logo-remove" title="Usuń logo">✕ logo</button>
+          <span class="clad-present-status"></span>
+          <span class="clad-spacer"></span>
+          <button type="button" data-present="exit" title="Koniec prezentacji (Esc)">✕ Zakończ</button>
+          <input type="file" accept="image/*" data-present="logo-file" hidden />
+        </div>
       </main>
       <aside class="clad-right">
         <nav class="clad-tabs"><button type="button" data-pane="measure" class="active">Pomiar</button><button type="button" data-pane="quote">Kosztorys</button><button type="button" data-pane="offer">Oferta</button></nav>
@@ -1096,15 +1113,87 @@ export function mountCladdingApp(rootEl, host = {}) {
       root.add(state.floor.group);
     }
     sceneApi.scene.add(root);
+    applyPresentation();
     const box = new THREE.Box3().setFromObject(root);
     sceneApi.fitShadowToBox(box);
     if (!framed) {
-      const centre = box.getCenter(new THREE.Vector3());
-      const radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
-      sceneApi.frameView('iso', centre, radius);
+      frame3D();
       framed = true;
     }
   }
+  // the whole stair in the iso view
+  function frame3D() {
+    if (!sceneApi || !root) return;
+    // (in the presentation the hidden slab / walls do not count)
+    const box = new THREE.Box3();
+    for (const c of root.children) if (!(present.on && c.name === 'Room')) box.expandByObject(c);
+    if (box.isEmpty()) return;
+    sceneApi.frameView('iso', box.getCenter(new THREE.Vector3()), Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2));
+  }
+  // --- the presentation mode (user request 2026-11-05): the 3D only, no grid / axes / editing aids, the slab hidden
+  // by default, the company logo (the shared app/presentation.js — the same logo as the self-supporting one) on screen
+  // and on „Zapisz zdjęcie” (the shared captureImage at 2×). View state only — not the config, not in undo.
+  const appEl = $('.clad-app');
+  const presentBar = $('.clad-present-bar');
+  const present = { on: false, slab: false, walls: true, viewBefore: 'plan' };
+  const logo = createPresentationLogo({
+    hostEl: $('.clad-main'),
+    viewportEl: view3dEl,
+    onStatus: (settings, message) => {
+      presentBar.querySelector('[data-present="corner"]').value = settings.corner;
+      presentBar.querySelector('[data-present="size"]').value = settings.sizePct;
+      presentBar.querySelector('[data-present="logo-remove"]').hidden = !settings.dataUrl;
+      presentBar.querySelector('.clad-present-status').textContent = message || (settings.dataUrl ? '' : 'bez logo');
+    },
+  });
+  function applyPresentation() {
+    if (!sceneApi) return;
+    const technical = !present.on;
+    sceneApi.helpers.grid.visible = technical;
+    sceneApi.helpers.axes.visible = technical;
+    sceneApi.helpers.ground.visible = !technical;
+    sceneApi.helpers.shadowCatcher.visible = technical;
+    const room = root?.getObjectByName('Room');
+    room?.traverse((o) => {
+      if (!o.isMesh) return;
+      o.visible = !present.on || (o.name === 'Slab' ? present.slab : present.walls);
+    });
+  }
+  function setPresentation(on) {
+    present.on = on;
+    appEl.classList.toggle('clad-present', on);
+    if (on) {
+      present.viewBefore = state.view;
+      setView('3d');
+      logo.apply();
+    } else setView(present.viewBefore);
+    applyPresentation();
+    // the canvas follows its box (the side panels hidden / back), then the stair is framed again
+    window.dispatchEvent(new Event('resize'));
+    requestAnimationFrame(() => frame3D());
+  }
+  $('[data-act="present"]').addEventListener('click', () => setPresentation(true));
+  presentBar.addEventListener('click', (ev) => {
+    const act = ev.target.closest('[data-present]')?.dataset.present;
+    if (act === 'exit') setPresentation(false);
+    else if (act === 'photo' && sceneApi) savePresentationSnapshot({ sceneApi, logo, projectName: state.projectName || 'schody-na-beton' });
+    else if (act === 'logo') presentBar.querySelector('[data-present="logo-file"]').click();
+    else if (act === 'logo-remove') logo.remove();
+  });
+  presentBar.addEventListener('change', (ev) => {
+    const el = ev.target;
+    const act = el.dataset.present;
+    if (act === 'slab' || act === 'walls') {
+      present[act] = el.checked;
+      applyPresentation();
+    } else if (act === 'corner') logo.update({ corner: el.value });
+    else if (act === 'logo-file' && el.files?.[0]) {
+      logo.loadFile(el.files[0]);
+      el.value = '';
+    }
+  });
+  presentBar.querySelector('[data-present="size"]').addEventListener('input', (ev) => logo.update({ sizePct: Number(ev.target.value) }));
+
   function setView(view) {
     state.view = view;
     rootEl.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
@@ -1211,6 +1300,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     const key = e.key.toLowerCase();
+    if (key === 'escape' && present.on) {
+      setPresentation(false);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'z') {
       e.preventDefault();
       restore(undo(history));

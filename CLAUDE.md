@@ -557,8 +557,9 @@ shared `scene/appearance.js` (saved in the project file, not in undo) and LED li
 writer: every piece flat with its code — ST / PD / PS / NA / LS / WO / SZ —, profiled edges on layer PROFILE), „⬇ DAE”
 / „⬇ OBJ” (the module's own writers in `export/claddingMeshExport.js` — world-baked meshes in the groups Stopnie /
 Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The wall handrail on brackets on a walled side
-(`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). Next (user, 2026-11-05): photo + client
-mode, the cut list (CSV), the client's 3D model, tape measures. Later (user): contract / payment-schedule documents.
+(`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
+shared logo + „Zapisz zdjęcie” — `app/presentation.js`). Next (user, 2026-11-05): the cut list (CSV), the client's 3D
+model, tape measures. Later (user): contract / payment-schedule documents.
 
 ## Open items / known limitations
 

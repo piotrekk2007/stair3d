@@ -137,3 +137,20 @@
 /* colours */
 .clad-colors-table select { max-width: 130px; font-size: 11px; }
 .clad-colors-table input[type='color'] { width: 34px; height: 22px; padding: 0; border: 0; }
+
+/* the presentation mode: the 3D only, a floating bar with the photo / logo / slab controls */
+.clad-present-bar { display: none; }
+.clad-app.clad-present { grid-template-columns: 0 minmax(0, 1fr) 0; grid-template-rows: 0 minmax(0, 1fr); }
+.clad-app.clad-present > .clad-bar,
+.clad-app.clad-present > .clad-left,
+.clad-app.clad-present > .clad-right,
+.clad-app.clad-present .clad-plan-modes { display: none; }
+.clad-app.clad-present .clad-present-bar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  position: absolute; top: 8px; left: 8px; right: 8px; z-index: 22;
+  padding: 6px 10px; background: rgba(255, 255, 255, 0.92); border: 1px solid #d0d4da; border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.clad-present-bar input[type='range'] { width: 90px; }
+.clad-present-status { color: #6b7280; font-size: 12px; }
+.clad-app.clad-present #presentation-logo.client-only { display: block; }

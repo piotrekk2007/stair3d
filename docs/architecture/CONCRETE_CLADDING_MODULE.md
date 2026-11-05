@@ -363,6 +363,17 @@ bracket an arm + stub + wall plate, in the `Railing` group), plan (the line + a 
 `railing-wall-bracket` — from the shared list, labour `wall-rail` per mb). Folder „Poręcz przyścienna”. Tests:
 `__tests__/wallRail.test.js`.
 
+## The presentation mode (user request 2026-11-05, as built)
+
+„🎬 Prezentacja” (toolbar, `app/claddingApp.js setPresentation`): the 3D only (the bar, the panels and the plan's modes
+hidden — `.clad-app.clad-present`), no grid / axes, the ground and its shadow as the self-supporting presentation, the
+slab hidden and the walls shown by default (toggles „Strop” / „Ściany” on the floating bar), the stair framed again
+without the room; Esc or „✕ Zakończ” goes back to the view before. The company logo through the SHARED
+`app/presentation.js createPresentationLogo` (read-only — the same logo, corner and size as the self-supporting one,
+remembered in this browser under `stair3d.presentationLogo`; „Logo…”, corner, size, „✕ logo”); „📷 Zapisz zdjęcie” =
+the shared `savePresentationSnapshot` (the scene at 2× + the logo, PNG named after the project). View state only — not
+the config, not in undo. The isolation list gains `app/presentation.js` and `scene/presentationImage.js`.
+
 ## Export (user request 2026-11-04, as built 2026-11-05)
 
 Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the project).

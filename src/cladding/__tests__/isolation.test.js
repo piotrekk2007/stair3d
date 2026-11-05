@@ -32,6 +32,9 @@ const ALLOWED_SHARED = new Set([
   'app/printHtml.js',
   // the browser download of a text file (the module writes its own DXF / OBJ / DAE text — export/)
   'export/downloadTextFile.js',
+  // the presentation mode: the company logo (on screen, on the photo) and „Zapisz zdjęcie” — DOM / pure helpers
+  'app/presentation.js',
+  'scene/presentationImage.js',
 ]);
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];
 // files outside the module allowed to import it (the hooks)
