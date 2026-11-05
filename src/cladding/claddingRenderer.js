@@ -163,7 +163,8 @@ function column(at, z0, z1, size, material) {
 function decorativePost(p) {
   const group = new THREE.Group();
   group.name = `Post-${p.id}`;
-  const shaftTop = p.topZ - p.capHeightMm;
+  // (no cap: the shaft up to the post's top)
+  const shaftTop = p.cap === 'none' ? p.topZ : p.topZ - p.capHeightMm;
   group.add(column(p.at, p.bottomZ, shaftTop, p.size, MATERIALS.post));
   for (let k = 0; k < p.grooves; k++) {
     const z = shaftTop - 40 - k * 30;
@@ -177,6 +178,16 @@ function decorativePost(p) {
     g.rotateY(Math.PI / 4);
     g.translate(p.at.x, shaftTop + p.capHeightMm / 2, -p.at.y);
     group.add(new THREE.Mesh(g, MATERIALS.post));
+  } else if (p.cap === 'round') {
+    // a turned, rounded top: a lathe profile — a collar the shaft's width, a neck, the dome (user request 2026-11-05)
+    const h = Math.max(20, p.capHeightMm);
+    const w = p.size / 2;
+    const prof = [[w * 1.02, 0], [w * 1.02, h * 0.12], [w * 0.72, h * 0.22], [w * 0.8, h * 0.4], [w * 0.86, h * 0.55], [w * 0.78, h * 0.72], [w * 0.55, h * 0.88], [w * 0.28, h * 0.97], [0, h]];
+    const g = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 24);
+    g.translate(p.at.x, shaftTop, -p.at.y);
+    group.add(Object.assign(new THREE.Mesh(g, MATERIALS.post), { name: 'PostCapRound' }));
+  } else if (p.cap === 'none') {
+    // (nothing on top)
   } else if (p.cap === 'ball') {
     const r = Math.min(p.size * 0.6, p.capHeightMm);
     const g = new THREE.SphereGeometry(r, 20, 14);
@@ -258,6 +269,10 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   // the antresola nosing at the exit
   for (const n of cladding.exitNosing || []) {
     treads.add(Object.assign(new THREE.Mesh(prismGeometry(n.outline, n.bottomZ, n.topZ), wood()), { name: `ExitNosing`, userData: { geometrySourceId: `cladding:${n.id}`, grainDirection: grainOf(n) } }));
+  }
+  // the opening's trim („fajka”): the nose into the opening and the board on the slab, one wood
+  for (const t of built.openingTrim?.pieces || []) {
+    for (const [part, x] of [['nose', t.nose], ['board', t.board]]) treads.add(Object.assign(new THREE.Mesh(prismGeometry(x.outline, x.bottomZ, x.topZ), wood()), { name: `OpeningTrim-${t.edge}-${part}`, userData: { geometrySourceId: `cladding:${t.id}`, grainDirection: grainOf(t) } }));
   }
   root.add(treads);
   const risers = new THREE.Group();

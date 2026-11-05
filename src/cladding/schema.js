@@ -73,6 +73,14 @@ export function createDefaultCladdingConfig() {
     landingNosingDepthMm: 120,
     // the antresola nosing at the exit: a solid piece on the slab's edge, its top flush with the finished floor above
     exitNosing: true,
+    // the opening's trim — „fajka” (openingTrimModel.js, user request 2026-11-05): per opening edge (null = on), sizes as
+    // the self-supporting defaults (ASSUMPTION)
+    openingTrimEnabled: false,
+    openingTrimEdges: {},
+    openingTrimNoseWidthMm: 20, // into the opening
+    openingTrimNoseHeightMm: null, // null = the tread's thickness
+    openingTrimBoardThicknessMm: null, // null = the top floor finish (else 15)
+    openingTrimBoardDepthMm: 100, // onto the floor
     exitNosingDepthMm: 120, // onto the slab, past the last back edge (ASSUMPTION)
     // the slab above and its opening (drawing): the opening = the treads that need it for the headroom
     showSlab: true,
@@ -151,7 +159,7 @@ export function createDefaultCladdingConfig() {
     // decorative posts (user request 2026-11-04: "ozdobne słupy z czapkami i frezowaniami")
     postSizeMm: 90,
     postAboveHandrailMm: 120,
-    postCap: 'pyramid', // 'flat' | 'pyramid' | 'ball'
+    postCap: 'pyramid', // 'flat' | 'pyramid' | 'ball' | 'round' (a turned, rounded top) | 'none' (the shaft square to its top)
     postCapHeightMm: 60,
     postGrooves: 2, // milled rings round the post under its cap
   };
@@ -180,6 +188,9 @@ function sanitizePostEdits(raw) {
 //   full: beside the stair, floor to slab; low: beside the stair, floor to a height over the noses (0 = the slab);
 //   above: beside the stair, from the stair's concrete (its soffit) up to the slab / a height over the noses — nothing
 //   under the flight (user request 2026-11-05); under: under the flight's edge, floor to the soffit (the side above open)
+// the decorative posts' tops (user request 2026-11-05: also rounded / turned, or none)
+export const POST_CAPS = Object.freeze(['flat', 'pyramid', 'ball', 'round', 'none']);
+export const POST_CAP_LABELS = Object.freeze({ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' });
 export const WALL_TYPES = Object.freeze(['full', 'low', 'above', 'under']);
 export const WALL_TYPE_LABELS = Object.freeze({ full: 'pełna (od podłogi do stropu)', low: 'od podłogi do wysokości nad noskami', above: 'od płyty schodów w górę (pod biegiem otwarte)', under: 'pod biegiem (do spodu betonu)' });
 // (low / above: the height over the noses, 0 = up to the slab)
@@ -294,6 +305,12 @@ export function sanitizeCladdingConfig(raw) {
     floorboardThicknessMm: num(c.floorboardThicknessMm, d.floorboardThicknessMm, 5, 40),
     landingNosingDepthMm: num(c.landingNosingDepthMm, d.landingNosingDepthMm, 30, 500),
     exitNosing: c.exitNosing !== false,
+    openingTrimEnabled: !!c.openingTrimEnabled,
+    openingTrimEdges: Object.fromEntries(Object.entries(c.openingTrimEdges && typeof c.openingTrimEdges === 'object' ? c.openingTrimEdges : {}).filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'boolean')),
+    openingTrimNoseWidthMm: num(c.openingTrimNoseWidthMm, d.openingTrimNoseWidthMm, 0, 200),
+    openingTrimNoseHeightMm: c.openingTrimNoseHeightMm === null || c.openingTrimNoseHeightMm === undefined || c.openingTrimNoseHeightMm === '' ? null : num(c.openingTrimNoseHeightMm, 40, 5, 300),
+    openingTrimBoardThicknessMm: c.openingTrimBoardThicknessMm === null || c.openingTrimBoardThicknessMm === undefined || c.openingTrimBoardThicknessMm === '' ? null : num(c.openingTrimBoardThicknessMm, 15, 3, 100),
+    openingTrimBoardDepthMm: num(c.openingTrimBoardDepthMm, d.openingTrimBoardDepthMm, 0, 600),
     exitNosingDepthMm: num(c.exitNosingDepthMm, d.exitNosingDepthMm, 20, 500),
     showSlab: c.showSlab !== false,
     slabThicknessMm: num(c.slabThicknessMm, d.slabThicknessMm, 80, 600),
@@ -328,7 +345,7 @@ export function sanitizeCladdingConfig(raw) {
     handrailHeightMm: num(c.handrailHeightMm, d.handrailHeightMm, 20, 150),
     postSizeMm: num(c.postSizeMm, d.postSizeMm, 40, 250),
     postAboveHandrailMm: num(c.postAboveHandrailMm, d.postAboveHandrailMm, 0, 500),
-    postCap: ['flat', 'pyramid', 'ball'].includes(c.postCap) ? c.postCap : 'pyramid',
+    postCap: POST_CAPS.includes(c.postCap) ? c.postCap : 'pyramid',
     postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
     postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
     ledTreadEnabled: !!c.ledTreadEnabled,

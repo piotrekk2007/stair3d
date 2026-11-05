@@ -89,6 +89,11 @@ export function buildCladdingQuote(built, settings) {
     const mb = round2(tongueMm / 1000);
     lines.push({ id: 'loose-tongue', group: 'Podstopnice', name: 'Obce pióro — podstopnice dywanowe (góra i dół)', qty: mb, unit: 'mb', dims: `${cladding.risers.filter((r) => r.tongues > 0 && r.heightMm > 0).length} podstopnic × 2`, material: settings.looseTonguePerMb > 0 ? { value: round2(mb * settings.looseTonguePerMb), note: `${round2(settings.looseTonguePerMb)} zł/mb` } : { value: null, note: 'brak ceny obcego pióra' }, labour: null });
   }
+  // the opening's trim („fajka”): a board per edge (its blank: along the edge × nose + board, the nose's thickness)
+  for (const t of built.openingTrim?.pieces || []) {
+    const blank = { lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm };
+    lines.push({ id: t.id, group: 'Noski', name: `Fajka — obróbka otworu, krawędź ${t.edge + 1}`, qty: 1, unit: 'szt.', dims: dims(blank, t.thicknessMm), material: board(blank), labour: labour('nosing') });
+  }
   for (const n of cladding.exitNosing || []) {
     const blank = { lengthMm: n.lengthMm, depthMm: n.depthMm, thicknessMm: n.thicknessMm };
     lines.push({ id: n.id, group: 'Noski', name: 'Nosek antresoli', qty: 1, unit: 'szt.', dims: dims(blank, n.thicknessMm), material: board(blank), labour: labour('nosing') });
@@ -135,7 +140,7 @@ export function buildCladdingQuote(built, settings) {
       lines.push({ id: `${s.id}-glass`, group: 'Balustrada', name: `Szkło — ${where} (${s.panes.length} tafli)`, qty: m2, unit: 'm²', dims: s.panes.map((p) => `${Math.round(p.widthMm)}×${Math.round(p.heightMm)}`).join(', '), material: perUnit(priceOf(settings, 'railing-glass'), m2, 'm²'), labour: null });
       lines.push({ id: `${s.id}-glass-fixings`, group: 'Balustrada', name: `${s.infill === 'glass-side' ? 'Rotule' : 'Uchwyty szkła'} — ${where}`, qty: s.fixings, unit: 'szt.', dims: '', material: perUnit(priceOf(settings, 'railing-glass-fixing'), s.fixings, 'szt.'), labour: null });
     }
-    if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
+    if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
   }
   // the wall handrail: the handrail per mb, the brackets per piece (the shared list), its fitting per mb
   for (const w of built.balustrade?.wallRails || []) {

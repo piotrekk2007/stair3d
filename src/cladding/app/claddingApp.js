@@ -22,7 +22,7 @@ import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
 import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd, sideSAt } from '../wallEdits.js';
-import { WALL_TYPES } from '../schema.js';
+import { WALL_TYPES, POST_CAP_LABELS } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { printHtml } from '../../app/printHtml.js';
@@ -97,7 +97,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       </aside>
       <main class="clad-main">
         <div class="clad-plan"></div>
-        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="walls" title="Klik na boku stopnia = ściana przy tym stopniu tak / nie, prawy klik = inny typ ściany">▥ Ściany</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
+        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="trim" title="Fajka (obróbka otworu / antresoli): klik na krawędzi otworu = fajka tak / nie">▬ Fajka</button><button type="button" data-plan-mode="walls" title="Klik na boku stopnia = ściana przy tym stopniu tak / nie, prawy klik = inny typ ściany">▥ Ściany</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
         <div class="clad-3d-tools" hidden><button type="button" data-measure3d="toggle" title="Dwa kliknięcia na modelu = wymiar: odległość, różnica wysokości, w poziomie (przyciąga do narożników i krawędzi)">📏 Miarka</button><button type="button" data-measure3d="clear" title="Usuń wszystkie wymiary">Wyczyść</button></div>
         <div class="clad-3d" hidden></div>
         <div class="clad-present-bar">
@@ -355,10 +355,15 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'antresolaSetbackMm', 0, 300, 1).name('Antresola: oś od krawędzi [mm]'));
   live(rail.add(proxy, 'postSizeMm', 40, 250, 1).name('Słup: przekrój [mm]'));
   live(rail.add(proxy, 'postAboveHandrailMm', 0, 500, 5).name('Słup: ponad poręcz [mm]'));
-  live(rail.add(proxy, 'postCap', { płaska: 'flat', piramidka: 'pyramid', kula: 'ball' }).name('Słup: czapka'));
+  live(rail.add(proxy, 'postCap', Object.fromEntries(Object.entries(POST_CAP_LABELS).map(([k, l]) => [l, k]))).name('Słup: czapka'));
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
   rail.close();
+  const trimF = gui.addFolder('Obróbka otworu (fajka)');
+  live(trimF.add(proxy, 'openingTrimEnabled').name('Fajka przy otworze / antresoli'));
+  live(trimF.add(proxy, 'openingTrimNoseWidthMm', 0, 200, 1).name('Nosek: wysięg w otwór [mm]'));
+  live(trimF.add(proxy, 'openingTrimBoardDepthMm', 0, 600, 5).name('Deska: na strop [mm]'));
+  trimF.close();
   const wallRailF = gui.addFolder('Poręcz przyścienna');
   live(wallRailF.add(proxy, 'wallRailHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
   live(wallRailF.add(proxy, 'wallRailClearanceMm', 20, 200, 1).name('Odstęp od ściany [mm]'));
@@ -1042,6 +1047,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
     posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
+    trim: 'FAJKA: klik na krawędzi otworu = obróbka (nosek + deska na stropie) tak / nie; zielona — z fajką, szara — bez, pomarańczowa — wyjście ze schodów (tam nosek antresoli). Wymiary — w „Wykończenie → Obróbka otworu (fajka)”',
     walls: 'ŚCIANY: przeciągnij kółko na końcu ściany wzdłuż boku (przyciąga do krawędzi stopni, co 10 mm — ściana może kończyć się w połowie stopnia), klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
     measure: 'MIARKA: klik = początek, drugi klik = koniec (przyciąga do punktów w promieniu 10 px), prawy klik = usuń ostatni wymiar, Esc = przerwij',
   };
@@ -1073,6 +1079,20 @@ export function mountCladdingApp(rootEl, host = {}) {
   const sectionById = (id) => state.built.balustrade?.sections.find((s) => s.id === id);
   // a click of the plan's edit modes (no drag)
   function planClick(target, p) {
+    if (planMode === 'trim') {
+      const edge = target.closest?.('.clad-trim-edge');
+      if (!edge) return false;
+      const k = Number(edge.dataset.trimEdge);
+      change((c) => {
+        if (!c.openingTrimEnabled) {
+          // (the first click switches the trim on — on this edge only)
+          c.openingTrimEnabled = true;
+          const n = state.built.slab?.opening?.length || 0;
+          c.openingTrimEdges = Object.fromEntries(Array.from({ length: n }, (_, i) => [i, i === k]));
+        } else c.openingTrimEdges = { ...c.openingTrimEdges, [k]: c.openingTrimEdges?.[k] === false };
+      });
+      return true;
+    }
     if (planMode === 'walls') {
       const cell = target.closest?.('.clad-wall-cell');
       if (!cell) return false;

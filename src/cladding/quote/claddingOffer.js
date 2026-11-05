@@ -109,7 +109,7 @@ export function claddingFacts(built, quoteSettings) {
     ['Materiał', [bp.species, bp.cls].filter(Boolean).join(', ') || '—'],
     ['Grubość stopnia', `${config.treadThicknessMm} mm${config.riserBoards ? (config.riserMount === 'carpet' ? `, podstopnice dywanowe ${config.treadThicknessMm} mm (na obce pióro)` : `, podstopnice ${config.riserThicknessMm} mm`) : ', bez podstopnic'}`],
     ['Krawędź stopni', { square: 'prosta', chamfer: `fazka ${config.edgeProfileMm} mm`, round: `zaokrąglenie R${config.edgeProfileMm}`, bullnose: 'półwałek' }[config.edgeProfile] || '—'],
-    ['Balustrada', rail ? `${rail} ${rail === 1 ? 'odcinek' : 'odcinki'} (słupy: ${{ flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula' }[config.postCap]})` : 'nie'],
+    ['Balustrada', rail ? `${rail} ${rail === 1 ? 'odcinek' : 'odcinki'} (słupy: ${{ flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula', round: 'góra zaoblona (toczona)', none: 'bez czapki' }[config.postCap]})` : 'nie'],
     ['Montaż', quoteSettings.withInstallation ? 'tak (VAT 8%)' : 'nie — sam materiał (VAT 23%)'],
   ];
   const h = Math.round(avg(rises.slice(1, -1).length ? rises.slice(1, -1) : rises));

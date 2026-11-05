@@ -5,6 +5,7 @@
 import { planMeasureText } from '../plan2d/planMeasure.js';
 import { boardPolygons } from './finishModel.js';
 import { wallCells, wallEnds, wallListOf } from './wallEdits.js';
+import { trimEdges } from './openingTrimModel.js';
 import { wallOn } from './surroundingsModel.js';
 import { WALL_TYPE_LABELS } from './schema.js';
 import { escapeHtml } from '../util/format.js';
@@ -58,6 +59,15 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     }).join('');
     openingXML += edges + mids + vertices;
   }
+  // the opening's trim („fajka”); in its mode („▬ Fajka”) every opening edge to click (green = trimmed, grey = not,
+  // orange the stair's exit — the antresola nosing there)
+  const trimXML = (built.openingTrim?.pieces || []).map((t) => `<polygon class="clad-trim" points="${pts(t.outline)}" fill="#c99d62" stroke="#8a5a34" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
+  const trimModeXML =
+    mode === 'trim'
+      ? trimEdges(built, built.config)
+          .map((e) => `<line class="${e.exit ? '' : 'clad-trim-edge'}" data-trim-edge="${e.k}" x1="${fmt(e.a.x)}" y1="${fmt(-e.a.y)}" x2="${fmt(e.b.x)}" y2="${fmt(-e.b.y)}" stroke="${e.exit ? '#d35400' : e.on ? '#2e7d32' : '#9aa0a6'}" stroke-width="10" stroke-opacity="0.65" ${e.exit || e.on ? '' : 'stroke-dasharray="10,6"'} ${e.exit ? 'pointer-events="none"' : ''} ${HAIR}><title>${e.exit ? 'Wyjście ze schodów — tu nosek antresoli' : `Fajka na tej krawędzi: ${e.on ? 'tak' : 'nie'} — kliknij, żeby zmienić`}</title></line>`)
+          .join('')
+      : '';
   const exitXML = (cladding.exitNosing || []).map((n) => `<polygon class="clad-exit-nosing" points="${pts(n.outline)}" fill="#c99d62" stroke="#8a5a34" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
   const partsXML = cladding.treads
     .filter((t) => t.parts)
@@ -197,7 +207,7 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       })
       .join('');
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${wallModeXML}${measuresXML}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${trimXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${wallModeXML}${trimModeXML}${measuresXML}</svg>`;
 }
 
 /**

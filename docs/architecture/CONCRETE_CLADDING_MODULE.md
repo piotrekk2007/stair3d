@@ -366,6 +366,19 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## The opening's trim „fajka”; the posts' tops (user request 2026-11-05, as built)
+
+`openingTrimModel.js buildOpeningTrim` → `built.openingTrim.pieces` (the module's own, as the self-supporting
+`openingTrimModel.js`): along the chosen edges of the ceiling opening (`openingTrimEnabled`, `openingTrimEdges[k]`;
+`trimEdges` — never the stair's exit edge, the antresola nosing is there) a NOSE into the opening
+(`openingTrimNoseWidthMm` 20 × `openingTrimNoseHeightMm`, null = the tread's thickness) and a BOARD on the slab
+(`openingTrimBoardThicknessMm`, null = the top floor finish else 15; `openingTrimBoardDepthMm` 100), their top flush
+with the finished floor; mitred at a corner with the next trimmed edge, square where it has none. Plan mode „▬ Fajka”
+(a click on an opening edge = trim there or not — the first click switches the trim on, on that edge only), 3D (nose +
+board), the plan, the quote (a board per edge from the board price list, labour „nosing”), the DXF / cut list
+(`FJ-n`). The decorative posts' tops (`POST_CAPS`): flat, pyramid, ball, `round` (turned — a lathe profile: collar,
+neck, dome) and `none` (the shaft to the top). Tests: `__tests__/trimCaps.test.js`.
+
 ## A wall's end part-way along a step (user request 2026-11-05, as built)
 
 A wall entry's ends may sit inside a step: `fromOffsetMm` / `toOffsetMm` (mm from the `from` step's start / the `to`

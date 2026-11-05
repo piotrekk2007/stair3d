@@ -55,7 +55,7 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
       rows.push({ code: `TR-${n}`, name: `Tralki — ${where}`, qty: s.balusters.length, lengthMm: r0(len), widthMm: r0(config.balusterSizeMm), thicknessMm: r0(config.balusterSizeMm), material: wood, notes: `${config.balusterShape === 'round' ? 'okrągłe Ø' : 'kwadratowe '}${r0(config.balusterSizeMm)} mm; długość najdłuższej, docinane na miejscu` });
     }
     if (s.posts.length) {
-      const len = Math.max(...s.posts.map((p) => p.topZ - p.bottomZ)) + (config.postCapHeightMm || 0);
+      const len = Math.max(...s.posts.map((p) => p.topZ - p.bottomZ)); // (the cap is within the post's height)
       rows.push({ code: `SL-${n}`, name: `Słupy ozdobne — ${where}`, qty: s.posts.length, lengthMm: r0(len), widthMm: r0(config.postSizeMm), thicknessMm: r0(config.postSizeMm), material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}` });
     }
   }

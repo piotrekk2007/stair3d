@@ -563,7 +563,9 @@ typed L / P / CZ / LP by its side nosings (`treadSideType`, settable per tread).
 step range (`config.wallList`, `wallEdits.js`, types full / low / above — from the stair's concrete up — / under; the
 plan mode „▥ Ściany”); the side runs split where the wall changes (`run.id`). Risers behind the tread below and into the tread above's
 groove (`riserMount 'behind'`, `riserTopOverlapMm`) or carpet ones between the treads on loose tongues (`'carpet'`,
-priced per mb); the quote option „kanały i obróbka krawędzi” (per tread). The wall handrail on brackets on a walled side
+priced per mb); the quote option „kanały i obróbka krawędzi” (per tread). The opening's trim „fajka” per opening
+edge (`openingTrimModel.js`, plan mode „▬ Fajka”); the posts' tops also rounded (turned) or none; a wall's end may sit
+part-way along a step (`fromOffsetMm` / `toOffsetMm`, dragged on the plan — `resolveWalls` splits the sides there). The wall handrail on brackets on a walled side
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared
