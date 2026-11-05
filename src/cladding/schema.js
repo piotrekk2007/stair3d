@@ -118,6 +118,18 @@ export function createDefaultCladdingConfig() {
     railingAntresolaEdges: {},
     // the ceiling opening drawn by hand (plan points) — null = the one the headroom needs (surroundingsModel.js)
     openingManual: null,
+    // LED lighting (ledModel.js, user request 2026-11-04): under the noses, in the skirting, under the handrail — the
+    // self-supporting LED names and defaults (ASSUMPTION)
+    ledTreadEnabled: false,
+    ledSkirtingEnabled: false,
+    ledHandrailEnabled: false,
+    ledSkirtingAboveMm: 40, // the strip's centre over the noses in the skirting board
+    ledProfileWidthMm: 17,
+    ledProfileDepthMm: 8,
+    ledTreadSetbackMm: 4,
+    ledEndMarginMm: 30,
+    ledPowerWPerM: 9.6,
+    ledSupplyReservePct: 20,
     // decorative posts (user request 2026-11-04: "ozdobne słupy z czapkami i frezowaniami")
     postSizeMm: 90,
     postAboveHandrailMm: 120,
@@ -274,6 +286,16 @@ export function sanitizeCladdingConfig(raw) {
     postCap: ['flat', 'pyramid', 'ball'].includes(c.postCap) ? c.postCap : 'pyramid',
     postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
     postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
+    ledTreadEnabled: !!c.ledTreadEnabled,
+    ledSkirtingEnabled: !!c.ledSkirtingEnabled,
+    ledHandrailEnabled: !!c.ledHandrailEnabled,
+    ledSkirtingAboveMm: num(c.ledSkirtingAboveMm, d.ledSkirtingAboveMm, 0, 300),
+    ledProfileWidthMm: num(c.ledProfileWidthMm, d.ledProfileWidthMm, 5, 60),
+    ledProfileDepthMm: num(c.ledProfileDepthMm, d.ledProfileDepthMm, 2, 40),
+    ledTreadSetbackMm: num(c.ledTreadSetbackMm, d.ledTreadSetbackMm, 0, 50),
+    ledEndMarginMm: num(c.ledEndMarginMm, d.ledEndMarginMm, 0, 300),
+    ledPowerWPerM: num(c.ledPowerWPerM, d.ledPowerWPerM, 0, 60),
+    ledSupplyReservePct: num(c.ledSupplyReservePct, d.ledSupplyReservePct, 0, 100),
     railingInfill: ['balusters', 'glass-posts', 'glass-side'].includes(c.railingInfill) ? c.railingInfill : 'balusters',
     balusterShape: c.balusterShape === 'round' ? 'round' : 'square',
     glassThicknessMm: num(c.glassThicknessMm, d.glassThicknessMm, 6, 40),

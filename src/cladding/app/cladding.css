@@ -133,3 +133,7 @@
 .clad-plan-modes button.active { background: #1f6feb; color: #fff; }
 .clad-plan .clad-rail-line, .clad-plan .clad-post, .clad-plan .clad-post-ghost, .clad-plan .clad-opening-edge, .clad-plan .clad-opening-mid { cursor: pointer; }
 .clad-plan .clad-opening-vertex { cursor: move; }
+
+/* colours */
+.clad-colors-table select { max-width: 130px; font-size: 11px; }
+.clad-colors-table input[type='color'] { width: 34px; height: 22px; padding: 0; border: 0; }

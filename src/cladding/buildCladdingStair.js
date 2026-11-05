@@ -9,6 +9,7 @@ import { buildWalls, buildSlab } from './surroundingsModel.js';
 import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
 import { withGapWalls, buildSideWalls } from './sideWallsModel.js';
+import { buildCladdingLed } from './ledModel.js';
 
 export function buildCladdingStair(rawConfig) {
   const config = sanitizeCladdingConfig(rawConfig);
@@ -26,6 +27,8 @@ export function buildCladdingStair(rawConfig) {
   const finish = buildFinishBoards(concrete, cfg);
   const built = { config, concrete, cladding, walls, sideWalls, slab, totalRise, finish };
   built.balustrade = buildBalustrade(built, cfg);
+  // the LED lighting (under the noses, in the skirting, under the handrail)
+  built.led = buildCladdingLed(built, cfg);
   built.diagnostics = [...cladding.diagnostics];
   return built;
 }

@@ -2,7 +2,8 @@
 // cladding on it (treads, risers). Draws what buildCladdingStair returns, decides nothing.
 
 import * as THREE from 'three';
-import { applyWoodGrainToTree, getOakPhotoTexture } from '../scene/woodGrain.js';
+import { applyWoodGrainToTree, getOakPhotoTexture, getOakTexture, getOakMeanLuminance, OAK_PHOTO_MEAN_HEX } from '../scene/woodGrain.js';
+import { applyAppearanceToMaterials, defaultAppearance } from '../scene/appearance.js';
 import { insetExposed, profileRings } from './starterProfile.js';
 import { GLASS_TINTS } from './balustradeModel.js';
 
@@ -84,20 +85,35 @@ function treadGeometry(t) {
 }
 
 const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b1aa, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
-let woodMaterial = null;
-function wood() {
-  if (!woodMaterial) woodMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: typeof document === 'undefined' ? null : getOakPhotoTexture(), roughness: 0.7, metalness: 0.02 });
-  return woodMaterial;
+// one material per element group, coloured by the presentation's appearance (the SHARED scene/appearance.js: the same
+// colour presets and finishes — oak photo / generated oak / solid — as the self-supporting module): tread (treads,
+// landings, noses), riser, stringer (the skirting boards and cover stringers), post, railing (the handrail), baluster,
+// glassFixing (user request 2026-11-04)
+const woodMat = () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.02 });
+const MATERIALS = { tread: woodMat(), riser: woodMat(), stringer: woodMat(), post: woodMat(), railing: woodMat(), baluster: woodMat(), glassFixing: new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 }) };
+const OAK_BUMP_SCALE = 0.6; // as the self-supporting renderer — visual only
+let appearance = defaultAppearance();
+function woodTextures() {
+  if (typeof document === 'undefined') return null;
+  return { texture: getOakTexture(), meanLuminance: getOakMeanLuminance(), bumpScale: OAK_BUMP_SCALE, photo: { texture: getOakPhotoTexture(), meanHex: OAK_PHOTO_MEAN_HEX } };
 }
-const riserMaterial = new THREE.MeshStandardMaterial({ color: 0xe8ddc4, roughness: 0.8, metalness: 0.02 });
+/** The module's colours / finishes (presentation state, not the config — kept in the project file). */
+export function setCladdingAppearance(next) {
+  appearance = next || defaultAppearance();
+  applyAppearanceToMaterials(MATERIALS, appearance, woodTextures());
+}
+setCladdingAppearance(appearance);
+const wood = () => MATERIALS.tread;
+const riserMaterial = MATERIALS.riser;
+// the LED strips: a warm glowing band (presentation only)
+const ledMaterial = new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffc23a, emissiveIntensity: 2.2, roughness: 0.4, metalness: 0 });
 const osbMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a86a, roughness: 0.9, metalness: 0 });
 const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e5de, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
 // a wall carrying the stair (under it, between its flights): solid masonry
 const concreteWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 
-const railingWood = () => wood();
-const steelFixing = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 });
+const steelFixing = MATERIALS.glassFixing;
 const grooveMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.8, metalness: 0 });
 
 // a board in its own vertical plane (finishModel.js): the polygon in (s along `dir`, z up), its thickness along
@@ -137,7 +153,7 @@ function decorativePost(p) {
   const group = new THREE.Group();
   group.name = `Post-${p.id}`;
   const shaftTop = p.topZ - p.capHeightMm;
-  group.add(column(p.at, p.bottomZ, shaftTop, p.size, railingWood()));
+  group.add(column(p.at, p.bottomZ, shaftTop, p.size, MATERIALS.post));
   for (let k = 0; k < p.grooves; k++) {
     const z = shaftTop - 40 - k * 30;
     const ring = column(p.at, z - 4, z + 4, p.size + 4, grooveMaterial);
@@ -149,14 +165,14 @@ function decorativePost(p) {
     const g = new THREE.ConeGeometry((p.size * 1.1) / Math.SQRT2, p.capHeightMm, 4);
     g.rotateY(Math.PI / 4);
     g.translate(p.at.x, shaftTop + p.capHeightMm / 2, -p.at.y);
-    group.add(new THREE.Mesh(g, railingWood()));
+    group.add(new THREE.Mesh(g, MATERIALS.post));
   } else if (p.cap === 'ball') {
     const r = Math.min(p.size * 0.6, p.capHeightMm);
     const g = new THREE.SphereGeometry(r, 20, 14);
     g.translate(p.at.x, shaftTop + r * 0.9, -p.at.y);
-    group.add(new THREE.Mesh(g, railingWood()));
+    group.add(new THREE.Mesh(g, MATERIALS.post));
   } else {
-    group.add(column(p.at, shaftTop, shaftTop + Math.max(15, p.capHeightMm / 3), p.size * 1.25, railingWood()));
+    group.add(column(p.at, shaftTop, shaftTop + Math.max(15, p.capHeightMm / 3), p.size * 1.25, MATERIALS.post));
   }
   return group;
 }
@@ -247,7 +263,7 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   const finish = new THREE.Group();
   finish.name = 'Finish';
   for (const b of [...(built.finish?.skirting || []), ...(built.finish?.coverStringers || [])]) {
-    const mesh = new THREE.Mesh(planeBoardGeometry(b), wood());
+    const mesh = new THREE.Mesh(planeBoardGeometry(b), MATERIALS.stringer);
     mesh.name = `${b.kind}-${b.id}`;
     mesh.userData = { geometrySourceId: `cladding:${b.id}`, grainDirection: [b.dir.x, 0, -b.dir.y] };
     finish.add(mesh);
@@ -256,14 +272,14 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   const railing = new THREE.Group();
   railing.name = 'Railing';
   for (const s of built.balustrade?.sections || []) {
-    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(beam(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, railingWood()), { name: `Handrail-${s.id}-${k}` }));
+    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(beam(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing), { name: `Handrail-${s.id}-${k}` }));
     for (const b of s.balusters) {
       // a round baluster (toczona) or a square one
       if (b.shape === 'round') {
         const g = new THREE.CylinderGeometry(b.size / 2, b.size / 2, b.topZ - b.bottomZ, 16);
         g.translate(b.at.x, (b.bottomZ + b.topZ) / 2, -b.at.y);
-        railing.add(Object.assign(new THREE.Mesh(g, railingWood()), { name: 'Baluster' }));
-      } else railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, railingWood()), { name: 'Baluster' }));
+        railing.add(Object.assign(new THREE.Mesh(g, MATERIALS.baluster), { name: 'Baluster' }));
+      } else railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, MATERIALS.baluster), { name: 'Baluster' }));
     }
     for (const p of s.posts) railing.add(decorativePost(p));
     // glass panes (see-through, the tint) and, on the concrete's side, their point fixings
@@ -292,6 +308,13 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
     }
   }
   root.add(railing);
+  // the LED lighting (ledModel.js): a thin glowing band along every strip
+  const leds = new THREE.Group();
+  leds.name = 'LedLighting';
+  for (const s of built.led?.strips || []) {
+    for (let k = 1; k < s.points.length; k++) leds.add(Object.assign(beam(s.points[k - 1], s.points[k], s.kind === 'skirting' ? 3 : config.ledProfileWidthMm, s.kind === 'skirting' ? config.ledProfileWidthMm : 3, ledMaterial), { name: `Led-${s.id}` }));
+  }
+  root.add(leds);
   applyWoodGrainToTree(root);
   // the surroundings (stage 3) — no wood grain: the walls see-through, the slab with its opening
   const room = new THREE.Group();

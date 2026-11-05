@@ -551,8 +551,9 @@ boardPricing, the same „cały cennik” file) + the module's labour, the offer
 `offer/offerDocument.js`), the internal estimate. Walls per flight side by type (full / above the steps
 to a height / under the flight) and the wall between flights set apart (`sideWallsModel.js`). The balustrade's types
 (balusters square / round, glass between posts, glass on the concrete's side), posts by hand, the antresola per edge and
-the opening drawn by hand (plan edit modes „▮ Słupy” / „▭ Otwór i antresola”). Next (user, 2026-11-04): colours, LED,
-DXF / DAE / OBJ export.
+the opening drawn by hand (plan edit modes „▮ Słupy” / „▭ Otwór i antresola”). Colours per element group through the
+shared `scene/appearance.js` (saved in the project file, not in undo) and LED lighting under the noses / in the skirting
+/ under the handrail (`ledModel.js`, priced). Next (user, 2026-11-04): DXF / DAE / OBJ export.
 
 ## Open items / known limitations
 

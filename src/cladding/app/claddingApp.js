@@ -8,7 +8,8 @@ import './cladding.css';
 import { createDefaultCladdingConfig, sanitizeCladdingConfig, LANDING_TURNS, LANDING_TURN_LABELS, WINDER_TURN_LABELS, WALL_TYPE_LABELS } from '../schema.js';
 import { buildCladdingStair } from '../buildCladdingStair.js';
 import { expandSequence, signedOnZoneLine } from '../concreteModel.js';
-import { renderCladdingStair } from '../claddingRenderer.js';
+import { renderCladdingStair, setCladdingAppearance } from '../claddingRenderer.js';
+import { defaultAppearance, sanitizeAppearance, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, METAL_PRESETS, finishKey } from '../../scene/appearance.js';
 import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
 import { claddingAsFloor } from '../floorStair.js';
@@ -35,7 +36,7 @@ const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
  *   a floor file of either kind; without them the floor link is not offered
  */
 export function mountCladdingApp(rootEl, host = {}) {
-  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), offer: createDefaultCladdingOffer(), pane: 'measure' };
+  const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), offer: createDefaultCladdingOffer(), appearance: defaultAppearance(), pane: 'measure' };
   let history = createHistory(state.config);
   let active = false;
 
@@ -73,6 +74,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <section class="clad-box"><h3>Listwy, wangi obiciowe, balustrada</h3><div class="clad-sides"></div></section>
         <section class="clad-box clad-floor-box"><h3>Piętro wyżej / niżej</h3><div class="clad-floor"></div></section>
         <section class="clad-box clad-gui"><h3>Wykończenie</h3></section>
+        <section class="clad-box"><h3>Kolory i wykończenie (prezentacja)</h3><div class="clad-colors"></div></section>
       </aside>
       <main class="clad-main">
         <div class="clad-plan"></div>
@@ -333,6 +335,18 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(glassF.add(proxy, 'glassFixingsPerPane', 1, 8, 1).name('Na boku: rotule na taflę'));
   live(glassF.add(proxy, 'glassClampsPerSide', 1, 4, 1).name('Między słupami: uchwyty na krawędź'));
   glassF.close();
+  const ledF = gui.addFolder('Oświetlenie LED');
+  live(ledF.add(proxy, 'ledTreadEnabled').name('Pod noskami stopni'));
+  live(ledF.add(proxy, 'ledSkirtingEnabled').name('W listwie przyściennej'));
+  live(ledF.add(proxy, 'ledHandrailEnabled').name('Pod poręczą'));
+  live(ledF.add(proxy, 'ledSkirtingAboveMm', 0, 300, 1).name('W listwie: nad noskami [mm]'));
+  live(ledF.add(proxy, 'ledProfileWidthMm', 5, 60, 1).name('Profil: szerokość [mm]'));
+  live(ledF.add(proxy, 'ledProfileDepthMm', 2, 40, 1).name('Profil: głębokość [mm]'));
+  live(ledF.add(proxy, 'ledTreadSetbackMm', 0, 50, 1).name('Pod noskiem: od czoła [mm]'));
+  live(ledF.add(proxy, 'ledEndMarginMm', 0, 300, 5).name('Od końców [mm]'));
+  live(ledF.add(proxy, 'ledPowerWPerM', 0, 60, 0.1).name('Moc taśmy [W/m]'));
+  live(ledF.add(proxy, 'ledSupplyReservePct', 0, 100, 1).name('Zapas zasilacza [%]'));
+  ledF.close();
   const wind = gui.addFolder('Kontrola zabiegów');
   live(wind.add(proxy, 'winderLegalOffsetMm', 100, 1000, 10).name('Pomiar od duszy [mm]'));
   live(wind.add(proxy, 'winderLegalMinGoingMm', 0, 500, 5).name('Min. głębokość tam [mm]'));
@@ -393,6 +407,8 @@ export function mountCladdingApp(rootEl, host = {}) {
       <div class="clad-subhead">Słupy — cena wg przekroju (najmniejszy przekrój ≥ słupa)</div>
       <table class="clad-table clad-posts-table"><thead><tr><th>przekrój [mm]</th><th>cena [zł]</th><th>za</th><th></th></tr></thead><tbody>${(bp.postPrices || []).map((r, k) => `<tr><td><input type="number" data-post="${k}" data-post-f="sectionMm" value="${r.sectionMm}" /></td><td><input type="number" data-post="${k}" data-post-f="price" value="${r.price}" /></td><td><select data-post="${k}" data-post-f="unit"><option value="szt" ${r.unit === 'szt' ? 'selected' : ''}>szt.</option><option value="mb" ${r.unit === 'mb' ? 'selected' : ''}>mb</option></select></td><td><button type="button" data-post-del="${k}">✕</button></td></tr>`).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-post-add>+ Przekrój słupa</button></div>
+      <div class="clad-subhead">Zasilacze LED — cena wg mocy (najmniejszy wystarczający)</div>
+      <table class="clad-table clad-posts-table"><thead><tr><th>moc [W]</th><th>cena [zł]</th></tr></thead><tbody>${(bp.ledSupplyPrices || []).map((r, k) => `<tr><td><input type="number" data-supply="${k}" data-supply-f="powerW" value="${r.powerW}" /></td><td><input type="number" data-supply="${k}" data-supply-f="price" value="${r.price}" /></td></tr>`).join('')}</tbody></table>
       <table class="clad-table clad-rates-table"><thead><tr><th>Robocizna</th><th>ilość</th><th>stawka</th><th></th></tr></thead><tbody>${s.labour.map(rateRow).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-own-add>+ Pozycja własna</button><button type="button" data-pricelist-save title="Ten sam plik co „Zapisz cały cennik” w schodach samonośnych">💾 Zapisz cały cennik</button><button type="button" data-pricelist-all title="Plik „Zapisz cały cennik” (albo projekt) — także z modułu samonośnego: deski, gatunki, słupy, tralki, poręcze, szkło, LED…">📂 Wczytaj cały cennik</button></div>
       <div class="clad-hint">Materiał stopni, podestów, podstopnic i nosków liczy się z cennika desek (jak w module samonośnym; ${escapeHtml(s.boardPricing ? 'wczytany cennik' : 'domyślny cennik DREWEX')}). Stawka 0 = bez ceny.</div>`;
@@ -426,6 +442,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (el.dataset.rate) s.labour.find((r) => r.id === el.dataset.rate).rate = Number(el.value) || 0;
     else if (el.dataset.ownQty) s.labour.find((r) => r.id === el.dataset.ownQty).qty = Number(el.value) || 0;
     else if (el.dataset.price) s.priceList.find((p) => p.materialId === el.dataset.price).price = Number(el.value) || 0;
+    else if (el.dataset.supply !== undefined) s.boardPricing.ledSupplyPrices[Number(el.dataset.supply)][el.dataset.supplyF] = Number(el.value) || 0;
     else if (el.dataset.post !== undefined) {
       const row = s.boardPricing.postPrices[Number(el.dataset.post)];
       row[el.dataset.postF] = el.dataset.postF === 'unit' ? el.value : Number(el.value) || 0;
@@ -744,6 +761,40 @@ export function mountCladdingApp(rootEl, host = {}) {
     });
   });
 
+  // --- colours and finishes (presentation — not the config, not in undo; saved in the project file) ---------------
+  const COLOR_ELEMENTS = [
+    ['tread', 'Stopnie, podesty, noski'],
+    ['riser', 'Podstopnice'],
+    ['stringer', 'Listwy i wangi obiciowe'],
+    ['baluster', 'Tralki'],
+    ['railing', 'Poręcz'],
+    ['post', 'Słupy'],
+  ];
+  const colorsEl = $('.clad-colors');
+  function renderColors() {
+    const a = state.appearance;
+    const presetOf = (hex) => COLOR_PRESETS.find((p) => p.hex.toLowerCase() === hex)?.id ?? '';
+    colorsEl.innerHTML =
+      `<table class="clad-table clad-colors-table"><tbody>` +
+      COLOR_ELEMENTS.map(([k, label]) => `<tr><td>${label}</td><td><select data-color-preset="${k}"><option value="">— własny —</option>${COLOR_PRESETS.map((p) => `<option value="${p.id}" ${presetOf(a[k]) === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}</select></td><td><input type="color" data-color="${k}" value="${a[k]}" /></td><td><select data-finish="${k}">${Object.values(FINISHES).map((f) => `<option value="${f}" ${a[finishKey(k)] === f ? 'selected' : ''}>${FINISH_LABELS_PL[f]}</option>`).join('')}</select></td></tr>`).join('') +
+      `<tr><td>Uchwyty szkła</td><td><select data-color-metal="glassFixing">${METAL_PRESETS.map((p) => `<option value="${p.hex}" ${a.glassFixing === p.hex ? 'selected' : ''}>${p.label}</option>`).join('')}</select></td><td></td><td></td></tr>` +
+      `</tbody></table><div class="clad-hint">Tylko wygląd (widok 3D, oferta, zdjęcia) — nie zmienia wyceny.</div>`;
+  }
+  colorsEl.addEventListener('change', (ev) => {
+    const el = ev.target;
+    const a = { ...state.appearance };
+    if (el.dataset.colorPreset) {
+      const p = COLOR_PRESETS.find((x) => x.id === el.value);
+      if (p) a[el.dataset.colorPreset] = p.hex;
+    } else if (el.dataset.color) a[el.dataset.color] = el.value;
+    else if (el.dataset.finish) a[finishKey(el.dataset.finish)] = el.value;
+    else if (el.dataset.colorMetal) a[el.dataset.colorMetal] = el.value;
+    state.appearance = sanitizeAppearance(a);
+    setCladdingAppearance(state.appearance);
+    renderColors();
+  });
+  setCladdingAppearance(state.appearance);
+
   // --- the selected step ---------------------------------------------------------------------------------------
   function renderStepEditor() {
     const box = $('.clad-step');
@@ -1059,6 +1110,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderReport();
     renderWalls();
     renderSides();
+    renderColors();
     renderFloorPanel();
     renderQuote();
     renderOffer();
@@ -1086,7 +1138,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     meta('');
   });
   $('[data-act="save"]').addEventListener('click', () => {
-    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes, quote: state.quote, offer: state.offer });
+    const file = claddingProjectToFile({ config: state.config, projectName: state.projectName, notes: state.notes, quote: state.quote, offer: state.offer, appearance: state.appearance });
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1106,6 +1158,8 @@ export function mountCladdingApp(rootEl, host = {}) {
         state.config = loaded.config;
         state.quote = loaded.quote;
         state.offer = loaded.offer;
+        state.appearance = loaded.appearance;
+        setCladdingAppearance(state.appearance);
         state.projectName = loaded.projectName;
         state.notes = loaded.notes;
         nameInput.value = loaded.projectName;

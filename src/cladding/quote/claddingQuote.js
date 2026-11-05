@@ -119,6 +119,19 @@ export function buildCladdingQuote(built, settings) {
     }
     if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
   }
+  // the LED lighting: the strip and its profile per mb (the shared list), the power supply from the table by power
+  // (the smallest priced one that is enough, else n × the largest — as takeoff/boardPricing.js), the fitting per mb
+  const led = built.led;
+  if (led?.strips?.length) {
+    const mb = round2(led.totals.all / 1000);
+    const places = [['tread', 'pod noskami'], ['skirting', 'w listwach'], ['handrail', 'pod poręczą']].filter(([k]) => led.totals[k] > 0).map(([, l]) => l).join(', ');
+    lines.push({ id: 'led-strip', group: 'Oświetlenie LED', name: `Taśma LED (${places})`, qty: mb, unit: 'mb', dims: `${led.strips.length} odc.`, material: perUnit(priceOf(settings, 'led-strip'), mb, 'mb'), labour: labour('led', mb) });
+    lines.push({ id: 'led-profile', group: 'Oświetlenie LED', name: `Profil aluminiowy LED ${led.profile.widthMm} × ${led.profile.depthMm} mm`, qty: mb, unit: 'mb', dims: '', material: perUnit(priceOf(settings, 'led-profile'), mb, 'mb'), labour: null });
+    const rows = [...(pricing.ledSupplyPrices || [])].filter((r) => r.price > 0 && r.powerW > 0).sort((a, b) => a.powerW - b.powerW);
+    const pick = rows.find((r) => r.powerW >= led.supplyW - 1e-6) || rows[rows.length - 1];
+    const count = !pick ? 1 : pick.powerW >= led.supplyW - 1e-6 ? 1 : Math.ceil(led.supplyW / pick.powerW);
+    lines.push({ id: 'led-supply', group: 'Oświetlenie LED', name: pick ? `Zasilacz LED ${pick.powerW} W${count > 1 ? ` × ${count}` : ''}` : `Zasilacz LED ≥ ${Math.ceil(led.supplyW)} W`, qty: count, unit: 'szt.', dims: `${Math.round(led.powerW)} W + zapas = ${Math.ceil(led.supplyW)} W`, material: pick ? { value: round2(pick.price * count), note: 'cennik zasilaczy wg mocy' } : { value: null, note: 'brak cen zasilaczy (cennik → zasilacze LED)' }, labour: null });
+  }
   // lump sums and the user's own extra lines
   for (const id of ['measure', 'transport']) {
     if (settings.lumps?.[id] === false) continue;
@@ -130,7 +143,7 @@ export function buildCladdingQuote(built, settings) {
     lines.push({ id: r.id, group: 'Pozycje własne', name: r.label, qty: r.qty ?? 1, unit: UNIT_LABELS[r.unit] || r.unit, dims: '', material: null, labour: l });
   }
   // one block per group (walking order within it)
-  const GROUPS = ['Stopnie zapraszające', 'Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Profilowanie', 'Listwy i wangi', 'Balustrada', 'Usługi', 'Pozycje własne'];
+  const GROUPS = ['Stopnie zapraszające', 'Stopnie proste', 'Stopnie zabiegowe', 'Podesty', 'Podstopnice', 'Noski', 'Profilowanie', 'Listwy i wangi', 'Balustrada', 'Oświetlenie LED', 'Usługi', 'Pozycje własne'];
   lines.sort((x, y) => GROUPS.indexOf(x.group) - GROUPS.indexOf(y.group));
   for (const l of lines) l.total = round2((l.material?.value ?? 0) + (l.labour?.value ?? 0));
   const materialNet = round2(lines.reduce((s, l) => s + (l.material?.value ?? 0), 0));

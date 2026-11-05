@@ -17,6 +17,7 @@ const ALLOWED_SHARED = new Set([
   'diagnostics/diagnostic.js',
   'util/format.js',
   'scene/woodGrain.js',
+  'scene/appearance.js',
   'scene/sceneSetup.js',
   'plan2d/viewport.js',
   'history/modelHistory.js',

@@ -322,11 +322,29 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   click on an edge switches its antresola balustrade — green on, grey off; the first edit takes the derived opening over).
 - Tests: `__tests__/balustrade.test.js`.
 
+## Colours and LED lighting (user request 2026-11-04, as built 2026-11-05)
+
+- Colours: one material per element group in `claddingRenderer.js` (`MATERIALS`: tread — treads, landings, noses;
+  riser; stringer — skirting boards and cover stringers; post; railing — the handrail; baluster; glassFixing), coloured
+  by the SHARED `scene/appearance.js` (`applyAppearanceToMaterials` — the same colour presets and finishes oak photo /
+  generated oak / solid as the self-supporting module; `setCladdingAppearance`). The appearance is presentation state
+  (not the config, not in undo), saved in the project file (`appearance`, `sanitizeAppearance`); panel „Kolory i
+  wykończenie” (a preset / own colour / finish per element, the glass fixings' metal). The offer's 3D picture uses it.
+- LED (`ledModel.js buildCladdingLed` → `built.led`): `ledTreadEnabled` (under every tread's nose along its front
+  edges, in front of the riser board — the concrete front moved forward by riser + nosing − `ledTreadSetbackMm` − half
+  the profile, at the tread's underside), `ledSkirtingEnabled` (in every skirting board, parallel to the noses
+  `ledSkirtingAboveMm` over them, on its face toward the stair), `ledHandrailEnabled` (under every balustrade
+  section's handrail); `ledEndMarginMm` off each end; `ledPowerWPerM`, `ledSupplyReservePct` → `powerW` / `supplyW`.
+  The self-supporting names and defaults (ASSUMPTION). 3D layer `LedLighting` (an emissive band), the plan (a warm
+  line), the quote („Oświetlenie LED”: strip and profile per mb from the shared list, the supply from the table by
+  power — `boardPricing.ledSupplyPrices`, editable in the Kosztorys tab —, labour `led` per mb). Folder „Oświetlenie LED”.
+- Tests: `__tests__/ledColors.test.js`.
+
 ## Gaps listed by the user (2026-11-04) — the next batches
 
 1. (done) Walls between / above / under the flights.
 2. (done) Balustrade types, posts by hand, the antresola per edge, the opening's editor — below.
-3. Colours of the treads, balusters, skirting; LED lighting.
+3. (done) Colours and LED lighting — below.
 4. Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ.
 
 ## Open questions
