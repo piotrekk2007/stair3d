@@ -319,6 +319,20 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
       mesh.name = `Glass-${s.id}`;
       mesh.renderOrder = 3;
       railing.add(mesh);
+      // glass between posts: a clamp on the post's face reaching over the pane's edge (picture sizes, as the
+      // self-supporting renderer: 30 mm grip, 60 high, the pane + 16 thick)
+      for (const c of pane.clamps || []) {
+        const grip = c.postFaceS < c.s ? 30 : -30;
+        const t0 = c.postFaceS;
+        const t1 = c.s + grip;
+        const mid = (t0 + t1) / 2;
+        const g = new THREE.BoxGeometry(Math.abs(t1 - t0), 60, pane.thicknessMm + 16);
+        g.rotateY(Math.atan2(pane.dir.y, pane.dir.x));
+        const cx = pane.origin.x + pane.dir.x * mid + pane.normal.x * (pane.thicknessMm / 2);
+        const cy = pane.origin.y + pane.dir.y * mid + pane.normal.y * (pane.thicknessMm / 2);
+        g.translate(cx, c.z, -cy);
+        railing.add(Object.assign(new THREE.Mesh(g, steelFixing), { name: 'GlassClamp' }));
+      }
       if (s.infill === 'glass-side') {
         const zs = pane.polygon.map((p) => p.z);
         const z = Math.min(...zs) + config.glassOverlapMm / 2;

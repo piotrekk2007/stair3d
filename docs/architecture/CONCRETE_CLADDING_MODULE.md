@@ -366,6 +366,15 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## Glass clamps (user request 2026-11-05, as built)
+
+Glass between posts (`railingInfill 'glass-posts'`): every pane carries its metal CLAMPS (`pane.clamps [{s, postFaceS,
+z}]`, `balustradeModel.js paneClamps` — as the self-supporting `railingGlass.js clamps`): always on a post, at each edge
+of the pane where a post stands, from the post's face (`glassGapMm` before the pane's edge) over the edge,
+`glassClampsPerSide` spread evenly over the pane's height there; 3D a steel block each (30 grip × 60 × the pane + 16 —
+picture sizes, as the self-supporting), plan a grey square per held edge, the quote's fixings = the clamps. Tests:
+`__tests__/glassClamps.test.js`.
+
 ## The production order (user request 2026-11-05, as built)
 
 „🏭 Zamówienie PDF” (`export/productionOrder.js`, printed by the shared `app/printHtml.js`): the blanks as the workshop

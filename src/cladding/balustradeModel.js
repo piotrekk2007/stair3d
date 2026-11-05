@@ -179,6 +179,24 @@ function crossing(l1, l2) {
 
 // --- posts, infill, handrail on a line -------------------------------------------------------------------------
 
+// a pane's clamps: at its start (if a post stands at the stretch's start) and its end; each {s (the pane's edge),
+// postFaceS (the post's face), z}
+function paneClamps(pa, pb, a0, b0, posts, zsAt, config) {
+  const half = config.postSizeMm / 2;
+  const out = [];
+  const m = Math.max(1, Math.round(config.glassClampsPerSide));
+  for (const [s, at, dir] of [
+    [pa, a0, 1],
+    [pb, b0, -1],
+  ]) {
+    if (!posts.some((p) => Math.abs(p.s - at) < 1e-6)) continue;
+    const face = at + dir * half;
+    const { lo, hi } = zsAt(s);
+    for (let k = 0; k < m; k++) out.push({ s, postFaceS: face, z: lo + ((hi - lo) * (k + 1)) / (m + 1) });
+  }
+  return out;
+}
+
 function section(line, config) {
   const edits = config.railingPostEdits?.[line.id] || {};
   const removed = new Set(edits.removed || []);
@@ -253,6 +271,9 @@ function section(line, config) {
       }
       // glass on the side: the stretch split into equal panes ≤ the pane width, a gap between them
       const parts = glassSide ? Math.max(1, Math.ceil((b - a) / config.glassMaxWidthMm)) : 1;
+      // (the stretch's own ends before the gaps: where its posts' faces are)
+      const a0 = cuts[k - 1];
+      const b0 = cuts[k];
       for (let j = 0; j < parts; j++) {
         const pa = a + ((b - a) * j) / parts + (glassSide && j > 0 ? config.glassGapMm / 2 : 0);
         const pb = a + ((b - a) * (j + 1)) / parts - (glassSide && j < parts - 1 ? config.glassGapMm / 2 : 0);
@@ -277,8 +298,12 @@ function section(line, config) {
           heightMm: Math.max(...zs) - Math.min(...zs),
           // the rectangle it is cut from (priced per m²)
           blankAreaM2: ((pb - pa) * (Math.max(...zs) - Math.min(...zs))) / 1e6,
+          // glass between posts: the metal CLAMPS holding it (user request 2026-11-05, as the self-supporting
+          // railingGlass.js clamps): always on the post — at both edges of the pane where a post stands, each from the
+          // post's face over the pane's edge, `glassClampsPerSide` spread evenly over the pane's height there
+          clamps: glassSide ? [] : paneClamps(pa, pb, a0, b0, posts, (s) => ({ lo: zAt(bottomLine, s), hi: zAt(topLine, s) }), config),
         });
-        fixings += glassSide ? config.glassFixingsPerPane : 2 * config.glassClampsPerSide;
+        fixings += glassSide ? config.glassFixingsPerPane : panes[panes.length - 1].clamps.length;
       }
     }
   }

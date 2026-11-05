@@ -110,7 +110,13 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
         const s0 = Math.min(...pane.polygon.map((p) => p.s));
         const s1 = Math.max(...pane.polygon.map((p) => p.s));
         const at = (sv) => ({ x: pane.origin.x + pane.dir.x * sv + pane.normal.x * pane.thicknessMm / 2, y: pane.origin.y + pane.dir.y * sv + pane.normal.y * pane.thicknessMm / 2 });
-        return `<line x1="${fmt(at(s0).x)}" y1="${fmt(-at(s0).y)}" x2="${fmt(at(s1).x)}" y2="${fmt(-at(s1).y)}" stroke="#3aa6a0" stroke-width="3" pointer-events="none" ${HAIR}/>`;
+        // (its clamps: a small grey block at each held edge)
+        const clamps = [...new Set((pane.clamps || []).map((c) => `${c.s}|${c.postFaceS}`))].map((k) => {
+          const [sv, fv] = k.split('|').map(Number);
+          const p = at((sv + fv) / 2);
+          return `<rect x="${fmt(p.x - 12)}" y="${fmt(-p.y - 12)}" width="24" height="24" fill="#8a9096" pointer-events="none"/>`;
+        }).join('');
+        return `<line x1="${fmt(at(s0).x)}" y1="${fmt(-at(s0).y)}" x2="${fmt(at(s1).x)}" y2="${fmt(-at(s1).y)}" stroke="#3aa6a0" stroke-width="3" pointer-events="none" ${HAIR}/>${clamps}`;
       }).join('');
       return line + rail + bal + glass + posts + ghosts;
     })
