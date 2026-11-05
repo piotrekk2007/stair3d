@@ -73,6 +73,23 @@ function crossPolyline(p, q, path, near) {
 }
 
 /**
+ * Where the nose of the winder whose front is the zone's edge `k` meets the wall and the dusza line: its concrete
+ * front edge moved forward by the nosing + its riser board, crossed with the zone's paths. `{outer, inner}` plan points
+ * (null where it misses), null without that winder.
+ */
+export function winderNose(concrete, config, zone, k) {
+  const el = concrete.elements.find((e) => e.groupIndex === zone.groupIndex && e.kind === 'winder' && e.k === k);
+  const front = el?.edges.find((e) => e.role === 'front');
+  if (!front) return null;
+  const l = Math.hypot(front.b.x - front.a.x, front.b.y - front.a.y) || 1;
+  const n = { x: (front.b.y - front.a.y) / l, y: -(front.b.x - front.a.x) / l };
+  const f = config.nosingFrontMm + (riserOn(el, config) ? riserThicknessOf(config) : 0);
+  const p = { x: front.a.x + n.x * f, y: front.a.y + n.y * f };
+  const q = { x: front.b.x + n.x * f, y: front.b.y + n.y * f };
+  return { outer: crossPolyline(p, q, zone.outerPath, zone.edges[k].outer), inner: crossPolyline(p, q, zone.innerPath, zone.edges[k].inner) };
+}
+
+/**
  * A winder zone measured as FINISHED treads (user request 2026-11-05): its edges' numbers are where the finished
  * treads' NOSES meet the wall and the dusza line. A winder's nose line = its concrete front edge moved forward by the
  * nosing + its riser board, so it meets the walls elsewhere (by that offset / the angle); the concrete edges are moved
@@ -83,7 +100,6 @@ export function concreteWinderEdges(config) {
   const targets = config.sequence.map((g) => (g.kind === 'winders' && g.measured === 'finished' && g.edges?.some(Boolean) ? g.edges : null));
   if (!targets.some(Boolean)) return config.sequence;
   const seq = config.sequence.map((g) => (g.kind === 'winders' ? { ...g, edges: (g.edges || []).map((e) => (e ? { ...e } : e)) } : g));
-  const r = riserThicknessOf(config);
   for (let round = 0; round < 6; round++) {
     const concrete = buildConcreteModel({ ...config, sequence: seq });
     let worst = 0;
@@ -93,23 +109,15 @@ export function concreteWinderEdges(config) {
       for (let k = 1; k < zone.edges.length - 1; k++) {
         const t = want[k - 1];
         if (!t) continue;
-        // the winder whose front this edge is, its nose line
-        const el = concrete.elements.find((e) => e.groupIndex === zone.groupIndex && e.kind === 'winder' && e.k === k);
-        const front = el?.edges.find((e) => e.role === 'front');
-        if (!front) continue;
-        const l = Math.hypot(front.b.x - front.a.x, front.b.y - front.a.y) || 1;
-        const n = { x: (front.b.y - front.a.y) / l, y: -(front.b.x - front.a.x) / l };
-        const f = config.nosingFrontMm + (riserOn(el, config) ? r : 0);
-        const p = { x: front.a.x + n.x * f, y: front.a.y + n.y * f };
-        const q = { x: front.b.x + n.x * f, y: front.b.y + n.y * f };
+        const noses = winderNose(concrete, config, zone, k);
+        if (!noses) continue;
         const own = seq[zone.groupIndex].edges[k - 1] || (seq[zone.groupIndex].edges[k - 1] = {});
         for (const [which, path, field] of [
           ['outer', zone.outerPath, 'outerMm'],
           ['inner', zone.innerPath, 'innerMm'],
         ]) {
           if (!Number.isFinite(t[field])) continue;
-          const near = which === 'outer' ? zone.edges[k].outer : zone.edges[k].inner;
-          const x = crossPolyline(p, q, path, near);
+          const x = noses[which];
           if (!x) continue;
           const err = t[field] - signedOnZoneLine(zone, which, x);
           // (kept within the line — a nose asked for where no edge can put it is reported by the zone's checks)
@@ -167,5 +175,11 @@ export function buildCladdingStair(rawConfig) {
   built.gapWalls = cfg.gapWalls || [];
   // (every wall's stretch along its side, mm — the plan's wall ends)
   built.wallEntries = cfg.wallIndex.entries;
+  // (a winder zone measured as finished treads: its edges' handles on the plan at the noses — what its numbers mean)
+  built.winderNoses = {};
+  for (const zone of concrete.zones || []) {
+    if (config.sequence[zone.groupIndex]?.measured !== 'finished') continue;
+    built.winderNoses[zone.groupIndex] = zone.edges.map((e, k) => (e.boundary ? null : winderNose(concrete, config, zone, k)));
+  }
   return built;
 }

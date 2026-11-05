@@ -48,7 +48,8 @@ test('the other groups: noses, the trim with its drawing, skirting, posts, balus
   assert.match(html, /<h1>Zamówienie na produkcję<\/h1>/);
   assert.match(html, /<b>40x300x1030<\/b> - <b>P<\/b> - <b>4 szt\.<\/b>/);
   assert.ok((html.match(/<svg class="draw"/g) || []).length >= 2, 'the tread and the trim profiles drawn');
-  assert.match(html, /font-size: 19pt/, 'large type');
+  assert.match(html, /.l { font-size: 15pt/, 'the sizes in the largest type');
+  assert.match(html, /column-count: 2/, 'two columns — at most two pages');
 });
 
 test('carpet risers: the heading says so, the tongues as their own group', () => {
@@ -56,4 +57,24 @@ test('carpet risers: the heading says so, the tongues as their own group', () =>
   assert.match(o.groups.find((x) => x.title.startsWith('Podstopnie')).title, /dywanowe, na obce pióro/);
   assert.ok(o.groups.some((g) => g.title.startsWith('Obce pióro')));
   assert.ok(o.groups.find((x) => x.title.startsWith('Stopnie proste')).title.includes('rowki na obce pióro'));
+});
+
+// user report 2026-11-05 (a screenshot): the profile drawing crossed itself (the profile taken top → bottom)
+test('the section drawings are simple polygons — the tread\'s and the trim\'s outlines never cross themselves', () => {
+  const b = buildCladdingStair(cfg({ ledTreadEnabled: true, openingTrimEnabled: true }));
+  const html = productionOrderHTML(buildProductionOrder(b, createDefaultQuoteSettings()));
+  const polys = [...html.matchAll(/<polygon points="([^"]+)"/g)].map((m) => m[1].split(' ').map((p) => p.split(',').map(Number)));
+  assert.equal(polys.length, 2, 'the tread and the trim');
+  const cross = (a, b, c, d) => {
+    const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+    return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
+  };
+  for (const pts of polys) {
+    const n = pts.length;
+    for (let i = 0; i < n; i++)
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        assert.ok(!cross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]), `edges ${i} and ${j} cross`);
+      }
+  }
 });

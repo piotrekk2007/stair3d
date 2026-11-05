@@ -128,37 +128,43 @@ export function buildProductionOrder(built, quoteSettings = {}) {
 }
 
 // --- the section drawings ---------------------------------------------------------------------------------------------
-const S = 3; // px per mm
+const S = 1.5; // px per mm (half the first size — user request 2026-11-05: max two pages)
+const PAD = 14;
+// a tread's section through its front: the profile bottom → top, the top on to L, down at L, the underside back to the
+// front with its grooves (user report 2026-11-05: the outline crossed itself — the profile was taken top → bottom)
 function treadSVG(d) {
   const t = d.thicknessMm;
-  const L = 170; // the front part of the tread drawn
-  const rings = profileRings(d.profile, d.sizeMm || 0, t); // {inset from the front, z from the bottom}
-  // the outline: the front profile bottom → top, the top to L, down, the underside back to the front (grooves in it)
-  const top = rings.map((p) => [p.inset, t - p.z]);
-  const under = [];
+  const L = 150; // the front part of the tread drawn
+  const rings = profileRings(d.profile, d.sizeMm || 0, t); // {inset from the front, z from the bottom}, bottom → top
+  const X = (x) => PAD + x * S;
+  const Y = (z) => PAD + 12 + (t - z) * S; // z up → y down
   const cuts = [...(d.cuts || [])].sort((a, b) => b.x - a.x);
-  under.push([L, t]);
-  for (const c of cuts) under.push([c.x + c.w, t], [c.x + c.w, t - c.h], [c.x, t - c.h], [c.x, t]);
-  const pts = [...top.reverse(), [L, 0], ...under].map(([x, y]) => `${x * S + 40},${y * S + 30}`).join(' ');
-  // (the labels staggered so neighbouring ones do not overlap; each with its distance from the front)
-  const labels = [...cuts].sort((a, b) => a.x - b.x).map((c, k) => `<text x="${(c.x + c.w / 2) * S + 40}" y="${t * S + 30 + 34 + k * 30}" text-anchor="middle">${esc(c.label)} (${r0(c.x)} od czoła)</text>`).join('');
-  const h = t * S + 80 + cuts.length * 30;
-  return `<svg class="draw" viewBox="0 0 ${L * S + 120} ${h}" width="${L * S + 120}" height="${h}" xmlns="http://www.w3.org/2000/svg"><polygon points="${pts}" fill="#f1dfc2" stroke="#3b2a1a" stroke-width="2.5"/><text x="${L * S + 50}" y="${(t / 2) * S + 38}">${r0(t)}</text><text x="40" y="22">czoło →</text>${labels}</svg>`;
+  const pts = [...rings.map((p) => [p.inset, p.z]), [L, t], [L, 0]];
+  for (const c of cuts) pts.push([c.x + c.w, 0], [c.x + c.w, c.h], [c.x, c.h], [c.x, 0]);
+  const poly = pts.map(([x, z]) => `${X(x).toFixed(1)},${Y(z).toFixed(1)}`).join(' ');
+  // (the labels under the section, one per line, each with its distance from the front)
+  const labels = [...cuts].sort((a, b) => a.x - b.x).map((c, k) => `<text x="${X(0)}" y="${Y(0) + 16 + k * 15}">${esc(c.label)} — ${r0(c.x)} od czoła</text>`).join('');
+  const w = X(L) + 34;
+  const h = Y(0) + 8 + cuts.length * 15 + 4;
+  return `<svg class="draw" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg"><polygon points="${poly}" fill="#f1dfc2" stroke="#3b2a1a" stroke-width="1.5"/><text x="${X(L) + 4}" y="${Y(t / 2) + 5}">${r0(t)}</text><text x="${X(0)}" y="${PAD + 4}">czoło</text>${labels}</svg>`;
 }
+// the trim's section: the nose into the opening (its profile bottom → top) and the board on the slab
 function trimSVG(d) {
   const W = d.noseWidthMm;
   const H = d.noseHeightMm;
   const T = d.boardThicknessMm;
-  const D = Math.min(d.boardDepthMm, 160);
+  const D = Math.min(d.boardDepthMm, 140);
   const rings = profileRings(d.profile, d.sizeMm || 0, H);
-  const x = (v) => (v + W) * S + 40;
-  const y = (v) => v * S + 30; // from the top
-  const nose = rings.map((p) => [-W + p.inset, H - p.z]).reverse();
-  const pts = [...nose, [D, 0], [D, T], [0, T], [0, H], [-W, H]].map(([a, b]) => `${x(a)},${y(b)}`).join(' ');
-  return `<svg class="draw" viewBox="0 0 ${(W + D) * S + 160} ${H * S + 110}" width="${(W + D) * S + 160}" height="${H * S + 110}" xmlns="http://www.w3.org/2000/svg"><polygon points="${pts}" fill="#f1dfc2" stroke="#3b2a1a" stroke-width="2.5"/><text x="${x(-W)}" y="${y(H) + 34}">nosek ${r0(W)}</text><text x="${x(-W) - 6}" y="${y(H / 2) + 8}" text-anchor="end">${r0(H)}</text><text x="${x(D) + 10}" y="${y(T / 2) + 8}">${r0(T)}</text><text x="${x(D / 2)}" y="${y(T) + 34}" text-anchor="middle">deska ${r0(d.boardDepthMm)}</text><text x="${x(-W)}" y="22">← otwór</text></svg>`;
+  const X = (v) => PAD + 6 + (v + W) * S;
+  const Y = (z) => PAD + 12 + (H - z) * S; // z up from the nose's bottom
+  const pts = [...rings.map((p) => [-W + p.inset, p.z]), [D, H], [D, H - T], [0, H - T], [0, 0]];
+  const poly = pts.map(([x, z]) => `${X(x).toFixed(1)},${Y(z).toFixed(1)}`).join(' ');
+  const w = X(D) + 30;
+  const h = Y(0) + 22;
+  return `<svg class="draw" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg"><polygon points="${poly}" fill="#f1dfc2" stroke="#3b2a1a" stroke-width="1.5"/><text x="${X(-W)}" y="${PAD + 4}">otwór</text><text x="${X(-W) - 3}" y="${Y(H / 2) + 5}" text-anchor="end">${r0(H)}</text><text x="${X(D) + 4}" y="${Y(H - T / 2) + 5}">${r0(T)}</text><text x="${X(-W)}" y="${Y(0) + 16}">nosek ${r0(W)} · deska ${r0(d.boardDepthMm)}</text></svg>`;
 }
 
-/** The order as a printable page (A4, large type). */
+/** The order as a printable page (A4, two columns, the sizes in the largest type). */
 export function productionOrderHTML(order, { projectName = '', date = new Date(), thicknessNote = '' } = {}) {
   const d = `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
   const body = order.groups
@@ -168,12 +174,14 @@ export function productionOrderHTML(order, { projectName = '', date = new Date()
       return `<section><h2>${esc(g.title)}</h2>${g.note ? `<div class="gn">${esc(g.note)}</div>` : ''}${draw}${lines}</section>`;
     })
     .join('');
+  // (two columns, compact — the whole order on one or two A4 pages; the sizes still the largest type)
   return `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Zamówienie na produkcję${projectName ? ` — ${esc(projectName)}` : ''}</title><style>
-  @page { size: A4; margin: 10mm; } body { font-family: "Segoe UI", Roboto, Arial, sans-serif; font-size: 16pt; color: #000; }
-  h1 { font-size: 24pt; margin: 0 0 2mm; } .meta { font-size: 15pt; margin-bottom: 6mm; }
-  section { break-inside: avoid; border-top: 2px solid #000; padding: 3mm 0 4mm; }
-  h2 { font-size: 21pt; margin: 0 0 2mm; } .gn { font-size: 14pt; margin-bottom: 2mm; }
-  .l { font-size: 19pt; margin: 2mm 0 2mm 4mm; } .nt { font-size: 14pt; font-weight: normal; } .c { font-size: 11pt; color: #555; margin-left: 2mm; }
-  svg.draw { display: block; margin: 2mm 0 3mm 4mm; font-size: 26px; font-family: Arial, sans-serif; }
-  </style></head><body><h1>Zamówienie na produkcję</h1><div class="meta">${projectName ? `<b>${esc(projectName)}</b> · ` : ''}${d}${order.wood ? ` · ${esc(order.wood)}` : ''}${thicknessNote ? ` · ${esc(thicknessNote)}` : ''}<br>Wymiary: grubość x szerokość x długość [mm]. Typ: L — nosek / koniec widoczny z lewej, P — z prawej, CZ — czołowy (między ścianami), PL — z obu stron.</div>${body}</body></html>`;
+  @page { size: A4; margin: 8mm; } body { font-family: "Segoe UI", Roboto, Arial, sans-serif; font-size: 11pt; color: #000; margin: 0; }
+  h1 { font-size: 18pt; margin: 0 0 1mm; } .meta { font-size: 10.5pt; margin-bottom: 3mm; }
+  .cols { column-count: 2; column-gap: 7mm; }
+  section { break-inside: avoid; border-top: 1.5px solid #000; padding: 1.5mm 0 2mm; }
+  h2 { font-size: 13pt; margin: 0 0 1mm; } .gn { font-size: 10pt; margin-bottom: 1mm; }
+  .l { font-size: 15pt; margin: 1mm 0 1mm 2mm; line-height: 1.15; } .nt { font-size: 10pt; font-weight: normal; } .c { font-size: 7.5pt; color: #555; margin-left: 1mm; line-height: 1.1; }
+  svg.draw { display: block; margin: 1mm 0 1.5mm 2mm; font-size: 12px; font-family: Arial, sans-serif; }
+  </style></head><body><h1>Zamówienie na produkcję</h1><div class="meta">${projectName ? `<b>${esc(projectName)}</b> · ` : ''}${d}${order.wood ? ` · ${esc(order.wood)}` : ''}${thicknessNote ? ` · ${esc(thicknessNote)}` : ''}<br>Wymiary: grubość x szerokość x długość [mm]. Typ: L — nosek / koniec widoczny z lewej, P — z prawej, CZ — czołowy (między ścianami), PL — z obu stron.</div><div class="cols">${body}</div></body></html>`;
 }

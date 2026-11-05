@@ -162,9 +162,21 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .map((z, zi) => {
       const walkline = `<polyline points="${pts(z.walkline)}" fill="none" stroke="#c0392b" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" ${HAIR}/>`;
       const corners = [z.wallCorner, z.duszaCorner].map((c) => `<circle cx="${fmt(c.x)}" cy="${fmt(-c.y)}" r="${fmt(r * 0.45)}" fill="#555" pointer-events="none"/>`).join('');
+      // (a zone measured as finished treads: the handles at the treads' noses — the numbers mean those, the drag sets
+      // them; the concrete edge drawn thin behind)
+      const noses = built.winderNoses?.[z.groupIndex] || null;
       const handles = z.edges
         .map((e, k) => {
           if (e.boundary) return '';
+          if (noses?.[k]) {
+            const no = noses[k].outer || e.outer;
+            const ni = noses[k].inner || e.inner;
+            const concreteLine = `<line x1="${fmt(e.outer.x)}" y1="${fmt(-e.outer.y)}" x2="${fmt(e.inner.x)}" y2="${fmt(-e.inner.y)}" stroke="#d35400" stroke-width="1" stroke-dasharray="4,3" pointer-events="none" ${HAIR}/>`;
+            const noseLine = `<line x1="${fmt(no.x)}" y1="${fmt(-no.y)}" x2="${fmt(ni.x)}" y2="${fmt(-ni.y)}" stroke="#d35400" stroke-width="1.5" pointer-events="none" ${HAIR}/>`;
+            const hn = (which, p, measured) =>
+              `<circle class="clad-edge-handle" data-zone="${zi}" data-edge="${k}" data-end="${which}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(r)}" fill="${measured ? '#d35400' : '#fff'}" stroke="#d35400" stroke-width="2" ${HAIR}><title>${which === 'outer' ? 'Nosek gotowego stopnia przy ścianie' : 'Nosek gotowego stopnia przy duszy'} — przeciągnij</title></circle>`;
+            return concreteLine + noseLine + hn('outer', no, e.measuredOuter) + hn('inner', ni, e.measuredInner);
+          }
           const line = `<line x1="${fmt(e.outer.x)}" y1="${fmt(-e.outer.y)}" x2="${fmt(e.inner.x)}" y2="${fmt(-e.inner.y)}" stroke="#d35400" stroke-width="1.5" pointer-events="none" ${HAIR}/>`;
           const h = (which, p, measured) =>
             `<circle class="clad-edge-handle" data-zone="${zi}" data-edge="${k}" data-end="${which}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(r)}" fill="${measured ? '#d35400' : '#fff'}" stroke="#d35400" stroke-width="2" ${HAIR}><title>${which === 'outer' ? 'Koniec przy ścianie' : 'Koniec przy duszy'} — przeciągnij</title></circle>`;

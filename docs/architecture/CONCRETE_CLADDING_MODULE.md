@@ -377,8 +377,9 @@ own sizes (not marked as own): a step's going from its tread's depth, its width 
 every element's rise from its finished rise. A winder zone measured so: its edges' numbers are where the finished
 treads' NOSES meet the wall and the dusza line (`concreteWinderEdges`: each winder's nose line = its concrete front
 edge moved forward by the nosing + its riser board, crossed with the zone's wall / dusza path; the concrete edge moved
-by the miss, a few rounds, kept within the line) — its A / B stay measured on the walls. (The plan's edge handles still
-show the concrete edges.)
+by the miss, a few rounds, kept within the line) — its A / B stay measured on the walls. In such a zone the plan's edge
+handles stand at the NOSES (`built.winderNoses`, `winderNose` — one rule for the conversion and the plan; the concrete
+edge drawn dashed behind), so a drag sets exactly what the numbers mean.
 The heights table's „beton” / „głęb.” show the derived concrete. Tests: `__tests__/finishedMeasure.test.js`.
 
 ## Glass clamps (user request 2026-11-05, as built)
@@ -401,7 +402,9 @@ groove / a carpet riser's tongue groove with their distances from the front; the
 L / P / CZ / PL — a riser takes its tread's). Groups: straight / starter / winder treads, landings, risers („Podstopnie
 dąb — za stopnicą, wpust …” / „dywanowe, na obce pióro”), noses, trims, skirting (stepped pieces with their mitres and
 notches), cover stringers, posts (cap, grooves), balusters (rounded up to 10 mm), handrails (wall handrails with their
-brackets), loose tongues. The both-sides tread type is now „PL” (the workshop's word, was LP). Tests:
+brackets), loose tongues. The both-sides tread type is now „PL” (the workshop's word, was LP). Layout (user request
+2026-11-05): two columns, the drawings half size (1.5 px/mm), the sizes 15 pt — the order on one or two A4 pages; the
+section outlines run the profile bottom → top (a crossing outline reported and fixed). Tests:
 `__tests__/productionOrder.test.js`.
 
 ## The opening's trim „fajka”; the posts' tops (user request 2026-11-05, as built)

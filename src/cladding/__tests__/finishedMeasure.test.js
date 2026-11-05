@@ -72,3 +72,26 @@ test('winders measured as finished: the treads\' noses meet the wall where measu
   const c = buildCladdingStair(cfg(null, { sequence: seq(undefined) })).concrete.zones[0];
   assert.deepEqual([c.edges[1].outerMm, c.edges[2].outerMm], [-300, 300]);
 });
+
+// user request 2026-11-05: in a finished winder zone the plan's edge handles stand at the treads' noses
+test('the plan\'s winder handles at the noses in a finished zone (the drag sets what the numbers mean)', async () => {
+  const { signedOnZoneLine } = await import('../concreteModel.js');
+  const { renderCladdingPlanSVG } = await import('../claddingPlanRenderer.js');
+  const seq = [
+    { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+    { kind: 'winders', count: 3, riseMm: 180, turn: 'right', measured: 'finished', edges: [{ outerMm: -300 }, { outerMm: 300 }] },
+    { kind: 'steps', count: 2, riseMm: 180, goingMm: 270, widthMm: 1000 },
+  ];
+  const b = buildCladdingStair(cfg(null, { sequence: seq }));
+  const z = b.concrete.zones[0];
+  const svg = renderCladdingPlanSVG(b, {});
+  const m = svg.match(/<circle class="clad-edge-handle" data-zone="0" data-edge="1" data-end="outer" cx="([-\d.]+)" cy="([-\d.]+)"/);
+  assert.ok(m, 'the handle');
+  const p = { x: Number(m[1]), y: -Number(m[2]) };
+  near(signedOnZoneLine(z, 'outer', p), -300, 'at the nose, where measured', 0.2);
+  assert.ok(Math.abs(signedOnZoneLine(z, 'outer', z.edges[1].outer) + 300) > 10, 'not at the concrete edge');
+  // measured on the concrete: at the concrete edge
+  const c = buildCladdingStair(cfg(null, { sequence: seq.map((g) => ({ ...g, measured: undefined })) }));
+  const mc = renderCladdingPlanSVG(c, {}).match(/<circle class="clad-edge-handle" data-zone="0" data-edge="1" data-end="outer" cx="([-\d.]+)" cy="([-\d.]+)"/);
+  near(signedOnZoneLine(c.concrete.zones[0], 'outer', { x: Number(mc[1]), y: -Number(mc[2]) }), -300, 'at the concrete', 0.2);
+});
