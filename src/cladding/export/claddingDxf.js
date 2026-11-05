@@ -69,7 +69,21 @@ export function claddingPieces(built) {
     pieces.push({ row: 'risers', code, name: r.bent ? 'Podstopnica gięta (rozwinięcie)' : 'Podstopnica', pts, notes: [`${r.thicknessMm} mm`] });
   }
   for (const n of cladding.exitNosing || []) pieces.push({ row: 'treads', code: 'NA', name: 'Nosek antresoli', pts: toLocal(n.outline, n.grain), notes: [`${n.thicknessMm} mm`] });
-  for (const b of built.finish?.skirting || []) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyścienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyła'] });
+  for (const b of built.finish?.skirting || []) {
+    if (!b.parts) continue;
+    // a stepped skirting: every piece flat with its mitres and notch, its grain along x (a vertical piece turned)
+    const base = `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`;
+    b.parts.forEach((p, k) => {
+      let pts = planeLocal(p.polygon);
+      if (p.part === 'vertical') {
+        const H = Math.max(...pts.map((q) => q.u));
+        pts = pts.map((q) => ({ u: q.v, v: H - q.u }));
+      }
+      const notes = [`${b.thicknessMm} mm`, p.part === 'horizontal' ? 'poziomy, końce 45°' : `pionowy, 45°${p.notch ? `, wycięcie pod nosek ${Math.round(p.notch.widthMm)} × ${Math.round(p.notch.heightMm)}` : ''}${p.exit ? ', przy wyjściu' : ''}`];
+      pieces.push({ row: 'boards', code: `${base}-${String(k + 1).padStart(2, '0')}`, name: `Listwa schodkowa bieg ${b.key.flight + 1} — ${p.part === 'horizontal' ? 'poziomy' : 'pionowy'}`, pts, notes });
+    });
+  }
+  for (const b of (built.finish?.skirting || []).filter((x) => !x.parts)) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyścienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyła'] });
   for (const b of built.finish?.coverStringers || []) pieces.push({ row: 'boards', code: `WO-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Wanga obiciowa bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`] });
   let g = 0;
   for (const s of built.balustrade?.sections || []) for (const p of s.panes || []) pieces.push({ row: 'glass', code: `SZ-${++g}`, name: `Szyba (${s.infill === 'glass-side' ? 'na boku, rotule' : 'między słupami'})`, pts: planeLocal(p.polygon), notes: [`${p.thicknessMm} mm`, `${Math.round(p.widthMm)} x ${Math.round(p.heightMm)}`] });

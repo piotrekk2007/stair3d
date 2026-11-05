@@ -5,6 +5,8 @@ import { createDefaultCladdingConfig } from '../schema.js';
 import { buildCladdingStair } from '../buildCladdingStair.js';
 import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings } from '../quote/labour.js';
+import { claddingPieces } from '../export/claddingDxf.js';
+import { renderCladdingStair } from '../claddingRenderer.js';
 
 // stage 5 (user request 2026-11-04): skirting boards, cover stringers, the balustrade with decorative posts
 const straight = (patch = {}) => ({ ...createDefaultCladdingConfig(), sequence: [{ kind: 'steps', count: 6, riseMm: 180, goingMm: 270, widthMm: 1000 }], treadThicknessMm: 40, floorFinishBottomMm: 40, floorFinishTopMm: 40, ...patch });
@@ -34,13 +36,86 @@ test('skirting on a walled side: the bottom cut to every tread top and riser, th
   assert.equal(buildCladdingStair(straight({ walls: { 0: { left: true } } })).finish.skirting.length, 0);
 });
 
-test('a stepped skirting: its top a constant height over every tread', () => {
-  const b = buildCladdingStair(straight({ walls: { 0: { right: true } }, skirtingEnabled: true, skirtingStyle: 'stepped', skirtingHeightMm: 80 }));
-  const k = b.finish.skirting[0];
-  for (let i = 0; i < 6; i++) {
-    const top = 180 * (i + 1) + 40;
-    assert.ok(has(k.polygon, 270 * i, top + 80) && has(k.polygon, 270 * (i + 1), top + 80), `tread ${i + 1}`);
+// a stepped skirting as the joiners make it (user request 2026-11-05): horizontal pieces on the treads, vertical ones
+// in front of the risers, mitred at 45°, the vertical ones notched for the noses
+const stepped = (patch = {}) => straight({ walls: { 0: { right: true } }, skirtingEnabled: true, skirtingStyle: 'stepped', skirtingHeightMm: 80, riserBoards: true, riserThicknessMm: 20, nosingFrontMm: 30, ...patch });
+// tread i: its top 180 (i + 1) + 40, its underside 180 (i + 1); riser i's face F = 270 i − 20
+const top = (i) => 180 * (i + 1) + 40;
+const F = (i) => 270 * i - 20;
+
+test('a stepped skirting: a horizontal piece on every tread and a vertical one at every riser, mitred at 45°', () => {
+  const k = buildCladdingStair(stepped()).finish.skirting[0];
+  assert.equal(k.polygon, null);
+  assert.deepEqual(k.parts.map((p) => p.part), [...Array(6)].flatMap(() => ['vertical', 'horizontal']).concat(['vertical']), 'v h v h … + the exit');
+  const hs = k.parts.filter((p) => p.part === 'horizontal');
+  for (let i = 0; i < 5; i++) {
+    const h = hs[i].polygon;
+    // front: the mitre from (F, top) to (F − 80, top + 80) — 45°; back: from (F', top) to (F' − 80, top + 80)
+    assert.ok(has(h, F(i), top(i)) && has(h, F(i) - 80, top(i) + 80), `tread ${i + 1} front mitre`);
+    assert.ok(has(h, F(i + 1), top(i)) && has(h, F(i + 1) - 80, top(i) + 80), `tread ${i + 1} back mitre`);
+    near(hs[i].lengthMm, F(i + 1) - F(i) + 80, `tread ${i + 1} blank length`);
+    near(hs[i].depthMm, 80, 'the board width');
   }
+  const vs = k.parts.filter((p) => p.part === 'vertical');
+  // the first one from the finished floor (level cut), up to the first tread's mitre
+  assert.ok(has(vs[0].polygon, F(0), 40) && has(vs[0].polygon, F(0) - 80, 40), 'level on the floor');
+  for (let i = 1; i < 6; i++) {
+    const v = vs[i].polygon;
+    assert.ok(has(v, F(i), top(i - 1)) && has(v, F(i) - 80, top(i - 1) + 80), `riser ${i + 1}: the bottom mitre with the tread below`);
+    assert.ok(has(v, F(i) - 80, top(i) + 80) && has(v, F(i), top(i)), `riser ${i + 1}: the top mitre`);
+  }
+});
+
+test('a stepped skirting: the vertical pieces notched for the nose; a nose past the board ends them level under it', () => {
+  const k = buildCladdingStair(stepped()).finish.skirting[0];
+  const v = k.parts.filter((p) => p.part === 'vertical')[2];
+  // the riser face up to the tread's underside, out by the overhang (30), up its thickness (40)
+  assert.ok(has(v.polygon, F(2), 180 * 3) && has(v.polygon, F(2) - 30, 180 * 3) && has(v.polygon, F(2) - 30, top(2)), 'the notch');
+  assert.deepEqual(v.notch, { widthMm: 30, heightMm: 40 });
+  assert.ok(v.depthMm === 80 && v.lengthMm > 180, 'blank along its grain (up)');
+  // a nose of 100 over an 80 board: the vertical piece ends level under it, the horizontal one square at F − 80
+  const long = buildCladdingStair(stepped({ nosingFrontMm: 100 })).finish.skirting[0];
+  const lv = long.parts.filter((p) => p.part === 'vertical')[2];
+  assert.ok(has(lv.polygon, F(2), 180 * 3) && has(lv.polygon, F(2) - 80, 180 * 3), 'level under the nose');
+  assert.equal(lv.notch, null);
+  const lh = long.parts.filter((p) => p.part === 'horizontal')[2];
+  assert.ok(has(lh.polygon, F(2) - 80, top(2)) && has(lh.polygon, F(2) - 80, top(2) + 80), 'square over the nose');
+});
+
+test('a stepped skirting: the exit piece up to the floor above + its width, notched for the antresola nosing', () => {
+  const b = buildCladdingStair(stepped());
+  const k = b.finish.skirting[0];
+  const exit = k.parts.at(-1);
+  assert.equal(exit.exit, true);
+  const floorAbove = b.concrete.exit.rawSlabTopZ + b.config.floorFinishTopMm;
+  const Fe = 270 * 6 - 20;
+  assert.ok(has(exit.polygon, Fe, floorAbove + 80) && has(exit.polygon, Fe - 80, floorAbove + 80), 'level top 80 over the floor');
+  assert.ok(has(exit.polygon, Fe - 30, floorAbove - 40) && has(exit.polygon, Fe - 30, floorAbove), 'notched for the antresola nosing');
+});
+
+test('a stepped skirting downstream: 3D one mesh per piece, the DXF / cut list per piece (grain along x), the quote per piece, LED per tread', () => {
+  const b = buildCladdingStair(stepped({ ledSkirtingEnabled: true, ledSkirtingAboveMm: 40 }));
+  const k = b.finish.skirting[0];
+  const s = createDefaultQuoteSettings();
+  s.skirtingPerMb = 30;
+  s.labour.find((r) => r.id === 'skirting-stepped').rate = 15;
+  const line = buildCladdingQuote(b, s).lines.find((l) => l.id === k.id);
+  near(line.qty, Math.round(k.lengthMm / 10) / 100, 'mb of all pieces');
+  near(line.labour.value, 15 * k.parts.length, 'labour per piece', 0.011);
+  const leds = b.led.strips.filter((x) => x.kind === 'skirting');
+  assert.equal(leds.length, 6, 'one strip per tread');
+  near(leds[1].points[0].z, top(1) + 40, 'the LED 40 over the tread');
+  const pieces = claddingPieces(b).filter((p) => p.code.startsWith('LS-1P-'));
+  assert.equal(pieces.length, k.parts.length, 'every piece in the DXF');
+  for (const [i, p] of pieces.entries()) {
+    const w = Math.max(...p.pts.map((q) => q.u)) - Math.min(...p.pts.map((q) => q.u));
+    near(w, k.parts[i].lengthMm, `${p.code} grain along x`);
+  }
+  assert.match(pieces[2].notes.join(), /wycięcie pod nosek 30 × 40/);
+  const root = renderCladdingStair(b);
+  let meshes = 0;
+  root.getObjectByName('Finish').traverse((o) => o.isMesh && meshes++);
+  assert.equal(meshes, k.parts.length, 'one mesh per piece');
 });
 
 test('a cover stringer on the open side: along the soffit, its top under the treads (stepped) or above the noses (raked — no side nosing then)', () => {

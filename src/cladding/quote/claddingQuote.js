@@ -98,6 +98,13 @@ export function buildCladdingQuote(built, settings) {
   const perUnit = (price, qty, what) => (price > 0 ? { value: round2(price * qty), note: `${round2(price)} zł/${what}` } : { value: null, note: `brak ceny (${what})` });
   for (const b of built.finish?.skirting || []) {
     const mb = round2(b.lengthMm / 1000);
+    if (b.parts) {
+      // stepped: the pieces' lengths per mb, the labour per piece (each cut at 45°, the vertical ones notched)
+      const h = b.parts.filter((p) => p.part === 'horizontal').length;
+      const v = b.parts.length - h;
+      lines.push({ id: b.id, group: 'Listwy i wangi', name: `Listwa przyścienna schodkowa — bieg ${b.key.flight + 1}, ${b.key.side === 'left' ? 'lewa' : 'prawa'} (${h} poziomych + ${v} pionowych, łączone na 45°)`, qty: mb, unit: 'mb', dims: `${b.parts.length} el. × ${Math.round(b.depthMm)} × ${Math.round(b.thicknessMm)} mm`, material: perUnit(settings.skirtingPerMb, mb, 'mb'), labour: labour('skirting-stepped', b.parts.length) });
+      continue;
+    }
     lines.push({ id: b.id, group: 'Listwy i wangi', name: `Listwa przyścienna — bieg ${b.key.flight + 1}, ${b.key.side === 'left' ? 'lewa' : 'prawa'} (${b.style === 'stepped' ? 'schodkowa' : 'pochyła'})`, qty: mb, unit: 'mb', dims: `${Math.round(b.lengthMm)} × ${Math.round(b.depthMm)} × ${Math.round(b.thicknessMm)} mm`, material: perUnit(settings.skirtingPerMb, mb, 'mb'), labour: labour('skirting', mb) });
   }
   for (const b of built.finish?.coverStringers || []) {

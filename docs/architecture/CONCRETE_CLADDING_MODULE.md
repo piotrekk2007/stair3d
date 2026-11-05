@@ -230,8 +230,8 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   concrete's soffit (`soffitAt`); `walled` from the walls. One source for the three elements below.
 - `finishModel.js buildFinishBoards` — boards in their own vertical plane (polygon in s / z, `origin`, `dir`,
   `normal`, thickness; blank along the top line): the SKIRTING on a walled side (`skirtingEnabled`, bottom cut to the
-  finished treads and risers, top raked through the noses + `skirtingHeightMm` or stepped; `skirtingThicknessMm` into the
-  stair) and the COVER STRINGER on an open side (`coverStringers {[flight]: {left, right}}`, bottom along the soffit,
+  finished treads and risers, top raked through the noses + `skirtingHeightMm` — one board —, or STEPPED;
+  `skirtingThicknessMm` into the stair) and the COVER STRINGER on an open side (`coverStringers {[flight]: {left, right}}`, bottom along the soffit,
   top stepped under the treads — the side nosing over it — or raked `coverStringerAboveMm` over the noses — then no
   side nosing there, `surroundingsModel.js edgeHasRakedCover`).
 - `balustradeModel.js buildBalustrade` — the module's own balustrade (the self-supporting railingSolver.js untouched):
@@ -346,6 +346,25 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
 2. (done) Balustrade types, posts by hand, the antresola per edge, the opening's editor — below.
 3. (done) Colours and LED lighting — below.
 4. (done) Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ — below.
+
+## The stepped skirting in pieces (user request 2026-11-05, as built)
+
+„tak faktycznie robią stolarze”: `skirtingStyle: 'stepped'` is no longer one board but PARTS
+(`finishModel.js steppedSkirtingParts` → `skirting[].parts [{id h01 / v02 …, part 'horizontal' | 'vertical', polygon
+{s, z} CCW, lengthMm along its grain, depthMm = H, notch {widthMm, heightMm} | null, exit?}]`, the board's `polygon`
+null; `boardPolygons(b)` gives either): a HORIZONTAL piece on every tread / landing (consecutive pieces at one height
+merged) and a VERTICAL piece in front of every riser — at the riser board's face, or the concrete's face without riser
+boards (`riserOn`) — the board H = `skirtingHeightMm` wide, mitred at 45° at both corners: the inner one (tread ×
+riser: from (F, top below) to (F − H, top below + H)) and the outer one (from (F − H, top + H) to (F, top)). The vertical
+piece is NOTCHED for the tread's nose: up the riser face to the tread's underside, out by `nosingFrontMm`, up the
+tread's thickness. A nose reaching past the board (overhang ≥ H): the vertical piece ends level under it, the horizontal
+one starts square over it at F − H. The first piece from the floor (or the tread before the run) has a level bottom; at
+the stair's exit a vertical piece in front of the exit riser up to the floor above + H (level top), notched for the
+antresola nosing; a run ending elsewhere ends square. Consumers: 3D one mesh per piece (a vertical piece's grain up),
+plan / tape measure from every part, the DXF one piece per part (`LS-<flight><L|P>-nn`, the grain along x — a vertical
+one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie pod nosek w × h”) and so the cut list, the quote
+(material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
+piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
 ## The wall handrail (user request 2026-11-05, as built)
 

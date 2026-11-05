@@ -2,10 +2,12 @@
 // CONCRETE_CLADDING_MODULE.md): the SKIRTING BOARD on a walled side (listwa przyścienna — its bottom cut to the
 // treads and risers, its top raked parallel to the noses or stepped with them) and the COVER STRINGER on an open side
 // (wanga obiciowa — on the concrete's side face, from its soffit up to under the treads (stepped) or above the noses
-// (raked)). Each board is a polygon in its own vertical plane (s along the flight, z up) placed by its run's line.
+// (raked)). Each board is a polygon in its own vertical plane (s along the flight, z up) placed by its run's line; a
+// STEPPED skirting is made of parts (horizontal + vertical pieces, mitred, notched for the noses — `parts`).
 // Pure, no Three.js.
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
+import { riserOn } from './claddingModel.js';
 
 export const dedupe = (pts) => pts.filter((p, k) => k === 0 || Math.abs(p.s - pts[k - 1].s) > 1e-6 || Math.abs(p.z - pts[k - 1].z) > 1e-6);
 
@@ -38,6 +40,91 @@ function placed(run, id, kind, polygon, top, normal, thicknessMm, extra = {}) {
   return { id, kind, key: run.key, polygon, origin: runPoint(run, 0), dir: run.frame.f, normal, thicknessMm, ...blank(polygon, top), ...extra };
 }
 
+/** Every polygon of a board in its plane: a stepped skirting's parts, else the board itself. */
+export const boardPolygons = (b) => (b.parts ? b.parts.map((p) => p.polygon) : [b.polygon]);
+
+/**
+ * A STEPPED skirting as the joiners make it (user request 2026-11-05): a HORIZONTAL piece lying on every tread /
+ * landing and a VERTICAL piece standing in front of every riser (the riser board's face, or the concrete's face without
+ * riser boards), the board `H` wide, mitred at 45° where they meet — at the stair's inner corner (tread × riser) and at
+ * the outer corner (over the nose: the mitre from the band's outer corner (F − H, top + H) to (F, top)) — and in the
+ * vertical piece a NOTCH for the tread's nose (its overhang `nosingFrontMm` × the tread's thickness). A nose reaching
+ * past the board (overhang ≥ H) leaves no mitre there: the vertical piece ends level under the nose, the horizontal one
+ * starts square over it at F − H. The first piece from the floor (or the tread before the run) has a level bottom cut; a
+ * run that ends at the stair's exit gets a vertical piece in front of the exit riser up to the floor above + H (notched
+ * for the antresola nosing), else the last horizontal piece ends square. Each part a polygon in the run's plane
+ * ({s, z}, CCW) with its blank (length along its grain × H).
+ */
+function steppedSkirtingParts(run, concrete, config) {
+  const H = config.skirtingHeightMm;
+  const n = config.nosingFrontMm;
+  const r = config.riserThicknessMm;
+  // the levels: consecutive pieces at one height merged (two landing pieces, …)
+  const levels = [];
+  for (const p of run.pieces) {
+    const last = levels[levels.length - 1];
+    if (last && Math.abs(last.top - p.top) < 1e-6) last.s1 = p.s1;
+    else levels.push({ s0: p.s0, s1: p.s1, top: p.top, under: p.concreteTop, first: p, lastPiece: p });
+    levels[levels.length - 1].lastPiece = p;
+  }
+  // the riser face in front of a level (where its own riser board stands, else the concrete's front)
+  const face = (lv) => lv.s0 - (riserOn(lv.first.element, config) ? r : 0);
+  const els = concrete.elements;
+  const exitEl = els[els.length - 1];
+  const floorAbove = concrete.exit.rawSlabTopZ + config.floorFinishTopMm;
+  const parts = [];
+  const vertical = (F, bottom, top, notch) => {
+    // bottom: 'level' at z, or a mitre with the horizontal piece below at its top `zb`
+    const pts = [];
+    if (bottom.level !== undefined) pts.push({ s: F - H, z: bottom.level }, { s: F, z: bottom.level });
+    else pts.push({ s: F - H, z: bottom.mitre + H }, { s: F, z: bottom.mitre });
+    const nn = Math.min(notch.overhang, H);
+    if (notch.overhang >= H - 1e-6) {
+      // the nose covers the whole board: ends level under it
+      pts.push({ s: F, z: notch.under }, { s: F - H, z: notch.under });
+    } else {
+      pts.push({ s: F, z: notch.under }, { s: F - nn, z: notch.under }, { s: F - nn, z: notch.top });
+      if (top.level !== undefined) pts.push({ s: F, z: notch.top }, { s: F, z: top.level }, { s: F - H, z: top.level });
+      else pts.push({ s: F, z: notch.top }, { s: F - H, z: notch.top + H });
+    }
+    return dedupe(pts);
+  };
+  levels.forEach((lv, j) => {
+    const prev = levels[j - 1] || null;
+    const next = levels[j + 1] || null;
+    const F = face(lv);
+    const riserHere = !!prev || !lv.first.flat;
+    // the vertical piece in front of this level's riser
+    if (riserHere) {
+      const notch = { overhang: n, under: lv.under, top: lv.top };
+      parts.push({ part: 'vertical', polygon: vertical(F, prev ? { mitre: prev.top } : { level: lv.first.below }, {}, notch), notch: n < H - 1e-6 ? { widthMm: n, heightMm: lv.top - lv.under } : null });
+    }
+    // the horizontal piece on it: its front mitred with the riser's piece (square at F − H under a long nose / square
+    // at the run's start), its back mitred with the next riser's piece (square at the run's end)
+    const nextF = next ? face(next) : null;
+    const isExit = !next && lv.lastPiece.element === exitEl;
+    const exitF = isExit ? lv.s1 - (config.riserBoards ? r : 0) : null;
+    const backF = nextF ?? exitF;
+    const front = !riserHere ? [{ s: lv.s0, z: lv.top }, null, { s: lv.s0, z: lv.top + H }] : n >= H - 1e-6 ? [{ s: F - H, z: lv.top }, null, { s: F - H, z: lv.top + H }] : [{ s: F, z: lv.top }, null, { s: F - H, z: lv.top + H }];
+    const back = backF !== null ? [{ s: backF, z: lv.top }, { s: backF - H, z: lv.top + H }] : [{ s: lv.s1, z: lv.top }, { s: lv.s1, z: lv.top + H }];
+    parts.push({ part: 'horizontal', polygon: dedupe([front[0], back[0], back[1], front[2]]) });
+    // the stair's exit: the piece in front of the exit riser up to the floor above + H, notched for the antresola nosing
+    if (isExit && floorAbove > lv.top + 1) {
+      const nosed = config.exitNosing;
+      const notch = nosed ? { overhang: n, under: floorAbove - config.treadThicknessMm, top: floorAbove } : { overhang: 0, under: floorAbove, top: floorAbove };
+      parts.push({ part: 'vertical', exit: true, polygon: vertical(exitF, { mitre: lv.top }, { level: floorAbove + H }, notch), notch: nosed && n < H - 1e-6 ? { widthMm: n, heightMm: config.treadThicknessMm } : null });
+    }
+  });
+  // each part's blank: along its grain (horizontal: s, vertical: z) × the board's width
+  return parts.map((p, k) => {
+    const ss = p.polygon.map((q) => q.s);
+    const zs = p.polygon.map((q) => q.z);
+    const along = p.part === 'horizontal' ? Math.max(...ss) - Math.min(...ss) : Math.max(...zs) - Math.min(...zs);
+    const across = p.part === 'horizontal' ? Math.max(...zs) - Math.min(...zs) : Math.max(...ss) - Math.min(...ss);
+    return { ...p, id: `${p.part === 'horizontal' ? 'h' : 'v'}${String(k + 1).padStart(2, '0')}`, lengthMm: along, depthMm: across };
+  });
+}
+
 /** @returns {{skirting: object[], coverStringers: object[]}} */
 export function buildFinishBoards(concrete, config) {
   const runs = buildSideRuns(concrete, config);
@@ -47,7 +134,11 @@ export function buildFinishBoards(concrete, config) {
     const { pieces } = run;
     if (!pieces.length) continue;
     const out = runOutward(run);
-    if (run.walled && config.skirtingEnabled) {
+    if (run.walled && config.skirtingEnabled && config.skirtingStyle === 'stepped') {
+      // stepped: horizontal + vertical pieces mitred at 45°, notched for the noses (steppedSkirtingParts)
+      const parts = steppedSkirtingParts(run, concrete, config);
+      skirting.push({ id: `skirting-${run.key.flight}-${run.key.side}`, kind: 'skirting', key: run.key, polygon: null, parts, origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -out.x, y: -out.y }, thicknessMm: config.skirtingThicknessMm, lengthMm: parts.reduce((s, p) => s + p.lengthMm, 0), depthMm: config.skirtingHeightMm, style: 'stepped' });
+    } else if (run.walled && config.skirtingEnabled) {
       // the bottom cut to the finished treads and risers (a run beginning on a landing starts at its top)
       const bottom = [];
       let prev = pieces[0].flat ? pieces[0].top : pieces[0].below;

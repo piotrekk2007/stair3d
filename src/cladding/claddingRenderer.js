@@ -263,10 +263,13 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   const finish = new THREE.Group();
   finish.name = 'Finish';
   for (const b of [...(built.finish?.skirting || []), ...(built.finish?.coverStringers || [])]) {
-    const mesh = new THREE.Mesh(planeBoardGeometry(b), MATERIALS.stringer);
-    mesh.name = `${b.kind}-${b.id}`;
-    mesh.userData = { geometrySourceId: `cladding:${b.id}`, grainDirection: [b.dir.x, 0, -b.dir.y] };
-    finish.add(mesh);
+    // (a stepped skirting: one mesh per piece — a vertical piece's grain up)
+    for (const part of b.parts || [null]) {
+      const mesh = new THREE.Mesh(planeBoardGeometry(part ? { ...b, polygon: part.polygon } : b), MATERIALS.stringer);
+      mesh.name = part ? `${b.kind}-${b.id}-${part.id}` : `${b.kind}-${b.id}`;
+      mesh.userData = { geometrySourceId: `cladding:${b.id}${part ? `:${part.id}` : ''}`, grainDirection: part?.part === 'vertical' ? [0, 1, 0] : [b.dir.x, 0, -b.dir.y] };
+      finish.add(mesh);
+    }
   }
   root.add(finish);
   const railing = new THREE.Group();

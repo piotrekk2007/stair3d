@@ -556,7 +556,9 @@ shared `scene/appearance.js` (saved in the project file, not in undo) and LED li
 / under the handrail (`ledModel.js`, priced). Export: „⬇ DXF 1:1” (`export/claddingDxf.js`, the module's own R12
 writer: every piece flat with its code — ST / PD / PS / NA / LS / WO / SZ —, profiled edges on layer PROFILE), „⬇ DAE”
 / „⬇ OBJ” (the module's own writers in `export/claddingMeshExport.js` — world-baked meshes in the groups Stopnie /
-Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The wall handrail on brackets on a walled side
+Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The stepped skirting is made of pieces as the
+joiners do (`finishModel.js steppedSkirtingParts`: horizontal on the treads, vertical at the risers, mitred 45°, the
+vertical ones notched for the noses). The wall handrail on brackets on a walled side
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared

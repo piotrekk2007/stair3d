@@ -3,6 +3,7 @@
 // height} in SVG user units = mm, plan y flipped).
 
 import { planMeasureText } from '../plan2d/planMeasure.js';
+import { boardPolygons } from './finishModel.js';
 import { escapeHtml } from '../util/format.js';
 
 const HAIR = 'vector-effect="non-scaling-stroke"';
@@ -63,8 +64,9 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
   const otherXML = (otherFloor?.treads || []).map((t) => `<polygon class="clad-other-floor" points="${pts(t.outline)}" fill="#7b4ab3" fill-opacity="0.06" stroke="#7b4ab3" stroke-width="1" stroke-dasharray="6,4" pointer-events="none" ${HAIR}/>`).join('');
   // stage 5: the finishing boards (a thick line on their side), the balustrade (handrail, balusters, posts)
   const boardLine = (b, colour) => {
-    const s0 = Math.min(...b.polygon.map((p) => p.s));
-    const s1 = Math.max(...b.polygon.map((p) => p.s));
+    const all = boardPolygons(b).flat();
+    const s0 = Math.min(...all.map((p) => p.s));
+    const s1 = Math.max(...all.map((p) => p.s));
     const at = (s, off) => ({ x: b.origin.x + b.dir.x * s + b.normal.x * off, y: b.origin.y + b.dir.y * s + b.normal.y * off });
     return `<polygon class="clad-board" points="${pts([at(s0, 0), at(s1, 0), at(s1, b.thicknessMm), at(s0, b.thicknessMm)])}" fill="${colour}" stroke="#5a3d24" stroke-width="0.8" pointer-events="none" ${HAIR}/>`;
   };
@@ -179,7 +181,7 @@ export function claddingMeasureRefs(built) {
   for (const w of built.walls || []) add(w.outline);
   add(built.slab?.opening);
   const planeEnds = (b) => {
-    const s = b.polygon.map((p) => p.s);
+    const s = boardPolygons(b).flat().map((p) => p.s);
     return [Math.min(...s), Math.max(...s)].map((v) => ({ x: b.origin.x + b.dir.x * v, y: b.origin.y + b.dir.y * v }));
   };
   for (const b of [...(built.finish?.skirting || []), ...(built.finish?.coverStringers || []), ...(built.sideWalls || [])]) add(planeEnds(b));

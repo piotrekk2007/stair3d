@@ -61,7 +61,22 @@ export function buildCladdingLed(built, config) {
   if (config.ledSkirtingEnabled) {
     // in every skirting board: parallel to the noses, on the face toward the stair
     for (const b of built.finish?.skirting || []) {
-      const line = rakedLine(b, config);
+      const line = b.parts ? null : rakedLine(b, config);
+      if (b.parts) {
+        // stepped: along every horizontal piece, `ledSkirtingAboveMm` over its tread (inside the board)
+        const off = b.thicknessMm + 1;
+        b.parts
+          .filter((p) => p.part === 'horizontal')
+          .forEach((p, k) => {
+            const zb = Math.min(...p.polygon.map((q) => q.z));
+            const z = zb + Math.min(config.ledSkirtingAboveMm, b.depthMm - config.ledProfileWidthMm / 2);
+            const span = chordAtZ(p.polygon, z);
+            if (!span) return;
+            const pts = trim([span[0], span[1]].map((s) => ({ x: b.origin.x + b.dir.x * s + b.normal.x * off, y: b.origin.y + b.dir.y * s + b.normal.y * off, z })), m);
+            if (pts) strips.push({ id: `led-${b.id}-${k}`, kind: 'skirting', points: pts, lengthMm: len3(pts) });
+          });
+        continue;
+      }
       if (!line) continue;
       const off = b.thicknessMm + 1;
       const pts = trim(line.map((q) => ({ x: b.origin.x + b.dir.x * q.s + b.normal.x * off, y: b.origin.y + b.dir.y * q.s + b.normal.y * off, z: q.z })), m);
@@ -82,6 +97,18 @@ export function buildCladdingLed(built, config) {
 
 // the skirting's nose line + the LED height, in its plane — from its own polygon's run (finishModel.js keeps the
 // pieces off the board; the board's cut bottom points at each tread's front are the noses)
+// a polygon in {s, z} cut by the level z → [s min, s max] of the crossing, or null
+function chordAtZ(poly, z) {
+  const ss = [];
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k];
+    const b = poly[(k + 1) % poly.length];
+    if ((a.z - z) * (b.z - z) > 0 || Math.abs(a.z - b.z) < 1e-9) continue;
+    ss.push(a.s + ((b.s - a.s) * (z - a.z)) / (b.z - a.z));
+  }
+  return ss.length >= 2 ? [Math.min(...ss), Math.max(...ss)] : null;
+}
+
 function rakedLine(board, config) {
   // the bottom cut: (s0, below) (s0, top) (s1, top) per piece — every vertical step's top is a nose
   const poly = board.polygon;

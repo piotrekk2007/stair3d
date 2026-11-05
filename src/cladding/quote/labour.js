@@ -26,6 +26,7 @@ export const DEFAULT_LABOUR = Object.freeze([
   { id: 'landing-floorboard', label: 'Montaż podestu z deski podłogowej (OSB + deska + nosek)', unit: 'm2', rate: 0 },
   { id: 'nosing', label: 'Montaż noska (antresola / podest)', unit: 'szt', rate: 0 },
   { id: 'skirting', label: 'Montaż listwy schodowej', unit: 'mb', rate: 0 },
+  { id: 'skirting-stepped', label: 'Listwa schodkowa — element (cięcie 45°, wycięcie pod nosek, montaż)', unit: 'szt', rate: 0 },
   { id: 'cover-stringer', label: 'Montaż wangi obiciowej', unit: 'mb', rate: 0 },
   { id: 'post', label: 'Montaż słupa ozdobnego', unit: 'szt', rate: 0 },
   { id: 'railing-stairs', label: 'Montaż balustrady na schodach (za stopień)', unit: 'szt', rate: 0 },
