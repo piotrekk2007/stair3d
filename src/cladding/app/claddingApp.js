@@ -27,6 +27,7 @@ import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
 import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
+import { buildCutList, cutListToCSV } from '../export/cutList.js';
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
@@ -56,6 +57,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <span class="clad-sep"></span>
         <button type="button" data-act="dxf" title="Wszystkie elementy okładziny płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
         <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnice / Listwy i wangi / Balustrada / Beton">⬇ DAE</button>
+        <button type="button" data-act="cutlist" title="Lista formatek dla warsztatu (CSV dla Excela): kod, element, ilość, wymiary formatki, grubość, materiał, uwagi — te same kody co w DXF">⬇ Formatki CSV</button>
         <button type="button" data-act="obj" title="Model 3D okładziny z betonem (OBJ, mm — przy imporcie ustaw milimetry); grupy jak w DAE">⬇ OBJ</button>
         <span class="clad-meta"></span>
         <span class="clad-sep"></span>
@@ -1259,6 +1261,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     const dxf = buildCladdingDXF(state.built, { projectName: state.projectName });
     if (!dxf) return meta('Brak elementów do eksportu');
     downloadTextFile(dxf, `${fileBase()}-okladzina.dxf`, 'application/dxf');
+  });
+  $('[data-act="cutlist"]').addEventListener('click', () => {
+    const bp = state.quote.boardPricing || {};
+    downloadTextFile(cutListToCSV(buildCutList(state.built, { species: bp.species, cls: bp.cls }), { projectName: state.projectName }), `${fileBase()}-formatki.csv`, 'text/csv;charset=utf-8');
   });
   // the 3D with the concrete as its own group „Beton” (user request 2026-11-05)
   $('[data-act="dae"]').addEventListener('click', () => downloadTextFile(buildCladdingDAE(claddingExportRoot(renderCladdingStair(state.built))), `${fileBase()}.dae`, 'model/vnd.collada+xml'));

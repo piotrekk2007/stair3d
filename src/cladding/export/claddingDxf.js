@@ -40,7 +40,7 @@ const planeLocal = (poly) => {
 };
 const size = (pts) => ({ w: Math.max(...pts.map((p) => p.u)), h: Math.max(...pts.map((p) => p.v)) });
 
-/** The pieces with their codes (shared with the labels the quote could print later). */
+/** The pieces with their codes and Polish names (the DXF writes them in ASCII; the cut list as they are). */
 export function claddingPieces(built) {
   const { cladding, concrete } = built;
   const kindOf = new Map(concrete.elements.map((e) => [e.index, e.kind]));
@@ -49,14 +49,14 @@ export function claddingPieces(built) {
   for (const t of cladding.treads) {
     const landing = t.kind === 'landing';
     const code = `${landing ? 'PD' : 'ST'}-${pad(t.index + 1)}`;
-    const notes = [`${t.thicknessMm} mm`, t.profile?.kind && t.profile.kind !== 'square' ? `profil: ${{ chamfer: `fazka ${t.profile.sizeMm}`, round: `R${t.profile.sizeMm}`, bullnose: 'polwalek' }[t.profile.kind]}` : '', t.starter ? 'zapraszajacy' : '', kindOf.get(t.index) === 'winder' ? 'zabiegowy' : ''].filter(Boolean);
+    const notes = [`${t.thicknessMm} mm`, t.profile?.kind && t.profile.kind !== 'square' ? `profil: ${{ chamfer: `fazka ${t.profile.sizeMm}`, round: `R${t.profile.sizeMm}`, bullnose: 'półwałek' }[t.profile.kind]}` : '', t.starter ? 'zapraszający' : '', kindOf.get(t.index) === 'winder' ? 'zabiegowy' : ''].filter(Boolean);
     if (t.parts) {
       if (t.parts.nosing) pieces.push({ row: 'treads', code: `${code}N`, name: `Nosek podestu ${t.index + 1}`, pts: toLocal(t.parts.nosing.outline, t.grain), notes: [`${t.parts.nosing.topZ - t.parts.nosing.bottomZ} mm`] });
       continue;
     }
     // the milled edges (front, nosed sides) on their own layer when the tread is profiled
     const edgeLayers = t.profile?.kind && t.profile.kind !== 'square' ? (t.exposed || []).map((x) => (x ? 'PROFILE' : null)) : null;
-    pieces.push({ row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopien'} ${t.index + 1}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes });
+    pieces.push({ row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes });
   }
   for (const r of cladding.risers) {
     if (!(r.heightMm > 0)) continue;
@@ -66,13 +66,13 @@ export function claddingPieces(built) {
     const code = top ? `PS-G${top[1] ? String.fromCharCode(97 + Number(top[1])) : ''}` : `PS-${pad(r.index + 1)}${panel ? String.fromCharCode(97 + Number(panel[1])) : ''}`;
     // a riser = a rectangle: its (developed) length × its height
     const pts = [{ u: 0, v: 0 }, { u: r.lengthMm, v: 0 }, { u: r.lengthMm, v: r.heightMm }, { u: 0, v: r.heightMm }];
-    pieces.push({ row: 'risers', code, name: r.bent ? 'Podstopnica gieta (rozwiniecie)' : 'Podstopnica', pts, notes: [`${r.thicknessMm} mm`] });
+    pieces.push({ row: 'risers', code, name: r.bent ? 'Podstopnica gięta (rozwinięcie)' : 'Podstopnica', pts, notes: [`${r.thicknessMm} mm`] });
   }
   for (const n of cladding.exitNosing || []) pieces.push({ row: 'treads', code: 'NA', name: 'Nosek antresoli', pts: toLocal(n.outline, n.grain), notes: [`${n.thicknessMm} mm`] });
-  for (const b of built.finish?.skirting || []) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyscienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyla'] });
+  for (const b of built.finish?.skirting || []) pieces.push({ row: 'boards', code: `LS-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Listwa przyścienna bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`, b.style === 'stepped' ? 'schodkowa' : 'pochyła'] });
   for (const b of built.finish?.coverStringers || []) pieces.push({ row: 'boards', code: `WO-${b.key.flight + 1}${b.key.side === 'left' ? 'L' : 'P'}`, name: `Wanga obiciowa bieg ${b.key.flight + 1}`, pts: planeLocal(b.polygon), notes: [`${b.thicknessMm} mm`] });
   let g = 0;
-  for (const s of built.balustrade?.sections || []) for (const p of s.panes || []) pieces.push({ row: 'glass', code: `SZ-${++g}`, name: `Szyba (${s.infill === 'glass-side' ? 'na boku, rotule' : 'miedzy slupami'})`, pts: planeLocal(p.polygon), notes: [`${p.thicknessMm} mm`, `${Math.round(p.widthMm)} x ${Math.round(p.heightMm)}`] });
+  for (const s of built.balustrade?.sections || []) for (const p of s.panes || []) pieces.push({ row: 'glass', code: `SZ-${++g}`, name: `Szyba (${s.infill === 'glass-side' ? 'na boku, rotule' : 'między słupami'})`, pts: planeLocal(p.polygon), notes: [`${p.thicknessMm} mm`, `${Math.round(p.widthMm)} x ${Math.round(p.heightMm)}`] });
   return pieces;
 }
 

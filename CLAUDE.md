@@ -558,8 +558,8 @@ writer: every piece flat with its code — ST / PD / PS / NA / LS / WO / SZ —,
 / „⬇ OBJ” (the module's own writers in `export/claddingMeshExport.js` — world-baked meshes in the groups Stopnie /
 Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The wall handrail on brackets on a walled side
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
-shared logo + „Zapisz zdjęcie” — `app/presentation.js`). Next (user, 2026-11-05): the cut list (CSV), the client's 3D
-model, tape measures. Later (user): contract / payment-schedule documents.
+shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
+wood, Excel PL). Next (user, 2026-11-05): the client's 3D model, tape measures. Later (user): contract / payment-schedule documents.
 
 ## Open items / known limitations
 

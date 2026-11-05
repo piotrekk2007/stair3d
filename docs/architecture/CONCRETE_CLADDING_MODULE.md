@@ -386,6 +386,13 @@ Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the p
   name, size, thickness, notes: profile, starter, winder). Codes (`claddingPieces`): `ST-nn` tread, `PD-nn` landing
   (`PD-nnN` its nosing), `PS-nn` riser (`PS-nna/b…` a winder's panels, `PS-G` the exit riser), `NA` antresola nosing,
   `LS-<flight><L|P>` skirting, `WO-<flight><L|P>` cover stringer, `SZ-n` pane. Nothing to draw → `null`.
+- Cut list „⬇ Formatki CSV” (`export/cutList.js buildCutList` / `cutListToCSV`, user request 2026-11-05): one row per
+  piece of the DXF (same codes, Polish names — the DXF writes them in ASCII) at its blank size + thickness + the wood
+  (`boardPricing.species` / `cls`) / „szkło VSG”, then a floor-board landing's OSB / boards in m² (`PD-nn-OSB`,
+  `PD-nn-DP`), the balustrade's wood per section (`PR-n` handrail by its developed length, `TR-n` balusters — the
+  longest —, `SL-n` posts with the cap) and the wall handrails (`PR-n`, brackets in the notes). For Excel in Polish:
+  `;`, a decimal comma, UTF-8 with a BOM, CRLF (the self-supporting takeoff CSV has English headers and its own items —
+  not used).
 - DAE / OBJ: the module's OWN small writers (`export/claddingMeshExport.js buildCladdingDAE` / `buildCladdingOBJ`,
   pure text) — the shared `export/daeExporter.js` / `objExporter.js` have the self-supporting categories built in (an
   unknown group falls into „Stopnie”), so the concrete could not be a group of its own there (user request
