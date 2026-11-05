@@ -165,3 +165,4 @@
 .clad-wall-row { flex-wrap: wrap; gap: 4px; align-items: center; }
 .clad-wall-row .clad-wall-type { max-width: 190px; }
 .clad-plan .clad-wall-cell { cursor: pointer; }
+.clad-plan .clad-wall-end { cursor: grab; }

@@ -21,7 +21,7 @@ import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
-import { wallListOf, wallCells, wallRange, toggleWallCell, newWall } from '../wallEdits.js';
+import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd, sideSAt } from '../wallEdits.js';
 import { WALL_TYPES } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
@@ -828,7 +828,9 @@ export function mountCladdingApp(rootEl, host = {}) {
         <select data-wf="side" title="Strona patrząc w górę">${opt('left', 'L', w.side)}${opt('right', 'P', w.side)}</select>
         <select data-wf="type" class="clad-wall-type">${WALL_TYPES.map((t) => opt(t, WALL_TYPE_LABELS[t], w.type)).join('')}</select>
         <label title="Od stopnia nr (puste = od początku boku)">od <input type="number" min="1" class="clad-small" data-wf="from" value="${w.from === null ? '' : w.from + 1}" placeholder="${a + 1}" /></label>
+        <label title="Początek przesunięty w głąb tego stopnia [mm] (+ = w górę biegu) — albo przeciągnij go na planie">+<input type="number" class="clad-small" data-wf="fromOffsetMm" value="${w.fromOffsetMm || ''}" placeholder="0" /></label>
         <label title="Do stopnia nr (puste = do końca boku)">do <input type="number" min="1" class="clad-small" data-wf="to" value="${w.to === null ? '' : w.to + 1}" placeholder="${b + 1}" /></label>
+        <label title="Koniec przesunięty od końca tego stopnia [mm] (− = krócej, np. −135 = ściana kończy się 135 mm przed końcem stopnia) — albo przeciągnij go na planie">±<input type="number" class="clad-small" data-wf="toOffsetMm" value="${w.toOffsetMm || ''}" placeholder="0" /></label>
         ${heighted ? `<label title="Wysokość nad noskami [mm] (0 = do stropu)">wys. <input type="number" min="0" class="clad-small" data-wf="heightAboveMm" value="${w.heightAboveMm}" /></label>` : ''}
         <button type="button" data-wdel="${k}" title="Usuń ścianę">✕</button></div>`;
     };
@@ -863,6 +865,16 @@ export function mountCladdingApp(rootEl, host = {}) {
         else delete w.heightAboveMm;
       } else if (f === 'from' || f === 'to') w[f] = v === '' ? null : Math.max(0, Math.round(Number(v)) - 1);
       else if (f === 'heightAboveMm') w.heightAboveMm = Math.max(0, Number(v) || 0);
+      else if (f === 'fromOffsetMm' || f === 'toOffsetMm') {
+        const n = Math.round(Number(v) || 0);
+        if (n) {
+          w[f] = n;
+          // (an offset needs its step: an open end becomes the side's first / last step)
+          const [a, b] = wallRange(w, wallCells(state.built.concrete));
+          if (f === 'fromOffsetMm' && w.from === null) w.from = a;
+          if (f === 'toOffsetMm' && w.to === null) w.to = b;
+        } else delete w[f];
+      }
     });
   });
   wallsEl.addEventListener('click', (ev) => {
@@ -1030,7 +1042,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
     posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
-    walls: 'ŚCIANY: klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
+    walls: 'ŚCIANY: przeciągnij kółko na końcu ściany wzdłuż boku (przyciąga do krawędzi stopni, co 10 mm — ściana może kończyć się w połowie stopnia), klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
     measure: 'MIARKA: klik = początek, drugi klik = koniec (przyciąga do punktów w promieniu 10 px), prawy klik = usuń ostatni wymiar, Esc = przerwij',
   };
   // the plan's tape measure — view state only (never the config / the project): the measures (plan mm) and the one
@@ -1176,7 +1188,8 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (ev.button === 2) return;
     const handle = ev.target.closest?.('.clad-edge-handle');
     const vertex = planMode === 'opening' ? ev.target.closest?.('.clad-opening-vertex') : null;
-    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, at: planAt(ev), vertex: vertex ? Number(vertex.dataset.vertex) : null, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
+    const wallEnd = planMode === 'walls' ? ev.target.closest?.('.clad-wall-end') : null;
+    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, at: planAt(ev), vertex: vertex ? Number(vertex.dataset.vertex) : null, wallEnd: wallEnd ? { k: Number(wallEnd.dataset.wallEnd.split(':')[0]), end: wallEnd.dataset.wallEnd.split(':')[1] } : null, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
     planEl.setPointerCapture(ev.pointerId);
   });
   planEl.addEventListener('pointermove', (ev) => {
@@ -1194,6 +1207,26 @@ export function mountCladdingApp(rootEl, host = {}) {
         (c) => {
           const o = manualOpening(c);
           o[drag.vertex] = { x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 };
+        },
+        { record: false }
+      );
+      return;
+    }
+    if (drag.wallEnd) {
+      // a wall's end dragged along its side (snapped to the steps' edges within 12 px, else 10 mm)
+      const list = wallListOf(state.config);
+      const w = list[drag.wallEnd.k];
+      if (!w) return;
+      const cells = wallCells(state.built.concrete);
+      const s = sideSAt(cells, w.flight, w.side, planAt(ev));
+      const res = state.built.wallEntries.find((x) => x.id === w.id);
+      const other = drag.wallEnd.end === 'start' ? res?.sB : res?.sA;
+      drag.moved = true;
+      change(
+        (c) => {
+          const l = wallListOf(c);
+          l[drag.wallEnd.k] = moveWallEnd(l[drag.wallEnd.k], cells, drag.wallEnd.end, s, { snapMm: 12 * mmPerPx(), other });
+          c.wallList = l;
         },
         { record: false }
       );
@@ -1228,7 +1261,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderPlan();
   });
   planEl.addEventListener('pointerup', () => {
-    if ((drag?.handle || (drag?.vertex !== null && drag?.vertex !== undefined)) && drag.moved) {
+    if ((drag?.handle || drag?.wallEnd || (drag?.vertex !== null && drag?.vertex !== undefined)) && drag.moved) {
       commitHistory();
       renderSequence();
     } else if (drag && !drag.moved) {

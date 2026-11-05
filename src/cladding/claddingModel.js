@@ -5,7 +5,7 @@
 
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { clipToConvex } from '../geometry/polygonClip.js';
-import { edgeHasWall, edgeHasRakedCover, edgeHasSideGlass } from './surroundingsModel.js';
+import { edgeHasWall, edgeHasRakedCover, edgeHasSideGlass, splitEdgesByWalls } from './surroundingsModel.js';
 import { isStarter, starterEdges, starterRiserStrip, EDGE_PROFILES } from './starterProfile.js';
 
 const median = (xs) => {
@@ -141,7 +141,10 @@ export function buildCladdingModel(concrete, config) {
       if (edge.role === 'left' || edge.role === 'right') return sideNosingOn(e, edge.role, config, edge) ? config.sideNosingMm : 0;
       return 0;
     };
-    const nosing = { left: e.edges.some((x) => x.role === 'left' && distOf(x) > 0) ? config.sideNosingMm : 0, right: e.edges.some((x) => x.role === 'right' && distOf(x) > 0) ? config.sideNosingMm : 0 };
+    // (a side edge split where a wall ends part-way along it: the side nosing on its free part only — a jog at the wall's
+    // end)
+    const edges = splitEdgesByWalls(e, config);
+    const nosing = { left: edges.some((x) => x.role === 'left' && distOf(x) > 0) ? config.sideNosingMm : 0, right: edges.some((x) => x.role === 'right' && distOf(x) > 0) ? config.sideNosingMm : 0 };
     const own = config.stepOverrides?.[e.index] || {};
     // a starter step (stage 5 part 2, starterProfile.js): its own widened / rounded / bowed outline
     const starter = e.kind === 'step' && isStarter(own.starter) ? own.starter : null;
@@ -153,7 +156,7 @@ export function buildCladdingModel(concrete, config) {
       outline = edges.map((x) => x.a);
       exposed = edges.map((x) => x.role === 'front' || (x.role === 'left' && (starter.leftMm > 0 || nosing.left > 0)) || (x.role === 'right' && (starter.rightMm > 0 || nosing.right > 0)));
     } else {
-      const d = offsetEdgesDetailed(e.edges, distOf);
+      const d = offsetEdgesDetailed(edges, distOf);
       outline = d.points;
       // the edges a profile is milled on: the front and every nosed side
       exposed = d.starts.map((x) => !!x && (x.role === 'front' || ((x.role === 'left' || x.role === 'right') && distOf(x) > 0)));

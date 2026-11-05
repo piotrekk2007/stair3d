@@ -366,6 +366,17 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## A wall's end part-way along a step (user request 2026-11-05, as built)
+
+A wall entry's ends may sit inside a step: `fromOffsetMm` / `toOffsetMm` (mm from the `from` step's start / the `to`
+step's end, + = on up the flight). `surroundingsModel.js resolveWalls` (built once per build, `cfg.wallIndex`) places
+every wall along its side in mm (`sA`, `sB` in the flight's frame) and `spansOf(element, edge)` splits an edge where a
+wall ends; the treads' side edges are split (`splitEdgesByWalls` — the side nosing on the free part only, a jog at the
+wall's end), the side runs' pieces too (`cutStart` / `cutEnd`: no riser piece / exit piece of the stepped skirting
+there, the raked one starts at the tread's top), the full walls per stretch. Edits: drag a wall's end on the plan
+(mode „▥ Ściany”, `wallEdits.js wallEnds` / `sideSAt` / `moveWallEnd` — snapped to the steps' edges within 12 px,
+else 10 mm, the ends never crossing) or type the offsets in the list. Tests: `__tests__/wallEnds.test.js`.
+
 ## The riser boards' fitting; edge channels (user request 2026-11-05, as built)
 
 The self-supporting mechanism (`riserSolver.js` / `treadSolver.js buildNotch`): `riserMount`

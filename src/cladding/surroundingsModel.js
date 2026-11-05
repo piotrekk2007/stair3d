@@ -73,10 +73,115 @@ export function wallOn(key, config, index = null) {
   return found;
 }
 
-/** Does a wall stand along this edge, beside the stair (no side nosing, the skirting there)? */
+/** Does a wall stand along this edge, beside the stair (no side nosing, the skirting there)? A piece of an edge split
+ *  where a wall ends (`wallSpans`) carries its own `wall`; a whole edge counts as walled where its longest stretch is. */
 export function edgeHasWall(element, edge, config) {
+  if (edge && 'wall' in edge) return !!edge.wall && edge.wall.type !== 'under';
+  const spans = config.wallIndex?.spansOf(element, edge);
+  if (spans?.length) {
+    const longest = spans.reduce((b, x) => (!b || x.t1 - x.t0 > b.t1 - b.t0 ? x : b), null);
+    return !!longest.wall && longest.wall.type !== 'under';
+  }
   const w = wallOn(edgeWallKey(element, edge), config, element.index);
   return !!w && w.type !== 'under';
+}
+
+/** Every flight's frame: from its first straight step (the side runs' s along it). */
+export function flightFrames(concrete) {
+  const frames = new Map();
+  for (const e of concrete.elements) if (e.kind === 'step' && !frames.has(e.flight)) frames.set(e.flight, e.frame);
+  return frames;
+}
+const sAlong = (frame, p) => (p.x - frame.o.x) * frame.f.x + (p.y - frame.o.y) * frame.f.y;
+
+/**
+ * The walls placed along their sides (user request 2026-11-05 — a wall ending part-way along a step): every list entry
+ * gets its stretch [sA, sB] in mm along its flight's frame — `from` / `to` steps (their side's first / last point) +
+ * `fromOffsetMm` / `toOffsetMm` (+ = on up the flight), open ends ±∞ —, and `spansOf(element, edge)` splits an edge where
+ * a wall ends: `[{t0, t1, a, b, s0, s1, wall}]` (t along the edge, a later list entry winning). An edge square to its
+ * flight (a U landing's end wall) takes the wall of its element by index. Pure; memoised per edge.
+ */
+export function resolveWalls(concrete, config) {
+  const frames = flightFrames(concrete);
+  // every side cell's s range
+  const cells = [];
+  for (const e of concrete.elements) {
+    for (const edge of e.edges) {
+      if (edge.role !== 'left' && edge.role !== 'right' && edge.role !== 'back') continue;
+      const key = edgeWallKey(e, edge);
+      const frame = key && frames.get(key.flight);
+      if (!frame) continue;
+      const sa = sAlong(frame, edge.a);
+      const sb = sAlong(frame, edge.b);
+      cells.push({ index: e.index, flight: key.flight, side: key.side, s0: Math.min(sa, sb), s1: Math.max(sa, sb) });
+    }
+  }
+  const sideCells = (w) => cells.filter((c) => c.flight === w.flight && c.side === w.side && c.s1 - c.s0 > 1);
+  const entries = wallsOf(config).map((w) => {
+    const mine = sideCells(w);
+    let sA = -Infinity;
+    let sB = Infinity;
+    if (w.from !== null && w.from !== undefined) {
+      const c = mine.filter((x) => x.index >= w.from);
+      const at = c.length ? Math.min(...c.filter((x) => x.index === Math.min(...c.map((y) => y.index))).map((x) => x.s0)) : Infinity;
+      sA = at + (Number(w.fromOffsetMm) || 0);
+    }
+    if (w.to !== null && w.to !== undefined) {
+      const c = mine.filter((x) => x.index <= w.to);
+      const at = c.length ? Math.max(...c.filter((x) => x.index === Math.max(...c.map((y) => y.index))).map((x) => x.s1)) : -Infinity;
+      sB = at + (Number(w.toOffsetMm) || 0);
+    }
+    return { ...w, sA, sB };
+  });
+  const memo = new WeakMap();
+  const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  function spansOf(element, edge) {
+    if (memo.has(edge)) return memo.get(edge);
+    const key = edgeWallKey(element, edge);
+    const frame = key && frames.get(key.flight);
+    let out;
+    if (!key) out = [{ t0: 0, t1: 1, a: edge.a, b: edge.b, wall: null }];
+    else if (!frame) out = [{ t0: 0, t1: 1, a: edge.a, b: edge.b, wall: wallOn(key, config, element.index) }];
+    else {
+      const sa = sAlong(frame, edge.a);
+      const sb = sAlong(frame, edge.b);
+      const mine = entries.filter((w) => w.flight === key.flight && w.side === key.side);
+      if (Math.abs(sb - sa) < 1) {
+        // (square to the flight: by its element)
+        out = [{ t0: 0, t1: 1, a: edge.a, b: edge.b, s0: sa, s1: sb, wall: wallOn(key, config, element.index) }];
+      } else {
+        const ts = [0, 1, ...mine.flatMap((w) => [w.sA, w.sB]).filter(Number.isFinite).map((s) => (s - sa) / (sb - sa))].filter((t) => t >= 0 && t <= 1);
+        const cuts = [...new Set(ts.map((t) => Math.round(t * 1e6) / 1e6))].sort((x, y) => x - y).filter((t, k, all) => k === 0 || t - all[k - 1] > 1e-4);
+        out = [];
+        for (let k = 1; k < cuts.length; k++) {
+          const t0 = cuts[k - 1];
+          const t1 = cuts[k];
+          const sMid = sa + (sb - sa) * ((t0 + t1) / 2);
+          let wall = null;
+          for (const w of mine) if (sMid >= w.sA - 1e-6 && sMid <= w.sB + 1e-6) wall = w;
+          const prev = out[out.length - 1];
+          if (prev && (prev.wall?.id ?? null) === (wall?.id ?? null)) {
+            prev.t1 = t1;
+            prev.b = lerp(edge.a, edge.b, t1);
+            prev.s1 = sa + (sb - sa) * t1;
+          } else out.push({ t0, t1, a: lerp(edge.a, edge.b, t0), b: lerp(edge.a, edge.b, t1), s0: sa + (sb - sa) * t0, s1: sa + (sb - sa) * t1, wall });
+        }
+      }
+    }
+    memo.set(edge, out);
+    return out;
+  }
+  return { entries, cells, frames, spansOf };
+}
+
+/** An element's edges with every side edge split where a wall ends (each piece its `wall`; the others as they are). */
+export function splitEdgesByWalls(element, config) {
+  if (!config.wallIndex) return element.edges;
+  return element.edges.flatMap((edge) => {
+    if (edge.role !== 'left' && edge.role !== 'right') return [edge];
+    const spans = config.wallIndex.spansOf(element, edge);
+    return spans.map((s) => ({ ...edge, a: s.a, b: s.b, wall: s.wall, cut: { start: s.t0 > 1e-6, end: s.t1 < 1 - 1e-6 } }));
+  });
 }
 
 /** Every walled edge as a wall piece: its face on the concrete's edge, `wallThicknessMm` outward, floor to slab. */
@@ -84,10 +189,14 @@ export function buildWalls(concrete, config) {
   const pieces = [];
   for (const e of concrete.elements) {
     for (const edge of e.edges) {
-      if (wallOn(edgeWallKey(e, edge), config, e.index)?.type !== 'full') continue;
-      const n = outward(edge);
-      const T = config.wallThicknessMm;
-      pieces.push({ id: `wall-${e.index}-${pieces.length}`, key: edgeWallKey(e, edge), outline: [edge.a, edge.b, add(edge.b, n, T), add(edge.a, n, T)], bottomZ: 0, topZ: concrete.exit.rawSlabTopZ });
+      // (the edge's stretches under a full wall — a wall may end part-way along it)
+      const spans = config.wallIndex ? config.wallIndex.spansOf(e, edge) : [{ a: edge.a, b: edge.b, wall: wallOn(edgeWallKey(e, edge), config, e.index) }];
+      for (const sp of spans) {
+        if (sp.wall?.type !== 'full') continue;
+        const n = outward(edge);
+        const T = config.wallThicknessMm;
+        pieces.push({ id: `wall-${e.index}-${pieces.length}`, key: edgeWallKey(e, edge), outline: [sp.a, sp.b, add(sp.b, n, T), add(sp.a, n, T)], bottomZ: 0, topZ: concrete.exit.rawSlabTopZ });
+      }
     }
   }
   return pieces;

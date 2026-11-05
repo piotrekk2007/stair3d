@@ -4,7 +4,7 @@
 
 import { planMeasureText } from '../plan2d/planMeasure.js';
 import { boardPolygons } from './finishModel.js';
-import { wallCells } from './wallEdits.js';
+import { wallCells, wallEnds, wallListOf } from './wallEdits.js';
 import { wallOn } from './surroundingsModel.js';
 import { WALL_TYPE_LABELS } from './schema.js';
 import { escapeHtml } from '../util/format.js';
@@ -181,8 +181,22 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
             const title = w ? `${WALL_TYPE_LABELS[w.type] || 'ściana między biegami'} — kliknij, żeby usunąć przy tym stopniu; prawy klik = inny typ` : 'Bez ściany — kliknij, żeby dodać';
             return `<line class="clad-wall-cell" data-cell="${c.index}:${c.flight}:${c.side}" x1="${fmt(c.a.x)}" y1="${fmt(-c.a.y)}" x2="${fmt(c.b.x)}" y2="${fmt(-c.b.y)}" stroke="${colour}" stroke-width="${w ? 9 : 6}" stroke-opacity="${w ? 0.9 : 0.6}" ${w?.type === 'under' || !w ? 'stroke-dasharray="10,6"' : ''} stroke-linecap="butt" ${HAIR}><title>${escapeHtml(title)}</title></line>`;
           })
-          .join('')
+          .join('') + wallEndsXML()
       : '';
+  // the user's walls' ends to drag along their side (claddingApp.js — snapped to the steps' edges / 10 mm)
+  function wallEndsXML() {
+    const cells = wallCells(concrete);
+    const resolved = built.config && (built.wallEntries || []);
+    return wallListOf(built.config)
+      .map((w, k) => {
+        const ends = wallEnds(w, cells, resolved.find((x) => x.id === w.id));
+        return ['start', 'end']
+          .filter((e) => ends[e])
+          .map((e) => `<circle class="clad-wall-end" data-wall-end="${k}:${e}" cx="${fmt(ends[e].p.x)}" cy="${fmt(-ends[e].p.y)}" r="${fmt(r * 0.8)}" fill="#fff" stroke="${WALL_COLOURS[w.type] || '#3e3a35'}" stroke-width="3" ${HAIR}><title>${e === 'start' ? 'Początek' : 'Koniec'} ściany — przeciągnij wzdłuż boku (przyciąga do krawędzi stopni, co 10 mm)</title></circle>`)
+          .join('');
+      })
+      .join('');
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${wallModeXML}${measuresXML}</svg>`;
 }
 

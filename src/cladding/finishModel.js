@@ -94,7 +94,7 @@ function steppedSkirtingParts(run, concrete, config, { joinedStart = false } = {
     const next = levels[j + 1] || null;
     const F = face(lv);
     // (a run going on round a wall corner from the previous one at the same height starts like a landing — no riser)
-    const riserHere = !!prev || (!lv.first.flat && !joinedStart);
+    const riserHere = !!prev || (!lv.first.flat && !joinedStart && !lv.first.cutStart);
     // the vertical piece in front of this level's riser
     if (riserHere) {
       const notch = { overhang: n, under: lv.under, top: lv.top };
@@ -103,7 +103,7 @@ function steppedSkirtingParts(run, concrete, config, { joinedStart = false } = {
     // the horizontal piece on it: its front mitred with the riser's piece (square at F − H under a long nose / square
     // at the run's start), its back mitred with the next riser's piece (square at the run's end)
     const nextF = next ? face(next) : null;
-    const isExit = !next && lv.lastPiece.element === exitEl;
+    const isExit = !next && lv.lastPiece.element === exitEl && !lv.lastPiece.cutEnd; // (a wall ending part-way: square there)
     const exitF = isExit ? lv.s1 - (config.riserBoards ? r : 0) : null;
     const backF = nextF ?? exitF;
     const front = !riserHere ? [{ s: lv.s0, z: lv.top }, null, { s: lv.s0, z: lv.top + H }] : n >= H - 1e-6 ? [{ s: F - H, z: lv.top }, null, { s: F - H, z: lv.top + H }] : [{ s: F, z: lv.top }, null, { s: F - H, z: lv.top + H }];
@@ -151,7 +151,7 @@ export function buildFinishBoards(concrete, config) {
     } else if (run.walled && config.skirtingEnabled) {
       // the bottom cut to the finished treads and risers (a run beginning on a landing starts at its top)
       const bottom = [];
-      let prev = pieces[0].flat || joinedStart.has(run) ? pieces[0].top : pieces[0].below;
+      let prev = pieces[0].flat || joinedStart.has(run) || pieces[0].cutStart ? pieces[0].top : pieces[0].below;
       for (const p of pieces) {
         bottom.push({ s: p.s0, z: prev }, { s: p.s0, z: p.top }, { s: p.s1, z: p.top });
         prev = p.top;

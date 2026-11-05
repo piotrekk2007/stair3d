@@ -184,12 +184,18 @@ export const WALL_TYPES = Object.freeze(['full', 'low', 'above', 'under']);
 export const WALL_TYPE_LABELS = Object.freeze({ full: 'pełna (od podłogi do stropu)', low: 'od podłogi do wysokości nad noskami', above: 'od płyty schodów w górę (pod biegiem otwarte)', under: 'pod biegiem (do spodu betonu)' });
 // (low / above: the height over the noses, 0 = up to the slab)
 const heightOf = (x) => Math.max(0, Math.min(3000, Number.isFinite(Number(x.heightAboveMm)) && x.heightAboveMm !== null && x.heightAboveMm !== '' ? Number(x.heightAboveMm) : x.type === 'above' ? 0 : 900));
+// a wall's end moved part-way along its first / last step (mm, + = on up the flight) — only when set
+const offsets = (w) => {
+  const o = {};
+  for (const f of ['fromOffsetMm', 'toOffsetMm']) if (Number.isFinite(Number(w[f])) && w[f] !== null && w[f] !== '' && Number(w[f]) !== 0) o[f] = Math.max(-5000, Math.min(5000, Math.round(Number(w[f]))));
+  return o;
+};
 function sanitizeWallList(raw) {
   if (!Array.isArray(raw)) return null;
   const idx = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
   return raw
     .filter((w) => w && typeof w === 'object' && WALL_TYPES.includes(w.type) && (w.side === 'left' || w.side === 'right') && Number.isFinite(Number(w.flight)))
-    .map((w, k) => ({ id: String(w.id ?? `w${k}`), flight: Math.max(0, Math.round(Number(w.flight))), side: w.side, type: w.type, ...(w.type === 'low' || w.type === 'above' ? { heightAboveMm: heightOf(w) } : {}), from: idx(w.from), to: idx(w.to) }));
+    .map((w, k) => ({ id: String(w.id ?? `w${k}`), flight: Math.max(0, Math.round(Number(w.flight))), side: w.side, type: w.type, ...(w.type === 'low' || w.type === 'above' ? { heightAboveMm: heightOf(w) } : {}), from: idx(w.from), to: idx(w.to), ...offsets(w) }));
 }
 function sanitizeWallTypes(raw) {
   const out = {};

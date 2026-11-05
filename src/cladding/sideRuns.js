@@ -48,7 +48,18 @@ export function buildSideRuns(concrete, config) {
       if (Math.abs(sb - sa) < 1) continue;
       const id = `${key.flight}:${key.side}`;
       if (!runs.has(id)) runs.set(id, { key, frame, u: dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.r), pieces: [] });
-      runs.get(id).pieces.push({ element: e, s0: Math.min(sa, sb), s1: Math.max(sa, sb), top: finishedTop(e), concreteTop: e.topZ, below, flat: e.kind === 'landing', soffit: soffitAt(e, config.concreteSlabThicknessMm), wall: wallOn(key, config, e.index) });
+      const lo = Math.min(sa, sb);
+      const hi = Math.max(sa, sb);
+      const soffit = soffitAt(e, config.concreteSlabThicknessMm);
+      // (split where a wall ends part-way along it — each piece its wall; `cutStart` / `cutEnd` = that end is such a
+      // cut, not the element's own end; the soffit interpolated)
+      const spans = config.wallIndex ? config.wallIndex.spansOf(e, edge) : [{ s0: sa, s1: sb, wall: wallOn(key, config, e.index) }];
+      for (const sp of spans) {
+        const p0 = Math.min(sp.s0, sp.s1);
+        const p1 = Math.max(sp.s0, sp.s1);
+        const at = (s) => soffit.front + (soffit.back - soffit.front) * ((s - lo) / (hi - lo || 1));
+        runs.get(id).pieces.push({ element: e, s0: p0, s1: p1, top: finishedTop(e), concreteTop: e.topZ, below, flat: e.kind === 'landing', soffit: { front: at(p0), back: at(p1) }, wall: sp.wall, cutStart: p0 > lo + 1e-6, cutEnd: p1 < hi - 1e-6 });
+      }
     }
   });
   // a side split where its wall changes (user request 2026-11-05 — walls on some steps only): every run one stretch

@@ -5,7 +5,7 @@
 import { sanitizeCladdingConfig } from './schema.js';
 import { buildConcreteModel } from './concreteModel.js';
 import { buildCladdingModel } from './claddingModel.js';
-import { buildWalls, buildSlab } from './surroundingsModel.js';
+import { buildWalls, buildSlab, resolveWalls } from './surroundingsModel.js';
 import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
 import { withGapWalls, buildSideWalls } from './sideWallsModel.js';
@@ -17,6 +17,8 @@ export function buildCladdingStair(rawConfig) {
   const concrete = buildConcreteModel(config);
   // (the wall between two flights set apart walls their facing sides — the cladding, skirting and balustrade see it)
   const cfg = withGapWalls(concrete, config);
+  // (the walls placed along their sides in mm — every consumer splits the stair's sides where a wall ends)
+  cfg.wallIndex = resolveWalls(concrete, cfg);
   const cladding = buildCladdingModel(concrete, cfg);
   const totalRise = concrete.exit.rawSlabTopZ + config.floorFinishTopMm - config.floorFinishBottomMm;
   // the surroundings (stage 3): walls along the flights, the slab above with its opening
@@ -34,5 +36,7 @@ export function buildCladdingStair(rawConfig) {
   // (the panel / the plan's wall mode: every side's stretches with their walls, the gap walls among them)
   built.sideRuns = buildSideRuns(concrete, cfg);
   built.gapWalls = cfg.gapWalls || [];
+  // (every wall's stretch along its side, mm — the plan's wall ends)
+  built.wallEntries = cfg.wallIndex.entries;
   return built;
 }
