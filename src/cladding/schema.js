@@ -99,6 +99,25 @@ export function createDefaultCladdingConfig() {
     railingMaxClearMm: 120, // between balusters (§ 298 — DO WERYFIKACJI)
     handrailWidthMm: 60,
     handrailHeightMm: 50,
+    // the infill (user request 2026-11-04 — the self-supporting types): balusters (square / round), glass between posts,
+    // glass on the concrete's side (point fixings, the handrail on the glass); glass sizes ASSUMPTION / DO WERYFIKACJI
+    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side'
+    balusterShape: 'square', // 'square' | 'round'
+    glassThicknessMm: 17,
+    glassMaxWidthMm: 1200,
+    glassGapMm: 20,
+    glassTopGapMm: 20,
+    glassBottomGapMm: 50,
+    glassStandoffMm: 20,
+    glassOverlapMm: 120,
+    glassFixingsPerPane: 2,
+    glassClampsPerSide: 2,
+    glassTint: 'clear',
+    // posts by hand: {[section id]: {added: [{id, s}], removed: [post id]}}; the antresola per opening edge {[k]: false}
+    railingPostEdits: {},
+    railingAntresolaEdges: {},
+    // the ceiling opening drawn by hand (plan points) — null = the one the headroom needs (surroundingsModel.js)
+    openingManual: null,
     // decorative posts (user request 2026-11-04: "ozdobne słupy z czapkami i frezowaniami")
     postSizeMm: 90,
     postAboveHandrailMm: 120,
@@ -116,6 +135,17 @@ function sanitizeReferenceFloor(ref) {
 }
 
 // {[flight]: {left, right}} — booleans only
+function sanitizePostEdits(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!v || typeof v !== 'object') continue;
+    const added = (Array.isArray(v.added) ? v.added : []).filter((m) => m && Number.isFinite(Number(m.s))).map((m, i) => ({ id: String(m.id ?? i), s: Number(m.s) }));
+    const removed = (Array.isArray(v.removed) ? v.removed : []).filter((x) => typeof x === 'string');
+    if (added.length || removed.length) out[k] = { added, removed };
+  }
+  return out;
+}
+
 // the walls: {[flight]: {left, right}} — each true (= full), or {type: full | low | under, heightAboveMm}
 export const WALL_TYPES = Object.freeze(['full', 'low', 'under']);
 export const WALL_TYPE_LABELS = Object.freeze({ full: 'pełna (do stropu)', low: 'nad stopniami (do wysokości)', under: 'pod biegiem' });
@@ -244,5 +274,20 @@ export function sanitizeCladdingConfig(raw) {
     postCap: ['flat', 'pyramid', 'ball'].includes(c.postCap) ? c.postCap : 'pyramid',
     postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
     postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
+    railingInfill: ['balusters', 'glass-posts', 'glass-side'].includes(c.railingInfill) ? c.railingInfill : 'balusters',
+    balusterShape: c.balusterShape === 'round' ? 'round' : 'square',
+    glassThicknessMm: num(c.glassThicknessMm, d.glassThicknessMm, 6, 40),
+    glassMaxWidthMm: num(c.glassMaxWidthMm, d.glassMaxWidthMm, 300, 3000),
+    glassGapMm: num(c.glassGapMm, d.glassGapMm, 0, 100),
+    glassTopGapMm: num(c.glassTopGapMm, d.glassTopGapMm, 0, 300),
+    glassBottomGapMm: num(c.glassBottomGapMm, d.glassBottomGapMm, 0, 300),
+    glassStandoffMm: num(c.glassStandoffMm, d.glassStandoffMm, 0, 100),
+    glassOverlapMm: num(c.glassOverlapMm, d.glassOverlapMm, 0, 500),
+    glassFixingsPerPane: Math.round(num(c.glassFixingsPerPane, d.glassFixingsPerPane, 1, 8)),
+    glassClampsPerSide: Math.round(num(c.glassClampsPerSide, d.glassClampsPerSide, 1, 4)),
+    glassTint: ['clear', 'optiwhite', 'grey', 'bronze'].includes(c.glassTint) ? c.glassTint : 'clear',
+    railingPostEdits: sanitizePostEdits(c.railingPostEdits),
+    railingAntresolaEdges: Object.fromEntries(Object.entries(c.railingAntresolaEdges && typeof c.railingAntresolaEdges === 'object' ? c.railingAntresolaEdges : {}).filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'boolean')),
+    openingManual: Array.isArray(c.openingManual) && c.openingManual.length >= 3 && c.openingManual.every((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) ? c.openingManual.map((p) => ({ x: p.x, y: p.y })) : null,
   };
 }

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { applyWoodGrainToTree, getOakPhotoTexture } from '../scene/woodGrain.js';
 import { insetExposed, profileRings } from './starterProfile.js';
+import { GLASS_TINTS } from './balustradeModel.js';
 
 // A solid between a plan outline's top and bottom heights (one height per outline point); plan (x, y) at z → three
 // (x, z, −y). The outline is made counter-clockwise.
@@ -96,6 +97,7 @@ const concreteWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d4cc, r
 const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 
 const railingWood = () => wood();
+const steelFixing = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, roughness: 0.3, metalness: 0.9 });
 const grooveMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.8, metalness: 0 });
 
 // a board in its own vertical plane (finishModel.js): the polygon in (s along `dir`, z up), its thickness along
@@ -255,8 +257,39 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   railing.name = 'Railing';
   for (const s of built.balustrade?.sections || []) {
     for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(beam(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, railingWood()), { name: `Handrail-${s.id}-${k}` }));
-    for (const b of s.balusters) railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, railingWood()), { name: 'Baluster' }));
+    for (const b of s.balusters) {
+      // a round baluster (toczona) or a square one
+      if (b.shape === 'round') {
+        const g = new THREE.CylinderGeometry(b.size / 2, b.size / 2, b.topZ - b.bottomZ, 16);
+        g.translate(b.at.x, (b.bottomZ + b.topZ) / 2, -b.at.y);
+        railing.add(Object.assign(new THREE.Mesh(g, railingWood()), { name: 'Baluster' }));
+      } else railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, railingWood()), { name: 'Baluster' }));
+    }
     for (const p of s.posts) railing.add(decorativePost(p));
+    // glass panes (see-through, the tint) and, on the concrete's side, their point fixings
+    const tint = GLASS_TINTS[config.glassTint] || GLASS_TINTS.clear;
+    const glass = new THREE.MeshStandardMaterial({ color: tint.color, transparent: true, opacity: tint.opacity, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+    for (const pane of s.panes || []) {
+      const mesh = new THREE.Mesh(planeBoardGeometry(pane), glass);
+      mesh.name = `Glass-${s.id}`;
+      mesh.renderOrder = 3;
+      railing.add(mesh);
+      if (s.infill === 'glass-side') {
+        const zs = pane.polygon.map((p) => p.z);
+        const z = Math.min(...zs) + config.glassOverlapMm / 2;
+        const sMin = Math.min(...pane.polygon.map((p) => p.s));
+        const sMax = Math.max(...pane.polygon.map((p) => p.s));
+        for (let k = 0; k < config.glassFixingsPerPane; k++) {
+          const sk = sMin + ((k + 0.5) * (sMax - sMin)) / config.glassFixingsPerPane;
+          const c = { x: pane.origin.x + pane.dir.x * sk + pane.normal.x * pane.thicknessMm / 2, y: pane.origin.y + pane.dir.y * sk + pane.normal.y * pane.thicknessMm / 2 };
+          const g = new THREE.CylinderGeometry(15, 15, pane.thicknessMm + 40, 12);
+          g.rotateX(Math.PI / 2);
+          g.rotateY(Math.atan2(pane.normal.y, -pane.normal.x) + Math.PI / 2);
+          g.translate(c.x, z, -c.y);
+          railing.add(Object.assign(new THREE.Mesh(g, steelFixing), { name: 'GlassFixing' }));
+        }
+      }
+    }
   }
   root.add(railing);
   applyWoodGrainToTree(root);

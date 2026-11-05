@@ -15,7 +15,9 @@ export function claddingPlanBounds(built) {
   return { minX: b.minX, maxX: b.maxX, minY: -b.maxY, maxY: -b.minY };
 }
 
-export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false } = {}) {
+// `mode` (the plan's edit mode — claddingApp.js): 'posts' shows every balustrade line and its posts to click (add /
+// remove), 'opening' the opening's vertices / edge middles to drag / click and its edges to switch the antresola on / off
+export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false, mode = 'select' } = {}) {
   const { concrete, cladding } = built;
   const vb = viewport ? `${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}` : (() => {
     const b = claddingPlanBounds(built);
@@ -32,7 +34,25 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .join('');
   // stage 3: the walls (dark), the ceiling opening (dashed blue), the antresola nosing, a floor-board landing's parts
   const wallsXML = (built.walls || []).map((w) => `<polygon class="clad-wall" points="${pts(w.outline)}" fill="#6f6a62" stroke="#4d4943" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');
-  const openingXML = built.slab ? `<polygon class="clad-opening" points="${pts(built.slab.opening)}" fill="none" stroke="#1f6feb" stroke-width="1.5" stroke-dasharray="8,5" pointer-events="none" ${HAIR}/>` : '';
+  let openingXML = built.slab ? `<polygon class="clad-opening" points="${pts(built.slab.opening)}" fill="none" stroke="#1f6feb" stroke-width="1.5" stroke-dasharray="8,5" pointer-events="none" ${HAIR}/>` : '';
+  // the opening editor: every edge clickable (the antresola on / off — green on, grey off), its vertices to drag, a
+  // middle handle to add a vertex
+  if (mode === 'opening' && built.slab?.opening?.length) {
+    const o = built.slab.opening;
+    const hr = Math.max(18, (viewport?.width ?? 4000) / 160);
+    const off = built.config.railingAntresolaEdges || {};
+    const edges = o.map((a, k) => {
+      const b = o[(k + 1) % o.length];
+      const on = off[k] !== false;
+      return `<line class="clad-opening-edge" data-edge="${k}" x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${on ? '#2e7d32' : '#9aa0a6'}" stroke-width="10" stroke-opacity="0.6" ${HAIR}><title>Balustrada antresoli na tej krawędzi: ${on ? 'tak' : 'nie'} — kliknij, żeby zmienić</title></line>`;
+    }).join('');
+    const vertices = o.map((p, k) => `<circle class="clad-opening-vertex" data-vertex="${k}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(hr)}" fill="#fff" stroke="#1f6feb" stroke-width="2" ${HAIR}><title>Przeciągnij narożnik (prawy klik — usuń)</title></circle>`).join('');
+    const mids = o.map((a, k) => {
+      const b = o[(k + 1) % o.length];
+      return `<rect class="clad-opening-mid" data-mid="${k}" x="${fmt((a.x + b.x) / 2 - hr * 0.6)}" y="${fmt(-(a.y + b.y) / 2 - hr * 0.6)}" width="${fmt(hr * 1.2)}" height="${fmt(hr * 1.2)}" fill="#1f6feb" ${HAIR}><title>Kliknij, żeby dodać narożnik</title></rect>`;
+    }).join('');
+    openingXML += edges + mids + vertices;
+  }
   const exitXML = (cladding.exitNosing || []).map((n) => `<polygon class="clad-exit-nosing" points="${pts(n.outline)}" fill="#c99d62" stroke="#8a5a34" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
   const partsXML = cladding.treads
     .filter((t) => t.parts)
@@ -63,8 +83,18 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .map((s) => {
       const rail = `<polyline class="clad-handrail" points="${pts(s.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>`;
       const bal = s.balusters.map((b) => `<rect x="${fmt(b.at.x - b.size / 2)}" y="${fmt(-b.at.y - b.size / 2)}" width="${fmt(b.size)}" height="${fmt(b.size)}" fill="#7a4b22" pointer-events="none"/>`).join('');
-      const posts = s.posts.map((p) => `<rect class="clad-post" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="#5a3d24" stroke="#2b1a0c" stroke-width="1" pointer-events="none" ${HAIR}/>`).join('');
-      return rail + bal + posts;
+      const editing = mode === 'posts';
+      const posts = s.posts.map((p) => `<rect class="clad-post" data-section="${escapeHtml(s.id)}" data-post="${escapeHtml(p.id)}" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="${p.manual ? '#b5651d' : '#5a3d24'}" stroke="#2b1a0c" stroke-width="1" ${editing ? '' : 'pointer-events="none"'} ${HAIR}><title>Słup — kliknij, żeby usunąć</title></rect>`).join('');
+      // the post editor: the line to click (a post added there), removed posts as ghosts (a click restores)
+      const line = editing ? `<polyline class="clad-rail-line" data-section="${escapeHtml(s.id)}" points="${pts(s.path)}" fill="none" stroke="#d35400" stroke-opacity="0.35" stroke-width="14" ${HAIR}><title>Kliknij, żeby dodać słup</title></polyline>` : '';
+      const ghosts = editing ? (s.removedPosts || []).map((p) => `<rect class="clad-post-ghost" data-section="${escapeHtml(s.id)}" data-ghost="${escapeHtml(p.id)}" x="${fmt(p.at.x - 45)}" y="${fmt(-p.at.y - 45)}" width="90" height="90" fill="none" stroke="#5a3d24" stroke-width="1" stroke-dasharray="4,3" ${HAIR}><title>Usunięty słup — kliknij, żeby przywrócić</title></rect>`).join('') : '';
+      const glass = (s.panes || []).map((pane) => {
+        const s0 = Math.min(...pane.polygon.map((p) => p.s));
+        const s1 = Math.max(...pane.polygon.map((p) => p.s));
+        const at = (sv) => ({ x: pane.origin.x + pane.dir.x * sv + pane.normal.x * pane.thicknessMm / 2, y: pane.origin.y + pane.dir.y * sv + pane.normal.y * pane.thicknessMm / 2 });
+        return `<line x1="${fmt(at(s0).x)}" y1="${fmt(-at(s0).y)}" x2="${fmt(at(s1).x)}" y2="${fmt(-at(s1).y)}" stroke="#3aa6a0" stroke-width="3" pointer-events="none" ${HAIR}/>`;
+      }).join('');
+      return line + rail + bal + glass + posts + ghosts;
     })
     .join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');

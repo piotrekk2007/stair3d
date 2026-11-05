@@ -111,7 +111,13 @@ export function buildCladdingQuote(built, settings) {
     // table by its section, per piece or per mb of its height — takeoff/boardPricing.js postPrices)
     lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
     if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(priceOf(settings, 'railing-baluster'), s.balusters.length, 'szt.'), labour: null });
-    lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
+    // glass: the panes per m² of the rectangles they are cut from, the fixings (rotules / clamps) per piece
+    if (s.panes?.length) {
+      const m2 = round2(s.panes.reduce((sum, p) => sum + p.blankAreaM2, 0));
+      lines.push({ id: `${s.id}-glass`, group: 'Balustrada', name: `Szkło — ${where} (${s.panes.length} tafli)`, qty: m2, unit: 'm²', dims: s.panes.map((p) => `${Math.round(p.widthMm)}×${Math.round(p.heightMm)}`).join(', '), material: perUnit(priceOf(settings, 'railing-glass'), m2, 'm²'), labour: null });
+      lines.push({ id: `${s.id}-glass-fixings`, group: 'Balustrada', name: `${s.infill === 'glass-side' ? 'Rotule' : 'Uchwyty szkła'} — ${where}`, qty: s.fixings, unit: 'szt.', dims: '', material: perUnit(priceOf(settings, 'railing-glass-fixing'), s.fixings, 'szt.'), labour: null });
+    }
+    if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: `${Math.round(s.posts[0]?.size ?? 0)} × ${Math.round(s.posts[0]?.size ?? 0)} mm`, material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
   }
   // lump sums and the user's own extra lines
   for (const id of ['measure', 'transport']) {

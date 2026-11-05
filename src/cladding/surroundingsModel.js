@@ -36,6 +36,12 @@ export function edgeWallKey(element, edge) {
   return null;
 }
 
+/** Does glass on the concrete's side (balustradeModel.js, `glass-side`) stand along this edge — no side nosing there? */
+export function edgeHasSideGlass(element, edge, config) {
+  const key = edgeWallKey(element, edge);
+  return !!key && config.railingInfill === 'glass-side' && !!config.railingSides?.[key.flight]?.[key.side] && !edgeHasWall(element, edge, config);
+}
+
 /** Is this edge's side covered by a RAKED cover stringer (finishModel.js — the treads butt into it, no side nosing)? */
 export function edgeHasRakedCover(element, edge, config) {
   const key = edgeWallKey(element, edge);
@@ -79,13 +85,19 @@ export function buildSlab(concrete, cladding, config) {
   const top = concrete.exit.rawSlabTopZ;
   const soffit = top - config.slabThicknessMm;
   const need = cladding.treads.filter((t) => t.topZ + config.minHeadroomMm > soffit);
-  if (!need.length) return null;
+  if (!need.length && !config.openingManual) return null;
   // (the opening runs to the stair's exit: the last tread's back line)
-  const loops = unionRectangles(need.map((t) => rect(t.outline)).map((r) => ({ uStart: r.minX, uEnd: r.maxX, vBottom: r.minY, vTop: r.maxY })));
+  const loops = !need.length ? [] : unionRectangles(need.map((t) => rect(t.outline)).map((r) => ({ uStart: r.minX, uEnd: r.maxX, vBottom: r.minY, vTop: r.maxY })));
   const area = (l) => Math.abs(l.reduce((s, p, k) => s + p.u * l[(k + 1) % l.length].v - l[(k + 1) % l.length].u * p.v, 0) / 2);
   const biggest = loops.reduce((best, l) => (!best || area(l) > area(best) ? l : best), null);
-  if (!biggest) return null;
-  const openingPoly = biggest.map((p) => ({ x: p.u, y: p.v }));
+  if (!biggest && !config.openingManual) return null;
+  let openingPoly = biggest ? biggest.map((p) => ({ x: p.u, y: p.v })) : [];
+  // drawn by hand (the plan's opening editor): as given, made counter-clockwise
+  const manual = config.openingManual;
+  if (manual?.length >= 3) {
+    const a = manual.reduce((s, p, k) => s + p.x * manual[(k + 1) % manual.length].y - manual[(k + 1) % manual.length].x * p.y, 0);
+    openingPoly = a < 0 ? [...manual].reverse() : manual.map((p) => ({ ...p }));
+  }
   const all = rect(concrete.elements.flatMap((e) => e.outline));
   const MARGIN = 1000;
   const outer = { minX: all.minX - MARGIN, maxX: all.maxX + MARGIN, minY: all.minY - MARGIN, maxY: all.maxY + MARGIN };
@@ -96,7 +108,7 @@ export function buildSlab(concrete, cladding, config) {
     { x: r.minX, y: r.maxY },
   ];
   // the exit edge of the opening must be the stair's last back edge (the slab starts there)
-  return { outline: asPoly(outer), opening: openingPoly, topZ: top, bottomZ: soffit, finishTopZ: top + config.floorFinishTopMm, treadsUnder: need.map((t) => t.index) };
+  return { outline: asPoly(outer), opening: openingPoly, manual: !!manual, topZ: top, bottomZ: soffit, finishTopZ: top + config.floorFinishTopMm, treadsUnder: need.map((t) => t.index) };
 }
 
 function rect(pts) {

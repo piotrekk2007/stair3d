@@ -12,6 +12,7 @@ import { renderCladdingStair } from '../claddingRenderer.js';
 import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
 import { claddingAsFloor } from '../floorStair.js';
+import { sNearest, RAILING_INFILLS, GLASS_TINTS } from '../balustradeModel.js';
 import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
@@ -75,6 +76,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       </aside>
       <main class="clad-main">
         <div class="clad-plan"></div>
+        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button></div>
         <div class="clad-3d" hidden></div>
       </main>
       <aside class="clad-right">
@@ -286,6 +288,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(top.add(proxy, 'exitNosing').name('Nosek antresoli na wyjściu'));
   live(top.add(proxy, 'exitNosingDepthMm', 20, 500, 5).name('Nosek antresoli: na strop [mm]'));
   live(top.add(proxy, 'showSlab').name('Pokaż strop z otworem'));
+  top.add({ auto: () => change((c) => (c.openingManual = null)) }, 'auto').name('Otwór: wróć do wyznaczonego');
   live(top.add(proxy, 'slabThicknessMm', 80, 600, 5).name('Grubość stropu [mm]'));
   live(top.add(proxy, 'minHeadroomMm', 1500, 3000, 10).name('Skrajnia nad stopniami [mm]'));
   live(top.add(proxy, 'wallThicknessMm', 50, 600, 5).name('Grubość ścian (rysunek) [mm]'));
@@ -304,7 +307,9 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'railingHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
   live(rail.add(proxy, 'railingAntresolaHeightMm', 600, 1500, 10).name('Antresola: wysokość [mm]'));
   live(rail.add(proxy, 'balustersPerTread', 0, 6, 1).name('Tralki na stopień'));
-  live(rail.add(proxy, 'balusterSizeMm', 10, 120, 1).name('Tralka: przekrój [mm]'));
+  live(rail.add(proxy, 'railingInfill', Object.fromEntries(Object.entries(RAILING_INFILLS).map(([k, l]) => [l, k]))).name('Wypełnienie'));
+  live(rail.add(proxy, 'balusterShape', { kwadratowe: 'square', 'okrągłe (toczone)': 'round' }).name('Tralki'));
+  live(rail.add(proxy, 'balusterSizeMm', 10, 120, 1).name('Tralka: przekrój / średnica [mm]'));
   live(rail.add(proxy, 'railingMaxClearMm', 50, 300, 5).name('Maks. prześwit (podest, antresola) [mm]'));
   live(rail.add(proxy, 'handrailWidthMm', 20, 150, 1).name('Poręcz: szerokość [mm]'));
   live(rail.add(proxy, 'handrailHeightMm', 20, 150, 1).name('Poręcz: wysokość [mm]'));
@@ -316,6 +321,18 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
   rail.close();
+  const glassF = gui.addFolder('Szkło balustrady');
+  live(glassF.add(proxy, 'glassTint', Object.fromEntries(Object.entries(GLASS_TINTS).map(([k, t]) => [t.label, k]))).name('Kolor szkła'));
+  live(glassF.add(proxy, 'glassThicknessMm', 6, 40, 0.5).name('Grubość [mm]'));
+  live(glassF.add(proxy, 'glassMaxWidthMm', 300, 3000, 10).name('Maks. szerokość tafli [mm]'));
+  live(glassF.add(proxy, 'glassGapMm', 0, 100, 1).name('Szczelina [mm]'));
+  live(glassF.add(proxy, 'glassTopGapMm', 0, 300, 1).name('Między słupami: od poręczy [mm]'));
+  live(glassF.add(proxy, 'glassBottomGapMm', 0, 300, 1).name('Między słupami: nad noskami [mm]'));
+  live(glassF.add(proxy, 'glassStandoffMm', 0, 100, 1).name('Na boku: odsunięcie od betonu [mm]'));
+  live(glassF.add(proxy, 'glassOverlapMm', 0, 500, 5).name('Na boku: poniżej stopni [mm]'));
+  live(glassF.add(proxy, 'glassFixingsPerPane', 1, 8, 1).name('Na boku: rotule na taflę'));
+  live(glassF.add(proxy, 'glassClampsPerSide', 1, 4, 1).name('Między słupami: uchwyty na krawędź'));
+  glassF.close();
   const wind = gui.addFolder('Kontrola zabiegów');
   live(wind.add(proxy, 'winderLegalOffsetMm', 100, 1000, 10).name('Pomiar od duszy [mm]'));
   live(wind.add(proxy, 'winderLegalMinGoingMm', 0, 500, 5).name('Min. głębokość tam [mm]'));
@@ -834,10 +851,80 @@ export function mountCladdingApp(rootEl, host = {}) {
     const { w, h } = panelSize();
     viewport = fitToBounds(claddingPlanBounds(state.built), w, h, 400);
   }
+  let planMode = 'select';
+  const MODE_HINTS = {
+    select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
+    posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
+    opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
+  };
+  rootEl.querySelectorAll('[data-plan-mode]').forEach((b) =>
+    b.addEventListener('click', () => {
+      planMode = b.dataset.planMode;
+      rootEl.querySelectorAll('[data-plan-mode]').forEach((x) => x.classList.toggle('active', x === b));
+      if (state.view !== 'plan') setView('plan');
+      else renderPlan();
+    })
+  );
   function renderPlan() {
     if (!viewport) fitPlan();
-    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null }) + '<div class="clad-plan-hint">kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj</div>';
+    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null, mode: planMode }) + `<div class="clad-plan-hint">${MODE_HINTS[planMode]}</div>`;
   }
+  // the opening as drawn by hand (the derived one taken over on the first edit)
+  const manualOpening = (c) => (c.openingManual ||= (state.built.slab?.opening || []).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })));
+  const sectionById = (id) => state.built.balustrade?.sections.find((s) => s.id === id);
+  // a click of the plan's edit modes (no drag)
+  function planClick(target, p) {
+    if (planMode === 'posts') {
+      const post = target.closest?.('.clad-post');
+      const ghost = target.closest?.('.clad-post-ghost');
+      const line = target.closest?.('.clad-rail-line');
+      const id = (post || ghost || line)?.dataset.section;
+      if (!id) return false;
+      change((c) => {
+        const e = (c.railingPostEdits[id] ||= { added: [], removed: [] });
+        if (post) {
+          const pid = post.dataset.post;
+          const m = pid.split(':m-')[1];
+          if (m !== undefined) e.added = e.added.filter((x) => x.id !== m);
+          else e.removed = [...new Set([...e.removed, pid])];
+        } else if (ghost) e.removed = e.removed.filter((x) => x !== ghost.dataset.ghost);
+        else {
+          const near = sNearest(sectionById(id), p);
+          if (near) e.added = [...e.added, { id: Date.now().toString(36), s: Math.round(near.s) }];
+        }
+      });
+      return true;
+    }
+    if (planMode === 'opening') {
+      const edge = target.closest?.('.clad-opening-edge');
+      const mid = target.closest?.('.clad-opening-mid');
+      if (mid) {
+        const k = Number(mid.dataset.mid);
+        change((c) => {
+          const o = manualOpening(c);
+          const a = o[k];
+          const b = o[(k + 1) % o.length];
+          o.splice(k + 1, 0, { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) });
+        });
+        return true;
+      }
+      if (edge) {
+        const k = edge.dataset.edge;
+        change((c) => (c.railingAntresolaEdges = { ...c.railingAntresolaEdges, [k]: c.railingAntresolaEdges[k] === false }));
+        return true;
+      }
+    }
+    return false;
+  }
+  planEl.addEventListener('contextmenu', (ev) => {
+    const v = ev.target.closest?.('.clad-opening-vertex');
+    if (planMode !== 'opening' || !v) return;
+    ev.preventDefault();
+    change((c) => {
+      const o = manualOpening(c);
+      if (o.length > 3) o.splice(Number(v.dataset.vertex), 1);
+    });
+  });
   planEl.addEventListener('wheel', (ev) => {
     ev.preventDefault();
     const rect = planEl.getBoundingClientRect();
@@ -853,12 +940,27 @@ export function mountCladdingApp(rootEl, host = {}) {
     return { x: viewport.x + ((ev.clientX - rect.left) / w) * viewport.width, y: -(viewport.y + ((ev.clientY - rect.top) / h) * viewport.height) };
   };
   planEl.addEventListener('pointerdown', (ev) => {
+    if (ev.button === 2) return;
     const handle = ev.target.closest?.('.clad-edge-handle');
-    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
+    const vertex = planMode === 'opening' ? ev.target.closest?.('.clad-opening-vertex') : null;
+    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, at: planAt(ev), vertex: vertex ? Number(vertex.dataset.vertex) : null, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
     planEl.setPointerCapture(ev.pointerId);
   });
   planEl.addEventListener('pointermove', (ev) => {
     if (!drag) return;
+    if (drag.vertex !== null && drag.vertex !== undefined) {
+      // an opening corner dragged (10 mm steps)
+      const p = planAt(ev);
+      drag.moved = true;
+      change(
+        (c) => {
+          const o = manualOpening(c);
+          o[drag.vertex] = { x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 };
+        },
+        { record: false }
+      );
+      return;
+    }
     if (drag.handle) {
       // an edge end slides along its wall / dusza line; the number = mm from that line's corner (whole mm)
       const zone = state.built.concrete.zones[drag.handle.zone];
@@ -888,12 +990,14 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderPlan();
   });
   planEl.addEventListener('pointerup', () => {
-    if (drag?.handle && drag.moved) {
+    if ((drag?.handle || (drag?.vertex !== null && drag?.vertex !== undefined)) && drag.moved) {
       commitHistory();
       renderSequence();
     } else if (drag && !drag.moved) {
-      const idx = drag.target?.closest?.('[data-index]')?.dataset.index;
-      if (idx !== undefined) select(Number(idx));
+      if (!planClick(drag.target, drag.at)) {
+        const idx = drag.target?.closest?.('[data-index]')?.dataset.index;
+        if (idx !== undefined && planMode === 'select') select(Number(idx));
+      }
     }
     drag = null;
   });

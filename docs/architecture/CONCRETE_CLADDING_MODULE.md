@@ -299,11 +299,33 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   „ściana między biegami”, do stropu / nad noskami o … mm.
 - Tests: `__tests__/sideWalls.test.js`.
 
+## The balustrade's types and editors (user request 2026-11-04, as built 2026-11-05)
+
+- `balustradeModel.js` rewritten round a SECTION LINE (straight plan pieces with s, the ground, the handrail top): a
+  stair side (`railing-<flight>-<side>`) or an antresola chain (`railing-antresola-e<first edge>` — the opening's free
+  edges, consecutive ones joined, a closed loop when all are free; `railingAntresolaEdges[k] = false` takes edge k off;
+  never the exit edge).
+- `railingInfill`: `balusters` (`balusterShape` square / round — cylinders in 3D), `glass-posts` (a pane per span
+  between posts, posts added where a span is wider than `glassMaxWidthMm`, `glassClampsPerSide` × 2 per pane),
+  `glass-side` (panes on the concrete's side face — `glassStandoffMm` out, `glassOverlapMm` below the treads — or the
+  slab's edge at the antresola, no posts of their own, `glassFixingsPerPane` rotules, the handrail on the glass; that
+  side gets no side nosing — `surroundingsModel.js edgeHasSideGlass`). `glassTint` (`GLASS_TINTS`), the gaps; sizes
+  ASSUMPTION. Panes are plane polygons (as the boards), `blankAreaM2` priced per m² (`railing-glass`), the fixings per
+  piece (`railing-glass-fixing`) — the shared price list.
+- Posts by hand: `railingPostEdits[section] = {added: [{id, s}], removed: [post id]}`; ids `<section>:start / end /
+  c<k> / g<k>-<j> / m-<id>`; `section.removedPosts` (ghosts), `sNearest(section, p)`.
+- The opening by hand: `openingManual` (plan points, CCW-made) replaces the derived one (`surroundingsModel.js
+  buildSlab`, `slab.manual`); „Otwór: wróć do wyznaczonego” clears it.
+- The plan's edit modes (`claddingApp.js planMode`, buttons over the plan): „Wybór”; „▮ Słupy” (the balustrade lines
+  clickable — a post added at the nearest s, a click on a post removes it, a dashed ghost restores it); „▭ Otwór i
+  antresola” (the opening's corners dragged in 10 mm steps, a middle square adds a corner, a right click removes one, a
+  click on an edge switches its antresola balustrade — green on, grey off; the first edit takes the derived opening over).
+- Tests: `__tests__/balustrade.test.js`.
+
 ## Gaps listed by the user (2026-11-04) — the next batches
 
 1. (done) Walls between / above / under the flights.
-2. Balustrade: the self-supporting types (glass, round balusters), adding / removing posts, editing the antresola's
-   edges and the opening.
+2. (done) Balustrade types, posts by hand, the antresola per edge, the opening's editor — below.
 3. Colours of the treads, balusters, skirting; LED lighting.
 4. Export: DXF (treads, risers, boards), DAE (SketchUp), OBJ.
 

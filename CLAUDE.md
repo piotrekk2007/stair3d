@@ -549,8 +549,10 @@ bowed, bent riser, support block) and the treads' edge profiles (chamfer / round
 Stage 6 part 1 built: the price list shared with the self-supporting takeoff (`quote/labour.js` priceList /
 boardPricing, the same „cały cennik” file) + the module's labour, the offer (`quote/claddingOffer.js` → the shared
 `offer/offerDocument.js`), the internal estimate. Walls per flight side by type (full / above the steps
-to a height / under the flight) and the wall between flights set apart (`sideWallsModel.js`). Next (user, 2026-11-04):
-balustrade types and post editing, colours, LED, DXF / DAE / OBJ export.
+to a height / under the flight) and the wall between flights set apart (`sideWallsModel.js`). The balustrade's types
+(balusters square / round, glass between posts, glass on the concrete's side), posts by hand, the antresola per edge and
+the opening drawn by hand (plan edit modes „▮ Słupy” / „▭ Otwór i antresola”). Next (user, 2026-11-04): colours, LED,
+DXF / DAE / OBJ export.
 
 ## Open items / known limitations
 

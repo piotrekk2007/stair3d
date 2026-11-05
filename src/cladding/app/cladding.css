@@ -126,3 +126,10 @@
 .clad-hidden-row td { opacity: 0.45; }
 .clad-notes { flex-direction: column; align-items: stretch; }
 .clad-notes textarea { width: 100%; }
+
+/* the plan's edit modes (balustrade posts, the opening and the antresola) */
+.clad-plan-modes { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; z-index: 2; }
+.clad-plan-modes button { font-size: 12px; padding: 2px 8px; }
+.clad-plan-modes button.active { background: #1f6feb; color: #fff; }
+.clad-plan .clad-rail-line, .clad-plan .clad-post, .clad-plan .clad-post-ghost, .clad-plan .clad-opening-edge, .clad-plan .clad-opening-mid { cursor: pointer; }
+.clad-plan .clad-opening-vertex { cursor: move; }

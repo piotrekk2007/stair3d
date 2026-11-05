@@ -1,18 +1,27 @@
-// The balustrade of the module "Schody na beton" (stage 5 — docs/architecture/CONCRETE_CLADDING_MODULE.md): its own,
-// simple solver (the self-supporting railingSolver.js stays untouched — the isolation rule): on every open side chosen
-// per flight a section — a decorative post at its start and end, the handrail `railingHeightMm` above the noses (level
-// over a landing), balusters standing on the treads (`balustersPerTread`, on a landing at most `railingMaxClearMm`
-// apart) — and the antresola balustrade round the ceiling opening (not on its exit edge) on the floor above. Pure.
+// The balustrade of the module "Schody na beton" (stage 5, extended 2026-11-05 — docs/architecture/
+// CONCRETE_CLADDING_MODULE.md): its own solver (the self-supporting railingSolver.js stays untouched — the isolation
+// rule). A SECTION is a line along the stair (an open side chosen per flight — `railingSides`) or round the ceiling
+// opening on the floor above (the antresola — `railingAntresola`, per edge `railingAntresolaEdges`, never the exit
+// edge), described by its straight plan pieces, its ground (the treads / the floor) and its handrail top
+// (`railingHeightMm` over the noses, level over a landing / `railingAntresolaHeightMm` over the floor). On it:
+//   - POSTS (decorative): at the ends (stairs) / at every corner and end (antresola), between them where glass panes
+//     need it, the user's own (`railingPostEdits[section].added`, s along the line) less the removed ones (`.removed`,
+//     by id) — none of their own with glass on the concrete's side;
+//   - the INFILL (`railingInfill`): `balusters` (square / round — `balusterShape`; per tread on the stairs, evenly
+//     ≤ `railingMaxClearMm` elsewhere), `glass-posts` (one pane per span between posts, clamps on the posts) or
+//     `glass-side` (panes on the concrete's / slab's side face on point fixings, the handrail on the glass);
+//   - the HANDRAIL from end to end.
+// Glass sizes ASSUMPTION / DO WERYFIKACJI (as the self-supporting railingGlass.js numbers). Pure.
 
-import { buildSideRuns, runPoint } from './sideRuns.js';
+import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
-function post(id, at, bottomZ, handrailTopZ, config) {
-  return { id, at, bottomZ, topZ: handrailTopZ + config.postAboveHandrailMm, size: config.postSizeMm, cap: config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves };
-}
-// the handrail's z at s along a polyline of {s, z}
+export const RAILING_INFILLS = Object.freeze({ balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu (rotule)' });
+export const GLASS_TINTS = Object.freeze({ clear: { label: 'bezbarwne', color: 0xcfe7e2, opacity: 0.3 }, optiwhite: { label: 'optiwhite', color: 0xf2f7f7, opacity: 0.22 }, grey: { label: 'grafit', color: 0x4b5258, opacity: 0.5 }, bronze: { label: 'brąz', color: 0x8a6a46, opacity: 0.45 } });
+
+// a polyline of {s, z} → z at s (clamped to its ends)
 function zAt(line, s) {
   if (s <= line[0].s) return line[0].z;
   for (let k = 1; k < line.length; k++) {
@@ -24,88 +33,132 @@ function zAt(line, s) {
   return line[line.length - 1].z;
 }
 
-function stairSection(run, config) {
+// --- the sections' lines ---------------------------------------------------------------------------------------
+
+// a stair side: one straight piece along the flight (s = the run's s), the ground = the tread under s
+function stairLine(run, config) {
   const { pieces } = run;
   const H = config.railingHeightMm;
-  const inset = config.railingInsetMm;
-  // the handrail's top through the noses (+ H), level along a landing
-  const line = [];
+  const top = [];
   for (const p of pieces) {
-    line.push({ s: p.s0, z: p.top + H });
-    if (p.flat) line.push({ s: p.s1, z: p.top + H });
+    top.push({ s: p.s0, z: p.top + H });
+    if (p.flat) top.push({ s: p.s1, z: p.top + H });
   }
-  line.push({ s: pieces[pieces.length - 1].s1, z: pieces[pieces.length - 1].top + H });
-  const s0 = pieces[0].s0 + config.postSizeMm / 2;
-  const s1 = pieces[pieces.length - 1].s1 - config.postSizeMm / 2;
-  const at = (s) => runPoint(run, s, -inset);
-  const posts = [post(`post-${run.key.flight}-${run.key.side}-start`, at(s0), pieces[0].top, zAt(line, s0), config), post(`post-${run.key.flight}-${run.key.side}-end`, at(s1), pieces[pieces.length - 1].top, zAt(line, s1), config)];
-  const clearOfPosts = (s) => Math.abs(s - s0) > (config.postSizeMm + config.balusterSizeMm) / 2 && Math.abs(s - s1) > (config.postSizeMm + config.balusterSizeMm) / 2;
-  const balusters = [];
-  for (const p of pieces) {
-    const len = p.s1 - p.s0;
-    const n = p.flat ? Math.max(1, Math.ceil(len / (config.railingMaxClearMm + config.balusterSizeMm)) - 1) : config.balustersPerTread;
-    for (let j = 0; j < n; j++) {
-      const s = p.s0 + ((j + (p.flat ? 1 : 0.5)) * len) / (p.flat ? n + 1 : n);
-      if (!clearOfPosts(s) || s < s0 || s > s1) continue;
-      balusters.push({ at: at(s), bottomZ: p.top, topZ: zAt(line, s) - config.handrailHeightMm, size: config.balusterSizeMm });
-    }
-  }
-  const handrail = line.filter((q) => q.s >= s0 - 1e-6 && q.s <= s1 + 1e-6);
-  const rail = [{ s: s0, z: zAt(line, s0) }, ...handrail.filter((q) => q.s > s0 + 1e-6 && q.s < s1 - 1e-6), { s: s1, z: zAt(line, s1) }].map((q) => ({ ...at(q.s), z: q.z - config.handrailHeightMm / 2 }));
-  return { id: `railing-${run.key.flight}-${run.key.side}`, kind: 'stairs', key: run.key, handrail: rail, posts, balusters, treadCount: pieces.filter((p) => !p.flat).length, lengthMm: length3d(rail) };
+  top.push({ s: pieces[pieces.length - 1].s1, z: pieces[pieces.length - 1].top + H });
+  const s0 = pieces[0].s0;
+  const s1 = pieces[pieces.length - 1].s1;
+  const glassSide = config.railingInfill === 'glass-side';
+  // the line: on the treads `railingInsetMm` in from their ends, or (glass on the side) outside the concrete face
+  const off = glassSide ? config.glassStandoffMm + config.glassThicknessMm / 2 : -config.railingInsetMm;
+  const piece = (s) => pieces.find((p) => s >= p.s0 - 1e-6 && s <= p.s1 + 1e-6) ?? (s < s0 ? pieces[0] : pieces[pieces.length - 1]);
+  return {
+    id: `railing-${run.key.flight}-${run.key.side}`,
+    kind: 'stairs',
+    key: run.key,
+    s0,
+    s1,
+    at: (s) => runPoint(run, s, off),
+    dirAt: () => run.frame.f,
+    corners: [],
+    top,
+    groundAt: (s) => piece(s).top,
+    // glass on the side: fixed to the concrete's side face under the treads
+    baseAt: (s) => piece(s).concreteTop,
+    treads: pieces.filter((p) => !p.flat),
+    flats: pieces.filter((p) => p.flat),
+    outward: runOutward(run),
+  };
 }
 
-function length3d(pts) {
-  let l = 0;
-  for (let k = 1; k < pts.length; k++) l += Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y, pts[k].z - pts[k - 1].z);
-  return l;
-}
-
-// the antresola: round the opening on the floor above, `antresolaSetbackMm` back from its edge, not on the edge the stair
-// arrives at (the last back edge's line)
-function antresolaSection(built, config) {
+// the antresola: the free edges of the opening, `antresolaSetbackMm` back onto the slab (glass on the side: at the edge)
+function antresolaLines(built, config) {
   const opening = built.slab?.opening;
-  if (!opening?.length) return null;
+  if (!opening?.length) return [];
   const last = built.concrete.elements.at(-1);
   const exitEdges = last.edges.filter((e) => e.role === 'back');
   const onExit = (a, b) => exitEdges.some((e) => [a, b].every((p) => Math.abs((e.b.x - e.a.x) * (p.y - e.a.y) - (e.b.y - e.a.y) * (p.x - e.a.x)) / (dist(e.a, e.b) || 1) < 1));
-  const floorZ = built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm;
   const n = opening.length;
-  // the opening's edges in order, starting just after the exit edge, so the free ones form one open chain
-  const exitAt = [...Array(n).keys()].find((k) => onExit(opening[k], opening[(k + 1) % n]));
-  const start = exitAt === undefined ? 0 : exitAt + 1;
-  const chain = [];
-  for (let j = 0; j < n; j++) {
-    const k = (start + j) % n;
-    const a = opening[k];
-    const b = opening[(k + 1) % n];
-    if (onExit(a, b)) continue;
-    chain.push({ a, b });
+  const free = (k) => !onExit(opening[k], opening[(k + 1) % n]) && config.railingAntresolaEdges?.[k] !== false;
+  // chains of consecutive free edges (a closed loop when every edge is free)
+  const chains = [];
+  const allFree = [...Array(n).keys()].every(free);
+  if (allFree) chains.push([...Array(n).keys()]);
+  else {
+    const start = [...Array(n).keys()].find((k) => !free(k));
+    let cur = null;
+    for (let j = 1; j <= n; j++) {
+      const k = (start + j) % n;
+      if (free(k)) (cur ||= []).push(k);
+      else if (cur) {
+        chains.push(cur);
+        cur = null;
+      }
+    }
+    if (cur) chains.push(cur);
   }
-  if (!chain.length) return null;
-  // moved back onto the slab (out of the CCW opening: the edge turned clockwise), corners meeting
-  const off = (e) => {
-    const l = dist(e.a, e.b) || 1;
-    const nrm = { x: (e.b.y - e.a.y) / l, y: -(e.b.x - e.a.x) / l };
-    const d = config.antresolaSetbackMm;
-    return { a: { x: e.a.x + nrm.x * d, y: e.a.y + nrm.y * d }, b: { x: e.b.x + nrm.x * d, y: e.b.y + nrm.y * d } };
-  };
-  const lines = chain.map(off);
-  const path = [lines[0].a];
-  for (let k = 1; k < lines.length; k++) path.push(crossing(lines[k - 1], lines[k]) ?? lines[k].a);
-  path.push(lines[lines.length - 1].b);
+  const floorZ = built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm;
+  const glassSide = config.railingInfill === 'glass-side';
+  const d = glassSide ? -(config.glassStandoffMm + config.glassThicknessMm / 2) : config.antresolaSetbackMm;
   const top = floorZ + config.railingAntresolaHeightMm;
-  const posts = path.map((p, k) => post(`post-antresola-${k}`, p, floorZ, top, config));
-  const balusters = [];
-  const pitch = config.railingMaxClearMm + config.balusterSizeMm;
-  for (let k = 1; k < path.length; k++) {
-    const len = dist(path[k - 1], path[k]);
-    const free = len - config.postSizeMm;
-    const count = Math.max(0, Math.ceil(free / pitch) - 1);
-    for (let j = 1; j <= count; j++) balusters.push({ at: lerp(path[k - 1], path[k], j / (count + 1)), bottomZ: floorZ, topZ: top - config.handrailHeightMm, size: config.balusterSizeMm });
-  }
-  const rail = path.map((p) => ({ ...p, z: top - config.handrailHeightMm / 2 }));
-  return { id: 'railing-antresola', kind: 'antresola', key: null, handrail: rail, posts, balusters, treadCount: 0, lengthMm: length3d(rail) };
+  return chains.map((edges) => {
+    const closed = edges.length === n;
+    // each edge moved onto the slab (out of the CCW opening: the edge turned clockwise), corners meeting
+    const lines = edges.map((k) => {
+      const a = opening[k];
+      const b = opening[(k + 1) % n];
+      const l = dist(a, b) || 1;
+      const nrm = { x: (b.y - a.y) / l, y: -(b.x - a.x) / l };
+      return { a: { x: a.x + nrm.x * d, y: a.y + nrm.y * d }, b: { x: b.x + nrm.x * d, y: b.y + nrm.y * d }, nrm };
+    });
+    const path = closed ? [] : [lines[0].a];
+    for (let k = closed ? 0 : 1; k < lines.length; k++) {
+      const prev = lines[(k - 1 + lines.length) % lines.length];
+      path.push(crossing(prev, lines[k]) ?? lines[k].a);
+    }
+    if (closed) path.push(path[0]);
+    else path.push(lines[lines.length - 1].b);
+    const cum = [0];
+    for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + dist(path[k - 1], path[k]));
+    const segAt = (s) => {
+      for (let k = 1; k < path.length; k++) if (s <= cum[k] + 1e-6) return k;
+      return path.length - 1;
+    };
+    return {
+      id: `railing-antresola-e${edges[0]}`,
+      kind: 'antresola',
+      key: null,
+      s0: 0,
+      s1: cum[cum.length - 1],
+      at: (s) => {
+        const k = segAt(s);
+        return lerp(path[k - 1], path[k], (s - cum[k - 1]) / (cum[k] - cum[k - 1] || 1));
+      },
+      dirAt: (s) => {
+        const k = segAt(s);
+        const l = dist(path[k - 1], path[k]) || 1;
+        return { x: (path[k].x - path[k - 1].x) / l, y: (path[k].y - path[k - 1].y) / l };
+      },
+      // corners = the path's inner vertices (a closed loop: every vertex but the repeated end)
+      corners: cum.slice(1, -1),
+      cornerVertices: path.slice(1, -1),
+      top: [{ s: 0, z: top }, { s: cum[cum.length - 1], z: top }],
+      groundAt: () => floorZ,
+      baseAt: () => built.concrete.exit.rawSlabTopZ,
+      treads: [],
+      flats: [{ s0: 0, s1: cum[cum.length - 1], top: floorZ }],
+      // glass on the slab's edge hangs into the opening (the edge's outward normal reversed)
+      outwardAt: (s) => {
+        const t = (() => {
+          const k = segAt(s);
+          const l = dist(path[k - 1], path[k]) || 1;
+          return { x: (path[k].x - path[k - 1].x) / l, y: (path[k].y - path[k - 1].y) / l };
+        })();
+        return { x: -t.y, y: t.x };
+      },
+      closed,
+      floorZ,
+    };
+  });
 }
 
 function crossing(l1, l2) {
@@ -117,16 +170,158 @@ function crossing(l1, l2) {
   return { x: l1.a.x + r.x * t, y: l1.a.y + r.y * t };
 }
 
+// --- posts, infill, handrail on a line -------------------------------------------------------------------------
+
+function section(line, config) {
+  const edits = config.railingPostEdits?.[line.id] || {};
+  const removed = new Set(edits.removed || []);
+  const size = config.postSizeMm;
+  const glassSide = config.railingInfill === 'glass-side';
+  const glassPosts = config.railingInfill === 'glass-posts';
+  // the posts' spots: ends + corners (none of their own for glass on the side), the user's
+  const spots = [];
+  if (!glassSide) {
+    if (line.kind === 'stairs') spots.push({ id: `${line.id}:start`, s: line.s0 + size / 2 }, { id: `${line.id}:end`, s: line.s1 - size / 2 });
+    else {
+      if (!line.closed) spots.push({ id: `${line.id}:start`, s: line.s0 }, { id: `${line.id}:end`, s: line.s1 });
+      line.corners.forEach((s, k) => spots.push({ id: `${line.id}:c${k}`, s }));
+    }
+  }
+  for (const m of edits.added || []) if (Number.isFinite(m.s) && m.s >= line.s0 && m.s <= line.s1) spots.push({ id: `${line.id}:m-${m.id}`, s: m.s, manual: true });
+  let posts = spots.filter((p) => !removed.has(p.id)).sort((a, b) => a.s - b.s);
+  // glass between posts: a post wherever a span is wider than a pane allows
+  if (glassPosts) {
+    const out = [];
+    const stops = [line.s0, ...posts.map((p) => p.s), line.s1];
+    posts.forEach((p) => out.push(p));
+    for (let k = 1; k < stops.length; k++) {
+      const span = stops[k] - stops[k - 1];
+      const parts = Math.ceil(span / (config.glassMaxWidthMm + size));
+      for (let j = 1; j < parts; j++) {
+        const id = `${line.id}:g${k}-${j}`;
+        if (!removed.has(id)) out.push({ id, s: stops[k - 1] + (span * j) / parts });
+      }
+    }
+    posts = out.sort((a, b) => a.s - b.s);
+  }
+  const topAt = (s) => zAt(line.top, s);
+  const postModels = posts.map((p) => ({ id: p.id, s: p.s, manual: !!p.manual, at: line.at(p.s), bottomZ: line.groundAt(p.s), topZ: topAt(p.s) + config.postAboveHandrailMm, size, cap: config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves }));
+  const clear = (s, w) => posts.every((p) => Math.abs(s - p.s) > (size + w) / 2 + 1);
+  // the infill
+  const balusters = [];
+  const panes = [];
+  let fixings = 0;
+  if (config.railingInfill === 'balusters') {
+    const w = config.balusterSizeMm;
+    const at = (s) => ({ at: line.at(s), bottomZ: line.groundAt(s), topZ: topAt(s) - config.handrailHeightMm, size: w, shape: config.balusterShape });
+    for (const p of line.treads) {
+      const n = config.balustersPerTread;
+      for (let j = 0; j < n; j++) {
+        const s = p.s0 + ((j + 0.5) * (p.s1 - p.s0)) / n;
+        if (s > line.s0 && s < line.s1 && clear(s, w)) balusters.push(at(s));
+      }
+    }
+    // a landing / the antresola: evenly between the stops (posts, the piece's ends) ≤ the clear gap
+    for (const f of line.flats) {
+      const stops = [f.s0, ...posts.map((p) => p.s).filter((s) => s > f.s0 && s < f.s1), f.s1];
+      for (let k = 1; k < stops.length; k++) {
+        const a = stops[k - 1] + (posts.some((p) => Math.abs(p.s - stops[k - 1]) < 1e-6) ? size / 2 : 0);
+        const b = stops[k] - (posts.some((p) => Math.abs(p.s - stops[k]) < 1e-6) ? size / 2 : 0);
+        const count = Math.max(0, Math.ceil((b - a) / (config.railingMaxClearMm + w)) - 1);
+        for (let j = 1; j <= count; j++) balusters.push(at(a + ((b - a) * j) / (count + 1)));
+      }
+    }
+  } else {
+    // glass: panes along the line, each a polygon in its own vertical plane (straight pieces only — a pane never turns
+    // a corner)
+    const cuts = [line.s0, ...(glassSide ? [] : posts.map((p) => p.s)), ...line.corners, line.s1].sort((a, b) => a - b).filter((s, k, all) => k === 0 || s - all[k - 1] > 1);
+    for (let k = 1; k < cuts.length; k++) {
+      let a = cuts[k - 1];
+      let b = cuts[k];
+      if (!glassSide) {
+        if (posts.some((p) => Math.abs(p.s - a) < 1e-6)) a += size / 2;
+        if (posts.some((p) => Math.abs(p.s - b) < 1e-6)) b -= size / 2;
+        a += config.glassGapMm;
+        b -= config.glassGapMm;
+      }
+      // glass on the side: the stretch split into equal panes ≤ the pane width, a gap between them
+      const parts = glassSide ? Math.max(1, Math.ceil((b - a) / config.glassMaxWidthMm)) : 1;
+      for (let j = 0; j < parts; j++) {
+        const pa = a + ((b - a) * j) / parts + (glassSide && j > 0 ? config.glassGapMm / 2 : 0);
+        const pb = a + ((b - a) * (j + 1)) / parts - (glassSide && j < parts - 1 ? config.glassGapMm / 2 : 0);
+        if (pb - pa < 50) continue;
+        // the pane's top under the handrail, its bottom over the noses (between posts) or down the concrete's side
+        const ss = [pa, ...line.top.map((q) => q.s).filter((s) => s > pa && s < pb), pb];
+        const topLine = ss.map((s) => ({ s, z: topAt(s) - config.handrailHeightMm - (glassSide ? 0 : config.glassTopGapMm) }));
+        const bottomLine = ss.map((s) => ({ s, z: glassSide ? line.baseAt(s) - config.glassOverlapMm : topAt(s) - (line.kind === 'stairs' ? config.railingHeightMm : config.railingAntresolaHeightMm) + config.glassBottomGapMm }));
+        const mid = (pa + pb) / 2;
+        const dir = line.dirAt(mid);
+        // the plane: through the line at s = 0 of this pane's straight piece
+        const origin = { x: line.at(pa).x - dir.x * pa, y: line.at(pa).y - dir.y * pa };
+        const nrm = { x: -dir.y, y: dir.x };
+        const zs = [...topLine, ...bottomLine].map((q) => q.z);
+        panes.push({
+          polygon: [...bottomLine, ...[...topLine].reverse()],
+          origin: { x: origin.x - nrm.x * (config.glassThicknessMm / 2), y: origin.y - nrm.y * (config.glassThicknessMm / 2) },
+          dir,
+          normal: nrm,
+          thicknessMm: config.glassThicknessMm,
+          widthMm: pb - pa,
+          heightMm: Math.max(...zs) - Math.min(...zs),
+          // the rectangle it is cut from (priced per m²)
+          blankAreaM2: ((pb - pa) * (Math.max(...zs) - Math.min(...zs))) / 1e6,
+        });
+        fixings += glassSide ? config.glassFixingsPerPane : 2 * config.glassClampsPerSide;
+      }
+    }
+  }
+  // the handrail: end to end at its top, its centre line half its height lower; on the glass with glass on the side
+  const ss = [line.s0, ...line.top.map((q) => q.s).filter((s) => s > line.s0 && s < line.s1), ...line.corners, line.s1].sort((a, b) => a - b).filter((s, k, all) => k === 0 || s - all[k - 1] > 1e-6);
+  const handrail = ss.map((s) => ({ ...line.at(s), z: topAt(s) - config.handrailHeightMm / 2 }));
+  let length = 0;
+  for (let k = 1; k < handrail.length; k++) length += Math.hypot(handrail[k].x - handrail[k - 1].x, handrail[k].y - handrail[k - 1].y, handrail[k].z - handrail[k - 1].z);
+  return {
+    id: line.id,
+    kind: line.kind,
+    key: line.key,
+    infill: config.railingInfill,
+    s0: line.s0,
+    s1: line.s1,
+    // the plan line for the editor (posts added / removed by s along it)
+    path: ss.map((s) => ({ s, ...line.at(s) })),
+    handrail,
+    posts: postModels,
+    removedPosts: spots.filter((p) => removed.has(p.id)).map((p) => ({ id: p.id, s: p.s, at: line.at(p.s) })),
+    balusters,
+    panes,
+    fixings,
+    treadCount: line.treads.length,
+    lengthMm: length,
+  };
+}
+
 /** @returns {{sections: object[]}} */
 export function buildBalustrade(built, config) {
-  const sections = [];
+  const lines = [];
   for (const run of buildSideRuns(built.concrete, config)) {
     if (run.walled || !config.railingSides?.[run.key.flight]?.[run.key.side] || !run.pieces.length) continue;
-    sections.push(stairSection(run, config));
+    lines.push(stairLine(run, config));
   }
-  if (config.railingAntresola) {
-    const a = antresolaSection(built, config);
-    if (a) sections.push(a);
+  if (config.railingAntresola) lines.push(...antresolaLines(built, config));
+  return { sections: lines.map((l) => section(l, config)) };
+}
+
+/** The nearest point of a section's line to a plan point → its s (for adding a post on the plan). */
+export function sNearest(section, p) {
+  let best = null;
+  for (let k = 1; k < section.path.length; k++) {
+    const a = section.path[k - 1];
+    const b = section.path[k];
+    const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2));
+    const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    const d = Math.hypot(p.x - q.x, p.y - q.y);
+    if (!best || d < best.d) best = { d, s: a.s + (b.s - a.s) * t };
   }
-  return { sections };
+  return best;
 }
