@@ -374,6 +374,17 @@ remembered in this browser under `stair3d.presentationLogo`; „Logo…”, corn
 the shared `savePresentationSnapshot` (the scene at 2× + the logo, PNG named after the project). View state only — not
 the config, not in undo. The isolation list gains `app/presentation.js` and `scene/presentationImage.js`.
 
+## The model 3D for the client (user request 2026-11-05, as built)
+
+„Oferta” tab → „📦 Model 3D dla klienta”: HTML (one self-contained file — the self-supporting client's viewer with its
+views, „Ściany i strop”, tape measure, the logo and the stair's facts), GLB (Windows / Android / any 3D program), USDZ
+(iPhone / iPad, AR). `export/clientModel.js claddingClientScene` renders the stair (concrete, cladding, balustrade,
+LED) and hands the walls + slab (`Room`) as the viewer's 'room' layer to the SHARED `export/clientModelExport.js`
+(read-only: `buildClientScene`, `sceneToGLB` / `sceneToUSDZ`, `clientViewerHTML`) with the viewer bundle
+`virtual:client-viewer-runtime`; `claddingClientFacts` = the offer's stair facts without „Montaż”. A linked floor is
+not included. Never the project, its parameters or prices. The isolation list gains `export/clientModelExport.js` and
+the package `virtual:client-viewer-runtime`. Tests: `__tests__/clientModel.test.js`.
+
 ## Export (user request 2026-11-04, as built 2026-11-05)
 
 Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the project).

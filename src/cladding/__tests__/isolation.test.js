@@ -35,8 +35,11 @@ const ALLOWED_SHARED = new Set([
   // the presentation mode: the company logo (on screen, on the photo) and „Zapisz zdjęcie” — DOM / pure helpers
   'app/presentation.js',
   'scene/presentationImage.js',
+  // the model 3D for the client: the shared scene → HTML viewer / GLB / USDZ (three only)
+  'export/clientModelExport.js',
 ]);
-const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/];
+// (+ the client's viewer bundle — vite.config.js clientViewerRuntime, the self-supporting viewer read-only)
+const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/, /^virtual:client-viewer-runtime$/];
 // files outside the module allowed to import it (the hooks)
 const HOOKS = new Set(['main.js']);
 

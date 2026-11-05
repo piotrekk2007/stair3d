@@ -28,6 +28,8 @@ import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../histo
 import { escapeHtml } from '../../util/format.js';
 import { buildCladdingDXF } from '../export/claddingDxf.js';
 import { buildCutList, cutListToCSV } from '../export/cutList.js';
+import { claddingClientScene, claddingClientFacts } from '../export/clientModel.js';
+import { sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML } from '../../export/clientModelExport.js';
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
@@ -592,7 +594,10 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
       <table class="clad-table clad-totals"><tbody><tr><td>Razem netto</td><td>${money(offer.totals.net)} zł</td></tr><tr><td>VAT ${offer.totals.vatRatePct}%</td><td>${money(offer.totals.vat)} zł</td></tr><tr><td><b>Razem brutto</b></td><td><b>${money(offer.totals.gross)} zł</b></td></tr></tbody></table>
       ${q.unpriced ? `<div class="clad-finding warning">${q.unpriced} pozycji kosztorysu jest bez ceny — oferta ich nie liczy (zakładka Kosztorys).</div>` : ''}
-      <div class="clad-actions"><button type="button" data-print-offer>📄 Drukuj ofertę (PDF)</button><button type="button" data-print-estimate>🧾 Drukuj kosztorys</button></div>`;
+      <div class="clad-actions"><button type="button" data-print-offer>📄 Drukuj ofertę (PDF)</button><button type="button" data-print-estimate>🧾 Drukuj kosztorys</button></div>
+      <div class="clad-subhead">📦 Model 3D dla klienta (bez cen i parametrów projektu)</div>
+      <div class="clad-actions"><button type="button" data-client-model="html" title="Jeden plik HTML: przeglądarka 3D z widokami, ścianami i stropem, miarką, logo i danymi schodów — otwiera się w każdej przeglądarce, także na telefonie, bez internetu">HTML (przeglądarka)</button><button type="button" data-client-model="glb" title="Sam model: Windows (Podgląd 3D), Android, dowolny program 3D">GLB</button><button type="button" data-client-model="usdz" title="Sam model dla iPhone / iPad: podgląd 3D i AR („schody w pokoju”)">USDZ (iPhone)</button></div>
+      <div class="clad-hint clad-client-status"></div>`;
     const c = company;
     const cf = (k, label) => `<label class="clad-field">${label} <input type="text" data-company="${k}" value="${escapeHtml(c[k] || '')}" /></label>`;
     $('.clad-company').innerHTML = `${cf('name', 'Nazwa')}${cf('address', 'Adres')}${cf('nip', 'NIP')}${cf('phone', 'Telefon')}${cf('email', 'E-mail')}${cf('www', 'WWW')}<div class="clad-hint">Te same dane co w ofercie schodów samonośnych; logo — z trybu Prezentacji.</div>`;
@@ -635,6 +640,12 @@ export function mountCladdingApp(rootEl, host = {}) {
       printOffer();
     } else if (b.dataset.printEstimate !== undefined) {
       printHtml(buildEstimateHTML({ quote: buildCladdingQuote(state.built, state.quote), projectName: state.projectName }));
+    } else if (b.dataset.clientModel) {
+      const status = $('.clad-client-status');
+      status.textContent = 'Przygotowuję model…';
+      clientModel(b.dataset.clientModel)
+        .then(() => (status.textContent = ''))
+        .catch((e) => (status.textContent = `Nie udało się: ${e.message}`));
     }
   });
   $('.clad-company').addEventListener('change', (ev) => {
@@ -659,6 +670,26 @@ export function mountCladdingApp(rootEl, host = {}) {
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
     return sceneApi.renderViewImage({ width: 1600, height: 1000, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+  }
+  // the model 3D for the client (export/clientModel.js + the shared export/clientModelExport.js and its viewer)
+  async function clientModel(kind) {
+    const scene = claddingClientScene(state.built);
+    const name = `${(state.projectName || 'schody-na-beton').replace(/[^\p{L}\p{N}_ -]+/gu, '').trim() || 'schody-na-beton'}_model_3d`;
+    const binary = (data, file, type) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([data], { type }));
+      a.download = file;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    if (kind === 'usdz') return binary(await sceneToUSDZ(scene), `${name}.usdz`, 'model/vnd.usdz+zip');
+    const glb = await sceneToGLB(scene);
+    if (kind === 'glb') return binary(glb, `${name}.glb`, 'model/gltf-binary');
+    const { default: runtime } = await import('virtual:client-viewer-runtime');
+    const html = clientViewerHTML({ glbBase64: arrayBufferToBase64(glb), title: state.projectName || 'Schody na beton', logo: readLogo(), facts: claddingClientFacts(state.built, state.quote), runtime });
+    downloadTextFile(html, `${name}.html`, 'text/html');
   }
   function printOffer() {
     const q = buildCladdingQuote(state.built, state.quote);
