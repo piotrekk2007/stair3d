@@ -154,3 +154,9 @@
 .clad-present-bar input[type='range'] { width: 90px; }
 .clad-present-status { color: #6b7280; font-size: 12px; }
 .clad-app.clad-present #presentation-logo.client-only { display: block; }
+
+/* the 3D tape measure's buttons (bottom left of the 3D view; also in the presentation) */
+.clad-3d-tools { position: absolute; left: 8px; bottom: 8px; z-index: 22; display: flex; gap: 4px; }
+.clad-3d-tools[hidden] { display: none; }
+.clad-3d-tools button { background: rgba(255, 255, 255, 0.92); }
+.clad-3d-tools button.active { background: #c0392b; color: #fff; }

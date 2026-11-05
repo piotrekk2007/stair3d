@@ -2,6 +2,7 @@
 // riser boards, the step numbers and the walking line. Pure SVG from the built model + a viewport ({x, y, width,
 // height} in SVG user units = mm, plan y flipped).
 
+import { planMeasureText } from '../plan2d/planMeasure.js';
 import { escapeHtml } from '../util/format.js';
 
 const HAIR = 'vector-effect="non-scaling-stroke"';
@@ -17,7 +18,7 @@ export function claddingPlanBounds(built) {
 
 // `mode` (the plan's edit mode — claddingApp.js): 'posts' shows every balustrade line and its posts to click (add /
 // remove), 'opening' the opening's vertices / edge middles to drag / click and its edges to switch the antresola on / off
-export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false, mode = 'select' } = {}) {
+export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false, mode = 'select', measures = [], measureDraft = null, mmPerPx = null } = {}) {
   const { concrete, cladding } = built;
   const vb = viewport ? `${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}` : (() => {
     const b = claddingPlanBounds(built);
@@ -147,5 +148,46 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return walkline + corners + handles;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}</svg>`;
+  // the tape measure (plan mode „📏 Miarka”, claddingApp.js): a red line, its end dots and its label (planMeasureText —
+  // the shared plan2d/planMeasure.js); the one being drawn dashed to the cursor
+  // (screen-constant: 13 px text, 3.5 px dots — `mmPerPx` from the app, else from the viewport's width on ~1000 px)
+  const px = mmPerPx || (viewport?.width ?? 4000) / 1000;
+  const measureOne = (a, b, draft) => {
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    // (the one being drawn: no label until the cursor moves off its start)
+    if (draft && Math.hypot(b.x - a.x, b.y - a.y) < 1) return `<circle cx="${fmt(a.x)}" cy="${fmt(-a.y)}" r="${fmt(px * 3.5)}" fill="#c0392b"/>`;
+    return `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="#c0392b" stroke-width="2" ${draft ? 'stroke-dasharray="6,4"' : ''} ${HAIR}/>` + [a, b].map((p) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(px * 3.5)}" fill="#c0392b"/>`).join('') + `<text x="${fmt(mid.x)}" y="${fmt(-mid.y - px * 6)}" font-size="${fmt(px * 13)}" text-anchor="middle" fill="#c0392b" stroke="#fff" stroke-width="${fmt(px * 3)}" paint-order="stroke" font-family="sans-serif" font-weight="600">${planMeasureText(a, b)}</text>`;
+  };
+  const measuresXML = measures.length || measureDraft ? `<g class="clad-measures" pointer-events="none">${measures.map((m) => measureOne(m.a, m.b, false)).join('')}${measureDraft ? measureOne(measureDraft.a, measureDraft.cursor, true) : ''}</g>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${measuresXML}</svg>`;
+}
+
+/**
+ * The points the plan's tape measure snaps to (plan2d/planMeasure.js snapMeasurePoint): the concrete's and the
+ * cladding's corners, the risers, the walls, the finishing boards' ends, the opening's corners, the posts, the
+ * handrails' points, the winder zones' corners. Pure.
+ */
+export function claddingMeasureRefs(built) {
+  const out = [];
+  const add = (list) => {
+    for (const p of list || []) if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) out.push(p);
+  };
+  for (const e of built.concrete.elements) add(e.outline);
+  for (const t of built.cladding.treads) add(t.outline);
+  for (const r of built.cladding.risers) add(r.outline);
+  for (const n of built.cladding.exitNosing || []) add(n.outline);
+  for (const w of built.walls || []) add(w.outline);
+  add(built.slab?.opening);
+  const planeEnds = (b) => {
+    const s = b.polygon.map((p) => p.s);
+    return [Math.min(...s), Math.max(...s)].map((v) => ({ x: b.origin.x + b.dir.x * v, y: b.origin.y + b.dir.y * v }));
+  };
+  for (const b of [...(built.finish?.skirting || []), ...(built.finish?.coverStringers || []), ...(built.sideWalls || [])]) add(planeEnds(b));
+  for (const s of built.balustrade?.sections || []) {
+    add(s.posts.map((p) => p.at));
+    add(s.handrail);
+  }
+  for (const w of built.balustrade?.wallRails || []) add(w.handrail);
+  for (const z of built.concrete.zones || []) add([z.wallCorner, z.duszaCorner]);
+  return out;
 }

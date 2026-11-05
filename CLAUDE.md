@@ -560,7 +560,9 @@ Podstopnice / Listwy_i_wangi / Balustrada / Beton, no room / LED). The wall hand
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`). „🎬 Prezentacja” (the 3D only, the
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared
-`export/clientModelExport.js` on `export/clientModel.js`). Next (user, 2026-11-05): tape measures. Later (user): contract / payment-schedule documents.
+`export/clientModelExport.js` on `export/clientModel.js`). Tape measures: plan mode „📏 Miarka” (the shared
+`plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). Later (user): the regulation
+warnings for the finished sizes, contract / payment-schedule documents. Later (user): contract / payment-schedule documents.
 
 ## Open items / known limitations
 

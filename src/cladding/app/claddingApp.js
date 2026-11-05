@@ -10,7 +10,9 @@ import { buildCladdingStair } from '../buildCladdingStair.js';
 import { expandSequence, signedOnZoneLine } from '../concreteModel.js';
 import { renderCladdingStair, setCladdingAppearance } from '../claddingRenderer.js';
 import { defaultAppearance, sanitizeAppearance, COLOR_PRESETS, FINISHES, FINISH_LABELS_PL, METAL_PRESETS, finishKey } from '../../scene/appearance.js';
-import { renderCladdingPlanSVG, claddingPlanBounds } from '../claddingPlanRenderer.js';
+import { renderCladdingPlanSVG, claddingPlanBounds, claddingMeasureRefs } from '../claddingPlanRenderer.js';
+import { snapMeasurePoint } from '../../plan2d/planMeasure.js';
+import { createMeasureTool } from '../../scene/measureTool.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
 import { claddingAsFloor } from '../floorStair.js';
 import { sNearest, RAILING_INFILLS, GLASS_TINTS } from '../balustradeModel.js';
@@ -92,7 +94,8 @@ export function mountCladdingApp(rootEl, host = {}) {
       </aside>
       <main class="clad-main">
         <div class="clad-plan"></div>
-        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button></div>
+        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
+        <div class="clad-3d-tools" hidden><button type="button" data-measure3d="toggle" title="Dwa kliknięcia na modelu = wymiar: odległość, różnica wysokości, w poziomie (przyciąga do narożników i krawędzi)">📏 Miarka</button><button type="button" data-measure3d="clear" title="Usuń wszystkie wymiary">Wyczyść</button></div>
         <div class="clad-3d" hidden></div>
         <div class="clad-present-bar">
           <button type="button" data-present="photo" title="Widok 3D w podwójnej rozdzielczości z logo — plik PNG">📷 Zapisz zdjęcie</button>
@@ -973,9 +976,21 @@ export function mountCladdingApp(rootEl, host = {}) {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
     posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
+    measure: 'MIARKA: klik = początek, drugi klik = koniec (przyciąga do punktów w promieniu 10 px), prawy klik = usuń ostatni wymiar, Esc = przerwij',
   };
+  // the plan's tape measure — view state only (never the config / the project): the measures (plan mm) and the one
+  // being drawn; they go when the mode is left
+  let planMeasures = [];
+  let measureDraft = null;
+  // (the SVG is fitted "meet": the larger of the two scales)
+  const mmPerPx = () => (viewport ? Math.max(viewport.width / panelSize().w, viewport.height / panelSize().h) : 1);
+  const measurePoint = (p) => snapMeasurePoint(p, claddingMeasureRefs(state.built), 10 * mmPerPx());
   rootEl.querySelectorAll('[data-plan-mode]').forEach((b) =>
     b.addEventListener('click', () => {
+      if (planMode === 'measure' && b.dataset.planMode !== 'measure') {
+        planMeasures = [];
+        measureDraft = null;
+      }
       planMode = b.dataset.planMode;
       rootEl.querySelectorAll('[data-plan-mode]').forEach((x) => x.classList.toggle('active', x === b));
       if (state.view !== 'plan') setView('plan');
@@ -984,13 +999,23 @@ export function mountCladdingApp(rootEl, host = {}) {
   );
   function renderPlan() {
     if (!viewport) fitPlan();
-    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null, mode: planMode }) + `<div class="clad-plan-hint">${MODE_HINTS[planMode]}</div>`;
+    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null, mode: planMode, measures: planMeasures, measureDraft, mmPerPx: mmPerPx() }) + `<div class="clad-plan-hint">${MODE_HINTS[planMode]}</div>`;
   }
   // the opening as drawn by hand (the derived one taken over on the first edit)
   const manualOpening = (c) => (c.openingManual ||= (state.built.slab?.opening || []).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })));
   const sectionById = (id) => state.built.balustrade?.sections.find((s) => s.id === id);
   // a click of the plan's edit modes (no drag)
   function planClick(target, p) {
+    if (planMode === 'measure') {
+      const q = measurePoint(p);
+      if (!measureDraft) measureDraft = { a: q, cursor: q };
+      else {
+        planMeasures = [...planMeasures, { a: measureDraft.a, b: q }];
+        measureDraft = null;
+      }
+      renderPlan();
+      return true;
+    }
     if (planMode === 'posts') {
       const post = target.closest?.('.clad-post');
       const ghost = target.closest?.('.clad-post-ghost');
@@ -1034,6 +1059,13 @@ export function mountCladdingApp(rootEl, host = {}) {
     return false;
   }
   planEl.addEventListener('contextmenu', (ev) => {
+    if (planMode === 'measure') {
+      ev.preventDefault();
+      if (measureDraft) measureDraft = null;
+      else planMeasures = planMeasures.slice(0, -1);
+      renderPlan();
+      return;
+    }
     const v = ev.target.closest?.('.clad-opening-vertex');
     if (planMode !== 'opening' || !v) return;
     ev.preventDefault();
@@ -1064,6 +1096,11 @@ export function mountCladdingApp(rootEl, host = {}) {
     planEl.setPointerCapture(ev.pointerId);
   });
   planEl.addEventListener('pointermove', (ev) => {
+    if (!drag && planMode === 'measure' && measureDraft) {
+      measureDraft = { ...measureDraft, cursor: measurePoint(planAt(ev)) };
+      renderPlan();
+      return;
+    }
     if (!drag) return;
     if (drag.vertex !== null && drag.vertex !== undefined) {
       // an opening corner dragged (10 mm steps)
@@ -1131,11 +1168,23 @@ export function mountCladdingApp(rootEl, host = {}) {
 
   // --- 3D ------------------------------------------------------------------------------------------------------
   let sceneApi = null;
+  let measure3d = null;
   let root = null;
   let framed = false;
   function render3D() {
     if (state.view !== '3d') return;
-    if (!sceneApi) sceneApi = createScene(view3dEl);
+    if (!sceneApi) {
+      sceneApi = createScene(view3dEl);
+      // the 3D tape measure (the shared scene/measureTool.js): on the stair as shown, a view tool only
+      measure3d = createMeasureTool({ scene: sceneApi.scene, getCamera: () => sceneApi.getCamera(), domElement: sceneApi.renderer.domElement, getTargets: () => [root] });
+      sceneApi.addFrameHook(() => measure3d.update());
+      let down = null;
+      sceneApi.renderer.domElement.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
+      sceneApi.renderer.domElement.addEventListener('click', (e) => {
+        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+        measure3d.click(e);
+      });
+    }
     if (root) {
       sceneApi.scene.remove(root);
       root.traverse((o) => o.geometry?.dispose?.());
@@ -1232,10 +1281,21 @@ export function mountCladdingApp(rootEl, host = {}) {
     rootEl.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
     planEl.hidden = view !== 'plan';
     view3dEl.hidden = view !== '3d';
+    tools3dEl.hidden = view !== '3d';
     if (view === 'plan') renderPlan();
     else render3D();
   }
   rootEl.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+  const tools3dEl = $('.clad-3d-tools');
+  tools3dEl.addEventListener('click', (ev) => {
+    const act = ev.target.closest('[data-measure3d]')?.dataset.measure3d;
+    if (!measure3d || !act) return;
+    if (act === 'clear') measure3d.clear();
+    else {
+      measure3d.setActive(!measure3d.active);
+      tools3dEl.querySelector('[data-measure3d="toggle"]').classList.toggle('active', measure3d.active);
+    }
+  });
 
   // --- rebuild -------------------------------------------------------------------------------------------------
   function rebuild() {
@@ -1337,6 +1397,16 @@ export function mountCladdingApp(rootEl, host = {}) {
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     const key = e.key.toLowerCase();
+    if (key === 'escape' && measureDraft) {
+      measureDraft = null;
+      renderPlan();
+      return;
+    }
+    if (key === 'escape' && measure3d?.active) {
+      measure3d.setActive(false);
+      tools3dEl.querySelector('[data-measure3d="toggle"]').classList.remove('active');
+      return;
+    }
     if (key === 'escape' && present.on) {
       setPresentation(false);
       return;

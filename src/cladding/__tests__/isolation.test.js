@@ -37,6 +37,10 @@ const ALLOWED_SHARED = new Set([
   'scene/presentationImage.js',
   // the model 3D for the client: the shared scene → HTML viewer / GLB / USDZ (three only)
   'export/clientModelExport.js',
+  // the tape measures: the plan's snap / text (pure) and the 3D tool with its snap rule (a view tool)
+  'plan2d/planMeasure.js',
+  'scene/measureTool.js',
+  'viewer/measure3d.js',
 ]);
 // (+ the client's viewer bundle — vite.config.js clientViewerRuntime, the self-supporting viewer read-only)
 const ALLOWED_PACKAGES = [/^three$/, /^three\/examples\//, /^lil-gui$/, /^virtual:client-viewer-runtime$/];

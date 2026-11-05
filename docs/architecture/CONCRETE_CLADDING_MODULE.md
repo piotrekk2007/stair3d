@@ -385,6 +385,20 @@ LED) and hands the walls + slab (`Room`) as the viewer's 'room' layer to the SHA
 not included. Never the project, its parameters or prices. The isolation list gains `export/clientModelExport.js` and
 the package `virtual:client-viewer-runtime`. Tests: `__tests__/clientModel.test.js`.
 
+## Tape measures (user request 2026-11-05, as built)
+
+View tools only — never the config, the project or an export. Plan: mode „📏 Miarka” (claddingApp.js `planMode
+'measure'`): a click = the start, a second = the end, each snapped by the SHARED `plan2d/planMeasure.js
+snapMeasurePoint` within 10 px to `claddingPlanRenderer.js claddingMeasureRefs` (the concrete's / treads' / risers' /
+the antresola nosing's / walls' corners, the opening's corners, the finishing boards' and side walls' ends, the posts,
+the handrails' points, the winder zones' corners), else whole mm; drawn by the plan renderer (`measures`,
+`measureDraft`, screen-constant text — `mmPerPx`) with `planMeasureText` (length, Δx, Δy); right click = remove the
+last, Esc = cancel the one being drawn; leaving the mode clears them. 3D: „📏 Miarka” / „Wyczyść” bottom left of the
+3D view (also in the presentation) = the SHARED `scene/measureTool.js createMeasureTool` (snap to a corner / edge of
+the face hit — `viewer/measure3d.js`, the client's viewer's rule): distance, height difference, horizontal; Esc turns
+it off. The isolation list gains `plan2d/planMeasure.js`, `scene/measureTool.js`, `viewer/measure3d.js`. Tests:
+`__tests__/measure.test.js`.
+
 ## Export (user request 2026-11-04, as built 2026-11-05)
 
 Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the project).
