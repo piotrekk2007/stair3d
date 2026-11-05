@@ -13,8 +13,48 @@ import { buildCladdingLed } from './ledModel.js';
 import { buildOpeningTrim } from './openingTrimModel.js';
 import { buildSideRuns } from './sideRuns.js';
 
+/**
+ * The concrete sizes behind the groups measured as FINISHED elements (user request 2026-11-05 — "gotowe stopnie": the
+ * contractor's sizes of the treads / landings he wants to order): built once with the entered numbers as the concrete,
+ * every element's finished minus concrete size is its offset (the nosing, a carpet riser, the side nosings, the finishes
+ * on the first / last rise — additive, so one pass is exact) and the concrete = the entered − that offset: a step's
+ * going (from its tread's depth) and width (from its length), a landing's depth, every element's rise (from its finished
+ * rise). A winder zone's A / B and its edges stay measured on the walls / the dusza (as on the concrete).
+ * @returns {object|null} `{[index]: {riseMm?, goingMm?, widthMm?, depthMm?}}`, null when no group is measured so
+ */
+export function concreteFromFinished(config) {
+  if (!config.sequence.some((g) => g.measured === 'finished')) return null;
+  const concrete = buildConcreteModel(config);
+  const cfg = withGapWalls(concrete, config);
+  cfg.wallIndex = resolveWalls(concrete, cfg);
+  const cladding = buildCladdingModel(concrete, cfg);
+  const tread = new Map(cladding.treads.map((t) => [t.index, t]));
+  const height = new Map(cladding.heights.filter((h) => h.kind !== 'exit').map((h) => [h.index, h]));
+  const out = {};
+  for (const e of concrete.elements) {
+    if (config.sequence[e.groupIndex]?.measured !== 'finished') continue;
+    const t = tread.get(e.index);
+    const h = height.get(e.index);
+    const d = {};
+    if (h && Number.isFinite(h.finishedRiseMm)) d.riseMm = e.riseMm - (h.finishedRiseMm - e.riseMm);
+    if (t && e.kind === 'step' && !t.starter) {
+      d.goingMm = e.goingMm - (t.depthMm - e.goingMm);
+      d.widthMm = e.widthMm - (t.lengthMm - e.widthMm);
+    }
+    if (t && e.kind === 'landing' && config.sequence[e.groupIndex]?.depthMm) {
+      const entered = config.sequence[e.groupIndex].depthMm;
+      // (the landing's depth along its flight = its tread's extent across its grain)
+      d.depthMm = entered - (t.depthMm - entered);
+    }
+    out[e.index] = d;
+  }
+  return out;
+}
+
 export function buildCladdingStair(rawConfig) {
-  const config = sanitizeCladdingConfig(rawConfig);
+  const sanitized = sanitizeCladdingConfig(rawConfig);
+  const derived = concreteFromFinished(sanitized);
+  const config = derived ? { ...sanitized, derivedConcrete: derived } : sanitized;
   const concrete = buildConcreteModel(config);
   // (the wall between two flights set apart walls their facing sides — the cladding, skirting and balustrade see it)
   const cfg = withGapWalls(concrete, config);

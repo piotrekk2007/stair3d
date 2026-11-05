@@ -243,8 +243,10 @@ const num = (v, d, min = -Infinity, max = Infinity) => {
 export function sanitizeCladdingConfig(raw) {
   const d = createDefaultCladdingConfig();
   const c = { ...d, ...(raw && typeof raw === 'object' ? raw : {}) };
-  const sequence = (Array.isArray(c.sequence) ? c.sequence : d.sequence)
-    .filter((g) => g && SEQUENCE_KINDS.includes(g.kind))
+  // (every group measured on the concrete — default — or as FINISHED elements: `measured: 'finished'`, the concrete
+  // derived from them — buildCladdingStair.js concreteFromFinished; user request 2026-11-05)
+  const rawGroups = (Array.isArray(c.sequence) ? c.sequence : d.sequence).filter((g) => g && SEQUENCE_KINDS.includes(g.kind));
+  const sequence = rawGroups
     .map((g) => {
       if (g.kind === 'steps') return { kind: 'steps', count: Math.round(num(g.count, 1, 1, 40)), riseMm: num(g.riseMm, 180, 50, 300), goingMm: num(g.goingMm, 270, 100, 500), widthMm: num(g.widthMm, 1000, 300, 3000) };
       // (a U landing's flights set apart may have a wall between them: up to the slab or `gapWallAboveMm` over the higher
@@ -260,7 +262,8 @@ export function sanitizeCladdingConfig(raw) {
         return outerMm === null && innerMm === null ? null : { ...(outerMm !== null ? { outerMm } : {}), ...(innerMm !== null ? { innerMm } : {}) };
       });
       return { kind: 'winders', count, riseMm: num(g.riseMm, 180, 50, 300), turn: g.turn === 'left' ? 'left' : 'right', spaceAMm: nullableNum(g.spaceAMm, 300, 6000), spaceBMm: nullableNum(g.spaceBMm, 300, 6000), walklineOffsetMm: nullableNum(g.walklineOffsetMm, 50, 3000), edges };
-    });
+    })
+    .map((x, k) => (rawGroups[k].measured === 'finished' ? { ...x, measured: 'finished' } : x));
   const stepOverrides = {};
   for (const [k, v] of Object.entries(c.stepOverrides && typeof c.stepOverrides === 'object' ? c.stepOverrides : {})) {
     if (!/^\d+$/.test(k) || !v || typeof v !== 'object') continue;

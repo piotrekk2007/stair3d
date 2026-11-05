@@ -172,3 +172,7 @@
 .clad-3d-layers[hidden] { display: none; }
 .clad-3d-layers summary { cursor: pointer; font-weight: 600; }
 .clad-3d-layer-list { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+
+/* a group measured as finished elements */
+.clad-measured { font-size: 11px; }
+.clad-measured option[value='finished'] { font-weight: 600; }

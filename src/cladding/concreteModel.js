@@ -52,7 +52,9 @@ export function expandSequence(config) {
     if (o.riseMm !== undefined) own.riseMm = o.riseMm;
     if (o.goingMm !== undefined && e.kind === 'step') own.goingMm = o.goingMm;
     if (o.widthMm !== undefined && e.kind === 'step') own.widthMm = o.widthMm;
-    return { ...e, index: i, ...own, overridden: Object.keys(o).length > 0 };
+    // (a group measured as finished elements: its concrete sizes derived — buildCladdingStair.js concreteFromFinished)
+    const derived = config.derivedConcrete?.[i] || {};
+    return { ...e, index: i, ...own, ...derived, overridden: Object.keys(o).length > 0, measured: config.sequence?.[e.groupIndex]?.measured === 'finished' ? 'finished' : 'concrete' };
   });
 }
 

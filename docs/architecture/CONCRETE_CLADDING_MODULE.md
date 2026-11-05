@@ -366,6 +366,17 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## Measured as finished elements (user request 2026-11-05, as built)
+
+Every group of the sequence has „beton” / „gotowe” (`measured: 'finished'`): the contractor's sizes of the treads /
+landings he wants to order. `buildCladdingStair.js concreteFromFinished` builds once with the entered numbers as the
+concrete; every element's finished − concrete size is its offset (the nosing, a carpet riser, the side nosings, the
+finishes on the first rise — additive, so one pass is exact) and the concrete = the entered − the offset →
+`config.derivedConcrete {[index]: {riseMm, goingMm, widthMm, depthMm}}`, applied in `expandSequence` after the step's
+own sizes (not marked as own): a step's going from its tread's depth, its width from its length, a landing's depth,
+every element's rise from its finished rise. A winder zone's A / B and edges stay measured on the walls / the dusza.
+The heights table's „beton” / „głęb.” show the derived concrete. Tests: `__tests__/finishedMeasure.test.js`.
+
 ## Glass clamps (user request 2026-11-05, as built)
 
 Glass between posts (`railingInfill 'glass-posts'`): every pane carries its metal CLAMPS (`pane.clamps [{s, postFaceS,

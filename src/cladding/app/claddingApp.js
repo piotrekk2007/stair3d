@@ -177,10 +177,13 @@ export function mountCladdingApp(rootEl, host = {}) {
   // a winder zone: its count, rise, turn, the sizes along the walls (A — from the zone start to the wall corner, B — from
   // the wall corner to the zone end; empty = automatic) and, folded, the edges measured from the corners
   const openEdges = new Set();
+  // how a group was measured: the raw concrete or the finished elements (the concrete derived — buildCladdingStair.js
+  // concreteFromFinished)
+  const measuredSel = (g, i) => `<select data-i="${i}" data-f="measured" class="clad-measured" title="Wymiary betonu — albo gotowych stopni / podestów (beton wyliczony: głębokość bez noska, szerokość bez nosków bocznych, wysokość bez grubości okładzin)"><option value="concrete" ${g.measured !== 'finished' ? 'selected' : ''}>beton</option><option value="finished" ${g.measured === 'finished' ? 'selected' : ''}>gotowe</option></select>`;
   function windersRow(g, i, tools) {
     const zone = state.built?.concrete.zones.find((z) => z.groupIndex === i);
     const turn = `<select data-i="${i}" data-f="turn">${Object.entries(WINDER_TURN_LABELS).map(([v, l]) => `<option value="${v}" ${v === g.turn ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-    const head = `<div class="clad-row clad-winders"><span class="clad-kind">Zabiegi</span>${numIn(i, 'count', g.count, 'Ilość zabiegów')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${turn}${tools}</div>`;
+    const head = `<div class="clad-row clad-winders"><span class="clad-kind">Zabiegi</span>${numIn(i, 'count', g.count, 'Ilość zabiegów')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${turn}${measuredSel(g, i)}${tools}</div>`;
     const sizes = `<div class="clad-row clad-winders-sizes"><label title="Od początku zabiegu do narożnika ściany, wzdłuż ściany wejściowej">A ${numIn(i, 'spaceAMm', g.spaceAMm, 'A [mm]', r0(zone?.A))}</label><label title="Od narożnika ściany do końca zabiegu, wzdłuż ściany wyjściowej">B ${numIn(i, 'spaceBMm', g.spaceBMm, 'B [mm]', r0(zone?.B))}</label><label title="Linia biegu — odległość od duszy (równe stopnie na niej przy krawędziach wyliczanych)">linia biegu ${numIn(i, 'walklineOffsetMm', g.walklineOffsetMm, 'od duszy [mm]', r0(zone?.walklineOffsetMm))}</label></div>`;
     const sideSel = (k, end, v) =>
       `<select data-i="${i}" data-edge="${k}" data-end="${end}" data-part="side" title="Po której stronie narożnika"><option value="in" ${v !== undefined && v < 0 ? 'selected' : ''}>przed narożnikiem</option><option value="out" ${v !== undefined && v >= 0 ? 'selected' : ''}>za narożnikiem</option></select>`;
@@ -202,7 +205,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       .map((g, i) => {
         const tools = `<span class="clad-row-tools"><button type="button" data-move="${i}:-1" title="Wyżej">↑</button><button type="button" data-move="${i}:1" title="Niżej">↓</button><button type="button" data-del="${i}" title="Usuń">✕</button></span>`;
         if (g.kind === 'steps') {
-          return `<div class="clad-row"><span class="clad-kind">Stopnie</span>${numIn(i, 'count', g.count, 'Ilość')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'goingMm', g.goingMm, 'Głębokość [mm]')}${numIn(i, 'widthMm', g.widthMm, 'Szerokość [mm]')}${tools}</div>`;
+          return `<div class="clad-row"><span class="clad-kind">Stopnie</span>${numIn(i, 'count', g.count, 'Ilość')}<span>×</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'goingMm', g.goingMm, 'Głębokość [mm]')}${numIn(i, 'widthMm', g.widthMm, 'Szerokość [mm]')}${measuredSel(g, i)}${tools}</div>`;
         }
         if (g.kind === 'winders') return windersRow(g, i, tools);
         const turn = `<select data-i="${i}" data-f="turn">${LANDING_TURNS.map((t) => `<option value="${t}" ${t === g.turn ? 'selected' : ''}>${LANDING_TURN_LABELS[t]}</option>`).join('')}</select>`;
@@ -210,7 +213,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         const gapWall = u && g.gapMm > 0 ? `<label title="Ściana wypełnia odstęp między biegami"><input type="checkbox" data-i="${i}" data-f="gapWall" ${g.gapWall ? 'checked' : ''}/> ściana między biegami</label>${g.gapWall ? `<select data-i="${i}" data-f="gapWallTop"><option value="slab" ${g.gapWallTop !== 'nose' ? 'selected' : ''}>do stropu</option><option value="nose" ${g.gapWallTop === 'nose' ? 'selected' : ''}>nad noskami o</option></select>${g.gapWallTop === 'nose' ? numIn(i, 'gapWallAboveMm', g.gapWallAboveMm, 'Wysokość nad noskami wyższego biegu [mm]') : ''}` : ''}` : '';
         const gap = u ? `<label>rozsunięcie ${numIn(i, 'gapMm', g.gapMm, 'Odstęp między biegami [mm]')}</label>${gapWall}` : '';
         const finish = `<select data-i="${i}" data-f="finish" title="Wykończenie podestu"><option value="wood" ${g.finish !== 'floorboard' ? 'selected' : ''}>drewno (jak stopnie)</option><option value="floorboard" ${g.finish === 'floorboard' ? 'selected' : ''}>deska podłogowa na OSB + nosek</option></select>`;
-        return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${finish}${tools}</div>`;
+        return `<div class="clad-row clad-landing"><span class="clad-kind">Podest</span>${numIn(i, 'riseMm', g.riseMm, 'Wysokość [mm]')}${numIn(i, 'depthMm', g.depthMm, 'Głębokość [mm] (puste = jak szerokość biegu)', 'auto')}${turn}${gap}${finish}${measuredSel(g, i)}${tools}</div>`;
       })
       .join('');
     const head = `<div class="clad-row clad-head"><span class="clad-kind"></span><span>ile</span><span></span><span>wys.</span><span>głęb.</span><span>szer.</span></div>`;
@@ -245,6 +248,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     change((c) => {
       const g = c.sequence[i];
       if (f === 'turn' || f === 'finish' || f === 'gapWallTop') g[f] = el.value;
+      else if (f === 'measured') {
+        if (el.value === 'finished') g.measured = 'finished';
+        else delete g.measured;
+      }
       else if (f === 'gapWall') g.gapWall = el.checked;
       else if ((f === 'depthMm' || f === 'spaceAMm' || f === 'spaceBMm' || f === 'walklineOffsetMm') && el.value === '') g[f] = null;
       else g[f] = Number(el.value);
