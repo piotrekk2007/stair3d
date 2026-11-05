@@ -2,7 +2,7 @@
 // every cladding piece flat on one sheet, in rows — the treads (each in its own frame: its grain along x, the front at
 // the bottom), the landings, the risers (a bent one developed), the antresola nosing, the skirting boards and cover
 // stringers (in their own plane), the glass panes — each outlined (layer OUTLINE; a profiled tread's milled edges on
-// PROFILE) with its code, size and notes (layer TEXT). ASCII R12, mm, no diacritics. The module's own small writer (the self-supporting dxfExport.js is built round
+// PROFILE; the groove for the riser behind the tread below on NOTCH) with its code, size and notes (layer TEXT). ASCII R12, mm, no diacritics. The module's own small writer (the self-supporting dxfExport.js is built round
 // that engine's models). Pure.
 
 const ROW_GAP = 250;
@@ -25,12 +25,32 @@ function closed(pts, edgeLayers = null) {
 }
 
 // a plan outline in the piece's own frame: its grain along +u, its front (the smaller v) at the bottom, at the origin
-function toLocal(outline, grain) {
+function toLocal(outline, grain, also = []) {
   const n = { x: -grain.y, y: grain.x };
-  const pts = outline.map((p) => ({ u: p.x * grain.x + p.y * grain.y, v: p.x * n.x + p.y * n.y }));
+  const map = (list) => list.map((p) => ({ u: p.x * grain.x + p.y * grain.y, v: p.x * n.x + p.y * n.y }));
+  const pts = map(outline);
   const u0 = Math.min(...pts.map((p) => p.u));
   const v0 = Math.min(...pts.map((p) => p.v));
-  return pts.map((p) => ({ u: p.u - u0, v: p.v - v0 }));
+  const shift = (list) => list.map((p) => ({ u: p.u - u0, v: p.v - v0 }));
+  // (`also`: other plan outlines in the same piece frame — the riser grooves)
+  return also.length ? { pts: shift(pts), also: also.map((o) => shift(map(o))) } : shift(pts);
+}
+// a tread's / nosing's grooves for the risers behind the treads below (claddingModel.js `grooves`) on layer NOTCH,
+// and its notes: the groove's depth, a carpet riser's loose-tongue grooves
+function grooveParts(piece, host, risers, index, config, lastIndex) {
+  const notes = [];
+  if (host.grooves?.length) {
+    const local = toLocal(host.outline, host.grain, host.grooves.map((g) => g.strip));
+    piece.extra = local.also.map((pts) => ({ layer: 'NOTCH', pts }));
+    notes.push(`wpust pod podstopnice ${host.grooves[0].depthMm} mm (spod)`);
+  }
+  if (config.riserMount === 'carpet' && index !== null) {
+    const front = risers.some((r) => r.index === index && r.heightMm > 0 && r.tongues);
+    const back = risers.some((r) => r.tongues && r.heightMm > 0 && (r.id.startsWith('riser-top') ? index === lastIndex : r.index === index + 1));
+    if (front) notes.push('rowek na obce pioro - spod (podstopnica dywanowa)');
+    if (back) notes.push('rowek na obce pioro - gora (podstopnica dywanowa)');
+  }
+  return notes;
 }
 // a polygon in (s, z) (a board, a pane) at the origin
 const planeLocal = (poly) => {
@@ -65,7 +85,9 @@ export function claddingPieces(built) {
     }
     // the milled edges (front, nosed sides) on their own layer when the tread is profiled
     const edgeLayers = t.profile?.kind && t.profile.kind !== 'square' ? (t.exposed || []).map((x) => (x ? 'PROFILE' : null)) : null;
-    pieces.push({ row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1} ${t.sideType}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes: [...notes, { L: 'nosek boczny z lewej', P: 'nosek boczny z prawej', CZ: 'czołowy', LP: 'noski boczne z obu stron' }[t.sideType]] });
+    const piece = { row: landing ? 'landings' : 'treads', code, name: `${landing ? 'Podest' : 'Stopień'} ${t.index + 1} ${t.sideType}`, pts: toLocal(t.outline, t.grain), edgeLayers, notes: [...notes, { L: 'nosek boczny z lewej', P: 'nosek boczny z prawej', CZ: 'czołowy', LP: 'noski boczne z obu stron' }[t.sideType]] };
+    piece.notes.push(...grooveParts(piece, t, cladding.risers, t.index, built.config, concrete.elements.length - 1));
+    pieces.push(piece);
   }
   for (const r of cladding.risers) {
     if (!(r.heightMm > 0)) continue;
@@ -77,7 +99,11 @@ export function claddingPieces(built) {
     const pts = [{ u: 0, v: 0 }, { u: r.lengthMm, v: 0 }, { u: r.lengthMm, v: r.heightMm }, { u: 0, v: r.heightMm }];
     pieces.push({ row: 'risers', code, name: r.bent ? 'Podstopnica gięta (rozwinięcie)' : 'Podstopnica', pts, notes: [`${r.thicknessMm} mm`] });
   }
-  for (const n of cladding.exitNosing || []) pieces.push({ row: 'treads', code: 'NA', name: 'Nosek antresoli', pts: toLocal(n.outline, n.grain), notes: [`${n.thicknessMm} mm`] });
+  for (const n of cladding.exitNosing || []) {
+    const piece = { row: 'treads', code: 'NA', name: 'Nosek antresoli', pts: toLocal(n.outline, n.grain), notes: [`${n.thicknessMm} mm`] };
+    piece.notes.push(...grooveParts(piece, n, cladding.risers, null, built.config, concrete.elements.length - 1));
+    pieces.push(piece);
+  }
   for (const b of built.finish?.skirting || []) {
     if (!b.parts) continue;
     // a stepped skirting: every piece flat with its mitres and notch, its grain along x (a vertical piece turned)
@@ -124,6 +150,7 @@ export function buildCladdingDXF(built, { projectName = '' } = {}) {
       const { w, h } = size(p.pts);
       const at = p.pts.map((q) => ({ u: q.u + u, v: q.v + base + TEXT_H * 4 }));
       entities.push(closed(at, p.edgeLayers));
+      for (const x of p.extra || []) entities.push(closed(x.pts.map((q) => ({ u: q.u + u, v: q.v + base + TEXT_H * 4 })), x.pts.map(() => x.layer)));
       entities.push(text(`${p.code} ${p.name}`, { u, v: base + TEXT_H * 2.2 }));
       entities.push(text(`${Math.round(w)} x ${Math.round(h)} mm${p.notes.length ? ` · ${p.notes.join(', ')}` : ''}`, { u, v: base + TEXT_H * 0.6 }, 'TEXT', TEXT_H * 0.8));
       u += w + PIECE_GAP;
@@ -133,7 +160,7 @@ export function buildCladdingDXF(built, { projectName = '' } = {}) {
     v = base + rowH + TEXT_H * 8 + ROW_GAP;
   }
   const layer = (name, colour) => ['0', 'LAYER', '2', name, '70', '0', '62', String(colour), '6', 'CONTINUOUS'];
-  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '3', ...layer('OUTLINE', 7), ...layer('PROFILE', 1), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
+  const tables = ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '4', ...layer('OUTLINE', 7), ...layer('PROFILE', 1), ...layer('NOTCH', 4), ...layer('TEXT', 3), '0', 'ENDTAB', '0', 'ENDSEC'];
   const header = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC'];
   return [...header, ...tables, '0', 'SECTION', '2', 'ENTITIES', entities.join('\n'), '0', 'ENDSEC', '0', 'EOF'].join('\n') + '\n';
 }

@@ -366,6 +366,25 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## The riser boards' fitting; edge channels (user request 2026-11-05, as built)
+
+The self-supporting mechanism (`riserSolver.js` / `treadSolver.js buildNotch`): `riserMount`
+- `'behind'` (default): the riser stands BEHIND the tread below — that tread's edge on the next element's front edge
+  (`onFrontOf`) / the last tread's back edge at the slab recedes by the riser's thickness (it ends at the riser's face),
+  the riser goes down to its underside (the concrete; the first one on the raw floor, z = 0 — the floor finish laid
+  against it) and UP `riserTopOverlapMm` (10, as the self-supporting) into a groove in the tread above's underside —
+  `tread.grooves [{depthMm, strip = the riser's footprint}]` (the exit riser into the antresola nosing's); the DXF
+  draws the groove on layer NOTCH and notes „wpust pod podstopnice n mm (spod)”; the nosing in front keeps its full
+  thickness;
+- `'carpet'` (dywanowa): BETWEEN the treads — on the tread below (which runs on under it) up to the tread above's
+  underside, as thick as a tread (`riserThicknessOf`), on LOOSE TONGUES top and bottom (`riser.tongues = 2`): the DXF
+  notes the tongue grooves on both treads, the cut list `OP-nn` × 2 (as long as the riser), the quote „Obce pióro” per mb
+  (`looseTonguePerMb`, 15 zł).
+The skirting's riser faces and the LED under the noses use the same thickness. The slab's opening runs to the slab's
+edge (the exit riser's footprint included — the last tread now ends in front of it). The quote's option „Kanały i
+obróbka krawędzi” (`edgeChannels`, a checkbox in „Cennik”): `edgeChannelsPerTread` (25 zł) per tread (landings not
+counted), a material line. Tests: `__tests__/risers.test.js`.
+
 ## The wall editor — walls on some steps (user request 2026-11-05, as built)
 
 „w 3 biegu pierwszy stopień jest ściana tylko z prawej, na kolejnych 4 po obu stronach, ściana tylko od płyty schodów w

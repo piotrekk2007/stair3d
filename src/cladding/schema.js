@@ -36,6 +36,12 @@ export function createDefaultCladdingConfig() {
     sideNosingRight: true,
     riserBoards: true,
     riserThicknessMm: 20,
+    // how a riser board is fitted (user request 2026-11-05, the self-supporting mechanism): 'behind' — behind the
+    // tread below (that tread ends at the riser's face, the riser down to its underside = the concrete) and up into a
+    // groove in the tread above `riserTopOverlapMm` deep; 'carpet' (dywanowa) — between the treads (on the tread below
+    // up to the tread above's underside), as thick as a tread, on loose tongues ("obce pióro") top and bottom
+    riserMount: 'behind',
+    riserTopOverlapMm: 10, // the groove in the tread above (as the self-supporting riserTopOverlapMm)
     floorFinishBottomMm: 15, // finished floor above the raw floor at the foot
     floorFinishTopMm: 15, // finished floor above the raw slab at the exit
     concreteSlabThicknessMm: 150, // the concrete flight's slab, square to the pitch — drawing only (ASSUMPTION)
@@ -265,6 +271,8 @@ export function sanitizeCladdingConfig(raw) {
     sideNosingRight: !!c.sideNosingRight,
     riserBoards: !!c.riserBoards,
     riserThicknessMm: num(c.riserThicknessMm, d.riserThicknessMm, 5, 60),
+    riserMount: c.riserMount === 'carpet' ? 'carpet' : 'behind',
+    riserTopOverlapMm: num(c.riserTopOverlapMm, d.riserTopOverlapMm, 0, 30),
     floorFinishBottomMm: num(c.floorFinishBottomMm, d.floorFinishBottomMm, 0, 200),
     floorFinishTopMm: num(c.floorFinishTopMm, d.floorFinishTopMm, 0, 200),
     concreteSlabThicknessMm: num(c.concreteSlabThicknessMm, d.concreteSlabThicknessMm, 50, 500),

@@ -119,7 +119,8 @@ test('the antresola nosing: along the last back edge, over the exit riser, onto 
   near(Math.max(...ys(n.outline)), 1080 + 120, 'onto the slab');
   assert.equal(n.topZ, b.concrete.exit.rawSlabTopZ + 20);
   assert.equal(n.bottomZ, n.topZ - 40);
-  assert.equal(b.cladding.risers.at(-1).topZ, n.bottomZ, 'the exit riser ends under it');
+  assert.equal(b.cladding.risers.at(-1).topZ, n.bottomZ + 10, 'the exit riser goes into its groove');
+  assert.deepEqual(n.grooves?.map((g) => g.depthMm), [10], 'the antresola nosing grooved for it');
   assert.equal(buildCladdingStair({ ...createDefaultCladdingConfig(), exitNosing: false }).cladding.exitNosing.length, 0);
 });
 

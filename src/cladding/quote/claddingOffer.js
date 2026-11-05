@@ -107,7 +107,7 @@ export function claddingFacts(built, quoteSettings) {
     ['Wysokość całkowita', `${Math.round(built.totalRise)} mm`],
     ['Wysokość stopnia (po wykończeniu)', `${Math.round(Math.min(...rises))}–${Math.round(Math.max(...rises))} mm`],
     ['Materiał', [bp.species, bp.cls].filter(Boolean).join(', ') || '—'],
-    ['Grubość stopnia', `${config.treadThicknessMm} mm${config.riserBoards ? `, podstopnice ${config.riserThicknessMm} mm` : ', bez podstopnic'}`],
+    ['Grubość stopnia', `${config.treadThicknessMm} mm${config.riserBoards ? (config.riserMount === 'carpet' ? `, podstopnice dywanowe ${config.treadThicknessMm} mm (na obce pióro)` : `, podstopnice ${config.riserThicknessMm} mm`) : ', bez podstopnic'}`],
     ['Krawędź stopni', { square: 'prosta', chamfer: `fazka ${config.edgeProfileMm} mm`, round: `zaokrąglenie R${config.edgeProfileMm}`, bullnose: 'półwałek' }[config.edgeProfile] || '—'],
     ['Balustrada', rail ? `${rail} ${rail === 1 ? 'odcinek' : 'odcinki'} (słupy: ${{ flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula' }[config.postCap]})` : 'nie'],
     ['Montaż', quoteSettings.withInstallation ? 'tak (VAT 8%)' : 'nie — sam materiał (VAT 23%)'],

@@ -40,6 +40,9 @@ export const TREAD_SIDE_TYPES = Object.freeze({
 });
 export const treadSideType = (nosing) => (nosing.leftMm > 0 && nosing.rightMm > 0 ? 'LP' : nosing.leftMm > 0 ? 'L' : nosing.rightMm > 0 ? 'P' : 'CZ');
 
+/** The riser board's thickness: a carpet riser (between the treads) is as thick as a tread. */
+export const riserThicknessOf = (config) => (config.riserMount === 'carpet' ? config.treadThicknessMm : config.riserThicknessMm);
+
 export function riserOn(element, config) {
   const own = config.stepOverrides?.[element.index]?.riser;
   return typeof own === 'boolean' ? own : !!config.riserBoards;
@@ -106,8 +109,20 @@ function boardSize(outline, grain) {
  * @returns {{treads, risers, heights, diagnostics}}
  */
 export function buildCladdingModel(concrete, config) {
-  const r = config.riserThicknessMm;
+  const r = riserThicknessOf(config);
+  const carpet = config.riserMount === 'carpet';
+  // (behind the tread: up into the tread above's groove; a carpet riser butts on its loose tongue)
+  const overlap = carpet ? 0 : config.riserTopOverlapMm;
   const els = concrete.elements;
+  // an edge of an element lying on a front edge of the next one (the riser there stands on / behind it)
+  const onFrontOf = (edge, next) =>
+    !!next &&
+    next.edges.some((f) => {
+      if (f.role !== 'front') return false;
+      const t = unit(f.a, f.b);
+      const off = (p) => Math.abs((p.x - f.a.x) * t.y - (p.y - f.a.y) * t.x);
+      return off(edge.a) < 0.5 && off(edge.b) < 0.5;
+    });
   const treads = [];
   const risers = [];
   const starterBlocks = [];
@@ -116,7 +131,12 @@ export function buildCladdingModel(concrete, config) {
     const t = thick(e);
     const riser = riserOn(e, config);
     const front = config.nosingFrontMm + (riser ? r : 0);
+    // behind the tread: this tread ends at the face of the riser standing on its back edge (the next step's, or the
+    // exit riser at the slab's edge)
+    const next = els[i + 1];
+    const behindAtBack = (edge) => !carpet && ((next && riserOn(next, config) && onFrontOf(edge, next)) || (!next && edge.role === 'back' && config.riserBoards));
     const distOf = (edge) => {
+      if (behindAtBack(edge)) return -r;
       if (edge.role === 'front') return front;
       if (edge.role === 'left' || edge.role === 'right') return sideNosingOn(e, edge.role, config, edge) ? config.sideNosingMm : 0;
       return 0;
@@ -166,12 +186,17 @@ export function buildCladdingModel(concrete, config) {
       starter: starter ? { ...starter } : null,
     });
     const below = i === 0 ? config.floorFinishBottomMm : els[i - 1].topZ + thick(els[i - 1]);
+    // the riser's bottom: behind the tread below = its underside (the concrete; the first one on the raw floor, the
+    // floor finish laid against it); a carpet riser stands on the tread below
+    const riserBottom = carpet ? below : i === 0 ? 0 : els[i - 1].topZ;
+    const riserTop = e.topZ + overlap;
+    const fit = { mount: config.riserMount, overlapMm: overlap, tongues: carpet ? 2 : 0 };
     if (starter) {
       // the bent riser round its front, the support block under the widening (inside the riser)
       const reach = { front, left: nosing.left, right: nosing.right };
       if (riser) {
         const strip = starterRiserStrip(e, starter, reach, config.nosingFrontMm, r);
-        if (strip) risers.push({ id: `riser-${e.index}`, index: e.index, outline: strip.outline, bottomZ: below, topZ: e.topZ, heightMm: e.topZ - below, lengthMm: strip.lengthMm, thicknessMm: r, grain: unit(fronts[0].a, fronts[0].b), bent: true });
+        if (strip) risers.push({ id: `riser-${e.index}`, index: e.index, outline: strip.outline, bottomZ: riserBottom, topZ: riserTop, heightMm: riserTop - riserBottom, lengthMm: strip.lengthMm, thicknessMm: r, grain: unit(fronts[0].a, fronts[0].b), bent: true, ...fit });
       }
       const inner = starterEdges(e, starter, reach, config.nosingFrontMm + (riser ? r : 0)).edges.map((x) => x.a);
       starterBlocks.push({ id: `starter-block-${e.index}`, index: e.index, outline: inner, bottomZ: e.bottomZ, topZ: e.topZ });
@@ -184,9 +209,10 @@ export function buildCladdingModel(concrete, config) {
           id: fronts.length > 1 ? `riser-${e.index}-${k}` : `riser-${e.index}`,
           index: e.index,
           outline: [edge.a, edge.b, add(edge.b, n, r), add(edge.a, n, r)].reverse(),
-          bottomZ: below,
-          topZ: e.topZ,
-          heightMm: e.topZ - below,
+          bottomZ: riserBottom,
+          topZ: riserTop,
+          heightMm: riserTop - riserBottom,
+          ...fit,
           lengthMm: Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y),
           thicknessMm: r,
           grain: unit(edge.a, edge.b),
@@ -221,7 +247,9 @@ export function buildCladdingModel(concrete, config) {
   // antresola nosing when there is one)
   if (last && config.riserBoards) {
     const t = thick(last);
-    const topZ = exitNosing.length ? floorAbove - config.treadThicknessMm : floorAbove;
+    // (behind the last tread: from its underside; up into the antresola nosing's groove when there is one)
+    const topZ = exitNosing.length ? floorAbove - config.treadThicknessMm + overlap : floorAbove;
+    const bottomZ = carpet ? last.topZ + t : last.topZ;
     last.edges
       .filter((edge) => edge.role === 'back')
       .forEach((edge, k) => {
@@ -230,14 +258,25 @@ export function buildCladdingModel(concrete, config) {
           id: k ? `riser-top-${k}` : 'riser-top',
           index: els.length,
           outline: [edge.a, edge.b, add(edge.b, n, -r), add(edge.a, n, -r)],
-          bottomZ: last.topZ + t,
+          bottomZ,
           topZ,
-          heightMm: topZ - last.topZ - t,
+          heightMm: topZ - bottomZ,
+          mount: config.riserMount,
+          overlapMm: exitNosing.length ? overlap : 0,
+          tongues: carpet ? 2 : 0,
           lengthMm: Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y),
           thicknessMm: r,
           grain: unit(edge.a, edge.b),
         });
       });
+  }
+  // the grooves the risers go into (behind the tread): in the tread above's underside — the riser's own footprint,
+  // `overlap` deep (the DXF draws it; the nosing in front keeps its full thickness)
+  if (overlap > 0) {
+    for (const rz of risers) {
+      const host = rz.id.startsWith('riser-top') ? exitNosing[0] : treads.find((t) => t.index === rz.index);
+      if (host && rz.topZ > rz.bottomZ) (host.grooves ||= []).push({ depthMm: overlap, strip: rz.outline });
+    }
   }
   const heights = finishedHeights(concrete, config);
   return { treads, risers, exitNosing, starterBlocks, heights, diagnostics: [...heightDiagnostics(heights, config), ...zoneDiagnostics(concrete), ...winderDiagnostics(concrete, config)] };

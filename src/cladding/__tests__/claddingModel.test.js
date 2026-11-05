@@ -68,7 +68,8 @@ test('cladding: the tread covers the step + the front nosing past the riser boar
   const b = buildCladdingStair(straight({ nosingFrontMm: 30, riserThicknessMm: 20, sideNosingMm: 25, sideNosingLeft: false, sideNosingRight: true }));
   const t = b.cladding.treads[1];
   near(Math.min(...ys(t.outline)), 270 - 30 - 20, 'front: nosing + riser board');
-  near(Math.max(...ys(t.outline)), 540, 'back: the next riser face');
+  // (the riser behind the tread — user request 2026-11-05: the tread ends at the next riser's face)
+  near(Math.max(...ys(t.outline)), 540 - 20, 'back: the next riser face');
   near(Math.min(...xs(t.outline)), 0, 'left (wall): none');
   near(Math.max(...xs(t.outline)), 1025, 'right (open): 25 past the concrete');
   assert.equal(t.bottomZ, 360);
@@ -85,14 +86,16 @@ test('cladding: a riser board per step from the tread below up to the tread abov
   const b = buildCladdingStair(straight({ treadThicknessMm: 40, floorFinishBottomMm: 15, floorFinishTopMm: 20 }));
   const r = b.cladding.risers;
   assert.equal(r.length, 6);
-  assert.equal(r[0].bottomZ, 15, 'the first on the finished floor');
-  assert.equal(r[0].topZ, 180);
-  assert.equal(r[1].bottomZ, 220, 'on the tread below');
+  // behind the tread below (user request 2026-11-05): down to its underside (the concrete; the first on the raw floor),
+  // up into the tread above's groove (riserTopOverlapMm 10)
+  assert.equal(r[0].bottomZ, 0, 'the first on the raw floor (the floor finish against it)');
+  assert.equal(r[0].topZ, 180 + 10);
+  assert.equal(r[1].bottomZ, 180, 'behind the tread below — down to its underside');
   const top = r.at(-1);
   assert.equal(top.id, 'riser-top');
-  assert.equal(top.bottomZ, 950);
-  // (under the antresola nosing — stage 3 —, up to the floor without one)
-  assert.equal(top.topZ, 910 + 185 + 20 - 40);
+  assert.equal(top.bottomZ, 910, 'behind the last tread');
+  // (into the antresola nosing's groove — stage 3 —, up to the floor without one)
+  assert.equal(top.topZ, 910 + 185 + 20 - 40 + 10);
   assert.equal(buildCladdingStair(straight({ treadThicknessMm: 40, floorFinishBottomMm: 15, floorFinishTopMm: 20, exitNosing: false })).cladding.risers.at(-1).topZ, 910 + 185 + 20);
   assert.equal(buildCladdingStair(straight({ riserBoards: false })).cladding.risers.length, 0);
 });

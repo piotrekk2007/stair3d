@@ -42,7 +42,7 @@ function trim(pts, m) {
 export function buildCladdingLed(built, config) {
   const strips = [];
   const m = config.ledEndMarginMm;
-  const r = config.riserThicknessMm;
+  const r = config.riserMount === 'carpet' ? config.treadThicknessMm : config.riserThicknessMm;
   if (config.ledTreadEnabled) {
     // under the nose: the concrete's front line moved forward by the riser board + the nosing, back by the setback and
     // half the profile — on the tread's underside

@@ -310,6 +310,8 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(gui.add(proxy, 'sideNosingRight').name('Nosek boczny z prawej'));
   live(gui.add(proxy, 'riserBoards').name('Podstopnice'));
   live(gui.add(proxy, 'riserThicknessMm', 5, 60, 1).name('Grubość podstopnicy [mm]'));
+  live(gui.add(proxy, 'riserMount', { 'za stopnicą (wpust w stopnicę wyżej)': 'behind', 'dywanowa — między stopniami, na obce pióro': 'carpet' }).name('Podstopnica: montaż'));
+  live(gui.add(proxy, 'riserTopOverlapMm', 0, 30, 1).name('Podstopnica: wpust w stopnicę [mm]'));
   live(gui.add(proxy, 'floorFinishBottomMm', 0, 200, 1).name('Posadzka na dole [mm]'));
   live(gui.add(proxy, 'floorFinishTopMm', 0, 200, 1).name('Posadzka na górze [mm]'));
   live(gui.add(proxy, 'concreteSlabThicknessMm', 50, 500, 5).name('Płyta betonu (rysunek) [mm]'));
@@ -443,6 +445,9 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Deska podłogowa [zł/m²] <input type="number" min="0" data-q="floorboardPerM2" value="${s.floorboardPerM2 || ''}" placeholder="0" /></label>
       <label class="clad-field">Płyta OSB [zł/m²] <input type="number" min="0" data-q="osbPerM2" value="${s.osbPerM2 || ''}" placeholder="0" /></label>
       <label class="clad-field">Listwa przyścienna [zł/mb] <input type="number" min="0" data-q="skirtingPerMb" value="${s.skirtingPerMb || ''}" placeholder="0" /></label>
+      <label class="clad-field">Obce pióro (podstopnice dywanowe) [zł/mb] <input type="number" min="0" data-q="looseTonguePerMb" value="${s.looseTonguePerMb}" /></label>
+      <label class="clad-field">Kanały i obróbka krawędzi <input type="checkbox" data-q-check="edgeChannels" ${s.edgeChannels ? 'checked' : ''} /></label>
+      <label class="clad-field">— cena [zł/stopień] <input type="number" min="0" data-q="edgeChannelsPerTread" value="${s.edgeChannelsPerTread}" /></label>
       <div class="clad-subhead">Wspólny cennik (jak w schodach samonośnych)</div>
       ${SHARED_PRICES.map(([id, label, unit]) => `<label class="clad-field">${label} [zł/${unit}] <input type="number" min="0" data-price="${id}" value="${priceValue(s, id) || ''}" placeholder="0" /></label>`).join('')}
       <div class="clad-subhead">Słupy — cena wg przekroju (najmniejszy przekrój ≥ słupa)</div>
@@ -489,6 +494,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       row[el.dataset.postF] = el.dataset.postF === 'unit' ? el.value : Number(el.value) || 0;
     }
     else if (el.dataset.lump) s.lumps[el.dataset.lump] = el.checked;
+    else if (el.dataset.qCheck) s[el.dataset.qCheck] = el.checked;
     else if (el.dataset.q === 'withInstallation') s.withInstallation = el.value === '1';
     else if (el.dataset.q === 'species') {
       const [species, cls] = el.value.split('|');

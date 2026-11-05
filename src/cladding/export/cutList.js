@@ -29,6 +29,12 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
     const thick = Number.parseFloat(p.notes[0]);
     rows.push({ code: p.code, name: p.name, qty: 1, lengthMm: r0(w), widthMm: r0(h), thicknessMm: r0(thick), material: glass ? `szkło VSG ${r0(thick)} mm` : wood, notes: p.notes.slice(1).join(', ') });
   }
+  // the carpet risers' loose tongues ("obce pióro"): top and bottom of each, as long as the riser
+  for (const r of built.cladding.risers) {
+    if (!(r.tongues > 0) || !(r.heightMm > 0)) continue;
+    const code = r.id.startsWith('riser-top') ? 'OP-G' : `OP-${String(r.index + 1).padStart(2, '0')}`;
+    rows.push({ code, name: `Obce pióro — podstopnica ${r.id.startsWith('riser-top') ? 'pod antresolą' : r.index + 1}`, qty: r.tongues, lengthMm: r0(r.lengthMm), widthMm: '', thicknessMm: '', material: 'obce pióro', notes: 'góra i dół podstopnicy dywanowej' });
+  }
   // a floor-board landing: the OSB and the floor boards by area (laid on site, not cut to one blank)
   for (const t of built.cladding.treads) {
     if (!t.parts) continue;

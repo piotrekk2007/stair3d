@@ -104,8 +104,11 @@ export function buildSlab(concrete, cladding, config) {
   const soffit = top - config.slabThicknessMm;
   const need = cladding.treads.filter((t) => t.topZ + config.minHeadroomMm > soffit);
   if (!need.length && !config.openingManual) return null;
-  // (the opening runs to the stair's exit: the last tread's back line)
-  const loops = !need.length ? [] : unionRectangles(need.map((t) => rect(t.outline)).map((r) => ({ uStart: r.minX, uEnd: r.maxX, vBottom: r.minY, vTop: r.maxY })));
+  // (the opening runs to the stair's exit: the slab's edge — the last tread with the exit riser standing behind it)
+  const lastIndex = concrete.elements.length - 1;
+  const exitRisers = cladding.risers.filter((r) => r.id.startsWith('riser-top')).flatMap((r) => r.outline);
+  const footprint = (t) => (t.index === lastIndex ? [...t.outline, ...exitRisers] : t.outline);
+  const loops = !need.length ? [] : unionRectangles(need.map((t) => rect(footprint(t))).map((r) => ({ uStart: r.minX, uEnd: r.maxX, vBottom: r.minY, vTop: r.maxY })));
   const area = (l) => Math.abs(l.reduce((s, p, k) => s + p.u * l[(k + 1) % l.length].v - l[(k + 1) % l.length].u * p.v, 0) / 2);
   const biggest = loops.reduce((best, l) => (!best || area(l) > area(best) ? l : best), null);
   if (!biggest && !config.openingManual) return null;

@@ -65,8 +65,8 @@ export function buildCladdingQuote(built, settings) {
         const floorM2 = t.parts.boards ? area(t.parts.boards.outline) / 1e6 : 0;
         lines.push({ id: `${t.id}`, group: 'Podesty', name: `${half ? 'Półpodest' : 'Podest'} ${no} — deska podłogowa na OSB`, qty: round2(m2), unit: 'm²', dims: `${round2(m2)} m²`, material: null, labour: labour('landing-floorboard', round2(m2)) });
         if (nb) lines.push({ id: `${t.id}-nosing`, group: 'Podesty', name: `Nosek podestu ${no}`, qty: 1, unit: 'szt.', dims: dims(nb, config.osbThicknessMm + config.floorboardThicknessMm), material: board({ ...nb, thicknessMm: config.osbThicknessMm + config.floorboardThicknessMm }), labour: null });
-        lines.push({ id: `${t.id}-boards`, group: 'Podesty', name: `Deska podłogowa — podest ${no}`, qty: round2(floorM2), unit: 'm²', dims: `${round2(floorM2)} m²`, material: settings.floorboardPerM2 > 0 ? { value: round2(floorM2 * settings.floorboardPerM2), note: `${round2(settings.floorboardPerM2)} zł/m²` } : { value: null, note: 'brak ceny deski za m²' }, labour: null });
-        lines.push({ id: `${t.id}-osb`, group: 'Podesty', name: `Płyta OSB ${config.osbThicknessMm} mm — podest ${no}`, qty: round2(floorM2), unit: 'm²', dims: `${round2(floorM2)} m²`, material: settings.osbPerM2 > 0 ? { value: round2(floorM2 * settings.osbPerM2), note: `${round2(settings.osbPerM2)} zł/m²` } : { value: null, note: 'brak ceny OSB za m²' }, labour: null });
+        lines.push({ id: `${t.id}-boards`, group: 'Podesty', name: `Deska podłogowa — podest ${no}`, qty: round2(floorM2), unit: 'm²', dims: `${round2(floorM2)} m²`, material: settings.floorboardPerM2 > 0 ? { value: round2(round2(floorM2) * settings.floorboardPerM2), note: `${round2(settings.floorboardPerM2)} zł/m²` } : { value: null, note: 'brak ceny deski za m²' }, labour: null });
+        lines.push({ id: `${t.id}-osb`, group: 'Podesty', name: `Płyta OSB ${config.osbThicknessMm} mm — podest ${no}`, qty: round2(floorM2), unit: 'm²', dims: `${round2(floorM2)} m²`, material: settings.osbPerM2 > 0 ? { value: round2(round2(floorM2) * settings.osbPerM2), note: `${round2(settings.osbPerM2)} zł/m²` } : { value: null, note: 'brak ceny OSB za m²' }, labour: null });
         continue;
       }
       lines.push({ id: t.id, group: 'Podesty', name: `${half ? 'Półpodest' : 'Podest'} ${no} (drewno)`, qty: 1, unit: 'szt.', dims: dims(t, t.thicknessMm), material: board({ lengthMm: t.lengthMm, depthMm: t.depthMm, thicknessMm: t.thicknessMm }), labour: labour(half ? 'landing-half' : 'landing-wood') });
@@ -83,9 +83,20 @@ export function buildCladdingQuote(built, settings) {
     const blank = { lengthMm: r.lengthMm, depthMm: r.heightMm, thicknessMm: r.thicknessMm };
     lines.push({ id: r.id, group: 'Podstopnice', name: r.id.startsWith('riser-top') ? 'Podstopnica pod antresolą' : `Podstopnica ${r.bent ? 'gięta ' : ''}${r.index + 1}`, qty: 1, unit: 'szt.', dims: dims(blank, r.thicknessMm), material: board(blank), labour: null });
   }
+  // carpet risers: the loose tongue top and bottom of each, per mb (an element of the tread, priced on its own)
+  const tongueMm = cladding.risers.reduce((s, r) => s + (r.heightMm > 0 ? (r.tongues || 0) * r.lengthMm : 0), 0);
+  if (tongueMm > 0) {
+    const mb = round2(tongueMm / 1000);
+    lines.push({ id: 'loose-tongue', group: 'Podstopnice', name: 'Obce pióro — podstopnice dywanowe (góra i dół)', qty: mb, unit: 'mb', dims: `${cladding.risers.filter((r) => r.tongues > 0 && r.heightMm > 0).length} podstopnic × 2`, material: settings.looseTonguePerMb > 0 ? { value: round2(mb * settings.looseTonguePerMb), note: `${round2(settings.looseTonguePerMb)} zł/mb` } : { value: null, note: 'brak ceny obcego pióra' }, labour: null });
+  }
   for (const n of cladding.exitNosing || []) {
     const blank = { lengthMm: n.lengthMm, depthMm: n.depthMm, thicknessMm: n.thicknessMm };
     lines.push({ id: n.id, group: 'Noski', name: 'Nosek antresoli', qty: 1, unit: 'szt.', dims: dims(blank, n.thicknessMm), material: board(blank), labour: labour('nosing') });
+  }
+  // "kanały i obróbka krawędzi" (an option): a price per tread (the landings not counted)
+  if (settings.edgeChannels) {
+    const n = cladding.treads.filter((t) => t.kind !== 'landing').length;
+    lines.push({ id: 'edge-channels', group: 'Profilowanie', name: 'Kanały i obróbka krawędzi', qty: n, unit: 'szt.', dims: `${n} stopni`, material: { value: round2(n * settings.edgeChannelsPerTread), note: `${round2(settings.edgeChannelsPerTread)} zł/stopień` }, labour: null });
   }
   // the treads' milled edges (per mb of every profiled edge)
   const profiled = cladding.treads.reduce((s, t) => s + (t.profiledLengthMm || 0), 0);

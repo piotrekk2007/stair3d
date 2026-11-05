@@ -7,7 +7,7 @@
 // Pure, no Three.js.
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
-import { riserOn } from './claddingModel.js';
+import { riserOn, riserThicknessOf } from './claddingModel.js';
 
 export const dedupe = (pts) => pts.filter((p, k) => k === 0 || Math.abs(p.s - pts[k - 1].s) > 1e-6 || Math.abs(p.z - pts[k - 1].z) > 1e-6);
 
@@ -58,7 +58,7 @@ export const boardPolygons = (b) => (b.parts ? b.parts.map((p) => p.polygon) : [
 function steppedSkirtingParts(run, concrete, config, { joinedStart = false } = {}) {
   const H = config.skirtingHeightMm;
   const n = config.nosingFrontMm;
-  const r = config.riserThicknessMm;
+  const r = riserThicknessOf(config);
   // the levels: consecutive pieces at one height merged (two landing pieces, …)
   const levels = [];
   for (const p of run.pieces) {

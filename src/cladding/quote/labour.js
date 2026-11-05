@@ -47,6 +47,11 @@ export function createDefaultQuoteSettings() {
     osbPerM2: 0,
     // the module's own materials per unit (stage 5)
     skirtingPerMb: 0,
+    // (user request 2026-11-05) the loose tongue of a carpet riser per mb (top + bottom of every riser); "kanały i
+    // obróbka krawędzi" — an option, a price per tread
+    looseTonguePerMb: 15,
+    edgeChannels: false,
+    edgeChannelsPerTread: 25,
     // the SHARED material list (as the self-supporting takeoff settings): by material id, and the board pricing
     priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
     wasteFactors: {},
@@ -88,6 +93,9 @@ export function sanitizeQuoteSettings(raw) {
     floorboardPerM2: Math.max(0, num(s.floorboardPerM2, 0)),
     osbPerM2: Math.max(0, num(s.osbPerM2, 0)),
     skirtingPerMb: Math.max(0, num(s.skirtingPerMb, 0)),
+    looseTonguePerMb: Math.max(0, num(s.looseTonguePerMb, 15)),
+    edgeChannels: !!s.edgeChannels,
+    edgeChannelsPerTread: Math.max(0, num(s.edgeChannelsPerTread, 25)),
     priceList: mergePriceList(s),
     wasteFactors: s.wasteFactors && typeof s.wasteFactors === 'object' ? { ...s.wasteFactors } : {},
     withInstallation: s.withInstallation !== false,

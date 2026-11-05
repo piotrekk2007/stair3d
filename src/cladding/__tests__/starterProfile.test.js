@@ -70,7 +70,8 @@ test('the treads carry their profile: the front (and a nosed side) exposed, per-
   const b = buildCladdingStair(straight({ edgeProfile: 'round', edgeProfileMm: 5, sideNosingRight: true, sideNosingMm: 30, stepOverrides: { 2: { profile: 'chamfer' } } }));
   const t = b.cladding.treads[1];
   assert.equal(t.profile.kind, 'round');
-  near(t.profiledLengthMm, 1030 + 320, 'the front (1030) + the nosed right side (320)', 1e-6);
+  // (the tread ends at the next riser's face — 20 shorter than the concrete + nosing)
+  near(t.profiledLengthMm, 1030 + 300, 'the front (1030) + the nosed right side (300)', 1e-6);
   assert.equal(b.cladding.treads[2].profile.kind, 'chamfer');
   const s = createDefaultQuoteSettings();
   s.labour.forEach((x) => (x.rate = 10));
