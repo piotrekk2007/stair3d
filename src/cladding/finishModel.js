@@ -147,7 +147,7 @@ export function buildFinishBoards(concrete, config) {
     if (run.walled && config.skirtingEnabled && config.skirtingStyle === 'stepped') {
       // stepped: horizontal + vertical pieces mitred at 45°, notched for the noses (steppedSkirtingParts)
       const parts = steppedSkirtingParts(run, concrete, config, { joinedStart: joinedStart.has(run) });
-      skirting.push({ id: `skirting-${run.key.flight}-${run.key.side}`, kind: 'skirting', key: run.key, polygon: null, parts, origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -out.x, y: -out.y }, thicknessMm: config.skirtingThicknessMm, lengthMm: parts.reduce((s, p) => s + p.lengthMm, 0), depthMm: config.skirtingHeightMm, style: 'stepped' });
+      skirting.push({ id: `skirting-${run.id}`, kind: 'skirting', key: run.key, polygon: null, parts, origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -out.x, y: -out.y }, thicknessMm: config.skirtingThicknessMm, lengthMm: parts.reduce((s, p) => s + p.lengthMm, 0), depthMm: config.skirtingHeightMm, style: 'stepped' });
     } else if (run.walled && config.skirtingEnabled) {
       // the bottom cut to the finished treads and risers (a run beginning on a landing starts at its top)
       const bottom = [];
@@ -159,7 +159,7 @@ export function buildFinishBoards(concrete, config) {
       const top = (config.skirtingStyle === 'stepped' ? steppedTop : rakedTop)(pieces, config.skirtingHeightMm, (p) => p.top);
       const polygon = dedupe([...dedupe(bottom), ...[...top].reverse()]);
       // on the wall's face, its thickness into the stair
-      skirting.push(placed(run, `skirting-${run.key.flight}-${run.key.side}`, 'skirting', polygon, top, { x: -out.x, y: -out.y }, config.skirtingThicknessMm, { style: config.skirtingStyle }));
+      skirting.push(placed(run, `skirting-${run.id}`, 'skirting', polygon, top, { x: -out.x, y: -out.y }, config.skirtingThicknessMm, { style: config.skirtingStyle }));
     }
     if (!run.walled && config.coverStringers?.[run.key.flight]?.[run.key.side]) {
       // the bottom along the concrete's soffit, the top under the treads (stepped — the side nosing over it) or above
@@ -168,7 +168,7 @@ export function buildFinishBoards(concrete, config) {
       const raked = config.coverStringerTop === 'raked';
       const top = raked ? rakedTop(pieces, config.coverStringerAboveMm, (p) => p.top) : steppedTop(pieces, 0, (p) => p.concreteTop);
       const polygon = dedupe([...bottom, ...[...top].reverse()]);
-      coverStringers.push(placed(run, `cover-${run.key.flight}-${run.key.side}`, 'cover-stringer', polygon, raked ? top : [top[0], top[top.length - 1]], out, config.coverStringerThicknessMm, { top: config.coverStringerTop }));
+      coverStringers.push(placed(run, `cover-${run.id}`, 'cover-stringer', polygon, raked ? top : [top[0], top[top.length - 1]], out, config.coverStringerThicknessMm, { top: config.coverStringerTop }));
     }
   }
   cornerCuts(joins, skirting);
@@ -184,7 +184,7 @@ export function buildFinishBoards(concrete, config) {
  */
 function cornerCuts(joins, skirting) {
   const dot = (u, v) => u.x * v.x + u.y * v.y;
-  const boardOf = (run) => skirting.find((b) => b.key.flight === run.key.flight && b.key.side === run.key.side);
+  const boardOf = (run) => skirting.find((b) => b.id === `skirting-${run.id}`);
   const ends = (b) => {
     const ss = boardPolygons(b).flat().map((p) => p.s);
     return { min: Math.min(...ss), max: Math.max(...ss) };

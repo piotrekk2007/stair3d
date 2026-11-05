@@ -48,16 +48,34 @@ export function edgeHasRakedCover(element, edge, config) {
   return !!key && config.coverStringerTop === 'raked' && !!config.coverStringers?.[key.flight]?.[key.side];
 }
 
-/** The wall on a (flight, side): null, or {type: full | low | under | gap, …} (true = full, the older form). */
-export function wallOn(key, config) {
-  const w = key ? config.walls?.[key.flight]?.[key.side] : null;
-  if (!w) return null;
-  return w === true ? { type: 'full' } : w;
+/**
+ * Every wall as a list entry {id, flight, side, type, heightAboveMm?, from, to} (from / to element indices, null = open):
+ * `config.wallList` when given (the wall editor), else one entry per (flight, side) of the per-flight `walls`
+ * (true = full, the older form); the walls between flights set apart (`gapWalls`, withGapWalls) first — a later entry
+ * wins, so the user's own wall on that side stays.
+ */
+export function wallsOf(config) {
+  const own = Array.isArray(config.wallList)
+    ? config.wallList
+    : Object.entries(config.walls || {}).flatMap(([f, v]) => ['left', 'right'].filter((side) => v?.[side]).map((side) => ({ id: `w-${f}-${side}`, flight: Number(f), side, ...(v[side] === true ? { type: 'full' } : v[side]), from: null, to: null })));
+  return [...(config.gapWalls || []), ...own];
+}
+
+/** The wall on a (flight, side) at an element (its index; omitted = anywhere on the side): null, or the list entry. */
+export function wallOn(key, config, index = null) {
+  if (!key) return null;
+  let found = null;
+  for (const w of wallsOf(config)) {
+    if (w.flight !== key.flight || w.side !== key.side) continue;
+    if (index !== null && ((w.from !== null && w.from !== undefined && index < w.from) || (w.to !== null && w.to !== undefined && index > w.to))) continue;
+    found = w;
+  }
+  return found;
 }
 
 /** Does a wall stand along this edge, beside the stair (no side nosing, the skirting there)? */
 export function edgeHasWall(element, edge, config) {
-  const w = wallOn(edgeWallKey(element, edge), config);
+  const w = wallOn(edgeWallKey(element, edge), config, element.index);
   return !!w && w.type !== 'under';
 }
 
@@ -66,7 +84,7 @@ export function buildWalls(concrete, config) {
   const pieces = [];
   for (const e of concrete.elements) {
     for (const edge of e.edges) {
-      if (wallOn(edgeWallKey(e, edge), config)?.type !== 'full') continue;
+      if (wallOn(edgeWallKey(e, edge), config, e.index)?.type !== 'full') continue;
       const n = outward(edge);
       const T = config.wallThicknessMm;
       pieces.push({ id: `wall-${e.index}-${pieces.length}`, key: edgeWallKey(e, edge), outline: [edge.a, edge.b, add(edge.b, n, T), add(edge.a, n, T)], bottomZ: 0, topZ: concrete.exit.rawSlabTopZ });

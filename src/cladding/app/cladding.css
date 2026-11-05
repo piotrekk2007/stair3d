@@ -160,3 +160,8 @@
 .clad-3d-tools[hidden] { display: none; }
 .clad-3d-tools button { background: rgba(255, 255, 255, 0.92); }
 .clad-3d-tools button.active { background: #c0392b; color: #fff; }
+
+/* the wall list */
+.clad-wall-row { flex-wrap: wrap; gap: 4px; align-items: center; }
+.clad-wall-row .clad-wall-type { max-width: 190px; }
+.clad-plan .clad-wall-cell { cursor: pointer; }

@@ -4,6 +4,9 @@
 
 import { planMeasureText } from '../plan2d/planMeasure.js';
 import { boardPolygons } from './finishModel.js';
+import { wallCells } from './wallEdits.js';
+import { wallOn } from './surroundingsModel.js';
+import { WALL_TYPE_LABELS } from './schema.js';
 import { escapeHtml } from '../util/format.js';
 
 const HAIR = 'vector-effect="non-scaling-stroke"';
@@ -166,7 +169,21 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     return `<line x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="#c0392b" stroke-width="2" ${draft ? 'stroke-dasharray="6,4"' : ''} ${HAIR}/>` + [a, b].map((p) => `<circle cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(px * 3.5)}" fill="#c0392b"/>`).join('') + `<text x="${fmt(mid.x)}" y="${fmt(-mid.y - px * 6)}" font-size="${fmt(px * 13)}" text-anchor="middle" fill="#c0392b" stroke="#fff" stroke-width="${fmt(px * 3)}" paint-order="stroke" font-family="sans-serif" font-weight="600">${planMeasureText(a, b)}</text>`;
   };
   const measuresXML = measures.length || measureDraft ? `<g class="clad-measures" pointer-events="none">${measures.map((m) => measureOne(m.a, m.b, false)).join('')}${measureDraft ? measureOne(measureDraft.a, measureDraft.cursor, true) : ''}</g>` : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${measuresXML}</svg>`;
+  // the wall mode („▥ Ściany”, claddingApp.js): every step's side that can carry a wall — a click = a wall there or not;
+  // its colour = the wall's type, open dashed
+  const WALL_COLOURS = { full: '#3e3a35', low: '#8d6e63', above: '#1f6feb', under: '#7b4ab3', gap: '#6f6a62' };
+  const wallModeXML =
+    mode === 'walls'
+      ? wallCells(concrete)
+          .map((c) => {
+            const w = wallOn(c, { ...built.config, gapWalls: built.gapWalls || [] }, c.index);
+            const colour = w ? WALL_COLOURS[w.type] || '#3e3a35' : '#9aa0a6';
+            const title = w ? `${WALL_TYPE_LABELS[w.type] || 'ściana między biegami'} — kliknij, żeby usunąć przy tym stopniu; prawy klik = inny typ` : 'Bez ściany — kliknij, żeby dodać';
+            return `<line class="clad-wall-cell" data-cell="${c.index}:${c.flight}:${c.side}" x1="${fmt(c.a.x)}" y1="${fmt(-c.a.y)}" x2="${fmt(c.b.x)}" y2="${fmt(-c.b.y)}" stroke="${colour}" stroke-width="${w ? 9 : 6}" stroke-opacity="${w ? 0.9 : 0.6}" ${w?.type === 'under' || !w ? 'stroke-dasharray="10,6"' : ''} stroke-linecap="butt" ${HAIR}><title>${escapeHtml(title)}</title></line>`;
+          })
+          .join('')
+      : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="clad-plan-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">${otherXML}${wallsXML}${sideWallsXML}${concreteXML}${riserXML}${treadXML}${partsXML}${exitXML}${finishXML}${railingXML}${wallRailXML}${ledXML}${openingXML}${walkXML}${labels}${zonesXML}${wallModeXML}${measuresXML}</svg>`;
 }
 
 /**

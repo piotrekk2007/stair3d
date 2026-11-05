@@ -8,7 +8,6 @@
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 import { rakedTop, dedupe } from './finishModel.js';
-import { wallOn } from './surroundingsModel.js';
 import { planPoint } from './concreteModel.js';
 
 /** The config with the walls between flights set apart added as walled sides ('gap') — the cladding, the skirting and
@@ -16,14 +15,9 @@ import { planPoint } from './concreteModel.js';
 export function withGapWalls(concrete, config) {
   const gaps = concrete.elements.filter((e) => e.gap && config.sequence?.[e.groupIndex]?.gapWall);
   if (!gaps.length) return config;
-  const walls = JSON.parse(JSON.stringify(config.walls || {}));
-  for (const e of gaps) {
-    for (const f of [e.gap.flightIn, e.gap.flightOut]) {
-      walls[f] = walls[f] || {};
-      if (!walls[f][e.gap.side]) walls[f][e.gap.side] = { type: 'gap' };
-    }
-  }
-  return { ...config, walls };
+  // (list entries before the user's own — wallsOf: a later entry wins)
+  const gapWalls = gaps.flatMap((e) => [e.gap.flightIn, e.gap.flightOut].map((f) => ({ id: `gap-${e.index}-${f}`, flight: f, side: e.gap.side, type: 'gap', from: null, to: null })));
+  return { ...config, gapWalls };
 }
 
 // a raked top through a run's noses as a function of s (null outside it)
@@ -36,13 +30,14 @@ function topLine(pieces, h) {
   };
 }
 
-/** @returns {{id, kind: 'wall-low' | 'wall-under' | 'wall-gap', key, polygon, origin, dir, normal, thicknessMm}[]} */
+/** @returns {{id, kind: 'wall-low' | 'wall-above' | 'wall-under' | 'wall-gap', key, polygon, origin, dir, normal, thicknessMm}[]} */
 export function buildSideWalls(concrete, config) {
   const runs = buildSideRuns(concrete, config);
   const out = [];
   const T = config.wallThicknessMm;
   for (const run of runs) {
-    const w = wallOn(run.key, config);
+    // (a run = a stretch of one side under one wall — sideRuns.js)
+    const w = run.wall;
     const { pieces } = run;
     if (!w || !pieces.length) continue;
     const s0 = pieces[0].s0;
@@ -51,11 +46,17 @@ export function buildSideWalls(concrete, config) {
     if (w.type === 'low') {
       // beside the stair, from the floor up to its height over the noses (0 = up to the slab)
       const top = w.heightAboveMm > 0 ? rakedTop(pieces, w.heightAboveMm, (p) => p.top) : [{ s: s0, z: concrete.exit.rawSlabTopZ }, { s: s1, z: concrete.exit.rawSlabTopZ }];
-      out.push({ id: `wall-low-${run.key.flight}-${run.key.side}`, kind: 'wall-low', key: run.key, polygon: dedupe([{ s: s0, z: 0 }, { s: s1, z: 0 }, ...[...top].reverse()]), origin: runPoint(run, 0), dir: run.frame.f, normal: outN, thicknessMm: T });
+      out.push({ id: `wall-low-${run.id}`, kind: 'wall-low', key: run.key, polygon: dedupe([{ s: s0, z: 0 }, { s: s1, z: 0 }, ...[...top].reverse()]), origin: runPoint(run, 0), dir: run.frame.f, normal: outN, thicknessMm: T });
+    } else if (w.type === 'above') {
+      // beside the stair, from the concrete's soffit (nothing under the flight) up to the slab / its height over the
+      // noses
+      const soffit = dedupe(pieces.flatMap((p) => [{ s: p.s0, z: p.soffit.front }, { s: p.s1, z: p.soffit.back }]));
+      const top = w.heightAboveMm > 0 ? rakedTop(pieces, w.heightAboveMm, (p) => p.top) : [{ s: s0, z: concrete.exit.rawSlabTopZ }, { s: s1, z: concrete.exit.rawSlabTopZ }];
+      out.push({ id: `wall-above-${run.id}`, kind: 'wall-above', key: run.key, polygon: dedupe([...soffit, ...[...top].reverse()]), origin: runPoint(run, 0), dir: run.frame.f, normal: outN, thicknessMm: T });
     } else if (w.type === 'under') {
       // under the flight's edge, its thickness under the stair, up to the concrete's soffit
       const soffit = dedupe(pieces.flatMap((p) => [{ s: p.s0, z: p.soffit.front }, { s: p.s1, z: p.soffit.back }]));
-      out.push({ id: `wall-under-${run.key.flight}-${run.key.side}`, kind: 'wall-under', key: run.key, polygon: dedupe([{ s: s0, z: 0 }, { s: s1, z: 0 }, ...[...soffit].reverse()]), origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -outN.x, y: -outN.y }, thicknessMm: T });
+      out.push({ id: `wall-under-${run.id}`, kind: 'wall-under', key: run.key, polygon: dedupe([{ s: s0, z: 0 }, { s: s1, z: 0 }, ...[...soffit].reverse()]), origin: runPoint(run, 0), dir: run.frame.f, normal: { x: -outN.x, y: -outN.y }, thicknessMm: T });
     }
   }
   // the walls between flights set apart (in the incoming flight's frame: s = v, the return flight's s' = v0 − v)

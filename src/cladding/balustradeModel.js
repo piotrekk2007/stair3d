@@ -15,7 +15,6 @@
 // Glass sizes ASSUMPTION / DO WERYFIKACJI (as the self-supporting railingGlass.js numbers). Pure.
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
-import { wallOn } from './surroundingsModel.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -60,7 +59,7 @@ function stairLine(run, config) {
   const off = glassSide ? config.glassStandoffMm + config.glassThicknessMm / 2 : -config.railingInsetMm;
   const piece = (s) => pieces.find((p) => s >= p.s0 - 1e-6 && s <= p.s1 + 1e-6) ?? (s < s0 ? pieces[0] : pieces[pieces.length - 1]);
   return {
-    id: `railing-${run.key.flight}-${run.key.side}`,
+    id: `railing-${run.id}`,
     kind: 'stairs',
     key: run.key,
     s0,
@@ -319,7 +318,7 @@ function section(line, config) {
  */
 function wallRail(run, config) {
   const { pieces } = run;
-  const id = `wall-rail-${run.key.flight}-${run.key.side}`;
+  const id = `wall-rail-${run.id}`;
   const top = topOver(pieces, config.wallRailHeightMm);
   const off = -(config.wallRailClearanceMm + config.handrailWidthMm / 2);
   const s0 = pieces[0].s0;
@@ -347,10 +346,10 @@ export function buildBalustrade(built, config) {
     if (!run.pieces.length) continue;
     if (run.walled) {
       if (!config.wallRails?.[run.key.flight]?.[run.key.side]) continue;
-      const w = wallOn(run.key, config);
+      const w = run.wall;
       const need = config.wallRailHeightMm + 50;
-      if (w?.type === 'low' && w.heightAboveMm > 0 && w.heightAboveMm < need) {
-        diagnostics.push(createDiagnostic({ ruleId: 'CLAD-WALL-RAIL-LOW', severity: 'WARNING', elementType: 'railing', elementId: `wall-rail-${run.key.flight}-${run.key.side}`, parameter: 'heightAboveMm', value: w.heightAboveMm, expected: `>= ${need}`, unit: 'mm', message: `Bieg ${run.key.flight + 1}, strona ${run.key.side === 'left' ? 'lewa' : 'prawa'}: ściana ma tylko ${w.heightAboveMm} mm nad noskami — poręcz przyścienna (${config.wallRailHeightMm} mm + uchwyt) się na niej nie zmieści. Podnieś ścianę albo daj balustradę.` }));
+      if ((w?.type === 'low' || w?.type === 'above') && w.heightAboveMm > 0 && w.heightAboveMm < need) {
+        diagnostics.push(createDiagnostic({ ruleId: 'CLAD-WALL-RAIL-LOW', severity: 'WARNING', elementType: 'railing', elementId: `wall-rail-${run.id}`, parameter: 'heightAboveMm', value: w.heightAboveMm, expected: `>= ${need}`, unit: 'mm', message: `Bieg ${run.key.flight + 1}, strona ${run.key.side === 'left' ? 'lewa' : 'prawa'}: ściana ma tylko ${w.heightAboveMm} mm nad noskami — poręcz przyścienna (${config.wallRailHeightMm} mm + uchwyt) się na niej nie zmieści. Podnieś ścianę albo daj balustradę.` }));
         continue;
       }
       wallRails.push(wallRail(run, config));

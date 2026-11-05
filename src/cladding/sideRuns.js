@@ -3,7 +3,7 @@
 // span along the flight (s from the flight frame's origin), its lateral position, its finished top and the height below
 // it. Read by the skirting boards (on a walled side), the cover stringer (on an open side) and the balustrade. Pure.
 
-import { edgeWallKey, edgeHasWall } from './surroundingsModel.js';
+import { edgeWallKey, wallOn } from './surroundingsModel.js';
 import { finishThicknessMm } from './claddingModel.js';
 
 const dot = (a, b) => a.x * b.x + a.y * b.y;
@@ -18,8 +18,9 @@ export function soffitAt(e, slabMm) {
 }
 
 /**
- * @returns {{key: {flight, side}, walled: boolean, frame, u, pieces: {element, s0, s1, top, concreteTop, below, flat,
- *   soffit: {front, back}}[]}[]}  one run per (flight, side) that has pieces; `top` = the finished tread top, `below` =
+ * @returns {{key: {flight, side}, id, seg, wall, walled: boolean, frame, u, pieces: {element, s0, s1, top, concreteTop,
+ *   below, flat, soffit: {front, back}, wall}[]}[]}  one run per stretch of a (flight, side) under one wall (or none)
+ *   that has pieces; `top` = the finished tread top, `below` =
  *   the finished top of the element before (or the floor finish), `u` = the side line's lateral position (the first
  *   piece's)
  */
@@ -46,13 +47,28 @@ export function buildSideRuns(concrete, config) {
       // its own flight adds no length)
       if (Math.abs(sb - sa) < 1) continue;
       const id = `${key.flight}:${key.side}`;
-      if (!runs.has(id)) runs.set(id, { key, walled: edgeHasWall(e, edge, config), frame, u: dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.r), pieces: [] });
-      runs.get(id).pieces.push({ element: e, s0: Math.min(sa, sb), s1: Math.max(sa, sb), top: finishedTop(e), concreteTop: e.topZ, below, flat: e.kind === 'landing', soffit: soffitAt(e, config.concreteSlabThicknessMm) });
+      if (!runs.has(id)) runs.set(id, { key, frame, u: dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.r), pieces: [] });
+      runs.get(id).pieces.push({ element: e, s0: Math.min(sa, sb), s1: Math.max(sa, sb), top: finishedTop(e), concreteTop: e.topZ, below, flat: e.kind === 'landing', soffit: soffitAt(e, config.concreteSlabThicknessMm), wall: wallOn(key, config, e.index) });
     }
   });
-  const out = [...runs.values()];
-  for (const r of out) r.pieces.sort((a, b) => a.s0 - b.s0);
-  return out.sort((a, b) => a.key.flight - b.key.flight || (a.key.side < b.key.side ? -1 : 1));
+  // a side split where its wall changes (user request 2026-11-05 — walls on some steps only): every run one stretch
+  // under one wall (or none); the first keeps the side's id (`${flight}-${side}`, the balustrade's / finish's ids and
+  // the user's post edits), the next ones get `-s<k>`
+  const out = [];
+  for (const r of runs.values()) {
+    r.pieces.sort((a, b) => a.s0 - b.s0);
+    let seg = null;
+    for (const p of r.pieces) {
+      const wid = p.wall?.id ?? null;
+      if (!seg || seg.wallId !== wid) {
+        const k = out.filter((x) => x.key.flight === r.key.flight && x.key.side === r.key.side).length;
+        seg = { key: r.key, frame: r.frame, u: r.u, pieces: [], wall: p.wall, wallId: wid, walled: !!p.wall && p.wall.type !== 'under', seg: k, id: `${r.key.flight}-${r.key.side}${k ? `-s${k}` : ''}` };
+        out.push(seg);
+      }
+      seg.pieces.push(p);
+    }
+  }
+  return out.sort((a, b) => a.key.flight - b.key.flight || (a.key.side < b.key.side ? -1 : 1) || a.seg - b.seg);
 }
 
 /** A plan point of a run's line at s (on its side line, `offset` mm further out — negative = into the stair). */

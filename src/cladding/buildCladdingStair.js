@@ -10,6 +10,7 @@ import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
 import { withGapWalls, buildSideWalls } from './sideWallsModel.js';
 import { buildCladdingLed } from './ledModel.js';
+import { buildSideRuns } from './sideRuns.js';
 
 export function buildCladdingStair(rawConfig) {
   const config = sanitizeCladdingConfig(rawConfig);
@@ -30,5 +31,8 @@ export function buildCladdingStair(rawConfig) {
   // the LED lighting (under the noses, in the skirting, under the handrail)
   built.led = buildCladdingLed(built, cfg);
   built.diagnostics = [...cladding.diagnostics, ...built.balustrade.diagnostics];
+  // (the panel / the plan's wall mode: every side's stretches with their walls, the gap walls among them)
+  built.sideRuns = buildSideRuns(concrete, cfg);
+  built.gapWalls = cfg.gapWalls || [];
   return built;
 }

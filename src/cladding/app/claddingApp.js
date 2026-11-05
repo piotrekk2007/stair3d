@@ -21,6 +21,8 @@ import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
+import { wallListOf, wallCells, wallRange, toggleWallCell, newWall } from '../wallEdits.js';
+import { WALL_TYPES } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { printHtml } from '../../app/printHtml.js';
@@ -95,7 +97,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       </aside>
       <main class="clad-main">
         <div class="clad-plan"></div>
-        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
+        <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="walls" title="Klik na boku stopnia = ściana przy tym stopniu tak / nie, prawy klik = inny typ ściany">▥ Ściany</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
         <div class="clad-3d-tools" hidden><button type="button" data-measure3d="toggle" title="Dwa kliknięcia na modelu = wymiar: odległość, różnica wysokości, w poziomie (przyciąga do narożników i krawędzi)">📏 Miarka</button><button type="button" data-measure3d="clear" title="Usuń wszystkie wymiary">Wyczyść</button></div>
         <div class="clad-3d" hidden></div>
         <div class="clad-present-bar">
@@ -783,9 +785,11 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderSides() {
     const n = state.built?.concrete.flights ?? 1;
     const c = state.config;
-    const walled = (f, side) => !!c.walls?.[f]?.[side] && c.walls[f][side].type !== 'under';
-    // (an open side: cover stringer / balustrade; a walled side: the wall handrail)
-    const box = (field, f, side, atWall = false) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${walled(f, side) !== atWall ? `disabled title="${atWall ? 'tylko przy ścianie' : 'przy ścianie'}"` : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
+    // (a side may be walled on some steps only: the cover stringer / balustrade go along its open stretches, the wall
+    // handrail along its walled ones — each offered where the side has such a stretch)
+    const runsOf = (f, side) => (state.built?.sideRuns || []).filter((r) => r.key.flight === f && r.key.side === side);
+    const has = (f, side, atWall) => runsOf(f, side).some((r) => r.walled === atWall);
+    const box = (field, f, side, atWall = false) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${!has(f, side, atWall) ? `disabled title="${atWall ? 'tylko przy ścianie' : 'cała strona przy ścianie'}"` : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
     sidesEl.innerHTML =
       `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th><th>poręcz przyścienna</th></tr></thead><tbody>` +
       Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td><td>${box('wallRails', f, 'left', true)} ${box('wallRails', f, 'right', true)}</td></tr>`).join('') +
@@ -801,34 +805,63 @@ export function mountCladdingApp(rootEl, host = {}) {
     });
   });
 
-  // the walls: per flight, left / right walking up (a walled side gets no side nosing)
+  // the walls (user request 2026-11-05): a LIST — each a flight's side from one step to another with its type
+  // (wallEdits.js); also edited on the plan („▥ Ściany”: a click on a step's side). A walled side gets no side nosing.
   const wallsEl = $('.clad-walls');
+  let newWallType = 'full';
   function renderWalls() {
     const n = state.built?.concrete.flights ?? 1;
-    const w = state.config.walls || {};
-    const cell = (f, side) => {
-      const x = w[f]?.[side];
-      const type = x === true ? 'full' : x?.type || '';
-      const sel = `<select data-wall="${f}:${side}"><option value="" ${!type ? 'selected' : ''}>brak</option>${Object.entries(WALL_TYPE_LABELS).map(([k, l]) => `<option value="${k}" ${type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-      const h = type === 'low' ? ` <input type="number" class="clad-small" data-wall-h="${f}:${side}" value="${x.heightAboveMm}" title="Wysokość nad noskami [mm] (0 = do stropu)" /> mm` : '';
-      return `<label>${side === 'left' ? 'L' : 'P'} ${sel}${h}</label>`;
+    const list = wallListOf(state.config);
+    const cells = state.built ? wallCells(state.built.concrete) : [];
+    const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
+    const row = (w, k) => {
+      const [a, b] = wallRange(w, cells);
+      const heighted = w.type === 'low' || w.type === 'above';
+      return `<div class="clad-row clad-wall-row" data-w="${k}">
+        <select data-wf="flight" title="Bieg">${Array.from({ length: n }, (_, f) => opt(f, `bieg ${f + 1}`, w.flight)).join('')}</select>
+        <select data-wf="side" title="Strona patrząc w górę">${opt('left', 'L', w.side)}${opt('right', 'P', w.side)}</select>
+        <select data-wf="type" class="clad-wall-type">${WALL_TYPES.map((t) => opt(t, WALL_TYPE_LABELS[t], w.type)).join('')}</select>
+        <label title="Od stopnia nr (puste = od początku boku)">od <input type="number" min="1" class="clad-small" data-wf="from" value="${w.from === null ? '' : w.from + 1}" placeholder="${a + 1}" /></label>
+        <label title="Do stopnia nr (puste = do końca boku)">do <input type="number" min="1" class="clad-small" data-wf="to" value="${w.to === null ? '' : w.to + 1}" placeholder="${b + 1}" /></label>
+        ${heighted ? `<label title="Wysokość nad noskami [mm] (0 = do stropu)">wys. <input type="number" min="0" class="clad-small" data-wf="heightAboveMm" value="${w.heightAboveMm}" /></label>` : ''}
+        <button type="button" data-wdel="${k}" title="Usuń ścianę">✕</button></div>`;
     };
     wallsEl.innerHTML =
-      Array.from({ length: n }, (_, f) => `<div class="clad-row clad-wall-row"><span class="clad-kind">Bieg ${f + 1}</span>${cell(f, 'left')}${cell(f, 'right')}</div>`).join('') +
-      '<div class="clad-hint">L / P patrząc w górę biegu. Pełna — obok schodów do stropu; nad stopniami — obok schodów do podanej wysokości nad noskami; pod biegiem — pod krawędzią biegu do spodu betonu (bok nad nią otwarty). Przy ścianie obok schodów stopnie nie mają noska bocznego. Ściana między rozsuniętymi biegami — przy podeście z zawrotem.</div>';
+      (list.length ? list.map(row).join('') : '<div class="clad-hint">Brak ścian — schody wolne z obu stron.</div>') +
+      `<div class="clad-actions"><button type="button" data-wadd>+ Dodaj ścianę</button><label title="Typ ściany dodawanej kliknięciem na planie (tryb „▥ Ściany”)">z planu: <select data-new-wall-type>${WALL_TYPES.map((t) => opt(t, WALL_TYPE_LABELS[t], newWallType)).join('')}</select></label></div>` +
+      '<div class="clad-hint">Każda ściana: bieg, strona (L / P patrząc w górę), typ i zakres stopni (numery jak na planie; puste = cały bok). Na planie tryb „▥ Ściany”: klik na boku stopnia = ściana tam albo nie, prawy klik = inny typ. Pełna — od podłogi do stropu; od podłogi do wysokości nad noskami; od płyty schodów w górę — tylko nad biegiem, pod nim otwarte; pod biegiem — pod krawędzią do spodu betonu (bok nad nią otwarty). Przy ścianie obok schodów stopień nie ma noska bocznego (typ CZ / L / P). Ściana między rozsuniętymi biegami — przy podeście z zawrotem.</div>';
   }
-  wallsEl.addEventListener('change', (ev) => {
-    const key = ev.target.dataset.wall || ev.target.dataset.wallH;
-    if (!key) return;
-    const [f, side] = key.split(':');
+  const editWalls = (fn) =>
     change((c) => {
-      c.walls = { ...(c.walls || {}) };
-      const cur = c.walls[f]?.[side];
-      let next;
-      if (ev.target.dataset.wallH) next = { ...(cur || {}), type: 'low', heightAboveMm: Number(ev.target.value) || 0 };
-      else next = ev.target.value ? { type: ev.target.value, ...(ev.target.value === 'low' ? { heightAboveMm: cur?.heightAboveMm ?? 900 } : {}) } : null;
-      c.walls[f] = { ...(c.walls[f] || {}), [side]: next };
+      const list = wallListOf(c);
+      fn(list);
+      c.wallList = list;
     });
+  wallsEl.addEventListener('change', (ev) => {
+    if (ev.target.dataset.newWallType !== undefined) {
+      newWallType = ev.target.value;
+      return;
+    }
+    const f = ev.target.dataset.wf;
+    const k = Number(ev.target.closest('[data-w]')?.dataset.w);
+    if (!f || !Number.isFinite(k)) return;
+    const v = ev.target.value;
+    editWalls((list) => {
+      const w = list[k];
+      if (!w) return;
+      if (f === 'flight') w.flight = Number(v);
+      else if (f === 'side') w.side = v;
+      else if (f === 'type') {
+        w.type = v;
+        if (v === 'low' || v === 'above') w.heightAboveMm = w.heightAboveMm ?? (v === 'low' ? 900 : 0);
+        else delete w.heightAboveMm;
+      } else if (f === 'from' || f === 'to') w[f] = v === '' ? null : Math.max(0, Math.round(Number(v)) - 1);
+      else if (f === 'heightAboveMm') w.heightAboveMm = Math.max(0, Number(v) || 0);
+    });
+  });
+  wallsEl.addEventListener('click', (ev) => {
+    if (ev.target.dataset.wadd !== undefined) editWalls((list) => list.push(newWall(0, 'left', newWallType)));
+    else if (ev.target.dataset.wdel !== undefined) editWalls((list) => list.splice(Number(ev.target.dataset.wdel), 1));
   });
 
   // --- colours and finishes (presentation — not the config, not in undo; saved in the project file) ---------------
@@ -991,6 +1024,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
     posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
+    walls: 'ŚCIANY: klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
     measure: 'MIARKA: klik = początek, drugi klik = koniec (przyciąga do punktów w promieniu 10 px), prawy klik = usuń ostatni wymiar, Esc = przerwij',
   };
   // the plan's tape measure — view state only (never the config / the project): the measures (plan mm) and the one
@@ -1021,6 +1055,16 @@ export function mountCladdingApp(rootEl, host = {}) {
   const sectionById = (id) => state.built.balustrade?.sections.find((s) => s.id === id);
   // a click of the plan's edit modes (no drag)
   function planClick(target, p) {
+    if (planMode === 'walls') {
+      const cell = target.closest?.('.clad-wall-cell');
+      if (!cell) return false;
+      const [index, flight, side] = cell.dataset.cell.split(':');
+      editWalls((list) => {
+        const next = toggleWallCell(list, wallCells(state.built.concrete), { index: Number(index), flight: Number(flight), side }, newWallType);
+        list.splice(0, list.length, ...next);
+      });
+      return true;
+    }
     if (planMode === 'measure') {
       const q = measurePoint(p);
       if (!measureDraft) measureDraft = { a: q, cursor: q };
@@ -1074,6 +1118,25 @@ export function mountCladdingApp(rootEl, host = {}) {
     return false;
   }
   planEl.addEventListener('contextmenu', (ev) => {
+    const wallCell = planMode === 'walls' ? ev.target.closest?.('.clad-wall-cell') : null;
+    if (wallCell) {
+      // the next type of the wall at that step (the whole wall)
+      ev.preventDefault();
+      const [index, flight, side] = wallCell.dataset.cell.split(':').map((x, i) => (i < 2 ? Number(x) : x));
+      const cells = wallCells(state.built.concrete);
+      editWalls((list) => {
+        const w = [...list].reverse().find((x) => {
+          if (x.flight !== flight || x.side !== side) return false;
+          const [a, b] = wallRange(x, cells);
+          return index >= a && index <= b;
+        });
+        if (!w) return;
+        w.type = WALL_TYPES[(WALL_TYPES.indexOf(w.type) + 1) % WALL_TYPES.length];
+        if (w.type === 'low' || w.type === 'above') w.heightAboveMm = w.type === 'low' ? 900 : 0;
+        else delete w.heightAboveMm;
+      });
+      return;
+    }
     if (planMode === 'measure') {
       ev.preventDefault();
       if (measureDraft) measureDraft = null;

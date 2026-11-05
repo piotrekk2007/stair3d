@@ -366,6 +366,25 @@ one turned —, notes „poziomy, końce 45°” / „pionowy, 45°, wycięcie p
 (material per mb of all pieces, labour `skirting-stepped` PER PIECE), the LED in the skirting one strip per horizontal
 piece `ledSkirtingAboveMm` over its tread. The raked skirting stays one board. Tests: `__tests__/finish.test.js`.
 
+## The wall editor — walls on some steps (user request 2026-11-05, as built)
+
+„w 3 biegu pierwszy stopień jest ściana tylko z prawej, na kolejnych 4 po obu stronach, ściana tylko od płyty schodów w
+górę”. `config.wallList` (null = the older per-flight `walls`, read as one entry per side): `[{id, flight, side, type,
+heightAboveMm?, from, to}]`, `from` / `to` element indices (null = the side's start / end), a later entry wins where
+two overlap. Types (`WALL_TYPES`): `full` (floor → slab), `low` (floor → `heightAboveMm` over the noses, 0 = slab),
+`above` (NEW — from the stair's concrete: its bottom along the soffit, nothing under the flight → the slab / a height
+over the noses), `under` (under the flight's edge → the soffit, the side above open); the walls between flights set
+apart are list entries too (`withGapWalls` → `config.gapWalls`, before the user's own). `surroundingsModel.js wallsOf`
+/ `wallOn(key, config, index)` / `edgeHasWall` resolve them PER ELEMENT; `sideRuns.js buildSideRuns` splits a side
+into stretches under one wall (`run.wall`, `run.walled`, `run.seg`, `run.id` — the first stretch keeps the side's old
+id `<flight>-<side>`, the next `-s<k>`), so the skirting / wall handrail go along the walled stretches and the cover
+stringer / balustrade along the open ones (the panel's checkboxes are per side, enabled where it has such a stretch),
+the side nosings / tread types follow per step. `built.sideRuns`, `built.gapWalls` for the panel / plan. Edits
+(`wallEdits.js`): the list in „Ściany przy biegach” (flight, side, type, from / to step numbers as on the plan, height;
+„+ Dodaj ścianę”) and the plan mode „▥ Ściany” (every step's side a clickable line coloured by its wall's type —
+`wallCells`; a click = `toggleWallCell`: out of its wall (shortened / split) or the neighbouring wall grown onto it,
+else a new one of the type chosen „z planu”; right click = the wall's next type). Tests: `__tests__/wallList.test.js`.
+
 ## The skirting at a turn's wall corner (user request 2026-11-05, as built)
 
 `finishModel.js buildFinishBoards`: two skirted runs where one ends at the point the next starts (a wall's end on the
