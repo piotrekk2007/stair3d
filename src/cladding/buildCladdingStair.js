@@ -33,6 +33,14 @@ export function buildCladdingStair(rawConfig) {
   built.balustrade = buildBalustrade(built, cfg);
   // the opening's trim („fajka”) along the chosen opening edges
   built.openingTrim = buildOpeningTrim(built, cfg);
+  // (the antresola nosing mitred where a trim meets it — the trim model's corner rule, one place)
+  for (const nz of cladding.exitNosing || []) {
+    const o = built.openingTrim.exitNosingOutlines?.[nz.id];
+    if (!o) continue;
+    // (carried on to the corner where the opening is wider than the stair: its length along its grain anew)
+    const us = o.map((p) => p.x * nz.grain.x + p.y * nz.grain.y);
+    Object.assign(nz, { outline: o, mitred: true, lengthMm: Math.max(...us) - Math.min(...us) });
+  }
   // the LED lighting (under the noses, in the skirting, under the handrail)
   built.led = buildCladdingLed(built, cfg);
   built.diagnostics = [...cladding.diagnostics, ...built.balustrade.diagnostics];

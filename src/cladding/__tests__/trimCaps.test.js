@@ -63,3 +63,18 @@ test('the posts\' tops: rounded (turned — a lathe) or none (the shaft to the t
   const q = buildCladdingQuote(b, createDefaultQuoteSettings());
   assert.match(q.lines.find((l) => /Słupy ozdobne/.test(l.name)).name, /bez czapki/);
 });
+
+// user report 2026-11-05 (a screenshot): the trim beside the stair's exit must meet the antresola nosing at 45°
+test('the trim meets the antresola nosing on the corner\'s diagonal, the nosing carried on to a corner short of it', () => {
+  const b = buildCladdingStair(cfg({ openingTrimEnabled: true, sideNosingRight: true, sideNosingMm: 30 }));
+  const [nz] = b.cladding.exitNosing;
+  assert.equal(nz.mitred, true);
+  const shared = (p) => b.openingTrim.pieces.filter((t) => t.outline.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < 1e-6)).length;
+  // both of the nosing's ends shared with a trim piece (the right one past the stair's width, the opening 30 wider)
+  const xs = nz.outline.map((p) => p.x);
+  assert.ok(Math.max(...xs) > 1000 + 30, 'carried on past the stair to the opening\'s corner');
+  assert.equal(nz.outline.filter((p) => shared(p) > 0).length, 4, 'every corner point of the nosing on a trim piece');
+  near(nz.lengthMm, Math.max(...xs) - Math.min(...xs), 'its length anew');
+  // without the trim: as before
+  assert.equal(buildCladdingStair(cfg()).cladding.exitNosing[0].mitred, undefined);
+});

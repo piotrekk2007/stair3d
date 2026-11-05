@@ -243,6 +243,10 @@ export function buildCladdingModel(concrete, config) {
           lengthMm: Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y),
           depthMm: over + config.exitNosingDepthMm,
           grain: unit(edge.a, edge.b),
+          // (its edge and offsets — the opening's trim („fajka”) beside it is mitred into it, openingTrimModel.js)
+          edge: { a: edge.a, b: edge.b },
+          overMm: over,
+          onSlabMm: config.exitNosingDepthMm,
         });
       });
   }

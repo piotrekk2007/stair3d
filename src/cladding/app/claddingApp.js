@@ -100,6 +100,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <main class="clad-main">
         <div class="clad-plan"></div>
         <div class="clad-plan-modes"><button type="button" data-plan-mode="select" class="active" title="Wybór stopnia, krawędzie zabiegów">Wybór</button><button type="button" data-plan-mode="posts" title="Klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć">▮ Słupy</button><button type="button" data-plan-mode="opening" title="Przeciągnij narożnik otworu, klik na kwadracie = nowy narożnik, prawy klik = usuń narożnik, klik na krawędzi = balustrada antresoli tak / nie">▭ Otwór i antresola</button><button type="button" data-plan-mode="trim" title="Fajka (obróbka otworu / antresoli): klik na krawędzi otworu = fajka tak / nie">▬ Fajka</button><button type="button" data-plan-mode="walls" title="Klik na boku stopnia = ściana przy tym stopniu tak / nie, prawy klik = inny typ ściany">▥ Ściany</button><button type="button" data-plan-mode="measure" title="Dwa kliknięcia = wymiar (przyciąga do narożników betonu, stopni, ścian, otworu, słupów); prawy klik = usuń ostatni, Esc = przerwij">📏 Miarka</button></div>
+        <details class="clad-3d-layers" hidden><summary>Warstwy</summary><div class="clad-3d-layer-list"></div></details>
         <div class="clad-3d-tools" hidden><button type="button" data-measure3d="toggle" title="Dwa kliknięcia na modelu = wymiar: odległość, różnica wysokości, w poziomie (przyciąga do narożników i krawędzi)">📏 Miarka</button><button type="button" data-measure3d="clear" title="Usuń wszystkie wymiary">Wyczyść</button></div>
         <div class="clad-3d" hidden></div>
         <div class="clad-present-bar">
@@ -1367,6 +1368,40 @@ export function mountCladdingApp(rootEl, host = {}) {
       presentBar.querySelector('.clad-present-status').textContent = message || (settings.dataUrl ? '' : 'bez logo');
     },
   });
+  // the 3D view's layers (user request 2026-11-05, as the self-supporting HUD's „Warstwy”): view state only, not the
+  // config / the project; remembered in this browser
+  const LAYERS = [
+    ['Concrete', 'Beton'],
+    ['Treads', 'Stopnie, podesty, noski, fajki'],
+    ['Risers', 'Podstopnice'],
+    ['Finish', 'Listwy i wangi obiciowe'],
+    ['Railing', 'Balustrada i poręcze'],
+    ['LedLighting', 'Oświetlenie LED'],
+    ['walls', 'Ściany'],
+    ['slab', 'Strop'],
+    ['floor', 'Piętro wyżej / niżej'],
+  ];
+  const layers = (() => {
+    const all = Object.fromEntries(LAYERS.map(([k]) => [k, true]));
+    try {
+      return { ...all, ...JSON.parse(localStorage.getItem('stair3d.claddingLayers') || '{}') };
+    } catch {
+      return all;
+    }
+  })();
+  const layersEl = $('.clad-3d-layers');
+  layersEl.querySelector('.clad-3d-layer-list').innerHTML = LAYERS.map(([k, l]) => `<label><input type="checkbox" data-layer="${k}" ${layers[k] ? 'checked' : ''} /> ${l}</label>`).join('');
+  layersEl.addEventListener('change', (ev) => {
+    const k = ev.target.dataset.layer;
+    if (!k) return;
+    layers[k] = ev.target.checked;
+    try {
+      localStorage.setItem('stair3d.claddingLayers', JSON.stringify(layers));
+    } catch {
+      /* the view still follows */
+    }
+    applyPresentation();
+  });
   function applyPresentation() {
     if (!sceneApi) return;
     const technical = !present.on;
@@ -1374,10 +1409,14 @@ export function mountCladdingApp(rootEl, host = {}) {
     sceneApi.helpers.axes.visible = technical;
     sceneApi.helpers.ground.visible = !technical;
     sceneApi.helpers.shadowCatcher.visible = technical;
+    // the layers (+ the presentation's own slab / walls switches)
+    for (const c of root?.children || []) if (c.name in layers) c.visible = layers[c.name];
+    if (state.floor?.group) state.floor.group.visible = layers.floor;
     const room = root?.getObjectByName('Room');
     room?.traverse((o) => {
       if (!o.isMesh) return;
-      o.visible = !present.on || (o.name === 'Slab' ? present.slab : present.walls);
+      const slab = o.name === 'Slab';
+      o.visible = (slab ? layers.slab : layers.walls) && (!present.on || (slab ? present.slab : present.walls));
     });
   }
   function setPresentation(on) {
@@ -1421,6 +1460,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     planEl.hidden = view !== 'plan';
     view3dEl.hidden = view !== '3d';
     tools3dEl.hidden = view !== '3d';
+    layersEl.hidden = view !== '3d';
     if (view === 'plan') renderPlan();
     else render3D();
   }

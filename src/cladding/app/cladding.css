@@ -166,3 +166,9 @@
 .clad-wall-row .clad-wall-type { max-width: 190px; }
 .clad-plan .clad-wall-cell { cursor: pointer; }
 .clad-plan .clad-wall-end { cursor: grab; }
+
+/* the 3D view's layers (bottom right) */
+.clad-3d-layers { position: absolute; right: 8px; bottom: 8px; z-index: 22; background: rgba(255, 255, 255, 0.94); border: 1px solid #d0d4da; border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 240px; }
+.clad-3d-layers[hidden] { display: none; }
+.clad-3d-layers summary { cursor: pointer; font-weight: 600; }
+.clad-3d-layer-list { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
