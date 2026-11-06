@@ -10,9 +10,16 @@
 // The SAME input as buildOfferHTML (offer, facts, settings, company, logoDataUrl, image3d, planSvg, projectName, date)
 // — used by both modules (the concrete module's facts come from cladding/quote/claddingOffer.js). Pure: a string out;
 // every text through escapeHtml. Never shows the CNC + projekt amount (it is inside the material lines).
+// Stage 2 (2026-11-06): `settings.showContactQr` — a QR code with the company's / handler's contact (contactCard.js,
+// util/qrCode.js) beside „Dostawa”. Optional texts for an offer made by hand (each absent = the text below; '' = none):
+// `heroCaption`, `offerEyebrow`, `deliveryNote`, `closingNote`; `technicalSheet: false` = no plan / parameters / comfort
+// (sheet 2 then only when the lines or the notes moved there); `heroFull: true` = the picture over the hero's whole
+// height (HERO_FULL_MM) instead of the 84 × 150 mm box.
 
 import { escapeHtml as esc } from '../util/format.js';
 import { money } from './offerDocument.js';
+import { contactCardText } from './contactCard.js';
+import { qrSvg } from '../util/qrCode.js';
 
 /** At most this many lines on sheet 1; more → one line pointing to sheet 2 and the full table there. */
 export const MAX_P1_LINES = 6;
@@ -24,6 +31,12 @@ const SPEC_MAX_LINES = 7;
 export const HERO_BACKGROUND = '#ECECEB';
 /** The hero render's box (mm) — render the 3D picture at this ratio. */
 export const HERO_BOX_MM = Object.freeze({ width: 84, height: 150 });
+/** `settings.heroFull`: the picture over the hero's whole height (the sheet less the footer) — render it at this ratio. */
+export const HERO_FULL_MM = Object.freeze({ width: 84, height: 297 - 21 });
+/** The contact QR's side (mm, its quiet zone of 2 modules included). */
+export const QR_MM = 24;
+const QR_QUIET = 2;
+const textOr = (v, fallback) => (typeof v === 'string' ? v.trim() : fallback);
 
 const qtyFmt = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 });
 const dateFmt = (d) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
@@ -52,6 +65,7 @@ const CSS = `
   .hero .logo { position: absolute; left: 8.5mm; top: 10.5mm; width: 53mm; height: auto; z-index: 1; }
   .hero .brand { position: absolute; left: 8.5mm; top: 10.5mm; right: 8.5mm; z-index: 1; background: var(--brand); color: #fff; font-family: var(--display); font-weight: 600; font-size: 13pt; padding: 2mm 3mm; border-radius: 1mm; }
   .hero .render { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: 84mm; height: 150mm; object-fit: cover; display: block; }
+  .hero .render.full { top: 0; transform: none; height: 100%; }
   .hero .caption { position: absolute; left: 8.5mm; bottom: 5.5mm; font-size: 9pt; color: #fff; background: var(--brand); padding: 0.8mm 2.2mm; border-radius: 1mm; }
   .main { flex: 1; min-width: 0; padding: 10.5mm 11.5mm 7.5mm; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -91,6 +105,9 @@ const CSS = `
   .facts { margin-top: auto; padding-top: 4mm; display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 6mm; }
   .facts .big { font-family: var(--display); font-size: 15pt; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
   .facts .strong { font-size: 9.75pt; font-weight: 500; }
+  .facts.with-qr { grid-template-columns: 1fr 1.25fr ${QR_MM}mm; column-gap: 4mm; }
+  .facts .qr .label { margin-left: 1mm; }
+  .facts .qr svg { width: ${QR_MM}mm; height: ${QR_MM}mm; display: block; }
 
   footer { height: 21mm; flex-shrink: 0; background: var(--brand); color: #fff; padding: 0 11.5mm 0 8.5mm; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 6mm; align-items: center; font-size: 9pt; line-height: 1.45; }
   footer span { display: block; }
@@ -164,7 +181,7 @@ const LINE_MM = { text: 4.6, name: 5.4, title: 8.7, titleLong: 7.0 };
 const CHARS = { spec: 58, name: 36, detail: 44, notes: 54, title: 22, titleLong: 28, people: 30 };
 const wrapped = (text, perLine) => String(text || '').split('\n').reduce((n, p) => n + Math.max(1, Math.ceil(p.length / perLine)), 0);
 
-export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime }) {
+export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime, qr = false }) {
   let h = 19; // number, its label, the date
   if (peopleRows) h += 8 + (peopleRows + 1) * LINE_MM.text;
   h += 6.8 + 4.9; // the eyebrow
@@ -176,7 +193,8 @@ export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP
   h += 2.4 + 1 + 2 * LINE_MM.text; // the sums
   h += 3.7 + 7.4 + 2 * LINE_MM.text; // the gross amount
   if (notes) h += 3.2 + 5.2 + LINE_MM.text + (notesOnP1 ? wrapped(notes, CHARS.notes) * LINE_MM.text : 0);
-  h += 4 + LINE_MM.text + (leadTime ? 6.4 : 0) + 2 * LINE_MM.text; // the lead time / delivery (its tallest column)
+  // the lead time / delivery (its tallest column; the QR's column is taller than either)
+  h += 4 + Math.max(LINE_MM.text + (leadTime ? 6.4 : 0) + 2 * LINE_MM.text, qr ? LINE_MM.text + QR_MM : 0);
   return h;
 }
 
@@ -186,10 +204,10 @@ export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP
  * lines), then the lines go to sheet 2 (and what was taken off comes back where it fits again). A title over 2 lines
  * (or > LONG_TITLE_CHARS) is set one size smaller.
  */
-export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime }) {
+export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime, qr = false }) {
   const long = titleText.length > LONG_TITLE_CHARS || wrapped(titleText, CHARS.title) > 2;
   const plan = { long, linesOnP1: lines.length <= MAX_P1_LINES, notesOnP1: !!notes && !notesGoToP2(notes), spec: [...spec] };
-  const fits = () => page1Height({ titleText, long, peopleRows, spec: plan.spec, lines, linesOnP1: plan.linesOnP1, notes, notesOnP1: plan.notesOnP1, leadTime }) + SAFETY_MM <= MAIN_HEIGHT_MM;
+  const fits = () => page1Height({ titleText, long, peopleRows, spec: plan.spec, lines, linesOnP1: plan.linesOnP1, notes, notesOnP1: plan.notesOnP1, leadTime, qr }) + SAFETY_MM <= MAIN_HEIGHT_MM;
   if (!fits() && plan.notesOnP1) plan.notesOnP1 = false;
   while (!fits() && plan.spec.length > 4) plan.spec.pop();
   if (!fits() && plan.linesOnP1) {
@@ -242,12 +260,20 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const notes = String(s.notes || '').trim();
   const clientRows = [client.name, client.address, client.phone, client.email].filter(Boolean).length;
   const handlerRows = [c.contactName, c.contactPhone, c.contactEmail].filter(Boolean).length;
-  const plan = planPage1({ titleText: `${title}${subtitle ? ` ${subtitle}` : ''}`, peopleRows: Math.max(clientRows, handlerRows), spec: specLines(facts), lines: offer.lines.map((l) => ({ label: l.label, detail: lineDetail(l) })), notes, leadTime: (s.leadTime || '').trim() });
+  const card = s.showContactQr ? contactCardText(c) : null;
+  const qr = card ? qrSvg(card.text, { quiet: QR_QUIET, color: '#141414' }) : null;
+  const plan = planPage1({ titleText: `${title}${subtitle ? ` ${subtitle}` : ''}`, peopleRows: Math.max(clientRows, handlerRows), spec: specLines(facts), lines: offer.lines.map((l) => ({ label: l.label, detail: lineDetail(l) })), notes, leadTime: (s.leadTime || '').trim(), qr: !!qr });
   const notesP2 = !!notes && !plan.notesOnP1;
   const linesP2 = !plan.linesOnP1;
 
+  const heroCaption = textOr(s.heroCaption, 'Wizualizacja poglądowa');
+  const eyebrow = textOr(s.offerEyebrow, '') || (install ? 'Schody drewniane z montażem' : 'Schody drewniane');
+  const deliveryNote = textOr(s.deliveryNote, 'Wycena po pomiarach i ocenie wykonawcy.');
+  const closingNote = textOr(s.closingNote, 'Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).');
+  const technical = s.technicalSheet !== false;
+
   // --- sheet 1
-  const hero = `<div class="hero">${logoDataUrl ? `<img class="logo" src="${esc(logoDataUrl)}" alt="logo">` : c.name ? `<div class="brand">${esc(c.name)}</div>` : ''}${image3d ? `<img class="render" src="${esc(image3d)}" alt="wizualizacja">` : ''}${image3d ? '<span class="caption">Wizualizacja poglądowa</span>' : ''}</div>`;
+  const hero = `<div class="hero">${logoDataUrl ? `<img class="logo" src="${esc(logoDataUrl)}" alt="logo">` : c.name ? `<div class="brand">${esc(c.name)}</div>` : ''}${image3d ? `<img class="render${s.heroFull ? ' full' : ''}" src="${esc(image3d)}" alt="wizualizacja">` : ''}${image3d && heroCaption ? `<span class="caption">${esc(heroCaption)}</span>` : ''}</div>`;
   const clientBlock = [client.name ? `<b>${esc(client.name)}</b>` : '', client.address ? `${esc(client.address)}<br>` : '', client.phone ? `tel. ${esc(client.phone)}<br>` : '', client.email ? esc(client.email) : ''].join('');
   const handlerBlock = [c.contactName ? `<b>${esc(c.contactName)}</b>` : '', c.contactPhone ? `tel. ${esc(c.contactPhone)}<br>` : '', c.contactEmail ? esc(c.contactEmail) : ''].join('');
   const people = clientBlock || handlerBlock ? `<div class="people"><div>${clientBlock ? `<span>Klient</span>${clientBlock}` : ''}</div><div>${handlerBlock ? `<span>Opiekun oferty</span>${handlerBlock}` : ''}</div></div>` : '';
@@ -257,12 +283,13 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const grossNote = delivery && install ? 'z dostawą i montażem' : delivery ? 'z dostawą' : install ? 'z montażem' : '';
   const notesP1 = !notes ? '' : notesP2 ? '<div class="notes"><b>Istotne uwagi — strona 2</b></div>' : `<div class="notes"><b>Istotne uwagi</b><p>${esc(notes)}</p></div>`;
   const leadTime = (s.leadTime || '').trim();
-  const facts1 = `<div class="facts"><div>${leadTime ? `<div class="label">Termin realizacji</div><div class="big">${esc(leadTime)}</div>${s.leadTimeNote ? `<div class="muted">${esc(s.leadTimeNote)}</div>` : ''}` : ''}</div><div><div class="label">Dostawa</div>${delivery ? '<div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>' : ''}<div class="muted">Wycena po pomiarach i ocenie wykonawcy.</div></div></div>`;
+  const qrCol = qr ? `<div class="qr"><div class="label">Zapisz kontakt</div>${qr}</div>` : '';
+  const facts1 = `<div class="facts${qr ? ' with-qr' : ''}"><div>${leadTime ? `<div class="label">Termin realizacji</div><div class="big">${esc(leadTime)}</div>${s.leadTimeNote ? `<div class="muted">${esc(s.leadTimeNote)}</div>` : ''}` : ''}</div><div><div class="label">Dostawa</div>${delivery ? '<div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>' : ''}${deliveryNote ? `<div class="muted">${esc(deliveryNote)}</div>` : ''}</div>${qrCol}</div>`;
   const sheet1 = `<section class="sheet"><div class="p1">${hero}<div class="main">
     <div class="top"><div><div class="num-label">${number ? 'Oferta nr' : ''}</div><div class="num display">${number || 'Oferta'}</div><div class="muted" style="margin-top:1mm">z dnia ${dateFmt(date)}</div></div>
       <div class="valid"><div class="label">Ważna do</div><strong>${dateFmt(valid)}</strong></div></div>
     ${people}
-    <div class="eyebrow">${install ? 'Schody drewniane z montażem' : 'Schody drewniane'}</div>
+    <div class="eyebrow">${esc(eyebrow)}</div>
     <h1 class="display${plan.long ? ' long' : ''}">${esc(title)}${subtitle ? ` <span class="sub">${esc(subtitle)}</span>` : ''}</h1>
     <div class="spec">${plan.spec.map((t) => `<div>${esc(t)}</div>`).join('')}</div>
     <div class="lines">${lines1}</div>
@@ -281,15 +308,16 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
         .join('')}</table>`
     : '';
   const notes2 = notesP2 ? `<h2>Istotne uwagi</h2><p class="notes2">${esc(notes)}</p>` : '';
-  const planFig = planSvg ? `<h2>Rzut z góry</h2><figure class="plan">${planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
-  const params = `<h2>Parametry schodów</h2><dl class="params">${(facts.rows || []).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
+  const planFig = technical && planSvg ? `<h2>Rzut z góry</h2><figure class="plan">${planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
+  const params = !technical || !(facts.rows || []).length ? '' : `<h2>Parametry schodów</h2><dl class="params">${(facts.rows || []).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
   const comfort =
-    s.showComfort !== false && facts.comfort?.length
+    technical && s.showComfort !== false && facts.comfort?.length
       ? `<h2>Wygoda i zgodność z przepisami</h2><table><tr><th>Parametr</th><th>Wartość</th><th>Wymaganie</th><th class="num-r">Ocena</th></tr>${facts.comfort
           .map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.value)}</td><td>${esc(x.requirement)} <span class="muted">(${esc(x.source)})</span></td><td class="num-r"><span class="${x.ok ? 'ok' : 'bad'}">${x.ok ? 'spełnia' : 'poza zakresem'}</span></td></tr>`)
           .join('')}</table>`
       : '';
-  const sheet2 = `<section class="sheet flow"><div class="p2">${head}${table}${notes2}${planFig}${params}${comfort}<p class="muted" style="margin:5mm 0 0">Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).</p></div>${footerHTML(c)}</section>`;
+  const body2 = `${table}${notes2}${planFig}${params}${comfort}`;
+  const sheet2 = body2 ? `<section class="sheet flow"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;
   return `<!DOCTYPE html>

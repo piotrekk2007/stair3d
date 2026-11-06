@@ -253,5 +253,45 @@ export function createScene(container) {
     setBackground: (hex) => {
       scene.background = new THREE.Color(hex);
     },
+    // The picture for the AI render (app/aiRenderPanel.js, user request 2026-11-06): what the user's own camera sees,
+    // the frame of ratio width / height CENTRED in the viewport (the frame drawn on screen — frameInViewport) — a
+    // copy of the camera with that aspect; when the frame is taller than the viewport the vertical angle grows.
+    renderFrameImage({ width, height }) {
+      const el = renderer.domElement;
+      const vw = el.clientWidth || el.width;
+      const vh = el.clientHeight || el.height;
+      const f = frameInViewport(vw, vh, width / height);
+      const cam = activeCamera.clone();
+      if (cam.isPerspectiveCamera) {
+        cam.aspect = width / height;
+        cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(activeCamera.fov) / 2) * (f.height / vh)));
+      } else {
+        const k = (activeCamera.top - activeCamera.bottom) / vh;
+        const cx = (activeCamera.left + activeCamera.right) / 2;
+        const cy = (activeCamera.top + activeCamera.bottom) / 2;
+        Object.assign(cam, { left: cx - (f.width * k) / 2, right: cx + (f.width * k) / 2, top: cy + (f.height * k) / 2, bottom: cy - (f.height * k) / 2 });
+      }
+      cam.updateProjectionMatrix();
+      const prevRatio = renderer.getPixelRatio();
+      const prevSize = renderer.getSize(new THREE.Vector2());
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height, false);
+      renderer.render(scene, cam);
+      const out = document.createElement('canvas');
+      out.width = width;
+      out.height = height;
+      out.getContext('2d').drawImage(renderer.domElement, 0, 0, width, height);
+      renderer.setPixelRatio(prevRatio);
+      renderer.setSize(prevSize.x, prevSize.y, false);
+      renderer.render(scene, activeCamera);
+      return out;
+    },
   };
+}
+
+/** The largest frame of ratio `aspect` (w / h) centred in a viewport vw × vh — or, in a viewport narrower than the
+ *  ratio, the viewport's width and a height beyond it (the picture then shows more above / below than the screen). */
+export function frameInViewport(vw, vh, aspect) {
+  if (vw / vh >= aspect) return { width: vh * aspect, height: vh, left: (vw - vh * aspect) / 2, top: 0 };
+  return { width: vw, height: vw / aspect, left: 0, top: (vh - vw / aspect) / 2 };
 }

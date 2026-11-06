@@ -53,6 +53,7 @@ export function createDefaultOfferSettings() {
     leadTime: DEFAULT_LEAD_TIME,
     leadTimeNote: DEFAULT_LEAD_TIME_NOTE,
     deliveryIncluded: true,
+    showContactQr: false,
   };
 }
 
@@ -87,6 +88,8 @@ export function sanitizeOfferStyleFields(value) {
     leadTime: typeof v.leadTime === 'string' ? v.leadTime : DEFAULT_LEAD_TIME,
     leadTimeNote: typeof v.leadTimeNote === 'string' ? v.leadTimeNote : DEFAULT_LEAD_TIME_NOTE,
     deliveryIncluded: v.deliveryIncluded !== false,
+    // stage 2 (2026-11-06): the contact QR beside „Dostawa” (offer/contactCard.js) — switched on by hand
+    showContactQr: v.showContactQr === true,
   };
 }
 

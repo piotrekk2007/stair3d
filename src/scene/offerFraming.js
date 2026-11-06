@@ -8,11 +8,26 @@ import { computeStandardView } from './sceneSetup.js';
 
 /**
  * @param {THREE.Box3} box  the stair's world box
- * @param {{view?: string, aspect: number, fovDeg?: number, margin?: number}} opts  aspect = width / height of the
- *   picture; margin = the free share kept at the frame's edges (0.06 = 6 %)
+ * @param {{view?: string, aspect: number, fovDeg?: number, margin?: number, fill?: 'contain'|'height'|number}} opts
+ *   aspect = width / height of the picture; margin = the free share kept at the frame's edges (0.06 = 6 %); fill:
+ *   'contain' (0) = the whole box inside, 'height' (1) = the box fills the picture's HEIGHT (its sides cut off — a tall
+ *   narrow picture of a wide stair), a number between = that far between the two in the picture's SCALE (the modern
+ *   offer's full-height strip takes 0.5 — user decision 2026-11-06)
  * @returns {{center: THREE.Vector3, radius: number}}  what renderViewImage takes for that framing
  */
-export function fitViewToBox(box, { view = 'iso', aspect, fovDeg = 50, margin = 0.06 } = {}) {
+export function fitViewToBox(box, opts = {}) {
+  const t = opts.fill === 'height' ? 1 : typeof opts.fill === 'number' ? Math.min(1, Math.max(0, opts.fill)) : 0;
+  if (t > 0 && t < 1) {
+    // the scale (∝ 1 / distance) interpolated between the two fits; centred like them
+    const a = fitViewToBox(box, { ...opts, fill: 'contain' });
+    const b = fitViewToBox(box, { ...opts, fill: 'height' });
+    const radius = 1 / ((1 - t) / a.radius + t / b.radius);
+    return { center: a.center.clone().lerp(b.center, t), radius };
+  }
+  return fitBox(box, { ...opts, fill: t === 1 ? 'height' : 'contain' });
+}
+
+function fitBox(box, { view = 'iso', aspect, fovDeg = 50, margin = 0.06, fill = 'contain' } = {}) {
   let center = box.getCenter(new THREE.Vector3());
   const { position } = computeStandardView(view, center, 1);
   const dir = position.clone().sub(center).normalize(); // from the target to the camera
@@ -51,7 +66,7 @@ export function fitViewToBox(box, { view = 'iso', aspect, fovDeg = 50, margin = 
     for (let k = 0; k < 60; k++) {
       const mid = (lo + hi) / 2;
       const e = extents(center, mid);
-      const fits = e && Math.max(-e.x0, e.x1, -e.y0, e.y1) <= 1 - margin;
+      const fits = e && (fill === 'height' ? Math.max(-e.y0, e.y1) : Math.max(-e.x0, e.x1, -e.y0, e.y1)) <= 1 - margin;
       if (fits) hi = mid;
       else lo = mid;
     }

@@ -5,8 +5,8 @@
 
 import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
 import { buildOfferHTML } from '../offer/offerDocument.js';
-import { buildModernOfferHTML, HERO_BACKGROUND, HERO_BOX_MM } from '../offer/offerDocumentModern.js';
-import { createOfferPanel, fillOfferForm, updateOfferPanel } from '../ui/offerPanel.js';
+import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../offer/offerDocumentModern.js';
+import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus } from '../ui/offerPanel.js';
 import { summarizeByCategory } from '../ui/takeoffView.js';
 import { printHtml } from './printHtml.js';
 
@@ -21,12 +21,16 @@ const COMPANY_STORAGE_KEY = 'stair3d.company';
  * @param {() => Set<string>} opts.getWinderStepIds  winder treads (their own summary category)
  * @param {() => string|null} opts.getLogoDataUrl
  * @param {() => string} opts.getProjectName
- * @param {(o?: {width, height, background, fit}) => string|null} opts.renderImage3D  the 3D picture (presentation look,
- *   iso view) as a data URL — the modern style asks for its portrait box on its studio background
+ * @param {(o?: {width, height, background, fit, slab, fill}) => string|null} opts.renderImage3D  the 3D picture
+ *   (presentation look, iso view) as a data URL — the modern style asks for its strip over the sheet's whole height on
+ *   its studio background, with the slab, framed half way between the whole stair and the strip's height
  * @param {() => string|null} opts.renderPlanSVG      the plan picture (whole stair, no edit layers)
  */
 export function createOfferController(opts) {
   let settings = createDefaultOfferSettings();
+  // the modern hero's own picture (an AI render from the presentation mode, or a file) — this session only, not the
+  // project (test, 2026-11-06): {img (data URL), full (the whole sheet's height, else the 84 × 150 box), source}
+  let hero = null;
   let company = (() => {
     try {
       return sanitizeCompany(JSON.parse(localStorage.getItem(COMPANY_STORAGE_KEY) || 'null'));
@@ -59,16 +63,16 @@ export function createOfferController(opts) {
       window.alert(c.offer.warnings[0] || 'Brak pozycji do wyceny.');
       return;
     }
-    const bp = opts.getTakeoffSettings().boardPricing || {};
     const modern = settings.offerStyle === 'modern';
     const input = {
       offer: c.offer,
-      facts: stairFacts(models.fullConfig, models.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') }),
-      settings,
+      facts: facts(),
+      // (the modern hero over the sheet's whole height — user decision 2026-11-06)
+      settings: modern ? { ...settings, heroFull: hero ? hero.full : true } : settings,
       company,
       logoDataUrl: opts.getLogoDataUrl(),
-      // (the modern hero: the render at its box's ratio, on its background, the stair filling it)
-      image3d: modern ? opts.renderImage3D({ width: 1120, height: Math.round((1120 * HERO_BOX_MM.height) / HERO_BOX_MM.width), background: HERO_BACKGROUND, fit: true }) : opts.renderImage3D(),
+      // (the modern hero: the render at the strip's ratio, on its background, with the slab, framed half way)
+      image3d: modern && hero ? hero.img : modern ? opts.renderImage3D({ width: 960, height: Math.round((960 * HERO_FULL_MM.height) / HERO_FULL_MM.width), background: HERO_BACKGROUND, fit: true, slab: true, fill: 0.5 }) : opts.renderImage3D(),
       planSvg: opts.renderPlanSVG(),
       projectName: opts.getProjectName(),
     };
@@ -94,6 +98,12 @@ export function createOfferController(opts) {
       refresh();
     },
     onGenerate: () => generatePDF(),
+    onHeroFile: (file) => {
+      const r = new FileReader();
+      r.onload = () => setHeroImage({ img: String(r.result), full: true, source: 'file' });
+      r.readAsDataURL(file);
+    },
+    onHeroRemove: () => setHeroImage(null),
     onClientModel: (kind) => opts.onClientModel?.(kind),
   });
   fillOfferForm(panel, settings, company);
@@ -104,5 +114,17 @@ export function createOfferController(opts) {
     fillOfferForm(panel, settings, company);
   }
 
-  return { refresh, load, settings: () => settings };
+  /** The offer's facts (the same rows the offer prints) — also the AI render's prompt. */
+  function facts() {
+    const models = opts.getModels();
+    if (!models) return null;
+    const bp = opts.getTakeoffSettings().boardPricing || {};
+    return stairFacts(models.fullConfig, models.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') });
+  }
+  function setHeroImage(h) {
+    hero = h && h.img ? { img: h.img, full: h.full !== false, source: h.source || 'ai' } : null;
+    setOfferHeroStatus(panel, hero);
+  }
+
+  return { refresh, load, settings: () => settings, facts, setHeroImage, heroImage: () => hero };
 }

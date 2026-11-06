@@ -55,6 +55,7 @@ import { renderReferenceStair } from './geometry/referenceStairRenderer.js';
 import { buildCladdingFloorFromFile, CLADDING_PROJECT_TYPE } from './cladding/floorStair.js';
 import { parseCladdingProjectFile } from './cladding/projectFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
+import { createAiRenderPanel } from './app/aiRenderPanel.js';
 import { fitViewToBox } from './scene/offerFraming.js';
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
@@ -559,6 +560,7 @@ function setClientMode(on) {
     setView('3d');
   } else {
     handleViewChange('showCeiling', ceilingBeforeClientMode);
+    aiPanel.close();
   }
   refreshUI(gui); // suwaki/checkboxy w panelu parametrów odzwierciedlają zmiany viewState
   sceneApi.setBackground(on ? viewportHudApi.hud.querySelector('[data-bg]').value : '#eef1f5');
@@ -597,6 +599,7 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   },
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
   onSnapshot: () => savePresentationSnapshot({ sceneApi, logo, projectName: projectMeta.name }),
+  onAiRender: () => aiPanel.toggle(),
   onLogoFile: (file) => logo.loadFile(file),
   onLogoRemove: () => logo.remove(),
   onLogoSettings: (patch) => logo.update(patch),
@@ -615,22 +618,34 @@ viewportHudApi.syncSideNames(config);
 // Tryb prezentacji: logo firmy na ekranie i na zdjęciach, „Zapisz zdjęcie" — app/presentation.js
 // ---------------------------------------------------------------------------------------------
 const logo = createPresentationLogo({ hostEl: ws.mainEl, viewportEl: viewport, onStatus: (settings, message) => viewportHudApi.syncLogo(settings, message) });
+// „✨ Obraz AI do oferty” (test, 2026-11-06): the presentation frame → Gemini → the modern offer's picture
+const aiPanel = createAiRenderPanel({
+  hostEl: ws.mainEl,
+  viewportEl: viewport,
+  getSceneApi: () => sceneApi,
+  getFacts: () => offer?.facts(),
+  onUse: (img, { full }) => offer?.setHeroImage({ img, full, source: 'ai' }),
+  getUsed: () => offer?.heroImage(),
+});
 
 // Obraz 3D do oferty: wygląd jak w trybie prezentacji (bez siatki, osi, stropu i nakładek technicznych), osobna kamera
 // w widoku izometrycznym; potem przywrócenie tego, co było widać.
 // The modern offer (offer/offerDocumentModern.js) asks for its own size + background and a FIT framing
 // (scene/offerFraming.js): the stair filling the portrait box, rendered on the box's colour, the floor as a shadow only.
-function offerImage3D({ width = 1400, height = 1000, background = null, fit = false } = {}) {
+function offerImage3D({ width = 1400, height = 1000, background = null, fit = false, slab = false, fill = 'contain' } = {}) {
   if (!lastModels) return null;
   const b = lastModels.planLayout.bounds;
   const rise = lastModels.fullConfig.totalRise;
   let center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
   // a little more room than the on-screen "Dopasuj" — the whole stair with its posts must fit the picture
   let radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
-  if (fit && currentRoot) ({ center, radius } = fitViewToBox(new THREE.Box3().setFromObject(currentRoot), { aspect: width / height, fovDeg: sceneApi.camera.fov }));
-  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentWalls, currentReference, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
+  if (fit && currentRoot) ({ center, radius } = fitViewToBox(new THREE.Box3().setFromObject(currentRoot), { aspect: width / height, fovDeg: sceneApi.camera.fov, fill }));
+  const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, slab ? null : currentCeiling, currentWalls, currentReference, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
   const was = hidden.map((o) => o.visible);
   hidden.forEach((o) => (o.visible = false));
+  // (the modern offer: the slab with its opening round the stair — user request 2026-11-06; never the walls)
+  const ceilingWas = currentCeiling?.visible;
+  if (slab && currentCeiling) currentCeiling.visible = true;
   const groundWas = sceneApi.helpers.ground.visible;
   const backgroundWas = sceneApi.scene.background;
   // (a studio picture on the box's colour: the floor only as its shadow, so the background stays one even colour)
@@ -642,6 +657,7 @@ function offerImage3D({ width = 1400, height = 1000, background = null, fit = fa
     return sceneApi.renderViewImage({ width, height, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.92);
   } finally {
     hidden.forEach((o, i) => (o.visible = was[i]));
+    if (slab && currentCeiling) currentCeiling.visible = ceilingWas;
     sceneApi.helpers.ground.visible = groundWas;
     // (the shadow catcher is in `hidden` — restored with it)
     sceneApi.scene.background = backgroundWas;

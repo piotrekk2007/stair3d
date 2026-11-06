@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { buildModernOfferHTML, MAX_P1_LINES, HERO_BACKGROUND } from '../offerDocumentModern.js';
 import { createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany } from '../offerModel.js';
 import { createDefaultCladdingOffer, sanitizeCladdingOffer } from '../../cladding/quote/claddingOffer.js';
+import { qrVersionFor as qrVersionForCard } from '../../util/qrCode.js';
 
 // the modern offer style (user decisions 2026-11-06 — docs/design/oferta-nowoczesna-wzor.html)
 const facts = {
@@ -162,4 +163,69 @@ test('sheet 1\'s budget: what does not fit goes to sheet 2, what fits again afte
   for (const [p, ls] of [[few, short], [many, lines(6)]]) assert.ok(page1Height({ ...base, long: p.long, spec: p.spec, lines: ls, linesOnP1: p.linesOnP1, notesOnP1: p.notesOnP1 }) <= 297 - 21 - 18 - 5);
   // a title over two lines is set one size smaller
   assert.equal(planPage1({ ...base, titleText: 'Okładziny schodów betonowych — Dąb, Klasa Natura', lines: [] }).long, true);
+});
+
+// ---- stage 2 (2026-11-06): the contact QR beside „Dostawa”, switched on in the offer's settings
+test('the contact QR: off by default, on → beside „Dostawa” with the handler\'s vCard; none without a phone / e-mail', async () => {
+  const { contactCardText } = await import('../contactCard.js');
+  assert.equal(createDefaultOfferSettings().showContactQr, false);
+  assert.equal(sanitizeOfferSettings({ showContactQr: true }).showContactQr, true);
+  assert.equal(createDefaultCladdingOffer().showContactQr, false);
+  assert.equal(sanitizeCladdingOffer({ showContactQr: true }).showContactQr, true);
+  assert.doesNotMatch(html(), /class="qr"/);
+  const p1 = page(html({ showContactQr: true }), 1);
+  assert.match(p1, /<div class="facts with-qr">.*Dostawa.*<div class="qr"><div class="label">Zapisz kontakt<\/div><svg [^>]*viewBox/s);
+  const card = contactCardText(company).text;
+  assert.equal(card, ['BEGIN:VCARD', 'VERSION:3.0', 'N:Nowak;Anna;;;', 'FN:Anna Nowak', 'ORG:Drewex sp.j.', 'TEL:501000000', 'TEL:+48227866298', 'EMAIL:anna@drewex.net.pl', 'URL:www.drewex.net.pl', 'ADR:;;ul. Wawrzyna 2;;;;', 'END:VCARD'].join('\r\n'));
+  // the company alone (no handler): its name is the contact; its own phone / e-mail
+  assert.ok(contactCardText({ name: 'Drewex', phone: '22 786', email: 'a@b.pl' }).text.includes('N:;;;;\r\nFN:Drewex\r\nORG:Drewex\r\nTEL:22786\r\nEMAIL:a@b.pl'));
+  // nothing to call or write to → no code
+  assert.equal(contactCardText({ name: 'Drewex' }), null);
+  assert.doesNotMatch(buildModernOfferHTML({ offer: offerOf(2), facts, settings: settings({ showContactQr: true }), company: { name: 'Drewex' } }), /class="qr"/);
+  // too long for a version-10 code → the vCard without the address, then MECARD (no address, then no www)
+  const long = { ...company, address: 'ul. Bardzo Długa Nazwa Ulicy Przy Której Stoi Zakład Stolarski 123/45, 05-123 Wólka Kosowska' };
+  assert.deepEqual([contactCardText(long).format, contactCardText(long).dropped], ['vcard', ['adres']]);
+  const longer = { ...long, name: 'Przedsiębiorstwo Produkcyjno-Handlowo-Usługowe Drewex spółka jawna', contactName: 'Anna Maria Nowak-Kowalska', contactEmail: 'anna.maria.nowak-kowalska@drewex.net.pl' };
+  const r = contactCardText(longer);
+  assert.equal(r.format, 'mecard');
+  assert.ok(r.text.startsWith('MECARD:N:Nowak-Kowalska,Anna Maria;ORG:Przedsiębiorstwo Produkcyjno-Handlowo-Usługowe Drewex spółka jawna;TEL:501000000;TEL:+48227866298;EMAIL:anna.maria.nowak-kowalska@drewex.net.pl;'), r.text);
+  for (const c of [company, long, longer]) assert.ok(qrVersionForCard(contactCardText(c).text), 'every card fits a code');
+  // escaping: vCard \; \, — MECARD the same per part (the N separator itself not)
+  assert.ok(contactCardText({ name: 'A; B, C', phone: '1' }).text.includes('ORG:A\\; B\\, C'));
+});
+
+test('sheet 1\'s budget counts the QR\'s column (taller than the lead time / delivery)', async () => {
+  const { page1Height } = await import('../offerDocumentModern.js');
+  const base = { titleText: 'Schody', long: false, peopleRows: 3, spec: ['a'], lines: [], linesOnP1: true, notes: '', notesOnP1: false, leadTime: '3–5 tygodni' };
+  assert.ok(page1Height({ ...base, qr: true }) > page1Height(base) + 7);
+});
+
+test('texts for an offer made by hand: the caption, eyebrow, delivery note, closing note, sheet 2 off — absent = as before', () => {
+  const before = html({}, 3, { image3d: 'data:image/jpeg;base64,AA' });
+  assert.match(before, /<span class="caption">Wizualizacja poglądowa<\/span>/);
+  assert.match(before, /<div class="eyebrow">Schody drewniane z montażem<\/div>/);
+  assert.match(before, /Wycena po pomiarach i ocenie wykonawcy\./);
+  assert.match(before, /Cena materiału obejmuje jego przygotowanie/);
+  const own = html({ heroCaption: 'Zdjęcie realizacji', offerEyebrow: 'Schody dywanowe', deliveryNote: '', closingNote: 'Dziękujemy.' }, 3, { image3d: 'data:image/jpeg;base64,AA' });
+  assert.match(own, /<span class="caption">Zdjęcie realizacji<\/span>/);
+  assert.match(own, /<div class="eyebrow">Schody dywanowe<\/div>/);
+  assert.doesNotMatch(own, /Wycena po pomiarach/);
+  assert.match(own, /Dziękujemy\./);
+  assert.doesNotMatch(html({ heroCaption: '' }, 3, { image3d: 'data:image/jpeg;base64,AA' }), /class="caption"/);
+  // sheet 2 off: one sheet only — unless the lines / long notes moved there (then only those)
+  const one = html({ technicalSheet: false });
+  assert.equal(one.split('<section class="sheet').length - 1, 1);
+  const moved = html({ technicalSheet: false }, 12);
+  assert.equal(moved.split('<section class="sheet').length - 1, 2);
+  assert.match(page(moved, 2), /Szczegółowa wycena/);
+  assert.doesNotMatch(page(moved, 2), /Parametry schodów|Rzut z góry|Wygoda/);
+});
+
+test('heroFull: the picture over the hero\'s whole height (the box as before when absent)', async () => {
+  const { HERO_FULL_MM } = await import('../offerDocumentModern.js');
+  assert.deepEqual({ ...HERO_FULL_MM }, { width: 84, height: 276 });
+  const img = { image3d: 'data:image/jpeg;base64,AA' };
+  assert.match(html({}, 3, img), /<img class="render" src=/);
+  assert.match(html({ heroFull: true }, 3, img), /<img class="render full" src=/);
+  assert.match(html({}, 3, img), /\.hero \.render\.full \{ top: 0; transform: none; height: 100%; \}/);
 });

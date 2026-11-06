@@ -489,7 +489,16 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   `page1Height`, mm from the CSS): notes → shorter spec → lines go to sheet 2 when it would spill. New offer fields
   `offerTitle` / `offerSubtitle` / `leadTime` / `leadTimeNote` / `deliveryIncluded`, optional company fields
   `contactName` / `contactPhone` / `contactEmail` / `hours`; Inter Tight + Inter (Google Fonts) — `printHtml.js` waits
-  for the fonts and images. No QR yet (stage 2).
+  for the fonts and images. Stage 2: `showContactQr` — a contact QR beside „Dostawa” (`offer/contactCard.js`: compact
+  vCard 3.0, MECARD when too long; own encoder `util/qrCode.js` — byte mode, level M, versions 1–10, SVG path; tested
+  with known vectors + an independent decoder). Optional doc texts `heroCaption` / `offerEyebrow` / `deliveryNote` /
+  `closingNote` / `technicalSheet` / `heroFull` (the picture over the hero's whole height, `HERO_FULL_MM`; absent = as
+  before). Both modules print the modern hero `heroFull` with the slab (no walls), framed `fitViewToBox` `fill: 0.5`
+  (half way in scale between the whole stair and the strip's height — user decision 2026-11-06). TEST: „✨ Obraz AI do
+  oferty” in both presentation modes (`app/aiRenderPanel.js` + pure `offer/aiRender.js`): the user's camera in a 9:16
+  frame (`sceneSetup.js renderFrameImage`) + our oak photo + a prompt from the offer's facts (the frame binding: camera,
+  geometry, counts, materials) → Google `gemini-2.5-flash-image` (the user's key, `localStorage stair3d.ai`, header
+  only) → the modern hero („Obraz po lewej”: 3D / AI / from a file; session only).
 
 ## Plan 2D and workspace UI
 
@@ -583,7 +592,9 @@ part-way along a step (`fromOffsetMm` / `toOffsetMm`, dragged on the plan — `r
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared
 `export/clientModelExport.js` on `export/clientModel.js`). Tape measures: plan mode „📏 Miarka” (the shared
-`plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). Later (user): the regulation
+`plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). The plan's walking line runs
+smoothly (`walkingLine.js`: the flights' axes, the zones' walklines, the landings' turn corners rounded by tangent
+arcs). Later (user): the regulation
 warnings for the finished sizes, contract / payment-schedule documents. Later (user): contract / payment-schedule documents.
 
 ## Open items / known limitations

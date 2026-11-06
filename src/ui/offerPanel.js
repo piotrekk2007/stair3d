@@ -29,6 +29,11 @@ export function createOfferPanel(container, handlers) {
       <label class="of-row">Termin realizacji<input type="text" data-set="leadTime"></label>
       <label class="of-row">Opis terminu<input type="text" data-set="leadTimeNote"></label>
       <label class="of-check"><input type="checkbox" data-set="deliveryIncluded"> Cena zawiera dostawę („Ceny zawierają koszt dostawy na miejsce”)</label>
+      <label class="of-check"><input type="checkbox" data-set="showContactQr"> Pokaż kod QR z kontaktem (opiekun / firma — z danych firmy)</label>
+      <div class="of-row of-col">Obraz po lewej<span class="of-inline"><span data-of="hero-status">wizualizacja 3D (automatycznie)</span></span>
+        <span class="of-inline"><button type="button" data-of="hero-file" title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button><button type="button" data-of="hero-remove" hidden>Wróć do wizualizacji 3D</button></span>
+        <input type="file" accept="image/*" data-of="hero-input" hidden></div>
+      <div class="of-hint">Obraz AI: tryb Prezentacji → „✨ Obraz AI do oferty” (test).</div>
       <div class="of-hint">Styl nowoczesny: strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne (rzut, parametry, wygoda). Pusty tytuł = „Schody — materiał”.</div>
     </div>
     <h4>Model 3D dla klienta</h4>
@@ -104,7 +109,22 @@ export function createOfferPanel(container, handlers) {
   panel.querySelector('[data-of="generate"]').addEventListener('click', () => handlers.onGenerate());
   panel.querySelectorAll('[data-client-model]').forEach((b) => b.addEventListener('click', () => handlers.onClientModel?.(b.dataset.clientModel)));
   panel.querySelector('[data-of="suggest"]').addEventListener('click', () => handlers.onSuggestNumber());
+  // the modern hero's own picture (an AI render / a file) instead of the 3D render
+  const heroInput = panel.querySelector('[data-of="hero-input"]');
+  panel.querySelector('[data-of="hero-file"]').addEventListener('click', () => heroInput.click());
+  heroInput.addEventListener('change', () => {
+    const f = heroInput.files?.[0];
+    heroInput.value = '';
+    if (f) handlers.onHeroFile?.(f);
+  });
+  panel.querySelector('[data-of="hero-remove"]').addEventListener('click', () => handlers.onHeroRemove?.());
   return panel;
+}
+
+/** The modern hero's picture in the panel: null = the 3D render. */
+export function setOfferHeroStatus(panel, hero) {
+  panel.querySelector('[data-of="hero-status"]').textContent = !hero ? 'wizualizacja 3D (automatycznie)' : `${hero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} — ${hero.full ? 'cała wysokość' : 'środek 84 × 150 mm'}`;
+  panel.querySelector('[data-of="hero-remove"]').hidden = !hero;
 }
 
 /** Puts the stored values into the form fields (on start, after loading a project, after "Nadaj"). */

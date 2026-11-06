@@ -28,6 +28,7 @@ export function createDefaultCladdingOffer() {
     leadTime: '3–5 tygodni',
     leadTimeNote: 'gotowe schody na miejscu',
     deliveryIncluded: true,
+    showContactQr: false, // (stage 2: a QR with the company's contact beside „Dostawa”)
   };
 }
 
@@ -61,6 +62,7 @@ export function sanitizeCladdingOffer(raw) {
     leadTime: typeof s.leadTime === 'string' ? s.leadTime : d.leadTime,
     leadTimeNote: typeof s.leadTimeNote === 'string' ? s.leadTimeNote : d.leadTimeNote,
     deliveryIncluded: s.deliveryIncluded !== false,
+    showContactQr: s.showContactQr === true,
   };
 }
 

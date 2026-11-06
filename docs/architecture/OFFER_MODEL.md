@@ -53,9 +53,9 @@ buildModernOfferHTML(input)` — **to samo wejście** co `buildOfferHTML` (`offe
 | Strona 2 | dane techniczne: „Rzut z góry”, parametry (`facts.rows`), „Wygoda i zgodność z przepisami” (gdy włączona), ewentualnie „Szczegółowa wycena” i dłuższe uwagi |
 | Nowe pola oferty (projekt) | `offerTitle` (pusty = „Schody — materiał” / „Okładziny schodów betonowych — materiał”), `offerSubtitle`, `leadTime` („3–5 tygodni”), `leadTimeNote` („gotowe schody na miejscu”), `deliveryIncluded` (tak) |
 | Nowe pola firmy (`localStorage`) | `contactName`, `contactPhone`, `contactEmail` (opiekun oferty), `hours` (godziny otwarcia) — opcjonalne, zapisywane tylko gdy podane |
-| Wizualizacja | pionowy kadr w proporcji hero (1120 × 2000 px), tło `#ECECEB` (jak hero), bez siatki / osi / podłogi (tylko jej cień), w module bez ścian i stropu; schody **wypełniają** kadr — `scene/offerFraming.js fitViewToBox` (rzut narożników prostopadłościanu schodów na kamerę widoku izometrycznego, odległość z bisekcji, środek wyrównany) |
+| Wizualizacja (zmiana 2026-11-06) | pas po lewej **na całą wysokość kartki** do stopki (`heroFull`, 84 × 276 mm, render 960 × 3154 px), tło `#ECECEB`, bez siatki / osi / podłogi (tylko jej cień) i bez ścian, **ze stropem** z otworem (samonośne: `currentCeiling`, moduł: `Room` → `Slab`, gdy strop jest włączony). Kadr: `scene/offerFraming.js fitViewToBox` z `fill: 0.5` — w połowie (w skali obrazu) między „całe schody w pasie” (`contain`) a „schody wypełniają wysokość pasa” (`height`, boki przycięte); decyzja użytkownika po porównaniu trzech wariantów: pas 1 : 3,3, schody L z ukosa ~1 : 1 — całe byłyby małe, na wysokość mocno przycięte |
 | Czcionki | Inter Tight + Inter z Google Fonts, z zapasowymi; `app/printHtml.js` czeka na `document.fonts.ready` i dekodowanie obrazów (każde ≤ 4 s), dopiero potem drukuje |
-| Kod QR | nie teraz (etap 2) |
+| Kod QR (etap 2, 2026-11-06) | „Pokaż kod QR z kontaktem” (`showContactQr`, domyślnie wyłączony, w obu modułach): na stronie 1 trzecia kolumna obok „Dostawa” — „Zapisz kontakt” + kod 24 mm. Treść: `offer/contactCard.js contactCardText(company)` — vCard 3.0 (N / FN opiekuna, ORG firma, TEL opiekuna i firmy, EMAIL opiekuna albo firmy, URL, ADR), zwięzła (bez parametrów TYPE, www tak jak wpisane — pełna z adresem miała ~230 B); gdy się nie mieści w wersji 10: bez adresu, potem MECARD (bez adresu, potem bez www); bez telefonu i e-maila — bez kodu. Kod: własny enkoder `util/qrCode.js` (bajtowo UTF-8, korekcja M, wersje 1–10, maska wg 4 reguł kar, SVG jednym `<path>`, strefa ciszy 2 moduły + biały margines strony). Testy: znane wektory (RS „HELLO WORLD” 1-M, ciągi formatu M, ciągi wersji 7–10) + niezależny dekoder w teście (format, odmaskowanie, zygzak, deinterleave, syndromy RS = 0, tekst); budżet strony 1 liczy kolumnę kodu (`page1Height({qr})`) |
 
 **Co przechodzi na stronę 2** (`planPage1`): pozycje — gdy jest ich więcej niż `MAX_P1_LINES` (6), na stronie 1
 zostaje jeden wiersz „Szczegółowa wycena (N pozycji) — strona 2”, a pełna tabela (Lp. | Pozycja | Ilość | Cena netto
@@ -68,7 +68,31 @@ wychodziły 8 mm poza arkusz), a niższy limit zabierałby pozycje także tam, g
 stronę 2, po czym to, co zdjęto, wraca, gdzie znów się mieści. Tytuł dłuższy niż 2 linie (lub > 60 znaków) jest o
 stopień mniejszy.
 
-Testy: `src/offer/__tests__/offerDocumentModern.test.js`.
+Opcjonalne teksty wejścia (dla oferty pisanej ręcznie, poza aplikacją; brak pola = jak dotąd, `''` = nic):
+`heroCaption` (podpis obrazka, domyślnie „Wizualizacja poglądowa”), `offerEyebrow` (nadtytuł, domyślnie z pozycji
+montażu), `deliveryNote` („Wycena po pomiarach i ocenie wykonawcy.”), `closingNote` (zdanie na końcu strony 2),
+`technicalSheet: false` (bez rzutu / parametrów / wygody — strona 2 tylko, gdy przeszła tam wycena albo uwagi),
+`heroFull: true` (obrazek na całą wysokość pola po lewej, 84 × 276 mm — `HERO_FULL_MM`, zamiast kadru 84 × 150 mm).
+
+Testy: `src/offer/__tests__/offerDocumentModern.test.js`, `src/util/__tests__/qrCode.test.js`.
+
+## Obraz AI do oferty nowoczesnej (TEST, prośba użytkownika 2026-11-06)
+
+Tryb prezentacji (oba moduły) → „✨ Obraz AI do oferty”: panel obok widoku 3D (`app/aiRenderPanel.js`) i ramka 9:16 na
+widoku (przerywany pas = to, co zostaje w pasie oferty na całą wysokość). Kadr ustawia użytkownik kamerą; „Wyślij kadr
+do AI” robi render jego kamery w tej ramce (`sceneSetup.js renderFrameImage`, `frameInViewport`) i wysyła do modelu
+obrazów Google (domyślnie `gemini-2.5-flash-image` — „Nano Banana”, jak w projekcie Ala_Ang; nazwa do zmiany w panelu):
+prompt z `offer/aiRender.js buildAiPrompt` — kadr WIĄŻĄCY (kamera, geometria, liczba stopni / słupów / tralek / szyb,
+materiały i kolory bez zmian, nic nie dodawać / usuwać; bez ludzi, napisów), nasze zdjęcie dębu
+(`assets/textures/oak-natural.jpg`) jako IMAGE 2 = wzór drewna (wyłączalne), otoczenie do wyboru (nowoczesne / klasyczne
+/ studio), dopiski użytkownika, a jako opis — te same wiersze `facts.rows`, które drukuje oferta. Prompt widoczny i
+do poprawienia w panelu. Klucz Gemini API = użytkownika, w tej przeglądarce (`localStorage` `stair3d.ai`), zapytanie
+prosto do `generativelanguage.googleapis.com`, klucz w nagłówku `x-goog-api-key` (nigdy w URL), `imageConfig.aspectRatio
+9:16`. Wynik obok kadru → „Użyj w ofercie nowoczesnej” (w ofercie: cała wysokość — boki przycięte — albo środek
+84 × 150 mm, cały obraz) albo „Pobierz”. Zakładka Oferta: „Obraz po lewej” (wizualizacja 3D / obraz AI / „Z pliku…” —
+np. zdjęcie realizacji; „Wróć do wizualizacji 3D”) — tylko na czas sesji, nie w projekcie. Model może mimo zakazów
+zmienić szczegóły (liczbę tralek) — stąd porównanie z kadrem przed użyciem. Testy: `src/offer/__tests__/aiRender.test.js`
+(prompt, treść zapytania, klucz tylko w nagłówku, odpowiedzi / błędy).
 
 ## Ograniczenia
 

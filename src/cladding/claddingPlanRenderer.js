@@ -9,6 +9,7 @@ import { trimEdges } from './openingTrimModel.js';
 import { wallOn } from './surroundingsModel.js';
 import { WALL_TYPE_LABELS } from './schema.js';
 import { escapeHtml } from '../util/format.js';
+import { walkingLine } from './walkingLine.js';
 
 const HAIR = 'vector-effect="non-scaling-stroke"';
 const fmt = (n) => (Math.round(n * 10) / 10).toString();
@@ -138,8 +139,8 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return `<text x="${fmt(c.x)}" y="${fmt(-c.y)}" font-size="90" text-anchor="middle" dominant-baseline="middle" fill="#3b2a1a" pointer-events="none">${escapeHtml(text)}</text>${type ? `<text class="clad-type-label" x="${fmt(c.x)}" y="${fmt(-c.y + 85)}" font-size="60" text-anchor="middle" dominant-baseline="middle" fill="#8a5a34" font-weight="600" pointer-events="none">${type}</text>` : ''}`;
     })
     .join('');
-  // the walking line: through the middle of every element, an arrow at its end
-  const walk = concrete.elements.map((e) => centre(e.outline));
+  // the walking line (walkingLine.js): along the flights' axes, the zones' walklines, round the landings; an arrow
+  const walk = walkingLine(concrete);
   let walkXML = '';
   if (walk.length >= 2) {
     const a = walk.at(-2);

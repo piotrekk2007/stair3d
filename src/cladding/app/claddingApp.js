@@ -25,7 +25,7 @@ import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd,
 import { WALL_TYPES, POST_CAP_LABELS } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
-import { buildModernOfferHTML, HERO_BACKGROUND, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
+import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../../offer/offerDocumentModern.js';
 import { fitViewToBox } from '../../scene/offerFraming.js';
 import { printHtml } from '../../app/printHtml.js';
 import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
@@ -42,6 +42,7 @@ import { sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML } from '
 import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../export/claddingMeshExport.js';
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
+import { createAiRenderPanel } from '../../app/aiRenderPanel.js';
 import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../../scene/presentationImage.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
@@ -108,6 +109,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <div class="clad-3d" hidden></div>
         <div class="clad-present-bar">
           <button type="button" data-present="photo" title="Widok 3D w podwójnej rozdzielczości z logo — plik PNG">📷 Zapisz zdjęcie</button>
+          <button type="button" data-present="ai" title="Kadr z widoku → realistyczny obraz z AI (Gemini) do oferty nowoczesnej — test">✨ Obraz AI do oferty</button>
           <label title="Strop nad schodami"><input type="checkbox" data-present="slab" /> Strop</label>
           <label title="Ściany przy schodach"><input type="checkbox" data-present="walls" checked /> Ściany</label>
           <span class="clad-sep"></span>
@@ -621,6 +623,8 @@ export function mountCladdingApp(rootEl, host = {}) {
     }
   };
   let company = readCompany();
+  // the modern hero's own picture (an AI render from the presentation, or a file) — this session only (test, 2026-11-06)
+  let aiHero = null;
   const readLogo = () => {
     try {
       const l = JSON.parse(localStorage.getItem('stair3d.presentationLogo') || 'null');
@@ -642,7 +646,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Nr oferty <span><input type="text" data-offer="offerNumber" value="${escapeHtml(o.offerNumber)}" /><button type="button" data-offer-number title="Zaproponuj numer">#</button></span></label>
       ${field('validityDays', 'Ważna [dni]', o.validityDays, 'number')}
       <label class="clad-field">Styl oferty <select data-offer="offerStyle"><option value="classic" ${o.offerStyle !== 'modern' ? 'selected' : ''}>klasyczny</option><option value="modern" ${o.offerStyle === 'modern' ? 'selected' : ''}>nowoczesny</option></select></label>
-      ${o.offerStyle === 'modern' ? `${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
+      ${o.offerStyle === 'modern' ? `${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><label class="clad-field">Kod QR z kontaktem <input type="checkbox" data-offer="showContactQr" ${o.showContactQr ? 'checked' : ''} /></label><div class="clad-field">Obraz po lewej: <b>${aiHero ? `${aiHero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} (${aiHero.full ? 'cała wysokość' : 'środek 84 × 150'})` : 'wizualizacja 3D'}</b> <button type="button" data-hero-file title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button>${aiHero ? ' <button type="button" data-hero-remove>Wróć do wizualizacji 3D</button>' : ''}<input type="file" accept="image/*" data-hero-input hidden /></div><div class="clad-hint">Obraz AI: 🎬 Prezentacja → „✨ Obraz AI do oferty” (test).</div><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
@@ -666,6 +670,17 @@ export function mountCladdingApp(rootEl, host = {}) {
   $('.clad-offer').addEventListener('change', (ev) => {
     const el = ev.target;
     const o = state.offer;
+    if (el.matches('[data-hero-input]')) {
+      const f = el.files?.[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        aiHero = { img: String(r.result), full: true, source: 'file' };
+        renderOffer();
+      };
+      r.readAsDataURL(f);
+      return;
+    }
     if (el.dataset.offer) {
       const path = el.dataset.offer.split('.');
       const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
@@ -695,6 +710,11 @@ export function mountCladdingApp(rootEl, host = {}) {
       offerChanged();
     } else if (b.dataset.printOffer !== undefined) {
       printOffer();
+    } else if (b.dataset.heroFile !== undefined) {
+      b.parentElement.querySelector('[data-hero-input]').click();
+    } else if (b.dataset.heroRemove !== undefined) {
+      aiHero = null;
+      renderOffer();
     } else if (b.dataset.printEstimate !== undefined) {
       printHtml(buildEstimateHTML({ quote: buildCladdingQuote(state.built, state.quote), projectName: state.projectName }));
     } else if (b.dataset.clientModel) {
@@ -716,9 +736,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     }
   });
   // the offer's 3D picture: the module's own scene in the standard iso view (created if the 3D was never opened)
-  // the modern offer asks for its portrait box on its own background, the stair filling it (scene/offerFraming.js): a
-  // studio picture — no grid / axes / slab / linked floor, the floor only as its shadow
-  function offerImage3D({ width = 1600, height = 1000, background = null, fit = false } = {}) {
+  // the modern offer asks for its strip (the sheet's whole height) on its own background (scene/offerFraming.js, `fill`
+  // half way between the whole stair and the strip's height — user decision 2026-11-06): a studio picture — no grid /
+  // axes / walls / linked floor, the slab with its opening kept (when shown), the floor only as its shadow
+  function offerImage3D({ width = 1600, height = 1000, background = null, fit = false, fill = 'contain' } = {}) {
     if (!sceneApi) {
       const prev = state.view;
       setView('3d');
@@ -735,7 +756,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       [sceneApi.helpers.axes, false],
       [sceneApi.helpers.ground, false],
       [sceneApi.helpers.shadowCatcher, true],
-      ...(room ? [[room, false]] : []),
+      ...(room ? room.children.filter((c) => c.name !== 'Slab').map((c) => [c, false]) : []),
       ...(state.floor?.group ? [[state.floor.group, false]] : []),
     ];
     const was = switched.map(([o]) => o.visible);
@@ -747,7 +768,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         // (the stair only: the box without the room / the linked floor)
         const stairBox = new THREE.Box3();
         for (const c of root.children) if (c.visible && c.name !== 'Room') stairBox.expandByObject(c);
-        ({ center, radius } = fitViewToBox(stairBox, { aspect: width / height, fovDeg: sceneApi.camera.fov }));
+        ({ center, radius } = fitViewToBox(stairBox, { aspect: width / height, fovDeg: sceneApi.camera.fov, fill }));
       }
       return sceneApi.renderViewImage({ width, height, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.92);
     } finally {
@@ -787,10 +808,11 @@ export function mountCladdingApp(rootEl, host = {}) {
     const input = {
       offer,
       facts,
-      settings: state.offer,
+      // (the modern hero over the sheet's whole height — user decision 2026-11-06)
+      settings: modern ? { ...state.offer, heroFull: aiHero ? aiHero.full : true } : state.offer,
       company,
       logoDataUrl: readLogo(),
-      image3d: modern ? offerImage3D({ width: 1120, height: Math.round((1120 * HERO_BOX_MM.height) / HERO_BOX_MM.width), background: HERO_BACKGROUND, fit: true }) : offerImage3D(),
+      image3d: modern && aiHero ? aiHero.img : modern ? offerImage3D({ width: 960, height: Math.round((960 * HERO_FULL_MM.height) / HERO_FULL_MM.width), background: HERO_BACKGROUND, fit: true, fill: 0.5 }) : offerImage3D(),
       planSvg: renderCladdingPlanSVG(state.built, { clientView: true }),
       projectName: state.projectName,
     };
@@ -1433,6 +1455,18 @@ export function mountCladdingApp(rootEl, host = {}) {
       presentBar.querySelector('.clad-present-status').textContent = message || (settings.dataUrl ? '' : 'bez logo');
     },
   });
+  // „✨ Obraz AI do oferty” (the shared app/aiRenderPanel.js — test, 2026-11-06)
+  const aiPanel = createAiRenderPanel({
+    hostEl: $('.clad-main'),
+    viewportEl: view3dEl,
+    getSceneApi: () => sceneApi,
+    getFacts: () => claddingFacts(state.built, state.quote),
+    onUse: (img, { full }) => {
+      aiHero = { img, full, source: 'ai' };
+      renderOffer();
+    },
+    getUsed: () => aiHero,
+  });
   // the 3D view's layers (user request 2026-11-05, as the self-supporting HUD's „Warstwy”): view state only, not the
   // config / the project; remembered in this browser
   const LAYERS = [
@@ -1491,7 +1525,10 @@ export function mountCladdingApp(rootEl, host = {}) {
       present.viewBefore = state.view;
       setView('3d');
       logo.apply();
-    } else setView(present.viewBefore);
+    } else {
+      setView(present.viewBefore);
+      aiPanel.close();
+    }
     applyPresentation();
     // the canvas follows its box (the side panels hidden / back), then the stair is framed again
     window.dispatchEvent(new Event('resize'));
@@ -1502,6 +1539,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     const act = ev.target.closest('[data-present]')?.dataset.present;
     if (act === 'exit') setPresentation(false);
     else if (act === 'photo' && sceneApi) savePresentationSnapshot({ sceneApi, logo, projectName: state.projectName || 'schody-na-beton' });
+    else if (act === 'ai') aiPanel.toggle();
     else if (act === 'logo') presentBar.querySelector('[data-present="logo-file"]').click();
     else if (act === 'logo-remove') logo.remove();
   });

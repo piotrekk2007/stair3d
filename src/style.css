@@ -1917,3 +1917,34 @@ code {
 #module-switch button:last-child { border-radius: 0 4px 4px 0; }
 #module-switch button.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
 #cladding-root[hidden] { display: none; }
+
+/* The AI render panel (app/aiRenderPanel.js, both modules' presentation mode — test, 2026-11-06): a floating panel
+   beside the 3D view and the 9:16 frame over it (the dashed strip = what the full-height offer hero keeps). */
+.ai-frame { position: absolute; z-index: 22; pointer-events: none; overflow: hidden; }
+.ai-frame[hidden] { display: none; }
+.ai-frame-box { position: absolute; border: 2px solid #97bb3d; box-shadow: 0 0 0 9999px rgba(20, 20, 20, 0.35); }
+.ai-frame-strip { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed #fff; border-right: 1.5px dashed #fff; }
+.ai-frame-strip[hidden] { display: none; }
+.ai-frame-label { position: absolute; left: 6px; top: 6px; font: 600 11px sans-serif; color: #fff; background: rgba(20, 20, 20, 0.6); padding: 2px 6px; border-radius: 3px; }
+.ai-panel { position: absolute; z-index: 30; right: 10px; top: 10px; bottom: 10px; width: 330px; overflow-y: auto; background: #fff; color: #141414; border: 1px solid #c3c9d0; border-radius: 8px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18); padding: 10px 12px; font: 13px/1.4 "Segoe UI", Arial, sans-serif; }
+.ai-panel[hidden] { display: none; }
+.ai-panel .ai-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ai-panel .ai-head button { margin-left: auto; border: 0; background: transparent; font-size: 15px; cursor: pointer; }
+.ai-panel .ai-test { font-size: 11px; background: #fff4d6; color: #5c4400; padding: 0 6px; border-radius: 8px; }
+.ai-panel .ai-hint { color: #5e5f61; font-size: 12px; margin: 4px 0; }
+.ai-panel .ai-row { display: grid; grid-template-columns: 110px 1fr; gap: 6px; align-items: center; margin: 5px 0; }
+.ai-panel .ai-row.ai-col { grid-template-columns: 1fr; }
+.ai-panel input[type="text"], .ai-panel input[type="password"], .ai-panel select, .ai-panel textarea { font: inherit; width: 100%; min-width: 0; padding: 3px 5px; border: 1px solid #c3c9d0; border-radius: 4px; box-sizing: border-box; }
+.ai-panel .ai-check { display: flex; gap: 6px; align-items: center; margin: 5px 0; }
+.ai-panel .ai-prompt textarea { font: 11px/1.35 Consolas, monospace; margin: 4px 0; }
+.ai-panel .ai-actions { display: flex; gap: 6px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.ai-panel button { font: inherit; padding: 4px 9px; border: 1px solid #c3c9d0; border-radius: 4px; background: #fff; cursor: pointer; }
+.ai-panel .ai-primary { background: #97bb3d; border-color: #97bb3d; font-weight: 600; }
+.ai-panel .ai-spin { color: #5e5f61; }
+.ai-panel .ai-status { font-size: 12px; color: #2b6a12; min-height: 1em; }
+.ai-panel .ai-status.bad { color: #b3261e; }
+.ai-panel .ai-result { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ai-panel .ai-result figure { margin: 0; }
+.ai-panel .ai-result img { width: 100%; display: block; border: 1px solid #d8d9db; }
+.ai-panel .ai-result figcaption { font-size: 11px; color: #5e5f61; text-align: center; }
+.ai-panel .ai-used { background: #eef6dd; padding: 4px 6px; border-radius: 4px; }

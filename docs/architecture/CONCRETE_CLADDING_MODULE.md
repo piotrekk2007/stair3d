@@ -43,7 +43,15 @@ The self-supporting engine must not be touched: it works and the user does not w
      `contactPhone`, `contactEmail`, `hours`); `app/printHtml.js` waits for the fonts and the images before printing;
      `ui/offerPanel.js` + `app/offerController.js` + `main.js offerImage3D({width, height, background, fit})` (the
      self-supporting side). The module keeps its own copy of the style fields (`quote/claddingOffer.js`) and its own
-     picture (`claddingApp.js offerImage3D`: no grid / axes / ground / room / linked floor, the shadow only);
+     picture (`claddingApp.js offerImage3D`: no grid / axes / ground / room / linked floor, the shadow only); stage 2
+     (2026-11-06): the contact QR — `showContactQr` in both modules' offer settings (the module's own copy in
+     `claddingOffer.js`, its checkbox in `claddingApp.js`), built inside the shared `offerDocumentModern.js` (its own
+     imports `offer/contactCard.js`, `util/qrCode.js` — the module imports neither); the modern hero over the sheet's
+     whole height with the slab (`heroFull`, `offerFraming.js fitViewToBox` `fill: 0.5`; the module's picture keeps
+     `Room` → `Slab`, hides the walls); the AI render of the offer's picture (test, 2026-11-06): the shared
+     `app/aiRenderPanel.js` on the allow-list (its button in the presentation bar, the result as the module's
+     `aiHero` — also „Z pliku…” in the offer panel), `sceneSetup.js renderFrameImage` (a new method, nothing else
+     changed);
    - nothing else without asking the user first.
 4. The project file of the module is its own type (`_type: 'schody3d-beton'`, own version and migrations) — the
    self-supporting `projectIO.js` stays as it is.
@@ -602,3 +610,13 @@ Toolbar „⬇ DXF 1:1”, „⬇ DAE”, „⬇ OBJ” (files named after the p
 1. (answered 2026-11-04) Winder edges are measured from the wall corner and the dusza corner; the uneven-rise
    tolerance is 5 mm.
 2. Labour rates (the user types them; the item list can grow with own items).
+
+## The walking line on the plan (user report 2026-11-06, fixed)
+
+It was a broken line through the middle of every element (a 90° corner on a landing, a zigzag through the winders'
+centroids). `walkingLine.js` (pure): straight along each flight's axis (the elements' middles), through a winder zone
+along that zone's own walkline (the arc its winders were laid out on), on a landing the corner where the axes in and
+out meet (a 180° landing: one point on each axis level with its middle), then every corner rounded by a tangent arc
+(tangent points ≤ half of each segment, radius ≤ 600 mm, chords of 5°). The plan's red line with its arrow
+(`claddingPlanRenderer.js`) draws it — also in the offer's plan. Test: `__tests__/walkingLine.test.js` (no bend over 6°
+for an L on a landing / on winders, a U on one / two landings — 90° / 62° / 88° / 90° on the old line).
