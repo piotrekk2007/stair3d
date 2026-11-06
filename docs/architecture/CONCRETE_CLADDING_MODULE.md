@@ -620,3 +620,24 @@ out meet (a 180° landing: one point on each axis level with its middle), then e
 (tangent points ≤ half of each segment, radius ≤ 600 mm, chords of 5°). The plan's red line with its arrow
 (`claddingPlanRenderer.js`) draws it — also in the offer's plan. Test: `__tests__/walkingLine.test.js` (no bend over 6°
 for an L on a landing / on winders, a U on one / two landings — 90° / 62° / 88° / 90° on the old line).
+
+## Full walls in one piece (user report 2026-11-06, fixed)
+
+A full wall was a box per step (`buildWalls`: one prism per walled edge stretch) — in 3D a row of see-through blocks
+with seams and overlaps, a gap at a turn's corner; it also confused the AI render. Now the walled stretches are
+chained end to end (`surroundingsModel.js joinWallSegments`: shared end points, a stretch walked backwards turned round,
+never across walls facing each other) and each chain is ONE wall (`wallOutline`: the face line with the collinear
+joints dropped, offset `wallThicknessMm` outward, the corners mitred — the outer corner filled), floor to slab;
+`segments` keeps the stretches ({key, a, b}) for whatever needs to know which flight / side a part walls. Plan, 3D,
+the tape measure's snap read the outline as before. Tests: `surroundings.test.js` (one wall round an L landing, the
+corner (−120, 1660) filled), `wallList.test.js` (a whole side = one wall of 5 stretches, 4 points).
+
+The walls that are not full ones (to a height over the noses / above the steps / under the flight — `sideWallsModel.js`)
+are joined the same way (user request 2026-11-06): `joinSideWalls` chains the pieces of one kind meeting end to end
+(round a turn, or on through a straight landing; never two walls facing each other) into `built.sideWallBodies` — the
+face line in plan with `cs` along it, the extrusion direction per segment, the back line mitred (outward beside the
+stair, inward under it), the bottom / top lines in (cs, z) joined (at a joint the lower bottom and the higher top). The
+pieces keep their own polygons (plan, measure) and get `bodyId`; the 3D draws each body as one folded wall
+(`claddingRenderer.js foldedWallGeometry`: one strip per straight segment so no triangle spans a corner, the outline's
+edges closed, no inner faces). Test: `sideWalls.test.js` (low / above / under on both flights of the L: one body, the
+corner at (−120, 2990) / (120, 2750), one mesh).

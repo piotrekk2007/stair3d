@@ -184,22 +184,98 @@ export function splitEdgesByWalls(element, config) {
   });
 }
 
-/** Every walled edge as a wall piece: its face on the concrete's edge, `wallThicknessMm` outward, floor to slab. */
+/**
+ * The full walls: every walled stretch of an edge (its face on the concrete's edge) joined end to end into one wall
+ * per run — through the flights' joints and round a turn's corner (user report 2026-11-06: a box per step read as a
+ * row of see-through blocks with seams, a gap at the corner, and confused the AI render). Each wall = its face line
+ * offset `wallThicknessMm` outward, the corners mitred (the outer corner filled), floor to slab, as one outline.
+ * `segments` keeps the stretches it is made of ({key, a, b} — which flight / side each one walls).
+ */
 export function buildWalls(concrete, config) {
-  const pieces = [];
+  const T = config.wallThicknessMm;
+  const segs = [];
   for (const e of concrete.elements) {
     for (const edge of e.edges) {
       // (the edge's stretches under a full wall — a wall may end part-way along it)
       const spans = config.wallIndex ? config.wallIndex.spansOf(e, edge) : [{ a: edge.a, b: edge.b, wall: wallOn(edgeWallKey(e, edge), config, e.index) }];
       for (const sp of spans) {
-        if (sp.wall?.type !== 'full') continue;
-        const n = outward(edge);
-        const T = config.wallThicknessMm;
-        pieces.push({ id: `wall-${e.index}-${pieces.length}`, key: edgeWallKey(e, edge), outline: [sp.a, sp.b, add(sp.b, n, T), add(sp.a, n, T)], bottomZ: 0, topZ: concrete.exit.rawSlabTopZ });
+        if (sp.wall?.type !== 'full' || Math.hypot(sp.b.x - sp.a.x, sp.b.y - sp.a.y) < 1e-6) continue;
+        segs.push({ key: edgeWallKey(e, edge), a: sp.a, b: sp.b, n: outward(edge), index: e.index });
       }
     }
   }
-  return pieces;
+  return joinWallSegments(segs, T).map((chain, k) => ({
+    id: `wall-${chain[0].index}-${k}`,
+    key: chain[0].key,
+    segments: chain.map((s) => ({ key: s.key, a: s.a, b: s.b })),
+    outline: wallOutline(chain, T),
+    bottomZ: 0,
+    topZ: concrete.exit.rawSlabTopZ,
+  }));
+}
+
+const JOIN_EPS = 0.5; // mm
+const samePoint = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < JOIN_EPS;
+
+/** The stretches chained end to end (a stretch walked backwards is turned round; its outward side stays). */
+export function joinWallSegments(segs) {
+  const left = segs.map((s) => ({ ...s }));
+  const chains = [];
+  while (left.length) {
+    const chain = [left.shift()];
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (let i = 0; i < left.length; i++) {
+        const s = left[i];
+        const head = chain[0];
+        const tail = chain[chain.length - 1];
+        // only stretches facing the same way round the stair join (their outward sides on one side of the chain)
+        const flip = (x) => ({ ...x, a: x.b, b: x.a });
+        let put = null;
+        if (samePoint(tail.b, s.a)) put = ['end', s];
+        else if (samePoint(tail.b, s.b)) put = ['end', flip(s)];
+        else if (samePoint(head.a, s.b)) put = ['start', s];
+        else if (samePoint(head.a, s.a)) put = ['start', flip(s)];
+        if (!put) continue;
+        const [where, x] = put;
+        const nb = where === 'end' ? tail : head;
+        // the outward side must not swap at the joint (walls facing each other are two walls)
+        if (nb.n.x * x.n.x + nb.n.y * x.n.y < -0.5) continue;
+        if (where === 'end') chain.push(x);
+        else chain.unshift(x);
+        left.splice(i, 1);
+        grew = true;
+        break;
+      }
+    }
+    chains.push(chain);
+  }
+  return chains;
+}
+
+/** A chain's outline: its face points, then the face offset by T outward walked back — each corner where the two offset lines meet. */
+function wallOutline(chain, T) {
+  // the face line, collinear joints dropped (one flat face, no seam)
+  const face = [chain[0].a];
+  const normals = [];
+  for (const s of chain) {
+    const last = normals.length ? normals[normals.length - 1] : null;
+    if (last && Math.abs(last.x * s.n.y - last.y * s.n.x) < 1e-6 && last.x * s.n.x + last.y * s.n.y > 0) face[face.length - 1] = s.b;
+    else {
+      face.push(s.b);
+      normals.push(s.n);
+    }
+  }
+  const back = face.map((p, k) => {
+    if (k === 0) return add(p, normals[0], T);
+    if (k === face.length - 1) return add(p, normals[normals.length - 1], T);
+    const n1 = normals[k - 1];
+    const n2 = normals[k];
+    const c = 1 + n1.x * n2.x + n1.y * n2.y;
+    // (the mitre: p + T (n1 + n2) / (1 + n1·n2) — the outer corner of two walls filled, the inner one met)
+    return c > 1e-6 ? { x: p.x + (T * (n1.x + n2.x)) / c, y: p.y + (T * (n1.y + n2.y)) / c } : add(p, n1, T);
+  });
+  return [...face, ...back.reverse()];
 }
 
 /**

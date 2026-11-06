@@ -138,6 +138,56 @@ function planeBoardGeometry(board) {
   g.applyMatrix4(m);
   return g;
 }
+// A folded wall (sideWallsModel.js joinSideWalls): the region between its bottom and top lines in (cs, z) laid on its
+// face line in plan and on the mitred back line, one strip per straight segment (a triangle never spans a corner),
+// the outline's edges closed by side faces — one closed body, no inner faces (the walls are see-through).
+function foldedWallGeometry(body) {
+  const { path, cs, back } = body;
+  const EPS = 1e-6;
+  const valueAt = (line, s, fromRight) => {
+    const hit = line.filter((p) => Math.abs(p.s - s) < EPS);
+    if (hit.length) return (fromRight ? hit[hit.length - 1] : hit[0]).z;
+    for (let k = 1; k < line.length; k++)
+      if (s >= line[k - 1].s - EPS && s <= line[k].s + EPS) return line[k - 1].z + ((line[k].z - line[k - 1].z) * (s - line[k - 1].s)) / (line[k].s - line[k - 1].s || 1);
+    return line[s < line[0].s ? 0 : line.length - 1].z;
+  };
+  const clip = (line, c0, c1) => [{ s: c0, z: valueAt(line, c0, true) }, ...line.filter((p) => p.s > c0 + EPS && p.s < c1 - EPS), { s: c1, z: valueAt(line, c1, false) }];
+  const pos = [];
+  const tri = (a, b, c) => pos.push(...a, ...b, ...c);
+  for (let k = 0; k < path.length - 1; k++) {
+    const c0 = cs[k];
+    const c1 = cs[k + 1];
+    if (c1 - c0 < EPS) continue;
+    const at = (line, s, z) => {
+      const t = (s - c0) / (c1 - c0);
+      return [line[k].x + (line[k + 1].x - line[k].x) * t, z, -(line[k].y + (line[k + 1].y - line[k].y) * t)];
+    };
+    const strip = [...clip(body.bottom, c0, c1), ...clip(body.top, c0, c1).reverse()].filter((p, i, all) => i === 0 || Math.abs(p.s - all[i - 1].s) > EPS || Math.abs(p.z - all[i - 1].z) > EPS);
+    if (strip.length < 3) continue;
+    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(strip.map((p) => new THREE.Vector2(p.s, p.z)), [])) {
+      tri(at(path, strip[a].s, strip[a].z), at(path, strip[b].s, strip[b].z), at(path, strip[c].s, strip[c].z));
+      tri(at(back, strip[a].s, strip[a].z), at(back, strip[c].s, strip[c].z), at(back, strip[b].s, strip[b].z));
+    }
+    // the side faces: every edge of the strip but the joints with the next / previous strip
+    for (let i = 0; i < strip.length; i++) {
+      const p = strip[i];
+      const q = strip[(i + 1) % strip.length];
+      const joint = (Math.abs(p.s - c0) < EPS && Math.abs(q.s - c0) < EPS && k > 0) || (Math.abs(p.s - c1) < EPS && Math.abs(q.s - c1) < EPS && k < path.length - 2);
+      if (joint) continue;
+      const fp = at(path, p.s, p.z);
+      const fq = at(path, q.s, q.z);
+      const bp = at(back, p.s, p.z);
+      const bq = at(back, q.s, q.z);
+      tri(fp, fq, bq);
+      tri(fp, bq, bp);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 // a box from plan point a (at za) to b (at zb), `w` wide across, `h` high (its centre line a → b)
 function beam(a, b, w, h, material) {
   const A = new THREE.Vector3(a.x, a.z, -a.y);
@@ -384,7 +434,15 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
     room.add(mesh);
   }
   // the walls following the stair (sideWallsModel.js): above the steps, under the flight, between flights set apart
+  // (the pieces meeting round a turn: one folded wall each — sideWallBodies)
+  for (const body of built.sideWallBodies || []) {
+    const mesh = new THREE.Mesh(foldedWallGeometry(body), body.kind === 'wall-under' ? concreteWallMaterial : wallMaterial);
+    mesh.name = `${body.kind}-${body.id}`;
+    mesh.renderOrder = 2;
+    room.add(mesh);
+  }
   for (const w of built.sideWalls || []) {
+    if (w.bodyId) continue;
     const mesh = new THREE.Mesh(planeBoardGeometry(w), w.kind === 'wall-under' || w.kind === 'wall-gap' ? concreteWallMaterial : wallMaterial);
     mesh.name = `${w.kind}-${w.id}`;
     mesh.renderOrder = 2;

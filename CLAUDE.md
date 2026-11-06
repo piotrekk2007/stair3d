@@ -595,7 +595,9 @@ part-way along a step (`fromOffsetMm` / `toOffsetMm`, dragged on the plan — `r
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared
 `export/clientModelExport.js` on `export/clientModel.js`). Tape measures: plan mode „📏 Miarka” (the shared
-`plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). The plan's walking line runs
+`plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). Full walls are one piece per run (`surroundingsModel.js joinWallSegments` / `wallOutline`: the stretches chained,
+the corners mitred); the other walls (low / above / under) likewise round a turn (`sideWallsModel.js joinSideWalls` →
+`built.sideWallBodies`, drawn by `claddingRenderer.js foldedWallGeometry`). The plan's walking line runs
 smoothly (`walkingLine.js`: the flights' axes, the zones' walklines, the landings' turn corners rounded by tangent
 arcs). Later (user): the regulation
 warnings for the finished sizes, contract / payment-schedule documents. Later (user): contract / payment-schedule documents.

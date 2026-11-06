@@ -67,8 +67,15 @@ test('walls: along the chosen flight sides (a turn landing’s back edge belongs
   // flight A left (x = 0): its two steps and the landing's left edge; flight B left = the landing's back edge (y = 1540)
   const w = walled.walls;
   assert.ok(w.every((p) => p.topZ === walled.concrete.exit.rawSlabTopZ && p.bottomZ === 0));
-  assert.ok(w.some((p) => p.key.flight === 0 && Math.max(...xs(p.outline)) <= 0 + 1e-9 && Math.min(...xs(p.outline)) === -120), 'a wall 120 thick left of flight A');
-  assert.ok(w.some((p) => p.key.flight === 1 && Math.min(...ys(p.outline)) >= 1540 - 1e-9 && Math.max(...ys(p.outline)) === 1660), 'the landing back edge = flight B’s left wall');
+  // (user report 2026-11-06: one wall per run, not a box per step) — the stretches it walls are its `segments`
+  const segs = w.flatMap((p) => p.segments);
+  assert.ok(segs.some((s) => s.key.flight === 0 && Math.abs(s.a.x) < 1e-9 && Math.abs(s.b.x) < 1e-9), 'flight A’s left side walled (x = 0)');
+  assert.ok(segs.some((s) => s.key.flight === 1 && Math.abs(s.a.y - 1540) < 1e-9 && Math.abs(s.b.y - 1540) < 1e-9), 'the landing back edge = flight B’s left wall');
+  assert.equal(Math.min(...w.flatMap((p) => xs(p.outline))), -120, 'a wall 120 thick left of flight A');
+  assert.equal(Math.max(...w.flatMap((p) => ys(p.outline))), 1660, '… and behind the landing');
+  // one solid wall round the turn, its outer corner filled (no gap where the two sides meet)
+  assert.equal(w.length, 1, 'one wall along flight A, the landing and flight B');
+  assert.ok(w[0].outline.some((p) => Math.abs(p.x + 120) < 1e-9 && Math.abs(p.y - 1660) < 1e-9), 'the corner (−120, 1660) filled');
   // the walled side: no nosing; the open right side keeps it
   near(Math.min(...xs(walled.cladding.treads[0].outline)), 0, 'wall: none on the left');
   near(Math.max(...xs(walled.cladding.treads[0].outline)), 1030, 'open right: nosing');

@@ -80,3 +80,37 @@ test('the wall between two flights set apart: the gap filled up to the slab, its
   root.traverse((o) => (found ||= o.name?.startsWith('wall-gap')));
   assert.ok(found);
 });
+
+// user request 2026-11-06: the walls that are not full ones (to a height / above the steps / under) joined round a
+// turn too — one folded body, the corner filled (as the full walls), no seam
+test('the walls of one kind meeting round a turn: one folded body, its outer corner mitred', async () => {
+  const { joinSideWalls } = await import('../sideWallsModel.js');
+  for (const type of ['low', 'above', 'under']) {
+    const b = buildCladdingStair({ ...createDefaultCladdingConfig(), wallList: [0, 1].map((flight) => ({ id: `w${flight}`, flight, side: 'left', type, heightAboveMm: 900, from: null, to: null })) });
+    assert.equal(b.sideWallBodies.length, 1, type);
+    const body = b.sideWallBodies[0];
+    assert.equal(body.ids.length, 2, `${type}: both flights' walls`);
+    assert.ok(b.sideWalls.every((w) => w.bodyId === body.id), `${type}: the pieces marked (the 3D draws the body)`);
+    assert.equal(body.path.length, 3, `${type}: one corner`);
+    const [cx, cy] = [body.back[1].x, body.back[1].y];
+    // the corner of the L's outer side at (0, 2870): the back line meets at the mitre — outward for a wall beside the
+    // stair (−120, 2990), inward for the one under its edge (120, 2750)
+    const expect = type === 'under' ? [120, 2750] : [-120, 2990];
+    assert.ok(Math.abs(cx - expect[0]) < 1e-6 && Math.abs(cy - expect[1]) < 1e-6, `${type}: corner ${cx}, ${cy}`);
+    // the bottom / top lines run on through the joint (one region, cs increasing)
+    for (const line of [body.bottom, body.top]) assert.ok(line.every((p, k) => k === 0 || p.s >= line[k - 1].s - 1e-6), `${type}: in order`);
+    // 3D: ONE mesh for the two (not one per flight), every vertex a number, reaching the corner's back point
+    const meshes = [];
+    renderCladdingStair(b).traverse((o) => o.isMesh && o.name?.startsWith(`wall-${type}`) && meshes.push(o));
+    assert.equal(meshes.length, 1, `${type}: one mesh`);
+    const pos = meshes[0].geometry.attributes.position;
+    assert.ok(pos.count > 0 && [...pos.array].every(Number.isFinite), `${type}: a valid body`);
+    let reach = false;
+    for (let i = 0; i < pos.count; i++) reach ||= Math.abs(pos.getX(i) - expect[0]) < 1e-3 && Math.abs(-pos.getZ(i) - expect[1]) < 1e-3;
+    assert.ok(reach, `${type}: the mitred corner in the mesh`);
+  }
+  // a single flight's wall stays as it was (no body)
+  const one = buildCladdingStair({ ...createDefaultCladdingConfig(), wallList: [{ id: 'w', flight: 0, side: 'left', type: 'low', heightAboveMm: 900, from: null, to: null }] });
+  assert.equal(one.sideWallBodies.length, 0);
+  assert.equal(joinSideWalls([], 120).length, 0);
+});

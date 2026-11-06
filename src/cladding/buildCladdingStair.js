@@ -8,7 +8,7 @@ import { buildCladdingModel, riserOn, riserThicknessOf } from './claddingModel.j
 import { buildWalls, buildSlab, resolveWalls } from './surroundingsModel.js';
 import { buildFinishBoards } from './finishModel.js';
 import { buildBalustrade } from './balustradeModel.js';
-import { withGapWalls, buildSideWalls } from './sideWallsModel.js';
+import { withGapWalls, buildSideWalls, joinSideWalls } from './sideWallsModel.js';
 import { buildCladdingLed } from './ledModel.js';
 import { buildOpeningTrim } from './openingTrimModel.js';
 import { buildSideRuns } from './sideRuns.js';
@@ -153,9 +153,11 @@ export function buildCladdingStair(rawConfig) {
   const slab = buildSlab(concrete, cladding, cfg);
   // the walls that follow the stair: above the steps to a height, under the flight, between flights set apart
   const sideWalls = buildSideWalls(concrete, cfg);
+  // (the pieces meeting round a turn as one folded wall — the 3D draws those)
+  const sideWallBodies = joinSideWalls(sideWalls, cfg.wallThicknessMm);
   // the finishing elements (stage 5): skirting boards, cover stringers, the balustrade with its decorative posts
   const finish = buildFinishBoards(concrete, cfg);
-  const built = { config, concrete, cladding, walls, sideWalls, slab, totalRise, finish };
+  const built = { config, concrete, cladding, walls, sideWalls, sideWallBodies, slab, totalRise, finish };
   built.balustrade = buildBalustrade(built, cfg);
   // the opening's trim („fajka”) along the chosen opening edges
   built.openingTrim = buildOpeningTrim(built, cfg);

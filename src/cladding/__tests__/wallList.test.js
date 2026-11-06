@@ -52,7 +52,11 @@ test('the wall "from the stair\'s concrete up": its bottom along the concrete\'s
   const bottom = w.polygon.filter((p) => p.z < b.concrete.exit.rawSlabTopZ - 1);
   assert.ok(bottom.at(-1).z > bottom[0].z + 500, 'raked along the soffit');
   // a full wall would stand on the floor instead
-  assert.equal(buildCladdingStair(cfg({ wallList: [{ id: 'f', flight: 0, side: 'right', type: 'full', from: null, to: null }] })).walls.length, 5);
+  // (one solid wall along the whole side — user report 2026-11-06 — not a box per step)
+  const full = buildCladdingStair(cfg({ wallList: [{ id: 'f', flight: 0, side: 'right', type: 'full', from: null, to: null }] })).walls;
+  assert.equal(full.length, 1);
+  assert.equal(full[0].segments.length, 5, 'made of the five steps’ stretches');
+  assert.equal(full[0].outline.length, 4, 'one flat face: the collinear joints dropped');
 });
 
 test('the older per-flight walls still read as the whole side; the list sanitized', () => {
