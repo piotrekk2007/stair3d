@@ -223,6 +223,28 @@ export function stairFacts(config, derived, extras = {}) {
   return { rows, comfort, blondel, pitchDeg };
 }
 
+/**
+ * What the self-supporting stair does NOT have — the AI render's „never add it” list (offer/aiRender.js AI_ABSENT keys;
+ * user report 2026-11-06: the model added an unreal balustrade to a stair without one).
+ * @param {Object} config  the full config
+ * @param {{sections?: Array}} [railingModel]  the built balustrade (stair sections, `kind: 'opening'`, wall handrails)
+ */
+export function stairAiAbsent(config, railingModel) {
+  const sections = railingModel?.sections || [];
+  const out = [];
+  const stairRail = sections.some((s) => s.kind !== 'opening' && s.mount !== 'wall' && (s.runs || []).some((r) => !r.wallRail));
+  const wallRail = sections.some((s) => s.mount === 'wall' || (s.runs || []).some((r) => r.wallRail));
+  if (!stairRail) out.push('stairRailing');
+  if (!sections.some((s) => s.kind === 'opening')) out.push('openingRailing');
+  if (!wallRail) out.push('wallHandrail');
+  const metal = config.stairConstruction === 'metal-profile' || config.stairConstruction === 'metal-flat';
+  if (!config.hasRiserBoards || metal) out.push('risers');
+  if (!config.ledTreadEnabled && !config.ledStringerEnabled && !config.ledHandrailEnabled) out.push('led');
+  if (config.stairConstruction === 'cantilever') out.push('stringers');
+  else if (metal) out.push('woodStringers');
+  return out;
+}
+
 /** Offer number suggestion: OF/YYYY/MMDD-HHMM. */
 export function suggestOfferNumber(date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');

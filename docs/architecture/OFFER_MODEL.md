@@ -92,7 +92,15 @@ prosto do `generativelanguage.googleapis.com`, klucz w nagłówku `x-goog-api-ke
 9:16`. Wynik obok kadru → „Użyj w ofercie nowoczesnej” (w ofercie: cała wysokość — boki przycięte — albo środek
 84 × 150 mm, cały obraz) albo „Pobierz”. Zakładka Oferta: „Obraz po lewej” (wizualizacja 3D / obraz AI / „Z pliku…” —
 np. zdjęcie realizacji; „Wróć do wizualizacji 3D”) — tylko na czas sesji, nie w projekcie. Model może mimo zakazów
-zmienić szczegóły (liczbę tralek) — stąd porównanie z kadrem przed użyciem. Testy: `src/offer/__tests__/aiRender.test.js`
+zmienić szczegóły (liczbę tralek) — stąd porównanie z kadrem przed użyciem.
+
+**Czego schody NIE mają** (zgłoszenie użytkownika 2026-11-06: do schodów bez balustrady model dorysował nierealną —
+samo „zachowaj IMAGE 1” traktował jako lukę do uzupełnienia): każdy moduł wylicza z projektu listę braków
+(`offerModel.js stairAiAbsent(config, railingModel)`, `cladding/quote/claddingOffer.js claddingAiAbsent(built)`:
+balustrada przy biegu / wokół otworu / poręcz na ścianie, podstopnice, LED, wangi — wspornikowe / metalowe), prompt
+dostaje sekcję „WHAT THIS STAIRCASE DOES NOT HAVE — never add it” (`AI_ABSENT`; trzy rodzaje balustrady naraz = jedna
+mocna reguła „NO balustrade of any kind … the client's choice, not something missing”), ogólną zasadę „Add NOTHING …
+not in IMAGE 1” i na końcu „Final check … above all: no …”. Panel pokazuje listę („Zakaz dodawania (z projektu): …”). Testy: `src/offer/__tests__/aiRender.test.js`
 (prompt, treść zapytania, klucz tylko w nagłówku, odpowiedzi / błędy).
 
 ## Ograniczenia

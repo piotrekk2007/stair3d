@@ -624,6 +624,7 @@ const aiPanel = createAiRenderPanel({
   viewportEl: viewport,
   getSceneApi: () => sceneApi,
   getFacts: () => offer?.facts(),
+  getAbsent: () => offer?.aiAbsent() || [],
   onUse: (img, { full }) => offer?.setHeroImage({ img, full, source: 'ai' }),
   getUsed: () => offer?.heroImage(),
 });

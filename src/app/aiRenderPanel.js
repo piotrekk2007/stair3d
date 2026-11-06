@@ -5,7 +5,7 @@
 // oak texture (offer/aiRender.js), shows the result next to the frame; „Użyj w ofercie nowoczesnej” hands it to the
 // module (onUse). The camera can be moved while the panel is open — the frame follows.
 
-import { buildAiPrompt, requestAiImage, aiErrorMessage, AI_ASPECT, AI_IMAGE_MODEL_DEFAULT, AI_SETTINGS } from '../offer/aiRender.js';
+import { buildAiPrompt, requestAiImage, aiErrorMessage, normalizeAbsent, AI_ABSENT, AI_ASPECT, AI_IMAGE_MODEL_DEFAULT } from '../offer/aiRender.js';
 import { HERO_FULL_MM, HERO_BOX_MM } from '../offer/offerDocumentModern.js';
 import { frameInViewport } from '../scene/sceneSetup.js';
 import { escapeHtml as esc } from '../util/format.js';
@@ -54,10 +54,11 @@ function toJpeg(src, maxSide, quality = 0.9) {
  * @param {HTMLElement} o.viewportEl    the 3D viewport (the frame is drawn over it)
  * @param {() => Object} o.getSceneApi  the module's scene (renderFrameImage)
  * @param {() => Object} o.getFacts     the offer's facts ({rows}) — the prompt's description
+ * @param {() => string[]} [o.getAbsent] what the stair does not have (AI_ABSENT keys) — „never add it” in the prompt
  * @param {(img: string, opts: {full: boolean}) => void} o.onUse  the picture for the modern offer
  * @param {() => {full: boolean}|null} [o.getUsed]  what the offer uses now (shown in the panel)
  */
-export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts, onUse, getUsed = () => null }) {
+export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts, getAbsent = () => [], onUse, getUsed = () => null }) {
   let prefs = { model: '', interior: 'modern', texture: true, extra: '', full: true, ...loadPrefs() };
   let frameImg = null;
   let resultImg = null;
@@ -92,7 +93,7 @@ export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts,
   window.addEventListener('resize', placeFrame);
   new ResizeObserver(placeFrame).observe(viewportEl);
 
-  const prompt = () => buildAiPrompt({ facts: getFacts() || {}, interior: prefs.interior, withTexture: prefs.texture, extra: prefs.extra });
+  const prompt = () => buildAiPrompt({ facts: getFacts() || {}, absent: getAbsent() || [], interior: prefs.interior, withTexture: prefs.texture, extra: prefs.extra });
 
   function render() {
     const used = getUsed();
@@ -105,6 +106,10 @@ export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts,
       <label class="ai-row">Wnętrze <select data-ai-pref="interior">${Object.entries(INTERIORS).map(([k, l]) => `<option value="${k}"${prefs.interior === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="ai-check"><input type="checkbox" data-ai-pref="texture"${prefs.texture ? ' checked' : ''}> Wyślij nasze zdjęcie dębu jako wzór drewna</label>
       <label class="ai-row ai-col">Dopiski (opcjonalnie) <textarea rows="2" data-ai-pref="extra" placeholder="np. okno po prawej, wieczorne światło">${esc(prefs.extra)}</textarea></label>
+      ${(() => {
+        const missing = normalizeAbsent(getAbsent() || []);
+        return missing.length ? `<div class="ai-hint ai-absent">Zakaz dodawania (z projektu): <b>${missing.map((k) => esc(AI_ABSENT[k].pl)).join(', ')}</b>.</div>` : '';
+      })()}
       <details class="ai-prompt"><summary>Prompt (z parametrów oferty — można poprawić)</summary><textarea rows="10" data-ai-prompt>${esc(prompt())}</textarea><button type="button" data-ai="reprompt">↺ Odtwórz z parametrów</button></details>
       <div class="ai-actions">${busy ? '<button type="button" data-ai="abort">Przerwij</button><span class="ai-spin">Generuję… (do minuty)</span>' : '<button type="button" class="ai-primary" data-ai="send">✨ Wyślij kadr do AI</button>'}</div>
       <div class="ai-status" data-ai-status></div>

@@ -28,7 +28,7 @@ import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
 import { fitViewToBox } from '../../scene/offerFraming.js';
 import { printHtml } from '../../app/printHtml.js';
-import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
+import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, claddingAiAbsent, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
@@ -1461,6 +1461,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     viewportEl: view3dEl,
     getSceneApi: () => sceneApi,
     getFacts: () => claddingFacts(state.built, state.quote),
+    getAbsent: () => claddingAiAbsent(state.built),
     onUse: (img, { full }) => {
       aiHero = { img, full, source: 'ai' };
       renderOffer();

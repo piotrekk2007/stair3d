@@ -499,7 +499,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   oferty” in both presentation modes (`app/aiRenderPanel.js` + pure `offer/aiRender.js`): the user's camera in a 9:16
   frame (`sceneSetup.js renderFrameImage`) + our oak photo + a prompt from the offer's facts (the frame binding: camera,
   geometry, counts, materials) → Google `gemini-2.5-flash-image` (the user's key, `localStorage stair3d.ai`, header
-  only) → the modern hero („Obraz po lewej”: 3D / AI / from a file; session only).
+  only) → the modern hero („Obraz po lewej”: 3D / AI / from a file; session only). The prompt also lists what the stair
+  does NOT have (`stairAiAbsent` / `claddingAiAbsent` → `AI_ABSENT`: no balustrade, risers, LED, stringers… — never add
+  it) and ends with a final check against the frame.
 
 ## Plan 2D and workspace UI
 

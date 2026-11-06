@@ -21,12 +21,38 @@ export const AI_SETTINGS = Object.freeze({
   },
 });
 
+// What the staircase does NOT have, said in so many words (user report 2026-11-06: with no balustrade the model added
+// an unreal one — „keep IMAGE 1” alone reads to it as a gap to fill). Each module lists its absent elements from the
+// project (app/offerController.js aiAbsent, cladding/quote/claddingOffer.js claddingAiAbsent); all three railing kinds
+// absent → the one strong 'balustrade'.
+export const AI_ABSENT = Object.freeze({
+  balustrade: { short: 'balustrade or handrail of any kind', pl: 'balustrady i poręczy', en: "There is NO balustrade of any kind: no handrail, no posts, no balusters, no glass, no rope or cable — not beside the steps on either side, not on the walls, not round the ceiling opening. Both sides stay open exactly as in IMAGE 1. This is the client's choice, not something missing." },
+  stairRailing: { short: 'railing beside the steps', pl: 'balustrady przy biegu', en: 'There is NO balustrade beside the steps: no posts, no balusters, no glass and no free-standing handrail on either side of the flight.' },
+  openingRailing: { short: 'railing round the opening', pl: 'balustrady wokół otworu', en: 'There is NO railing round the ceiling opening (the gallery edge stays as in IMAGE 1).' },
+  wallHandrail: { short: 'wall handrail', pl: 'poręczy na ścianie', en: 'There is NO handrail on the walls.' },
+  risers: { short: 'risers', pl: 'podstopnic', en: 'The stair is OPEN: there are NO risers — the gaps between the treads stay open and see-through as in IMAGE 1.' },
+  led: { short: 'lights', pl: 'oświetlenia LED', en: 'There are NO lights or LED strips on the stair.' },
+  stringers: { short: 'stringers', pl: 'wang', en: 'There are NO stringers: the treads are fixed in the wall (cantilever) as in IMAGE 1 — add no support under or beside them.' },
+  woodStringers: { short: 'wooden stringers', pl: 'drewnianych wang', en: 'There are NO wooden stringers: the treads rest on the steel structure exactly as in IMAGE 1.' },
+});
+
+/** The known keys in their order; the three railing kinds all absent → 'balustrade' instead. */
+export function normalizeAbsent(keys = []) {
+  const set = new Set(keys.filter((k) => AI_ABSENT[k]));
+  if (set.has('balustrade') || (set.has('stairRailing') && set.has('openingRailing') && set.has('wallHandrail'))) {
+    ['stairRailing', 'openingRailing', 'wallHandrail'].forEach((k) => set.delete(k));
+    set.add('balustrade');
+  }
+  return Object.keys(AI_ABSENT).filter((k) => set.has(k));
+}
+
 /**
  * The prompt: what the picture shows (the offer's facts — the same rows the offer prints), what must stay as it is,
- * what may change (light, the surroundings), the reference images.
- * @param {{facts?: {rows?: Array<[string, string]>}, interior?: string, withTexture?: boolean, extra?: string}} o
+ * what the staircase does NOT have (never to be added), what may change (light, the surroundings), the references.
+ * @param {{facts?: {rows?: Array<[string, string]>}, absent?: string[], interior?: string, withTexture?: boolean, extra?: string}} o
  */
-export function buildAiPrompt({ facts = {}, interior = 'modern', withTexture = true, extra = '' } = {}) {
+export function buildAiPrompt({ facts = {}, absent = [], interior = 'modern', withTexture = true, extra = '' } = {}) {
+  const missing = normalizeAbsent(absent);
   const rows = (facts.rows || []).filter(([k, v]) => k && v && v !== '—' && k !== 'Montaż');
   const lines = [
     'Turn IMAGE 1 (a 3D render of a timber staircase made to measure by a joinery workshop) into a photorealistic architectural interior photograph for the client\'s offer.',
@@ -39,8 +65,10 @@ export function buildAiPrompt({ facts = {}, interior = 'modern', withTexture = t
     withTexture
       ? '- IMAGE 2 is the exact wood used for all the wooden parts: keep its colour, tone and grain; the grain runs along each board as in IMAGE 1. Do not invent another wood species or stain.'
       : '- Keep the wood colour and grain direction of IMAGE 1. Do not invent another wood species or stain.',
+    '- Add NOTHING to the staircase that is not in IMAGE 1. If an element (a railing, a handrail, glass, risers, lights, a support) is not in IMAGE 1, this staircase does not have it.',
     '- Keep the ceiling slab and its opening where they are in IMAGE 1 (finish it as a white plastered ceiling).',
     '- No people, no text, no logos, no watermarks, no extra stairs or furniture in front of the staircase.',
+    ...(missing.length ? ['', 'WHAT THIS STAIRCASE DOES NOT HAVE — never add it:', ...missing.map((k) => `- ${AI_ABSENT[k].en}`)] : []),
     '',
     `Surroundings (may be added around the staircase, never in front of it): ${AI_SETTINGS.interior[interior] || AI_SETTINGS.interior.modern}.`,
     'Photographic style: a real estate / interior design photo, natural colours, sharp, realistic soft shadows on the floor.',
@@ -48,6 +76,7 @@ export function buildAiPrompt({ facts = {}, interior = 'modern', withTexture = t
   if (rows.length) lines.push('', 'The staircase (from the offer, for reference — IMAGE 1 is binding):', ...rows.map(([k, v]) => `- ${k}: ${v}`));
   const more = String(extra || '').trim();
   if (more) lines.push('', `Additional wishes: ${more}`);
+  lines.push('', `Final check before answering: compare your picture with IMAGE 1 — the same steps, the same parts, nothing added${missing.length ? ` (above all: no ${missing.map((k) => AI_ABSENT[k].short).join(', no ')})` : ''}. Remove anything that is not in IMAGE 1.`);
   return lines.join('\n');
 }
 

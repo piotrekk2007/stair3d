@@ -3,7 +3,7 @@
 // preview and printing to PDF. Lines and sums come from offer/offerModel.js out of what the takeoff already priced;
 // this module only gathers the inputs and pictures.
 
-import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
+import { buildOffer, stairFacts, stairAiAbsent, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
 import { buildOfferHTML } from '../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../offer/offerDocumentModern.js';
 import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus } from '../ui/offerPanel.js';
@@ -121,10 +121,15 @@ export function createOfferController(opts) {
     const bp = opts.getTakeoffSettings().boardPricing || {};
     return stairFacts(models.fullConfig, models.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') });
   }
+  /** What the stair does not have — the AI render's „never add it” list. */
+  function aiAbsent() {
+    const models = opts.getModels();
+    return models ? stairAiAbsent(models.fullConfig, models.railingModel) : [];
+  }
   function setHeroImage(h) {
     hero = h && h.img ? { img: h.img, full: h.full !== false, source: h.source || 'ai' } : null;
     setOfferHeroStatus(panel, hero);
   }
 
-  return { refresh, load, settings: () => settings, facts, setHeroImage, heroImage: () => hero };
+  return { refresh, load, settings: () => settings, facts, aiAbsent, setHeroImage, heroImage: () => hero };
 }

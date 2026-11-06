@@ -105,6 +105,22 @@ export function buildCladdingOffer(quote, offer) {
 }
 
 /** The stair's facts for the offer (the shared document's "Parametry schodów"), and its comfort table. */
+/**
+ * What the cladding does NOT have — the AI render's „never add it” list (keys of offer/aiRender.js AI_ABSENT, given as
+ * plain strings: the module never imports it; user report 2026-11-06).
+ */
+export function claddingAiAbsent(built) {
+  const config = built?.config || {};
+  const sections = built?.balustrade?.sections || [];
+  const out = [];
+  if (!sections.some((s) => s.kind !== 'antresola')) out.push('stairRailing');
+  if (!sections.some((s) => s.kind === 'antresola')) out.push('openingRailing');
+  if (!(built?.balustrade?.wallRails || []).length) out.push('wallHandrail');
+  if (!config.riserBoards) out.push('risers');
+  if (!config.ledTreadEnabled && !config.ledSkirtingEnabled && !config.ledHandrailEnabled) out.push('led');
+  return out;
+}
+
 export function claddingFacts(built, quoteSettings) {
   const { concrete, cladding, config } = built;
   const steps = concrete.elements.filter((e) => e.kind === 'step').length;

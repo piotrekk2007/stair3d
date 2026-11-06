@@ -47,3 +47,34 @@ test('errors: no key, HTTP statuses, a blocked or empty answer → a Polish mess
   assert.match(aiErrorMessage(new Error('no-key')), /klucz/);
   assert.equal(aiResponseImage({ candidates: [{ content: { parts: [{ inline_data: { mime_type: 'image/jpeg', data: 'D' } }] } }] }), 'data:image/jpeg;base64,D');
 });
+
+// user report 2026-11-06: a stair WITHOUT a balustrade came back with an unreal one — what it does not have is said
+test('what the stair does not have: listed as „never add it”, the three railing kinds as one strong rule, in the final check', async () => {
+  const { normalizeAbsent } = await import('../aiRender.js');
+  const p = buildAiPrompt({ facts, absent: ['stairRailing', 'openingRailing', 'wallHandrail', 'risers'] });
+  assert.match(p, /WHAT THIS STAIRCASE DOES NOT HAVE — never add it:/);
+  assert.match(p, /There is NO balustrade of any kind/);
+  assert.match(p, /there are NO risers/);
+  assert.match(p, /Final check before answering: .*no balustrade or handrail of any kind, no risers/);
+  assert.match(p, /Add NOTHING to the staircase that is not in IMAGE 1/);
+  assert.deepEqual(normalizeAbsent(['wallHandrail', 'led', 'nonsense']), ['wallHandrail', 'led']);
+  assert.deepEqual(normalizeAbsent(['stairRailing', 'openingRailing', 'wallHandrail']), ['balustrade']);
+  // nothing absent: no such section
+  assert.doesNotMatch(buildAiPrompt({ facts }), /DOES NOT HAVE/);
+});
+
+test('the absent elements from each module\'s project', async () => {
+  const { stairAiAbsent } = await import('../offerModel.js');
+  const { claddingAiAbsent } = await import('../../cladding/quote/claddingOffer.js');
+  const base = { hasRiserBoards: true, stairConstruction: 'stringers' };
+  assert.deepEqual(stairAiAbsent({ ...base, hasRiserBoards: false }, { sections: [] }), ['stairRailing', 'openingRailing', 'wallHandrail', 'risers', 'led']);
+  const stairOnly = { sections: [{ kind: 'stair', runs: [{ wallRail: false }] }] };
+  assert.deepEqual(stairAiAbsent({ ...base, ledTreadEnabled: true }, stairOnly), ['openingRailing', 'wallHandrail']);
+  const wallOnly = { sections: [{ kind: 'stair', mount: 'wall', runs: [{ wallRail: true }] }, { kind: 'opening', runs: [] }] };
+  assert.deepEqual(stairAiAbsent({ ...base, ledTreadEnabled: true }, wallOnly), ['stairRailing']);
+  assert.deepEqual(stairAiAbsent({ ...base, ledTreadEnabled: true, stairConstruction: 'cantilever' }, stairOnly).slice(-1), ['stringers']);
+  assert.ok(stairAiAbsent({ ...base, ledTreadEnabled: true, stairConstruction: 'metal-flat' }, stairOnly).includes('woodStringers'));
+  // the concrete module
+  assert.deepEqual(claddingAiAbsent({ config: { riserBoards: true }, balustrade: { sections: [], wallRails: [] } }), ['stairRailing', 'openingRailing', 'wallHandrail', 'led']);
+  assert.deepEqual(claddingAiAbsent({ config: { riserBoards: false, ledTreadEnabled: true }, balustrade: { sections: [{ kind: 'stair' }, { kind: 'antresola' }], wallRails: [{}] } }), ['risers']);
+});
