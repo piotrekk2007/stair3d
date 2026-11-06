@@ -5,6 +5,7 @@
 
 import { OFFER_VAT_RATES, OFFER_STYLES } from '../offer/offerModel.js';
 import { money } from '../offer/offerDocument.js';
+import { HERO_BOX_MM } from '../offer/offerDocumentModern.js';
 import { escapeHtml as esc } from '../util/format.js';
 
 
@@ -123,7 +124,7 @@ export function createOfferPanel(container, handlers) {
 
 /** The modern hero's picture in the panel: null = the 3D render. */
 export function setOfferHeroStatus(panel, hero) {
-  panel.querySelector('[data-of="hero-status"]').textContent = !hero ? 'wizualizacja 3D (automatycznie)' : `${hero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} — ${hero.full ? 'cała wysokość' : 'środek 84 × 150 mm'}`;
+  panel.querySelector('[data-of="hero-status"]').textContent = !hero ? 'wizualizacja 3D (automatycznie)' : `${hero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} — ${hero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height} mm`}`;
   panel.querySelector('[data-of="hero-remove"]').hidden = !hero;
 }
 

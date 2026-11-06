@@ -9,7 +9,7 @@
 // browser to generativelanguage.googleapis.com, the key in a header (never in the URL).
 
 export const AI_IMAGE_MODEL_DEFAULT = 'gemini-2.5-flash-image';
-/** The model's tallest ratio — the hero's 84 × 150 mm box is the same (0.56); the full-height strip crops its sides. */
+/** The model's tallest ratio — the hero's box (HERO_BOX_MM) is the same; the full-height strip crops its sides. */
 export const AI_ASPECT = Object.freeze({ label: '9:16', width: 9, height: 16 });
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 

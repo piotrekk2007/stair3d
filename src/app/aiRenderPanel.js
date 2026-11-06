@@ -6,7 +6,7 @@
 // module (onUse). The camera can be moved while the panel is open — the frame follows.
 
 import { buildAiPrompt, requestAiImage, aiErrorMessage, AI_ASPECT, AI_IMAGE_MODEL_DEFAULT, AI_SETTINGS } from '../offer/aiRender.js';
-import { HERO_FULL_MM } from '../offer/offerDocumentModern.js';
+import { HERO_FULL_MM, HERO_BOX_MM } from '../offer/offerDocumentModern.js';
 import { frameInViewport } from '../scene/sceneSetup.js';
 import { escapeHtml as esc } from '../util/format.js';
 
@@ -83,7 +83,7 @@ export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts,
     const f = frameInViewport(v.width, v.height, AI_ASPECT.width / AI_ASPECT.height);
     const box = frame.firstChild;
     Object.assign(box.style, { left: `${f.left}px`, top: `${f.top}px`, width: `${f.width}px`, height: `${f.height}px` });
-    // the full-height hero keeps the middle (84 / 276) ÷ (9 / 16) of the width
+    // the full-height hero keeps the middle (its width / 276) ÷ (9 / 16) of the picture's width
     const keep = HERO_FULL_MM.width / HERO_FULL_MM.height / (AI_ASPECT.width / AI_ASPECT.height);
     const strip = box.querySelector('.ai-frame-strip');
     strip.hidden = !prefs.full;
@@ -115,7 +115,7 @@ export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts,
       }
       ${
         resultImg
-          ? `<label class="ai-row">W ofercie <select data-ai-pref="full"><option value="1"${prefs.full ? ' selected' : ''}>cała wysokość (boki przycięte)</option><option value="0"${prefs.full ? '' : ' selected'}>środek 84 × 150 mm (cały obraz)</option></select></label>
+          ? `<label class="ai-row">W ofercie <select data-ai-pref="full"><option value="1"${prefs.full ? ' selected' : ''}>cała wysokość (boki przycięte)</option><option value="0"${prefs.full ? '' : ' selected'}>środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height} mm (cały obraz)</option></select></label>
         <div class="ai-actions"><button type="button" class="ai-primary" data-ai="use">Użyj w ofercie nowoczesnej</button><button type="button" data-ai="download">⬇ Pobierz</button></div>`
           : ''
       }

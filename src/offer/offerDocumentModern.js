@@ -30,9 +30,15 @@ const SPEC_MAX_LINES = 7;
 /** The hero box's background — the 3D render is made on exactly this colour (it melts into the box). */
 export const HERO_BACKGROUND = '#ECECEB';
 /** The hero render's box (mm) — render the 3D picture at this ratio. */
-export const HERO_BOX_MM = Object.freeze({ width: 84, height: 150 });
+// The hero's width (user request 2026-11-06: as wide as the right column allows — the design had 84 mm; the column's
+// side paddings went from 11.5 to MAIN_PAD_X_MM, the number / the gross amount / the lead time take a fitted size).
+export const HERO_WIDTH_MM = 100;
+const MAIN_PAD_X_MM = 8.5;
+/** The right column's text width (mm) — the page-1 budget's characters per line follow it. */
+export const MAIN_CONTENT_MM = 210 - HERO_WIDTH_MM - 2 * MAIN_PAD_X_MM;
+export const HERO_BOX_MM = Object.freeze({ width: HERO_WIDTH_MM, height: Math.round((HERO_WIDTH_MM * 16) / 9) }); // 9:16, the AI's ratio
 /** `settings.heroFull`: the picture over the hero's whole height (the sheet less the footer) — render it at this ratio. */
-export const HERO_FULL_MM = Object.freeze({ width: 84, height: 297 - 21 });
+export const HERO_FULL_MM = Object.freeze({ width: HERO_WIDTH_MM, height: 297 - 21 });
 /** The contact QR's side (mm, its quiet zone of 2 modules included). */
 export const QR_MM = 24;
 const QR_QUIET = 2;
@@ -61,17 +67,17 @@ const CSS = `
   .display { font-family: var(--display); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
 
   .p1 { flex: 1; display: flex; min-height: 0; }
-  .hero { width: 84mm; flex-shrink: 0; position: relative; background: ${HERO_BACKGROUND}; overflow: hidden; }
+  .hero { width: ${HERO_WIDTH_MM}mm; flex-shrink: 0; position: relative; background: ${HERO_BACKGROUND}; overflow: hidden; }
   .hero .logo { position: absolute; left: 8.5mm; top: 10.5mm; width: 53mm; height: auto; z-index: 1; }
   .hero .brand { position: absolute; left: 8.5mm; top: 10.5mm; right: 8.5mm; z-index: 1; background: var(--brand); color: #fff; font-family: var(--display); font-weight: 600; font-size: 13pt; padding: 2mm 3mm; border-radius: 1mm; }
-  .hero .render { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: 84mm; height: 150mm; object-fit: cover; display: block; }
+  .hero .render { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: ${HERO_WIDTH_MM}mm; height: ${HERO_BOX_MM.height}mm; object-fit: cover; display: block; }
   .hero .render.full { top: 0; transform: none; height: 100%; }
   .hero .caption { position: absolute; left: 8.5mm; bottom: 5.5mm; font-size: 9pt; color: #fff; background: var(--brand); padding: 0.8mm 2.2mm; border-radius: 1mm; }
-  .main { flex: 1; min-width: 0; padding: 10.5mm 11.5mm 7.5mm; display: flex; flex-direction: column; overflow: hidden; }
+  .main { flex: 1; min-width: 0; padding: 10.5mm ${MAIN_PAD_X_MM}mm 7.5mm; display: flex; flex-direction: column; overflow: hidden; }
 
   .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4mm; }
   .num-label, .label { font-size: 9pt; color: var(--muted); }
-  .num { font-size: 21pt; margin-top: 1mm; }
+  .num { font-size: 21pt; margin-top: 1mm; white-space: nowrap; }
   .valid { text-align: right; }
   .valid strong { display: inline-block; font-size: 11pt; font-weight: 600; margin-top: 1mm; padding-bottom: 0.8mm; border-bottom: 0.8mm solid var(--accent); }
 
@@ -103,7 +109,7 @@ const CSS = `
   .notes p { margin: 0; color: var(--muted); white-space: pre-wrap; }
 
   .facts { margin-top: auto; padding-top: 4mm; display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 6mm; }
-  .facts .big { font-family: var(--display); font-size: 15pt; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+  .facts .big { white-space: nowrap; font-family: var(--display); font-size: 15pt; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
   .facts .strong { font-size: 9.75pt; font-weight: 500; }
   .facts.with-qr { grid-template-columns: 1fr 1.25fr ${QR_MM}mm; column-gap: 4mm; }
   .facts .qr .label { margin-left: 1mm; }
@@ -178,7 +184,15 @@ const notesGoToP2 = (notes) => notes.length > NOTES_P1_MAX_CHARS || notes.split(
 const MAIN_HEIGHT_MM = 297 - 21 - 10.5 - 7.5; // the sheet less the footer and .main's paddings
 const SAFETY_MM = 5;
 const LINE_MM = { text: 4.6, name: 5.4, title: 8.7, titleLong: 7.0 };
-const CHARS = { spec: 58, name: 36, detail: 44, notes: 54, title: 22, titleLong: 28, people: 30 };
+// the characters per line were measured at the design's 103 mm column — scaled to this one
+const charsAt = (n) => Math.floor((n * MAIN_CONTENT_MM) / 103);
+const CHARS = Object.fromEntries(Object.entries({ spec: 58, name: 36, detail: 44, notes: 54, title: 22, titleLong: 28, people: 30 }).map(([k, n]) => [k, charsAt(n)]));
+
+// a display text's width in em (Inter Tight 600, rounded up a little): narrow punctuation and spaces, digits, letters
+const EM = { ' ': 0.27, ' ': 0.27, ',': 0.27, '.': 0.27, ':': 0.27, 'ł': 0.3, 'i': 0.28, 'l': 0.28, 'j': 0.28, 't': 0.36, 'f': 0.36, 'r': 0.4, '/': 0.4, '-': 0.4, '–': 0.56, m: 0.88, w: 0.8, M: 0.9, W: 1.0 };
+const textEm = (text) => [...String(text)].reduce((n, ch) => n + (EM[ch] ?? (/[0-9]/.test(ch) ? 0.6 : /[A-ZĄĆĘŁŃÓŚŹŻ]/.test(ch) ? 0.68 : 0.56)), 0);
+/** A one-line text's size (pt) so it fits `availMm`: at most maxPt (the design's), at least minPt. */
+const fitPt = (text, availMm, maxPt, minPt) => Math.max(minPt, Math.min(maxPt, Math.floor((availMm / (Math.max(0.5, textEm(text)) * 0.3528)) * 2) / 2));
 const wrapped = (text, perLine) => String(text || '').split('\n').reduce((n, p) => n + Math.max(1, Math.ceil(p.length / perLine)), 0);
 
 export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime, qr = false }) {
@@ -284,9 +298,9 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const notesP1 = !notes ? '' : notesP2 ? '<div class="notes"><b>Istotne uwagi — strona 2</b></div>' : `<div class="notes"><b>Istotne uwagi</b><p>${esc(notes)}</p></div>`;
   const leadTime = (s.leadTime || '').trim();
   const qrCol = qr ? `<div class="qr"><div class="label">Zapisz kontakt</div>${qr}</div>` : '';
-  const facts1 = `<div class="facts${qr ? ' with-qr' : ''}"><div>${leadTime ? `<div class="label">Termin realizacji</div><div class="big">${esc(leadTime)}</div>${s.leadTimeNote ? `<div class="muted">${esc(s.leadTimeNote)}</div>` : ''}` : ''}</div><div><div class="label">Dostawa</div>${delivery ? '<div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>' : ''}${deliveryNote ? `<div class="muted">${esc(deliveryNote)}</div>` : ''}</div>${qrCol}</div>`;
+  const facts1 = `<div class="facts${qr ? ' with-qr' : ''}"><div>${leadTime ? `<div class="label">Termin realizacji</div><div class="big" style="font-size:${fitPt(leadTime, qr ? (MAIN_CONTENT_MM - QR_MM - 8) / 2.25 : (MAIN_CONTENT_MM - 6) / 2.25, 15, 10)}pt">${esc(leadTime)}</div>${s.leadTimeNote ? `<div class="muted">${esc(s.leadTimeNote)}</div>` : ''}` : ''}</div><div><div class="label">Dostawa</div>${delivery ? '<div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>' : ''}${deliveryNote ? `<div class="muted">${esc(deliveryNote)}</div>` : ''}</div>${qrCol}</div>`;
   const sheet1 = `<section class="sheet"><div class="p1">${hero}<div class="main">
-    <div class="top"><div><div class="num-label">${number ? 'Oferta nr' : ''}</div><div class="num display">${number || 'Oferta'}</div><div class="muted" style="margin-top:1mm">z dnia ${dateFmt(date)}</div></div>
+    <div class="top"><div><div class="num-label">${number ? 'Oferta nr' : ''}</div><div class="num display" style="font-size:${fitPt(s.offerNumber || 'Oferta', MAIN_CONTENT_MM - 30, 21, 12)}pt">${number || 'Oferta'}</div><div class="muted" style="margin-top:1mm">z dnia ${dateFmt(date)}</div></div>
       <div class="valid"><div class="label">Ważna do</div><strong>${dateFmt(valid)}</strong></div></div>
     ${people}
     <div class="eyebrow">${esc(eyebrow)}</div>
@@ -295,7 +309,7 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
     <div class="lines">${lines1}</div>
     <div class="sum"><span>Razem netto</span><span>${nb(money(offer.totals.net))}</span></div>
     <div class="sum"><span>VAT ${offer.totals.vatRatePct}%</span><span>${nb(money(offer.totals.vat))}</span></div>
-    <div class="gross"><div><div class="label">Razem brutto</div>${grossNote ? `<div class="label">${grossNote}</div>` : ''}</div><div class="amount display">${nb(money(offer.totals.gross))}</div></div>
+    <div class="gross"><div><div class="label">Razem brutto</div>${grossNote ? `<div class="label">${grossNote}</div>` : ''}</div><div class="amount display" style="font-size:${fitPt(money(offer.totals.gross), MAIN_CONTENT_MM - 9.6 - 4 - Math.max(12, grossNote.length) * 0.55 * 9 * 0.3528, 24, 14)}pt">${nb(money(offer.totals.gross))}</div></div>
     ${notesP1}
     ${facts1}
   </div></div>${footerHTML(c)}</section>`;

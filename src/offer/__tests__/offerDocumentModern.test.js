@@ -33,7 +33,7 @@ const page = (h, k) => h.split('<section class="sheet')[k];
 test('sheet 1: the number, the date, „Ważna do” (calendar days), the client and the offer\'s handler', () => {
   const h = html();
   const p1 = page(h, 1);
-  assert.match(p1, /Oferta nr<\/div><div class="num display">DRX-2026-0003/);
+  assert.match(p1, /Oferta nr<\/div><div class="num display"[^>]*>DRX-2026-0003/);
   assert.match(p1, /z dnia 06\.11\.2026/);
   assert.match(p1, /Ważna do<\/div><strong>20\.11\.2026/);
   assert.match(p1, /<span>Klient<\/span><b>Jan Kowalski<\/b>tel\. 600 100 200<br>jan@example\.pl/);
@@ -54,7 +54,7 @@ test('every text escaped; the CNC + projekt amount never shown; the totals as th
   const o = offerOf(3);
   assert.match(h, /Razem netto<\/span><span>600,00&nbsp;zł/);
   assert.match(h, /VAT 23%<\/span><span>138,00&nbsp;zł/);
-  assert.match(h, new RegExp(`<div class="amount display">${'738,00'}&nbsp;zł`));
+  assert.match(h, new RegExp(`<div class="amount display"[^>]*>${'738,00'}&nbsp;zł`));
   assert.equal(o.totals.gross, 738);
 });
 
@@ -223,9 +223,22 @@ test('texts for an offer made by hand: the caption, eyebrow, delivery note, clos
 
 test('heroFull: the picture over the hero\'s whole height (the box as before when absent)', async () => {
   const { HERO_FULL_MM } = await import('../offerDocumentModern.js');
-  assert.deepEqual({ ...HERO_FULL_MM }, { width: 84, height: 276 });
+  assert.deepEqual({ ...HERO_FULL_MM }, { width: 100, height: 276 }); // (widened 2026-11-06 from the design's 84)
   const img = { image3d: 'data:image/jpeg;base64,AA' };
   assert.match(html({}, 3, img), /<img class="render" src=/);
   assert.match(html({ heroFull: true }, 3, img), /<img class="render full" src=/);
   assert.match(html({}, 3, img), /\.hero \.render\.full \{ top: 0; transform: none; height: 100%; \}/);
+});
+
+// the hero widened (user request 2026-11-06): the number / the gross amount / the lead time take a fitted size so the
+// narrower right column keeps them on one line
+test('the widened hero: a long number and a big amount set smaller, a short one at the design size', () => {
+  const size = (h, cls) => Number(h.match(new RegExp(`class="${cls}"[^>]*font-size:([0-9.]+)pt`))[1]);
+  const short = html({ offerNumber: 'DRX-26-3' });
+  const long = html({ offerNumber: 'OF/2026/1106-1206-WARIANT-B' });
+  assert.equal(size(short, 'num display'), 21);
+  assert.ok(size(long, 'num display') < 21 && size(long, 'num display') >= 12);
+  const big = buildModernOfferHTML({ offer: { lines: [{ kind: 'extra', label: 'X', net: 1 }], totals: { net: 1, vat: 0, gross: 1234567.89, vatRatePct: 23 } }, facts, settings: settings(), company, date: new Date(2026, 10, 6) });
+  assert.ok(size(big, 'amount display') < 24);
+  assert.match(html(), /\.hero \{ width: 100mm;/);
 });

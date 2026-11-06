@@ -482,7 +482,8 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   browser's print-to-PDF. Company data = browser setting (`localStorage`), offer data = project.
 - **Offer style** (user decision 2026-11-06, both modules; docs in OFFER_MODEL.md): `offerStyle` classic (default,
   `offerDocument.js`, unchanged) | modern (`offerDocumentModern.js buildModernOfferHTML`, the same input; the design
-  `docs/design/oferta-nowoczesna-wzor.html` 1:1). Modern = sheet 1 a FIXED A4 (a portrait 3D hero 84 × 150 mm on
+  `docs/design/oferta-nowoczesna-wzor.html`; the hero widened to 100 mm — `HERO_WIDTH_MM`, the right column's padding
+  8.5 mm, the number / gross amount / lead time at a fitted size `fitPt`). Modern = sheet 1 a FIXED A4 (a portrait 3D hero on
   `#ECECEB` filling its box — `scene/offerFraming.js fitViewToBox`; number, client + the offer's handler, title,
   ≤ 7 spec lines, ≤ `MAX_P1_LINES` 6 lines, sums, gross „z dostawą i montażem”, notes, lead time), sheet 2 the plan,
   parameters, comfort (+ the detailed price table / long notes moved there). Sheet 1's height budget (`planPage1` /
