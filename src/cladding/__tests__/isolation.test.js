@@ -29,6 +29,9 @@ const ALLOWED_SHARED = new Set([
   'takeoff/priceListFile.js',
   'takeoff/pricing.js',
   'offer/offerDocument.js',
+  // the modern offer (user decision 2026-11-06) and its picture's framing — shared, read-only
+  'offer/offerDocumentModern.js',
+  'scene/offerFraming.js',
   'app/printHtml.js',
   // the browser download of a text file (the module writes its own DXF / OBJ / DAE text — export/)
   'export/downloadTextFile.js',

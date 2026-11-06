@@ -480,6 +480,16 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation, VAT
   23/8/0, gross; 3D view and plan one under the other at full width; printed via the
   browser's print-to-PDF. Company data = browser setting (`localStorage`), offer data = project.
+- **Offer style** (user decision 2026-11-06, both modules; docs in OFFER_MODEL.md): `offerStyle` classic (default,
+  `offerDocument.js`, unchanged) | modern (`offerDocumentModern.js buildModernOfferHTML`, the same input; the design
+  `docs/design/oferta-nowoczesna-wzor.html` 1:1). Modern = sheet 1 a FIXED A4 (a portrait 3D hero 84 × 150 mm on
+  `#ECECEB` filling its box — `scene/offerFraming.js fitViewToBox`; number, client + the offer's handler, title,
+  ≤ 7 spec lines, ≤ `MAX_P1_LINES` 6 lines, sums, gross „z dostawą i montażem”, notes, lead time), sheet 2 the plan,
+  parameters, comfort (+ the detailed price table / long notes moved there). Sheet 1's height budget (`planPage1` /
+  `page1Height`, mm from the CSS): notes → shorter spec → lines go to sheet 2 when it would spill. New offer fields
+  `offerTitle` / `offerSubtitle` / `leadTime` / `leadTimeNote` / `deliveryIncluded`, optional company fields
+  `contactName` / `contactPhone` / `contactEmail` / `hours`; Inter Tight + Inter (Google Fonts) — `printHtml.js` waits
+  for the fonts and images. No QR yet (stage 2).
 
 ## Plan 2D and workspace UI
 
@@ -548,7 +558,7 @@ balustrade with decorative posts and the antresola (`balustradeModel.js`), all p
 bowed, bent riser, support block) and the treads' edge profiles (chamfer / round / bullnose, lofted) — `starterProfile.js`.
 Stage 6 part 1 built: the price list shared with the self-supporting takeoff (`quote/labour.js` priceList /
 boardPricing, the same „cały cennik” file) + the module's labour, the offer (`quote/claddingOffer.js` → the shared
-`offer/offerDocument.js`), the internal estimate. Walls per flight side by type (full / above the steps
+`offer/offerDocument.js`), the internal estimate; the offer's classic / modern style (shared `offer/offerDocumentModern.js`, hook). Walls per flight side by type (full / above the steps
 to a height / under the flight) and the wall between flights set apart (`sideWallsModel.js`). The balustrade's types
 (balusters square / round, glass between posts, glass on the concrete's side), posts by hand, the antresola per edge and
 the opening drawn by hand (plan edit modes „▮ Słupy” / „▭ Otwór i antresola”). Colours per element group through the

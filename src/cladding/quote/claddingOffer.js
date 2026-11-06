@@ -21,6 +21,13 @@ export function createDefaultCladdingOffer() {
     lineEdits: {},
     extras: [], // [{id, label, qty, unit, unitNet}]
     showComfort: true,
+    // the printed style (user decision 2026-11-06 — as the self-supporting offer's offerModel.js): classic / modern
+    offerStyle: 'classic',
+    offerTitle: '',
+    offerSubtitle: '',
+    leadTime: '3–5 tygodni',
+    leadTimeNote: 'gotowe schody na miejscu',
+    deliveryIncluded: true,
   };
 }
 
@@ -48,6 +55,12 @@ export function sanitizeCladdingOffer(raw) {
     lineEdits: edits,
     extras: (Array.isArray(s.extras) ? s.extras : []).filter((x) => x && typeof x === 'object').map((x, i) => ({ id: str(x.id) || `extra-${i}`, label: str(x.label) || 'Pozycja', qty: Math.max(0, num(x.qty, 1)), unit: str(x.unit) || 'szt.', unitNet: Math.max(0, num(x.unitNet)) })),
     showComfort: s.showComfort !== false,
+    offerStyle: s.offerStyle === 'modern' ? 'modern' : 'classic',
+    offerTitle: str(s.offerTitle),
+    offerSubtitle: str(s.offerSubtitle),
+    leadTime: typeof s.leadTime === 'string' ? s.leadTime : d.leadTime,
+    leadTimeNote: typeof s.leadTimeNote === 'string' ? s.leadTimeNote : d.leadTimeNote,
+    deliveryIncluded: s.deliveryIncluded !== false,
   };
 }
 

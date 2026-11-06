@@ -5,6 +5,7 @@
 
 import { buildOffer, stairFacts, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
 import { buildOfferHTML } from '../offer/offerDocument.js';
+import { buildModernOfferHTML, HERO_BACKGROUND, HERO_BOX_MM } from '../offer/offerDocumentModern.js';
 import { createOfferPanel, fillOfferForm, updateOfferPanel } from '../ui/offerPanel.js';
 import { summarizeByCategory } from '../ui/takeoffView.js';
 import { printHtml } from './printHtml.js';
@@ -20,7 +21,8 @@ const COMPANY_STORAGE_KEY = 'stair3d.company';
  * @param {() => Set<string>} opts.getWinderStepIds  winder treads (their own summary category)
  * @param {() => string|null} opts.getLogoDataUrl
  * @param {() => string} opts.getProjectName
- * @param {() => string|null} opts.renderImage3D      the 3D picture (presentation look, iso view) as a data URL
+ * @param {(o?: {width, height, background, fit}) => string|null} opts.renderImage3D  the 3D picture (presentation look,
+ *   iso view) as a data URL — the modern style asks for its portrait box on its studio background
  * @param {() => string|null} opts.renderPlanSVG      the plan picture (whole stair, no edit layers)
  */
 export function createOfferController(opts) {
@@ -58,17 +60,19 @@ export function createOfferController(opts) {
       return;
     }
     const bp = opts.getTakeoffSettings().boardPricing || {};
-    const html = buildOfferHTML({
+    const modern = settings.offerStyle === 'modern';
+    const input = {
       offer: c.offer,
       facts: stairFacts(models.fullConfig, models.derived, { material: [bp.species, bp.cls].filter(Boolean).join(', ') }),
       settings,
       company,
       logoDataUrl: opts.getLogoDataUrl(),
-      image3d: opts.renderImage3D(),
+      // (the modern hero: the render at its box's ratio, on its background, the stair filling it)
+      image3d: modern ? opts.renderImage3D({ width: 1120, height: Math.round((1120 * HERO_BOX_MM.height) / HERO_BOX_MM.width), background: HERO_BACKGROUND, fit: true }) : opts.renderImage3D(),
       planSvg: opts.renderPlanSVG(),
       projectName: opts.getProjectName(),
-    });
-    printHtml(html);
+    };
+    printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));
   }
 
   const panel = createOfferPanel(opts.container, {

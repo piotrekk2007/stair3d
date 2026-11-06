@@ -27,6 +27,11 @@ import { round2 } from '../util/format.js';
 import { sideShort } from '../util/sideNames.js';
 
 export const OFFER_VAT_RATES = Object.freeze([23, 8, 0]);
+// the offer's printed style (user decision 2026-11-06): the classic one (offerDocument.js, unchanged) or the modern one
+// (offerDocumentModern.js — two A4 sheets: the offer, the technical data)
+export const OFFER_STYLES = Object.freeze({ classic: 'klasyczny', modern: 'nowoczesny' });
+export const DEFAULT_LEAD_TIME = '3–5 tygodni';
+export const DEFAULT_LEAD_TIME_NOTE = 'gotowe schody na miejscu';
 const MAIN_LINE_LABEL = 'Schody — materiał wraz z przygotowaniem';
 
 export function createDefaultOfferSettings() {
@@ -41,6 +46,13 @@ export function createDefaultOfferSettings() {
     validityDays: 30,
     notes: '',
     showComfort: true,
+    // the modern style's own data (optional in the project file — an older project prints the classic offer)
+    offerStyle: 'classic',
+    offerTitle: '',
+    offerSubtitle: '',
+    leadTime: DEFAULT_LEAD_TIME,
+    leadTimeNote: DEFAULT_LEAD_TIME_NOTE,
+    deliveryIncluded: true,
   };
 }
 
@@ -61,6 +73,20 @@ export function sanitizeOfferSettings(value) {
     validityDays: Math.round(num(value.validityDays, d.validityDays)) || d.validityDays,
     notes: str(value.notes),
     showComfort: value.showComfort !== false,
+    ...sanitizeOfferStyleFields(value),
+  };
+}
+
+/** The modern style's fields (shared with the concrete module's offer — cladding/quote/claddingOffer.js). */
+export function sanitizeOfferStyleFields(value) {
+  const v = value && typeof value === 'object' ? value : {};
+  return {
+    offerStyle: Object.keys(OFFER_STYLES).includes(v.offerStyle) ? v.offerStyle : 'classic',
+    offerTitle: str(v.offerTitle),
+    offerSubtitle: str(v.offerSubtitle),
+    leadTime: typeof v.leadTime === 'string' ? v.leadTime : DEFAULT_LEAD_TIME,
+    leadTimeNote: typeof v.leadTimeNote === 'string' ? v.leadTimeNote : DEFAULT_LEAD_TIME_NOTE,
+    deliveryIncluded: v.deliveryIncluded !== false,
   };
 }
 
@@ -68,10 +94,16 @@ export function createDefaultCompany() {
   return { name: '', address: '', nip: '', phone: '', email: '', www: '' };
 }
 
+// optional company fields (the modern offer, user decision 2026-11-06): the offer's handler ("opiekun oferty") and
+// the opening hours (several lines) — kept only when given, so the older company data stays as it was
+export const OPTIONAL_COMPANY_FIELDS = Object.freeze(['contactName', 'contactPhone', 'contactEmail', 'hours']);
+
 export function sanitizeCompany(value) {
   const d = createDefaultCompany();
   if (!value || typeof value !== 'object') return d;
-  return Object.fromEntries(Object.keys(d).map((k) => [k, str(value[k])]));
+  const out = Object.fromEntries(Object.keys(d).map((k) => [k, str(value[k])]));
+  for (const k of OPTIONAL_COMPANY_FIELDS) if (typeof value[k] === 'string') out[k] = value[k];
+  return out;
 }
 
 /** Material categories the seller may show separately (priced, from the model — not the manual rows). */

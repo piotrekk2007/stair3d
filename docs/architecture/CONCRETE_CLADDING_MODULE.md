@@ -35,6 +35,15 @@ The self-supporting engine must not be touched: it works and the user does not w
      there); `main.js` registers `cladding/floorStair.js buildCladdingFloorFromFile` for `schody3d-beton`, reads a
      floor file of either kind (`readFloorFile`, used by both the self-supporting „Wczytaj bieg wyżej / niżej” and the
      module), and hands the module `linkFloor` (= `buildReferenceModel` + `renderReferenceStair`) on mounting;
+   - (made 2026-11-06, user decision) the modern offer style, shared by both modules: the new shared
+     `offer/offerDocumentModern.js` (`buildModernOfferHTML`, the same input as `buildOfferHTML`, which is unchanged) and
+     `scene/offerFraming.js` (`fitViewToBox` — the portrait hero picture filling its box), both on the allow-list;
+     `offer/offerModel.js` the offer's style fields (`offerStyle`, `offerTitle`, `offerSubtitle`, `leadTime`,
+     `leadTimeNote`, `deliveryIncluded` — `sanitizeOfferStyleFields`) and the optional company fields (`contactName`,
+     `contactPhone`, `contactEmail`, `hours`); `app/printHtml.js` waits for the fonts and the images before printing;
+     `ui/offerPanel.js` + `app/offerController.js` + `main.js offerImage3D({width, height, background, fit})` (the
+     self-supporting side). The module keeps its own copy of the style fields (`quote/claddingOffer.js`) and its own
+     picture (`claddingApp.js offerImage3D`: no grid / axes / ground / room / linked floor, the shadow only);
    - nothing else without asking the user first.
 4. The project file of the module is its own type (`_type: 'schody3d-beton'`, own version and migrations) — the
    self-supporting `projectIO.js` stays as it is.

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<!--
+  WZÓR: oferta „nowoczesna” (wersja B) — stair3d.
+  Statyczny wzorzec do przeniesienia na src/offer/offerDocumentModern.js (string-builder jak offerDocument.js).
+  Dane są przykładowe (z Wyceny_3); wartości w [nawiasach] = do podstawienia z modelu.
+  Strona 1 = arkusz stały A4 (nic nie może z niego wypłynąć), strona 2 = dane techniczne.
+  Jednostki: mm / pt (druk). Kolory: grafit #2B2A29 i zieleń #97BB3D z logo DREWEX.
+-->
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Oferta nr DRX-2026-0003 — wzór nowoczesny</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #141414; --muted: #5E5F61; --line: #D8D9DB; --surface: #F2F2F2;
+    --brand: #2B2A29; --accent: #97BB3D; --on-dark-muted: #C4C4C2; --warn: #B3261E;
+    --display: "Inter Tight", Inter, "Segoe UI", Arial, sans-serif;
+    --text: Inter, "Segoe UI", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: var(--text); color: var(--ink); font-size: 9pt; line-height: 1.45;
+         font-variant-numeric: tabular-nums; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; break-after: page; page-break-after: always; }
+  .sheet:last-child { break-after: auto; page-break-after: auto; }
+  /* page 2+: grows with its content (a long price table) — the browser breaks it, the footer ends the last page */
+  .sheet.flow { height: auto; min-height: 296mm; overflow: visible; }  /* 296, not 297: rounding must not spill a blank page */
+  .muted { color: var(--muted); }
+  .display { font-family: var(--display); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+
+  /* ---------- page 1 ---------- */
+  .p1 { flex: 1; display: flex; min-height: 0; }
+  .hero { width: 84mm; flex-shrink: 0; position: relative; background: #ECECEB; overflow: hidden; }
+  .hero .logo { position: absolute; left: 8.5mm; top: 10.5mm; width: 53mm; height: auto; z-index: 1; }
+  /* the 3D render, rendered at THIS box's ratio (84 x 150 mm) on the same background colour */
+  .hero .render { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: 84mm; height: 150mm; object-fit: cover; display: block; }
+  .hero .caption { position: absolute; left: 8.5mm; bottom: 5.5mm; font-size: 9pt; color: #fff; background: var(--brand); padding: 0.8mm 2.2mm; border-radius: 1mm; }
+  .main { flex: 1; min-width: 0; padding: 10.5mm 11.5mm 7.5mm; display: flex; flex-direction: column; }
+
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4mm; }
+  .num-label, .label { font-size: 9pt; color: var(--muted); }
+  .num { font-size: 21pt; margin-top: 1mm; }
+  .valid { text-align: right; }
+  .valid strong { display: inline-block; font-size: 11pt; font-weight: 600; margin-top: 1mm; padding-bottom: 0.8mm; border-bottom: 0.8mm solid var(--accent); }
+
+  .people { margin-top: 4.8mm; padding-top: 3.2mm; border-top: 0.26mm solid var(--line); display: grid; grid-template-columns: 1fr 1fr; column-gap: 5mm; color: var(--muted); }
+  .people b { display: block; color: var(--ink); font-weight: 500; }
+
+  .eyebrow { margin-top: 6.8mm; font-size: 9.75pt; font-weight: 500; color: var(--muted); }
+  h1 { margin: 2mm 0 0; font-size: 22.5pt; text-wrap: balance; }
+  h1 .sub { font-weight: 400; color: var(--muted); }
+  .spec { margin-top: 3.7mm; color: var(--muted); }
+  .spec div { line-height: 1.45; }
+
+  .lines { margin-top: 5.8mm; border-top: 0.26mm solid var(--ink); }
+  .line { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; padding: 2.4mm 0; border-bottom: 0.26mm solid var(--line); }
+  .line .name { font-size: 10.5pt; font-weight: 500; }
+  .line .detail { display: block; font-size: 9pt; color: var(--muted); font-weight: 400; }
+  .line .net { font-size: 10.5pt; white-space: nowrap; }
+  .more { padding: 2.4mm 0; border-bottom: 0.26mm solid var(--line); color: var(--muted); }   /* only when the lines go to page 2 */
+  .sum { display: flex; justify-content: space-between; color: var(--muted); margin-top: 1mm; }
+  .sum:first-of-type { margin-top: 2.4mm; }
+
+  .gross { margin-top: 3.7mm; background: var(--brand); color: #fff; border-radius: 1.6mm; padding: 3.7mm 4.8mm; display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+  .gross .label { color: var(--on-dark-muted); }
+  .gross .amount { font-size: 24pt; line-height: 1; white-space: nowrap; }
+
+  .notes { margin-top: 3.2mm; border: 0.26mm solid var(--line); border-radius: 1.6mm; padding: 2.6mm 3.7mm; }
+  .notes b { display: block; font-weight: 600; margin-bottom: 0.6mm; }
+  .notes p { margin: 0; color: var(--muted); white-space: pre-wrap; }
+
+  .facts { margin-top: auto; padding-top: 4mm; display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 6mm; }
+  .facts .big { font-family: var(--display); font-size: 15pt; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+  .facts .strong { font-size: 9.75pt; font-weight: 500; }
+
+  /* ---------- footer (every sheet) ---------- */
+  footer { height: 21mm; flex-shrink: 0; background: var(--brand); color: #fff; padding: 0 11.5mm 0 8.5mm; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 6mm; align-items: center; font-size: 9pt; line-height: 1.45; }
+  footer span { display: block; }
+  footer .dim { color: var(--on-dark-muted); }
+  footer .www { color: var(--accent); font-weight: 600; }
+  footer .right { text-align: right; }
+
+  /* ---------- page 2 ---------- */
+  .p2 { flex: 1; min-height: 0; padding: 10.5mm 11.5mm 8mm; display: flex; flex-direction: column; }
+  .p2-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 3mm; border-bottom: 0.26mm solid var(--ink); }
+  .p2-head img { height: 7mm; width: auto; display: block; }
+  .p2-head .t { text-align: right; color: var(--muted); }
+  .p2-head .t b { color: var(--ink); font-weight: 600; }
+  h2 { font-family: var(--display); font-size: 13.5pt; font-weight: 600; letter-spacing: -0.01em; margin: 7mm 0 2.6mm; }
+  .plan { margin: 0; background: var(--surface); border-radius: 1.6mm; padding: 4mm; }
+  .plan svg, .plan img { width: 100%; height: 90mm; display: block; }
+  .plan figcaption { margin-top: 2mm; color: var(--muted); }
+  .params { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; }
+  .params div { display: flex; justify-content: space-between; gap: 4mm; padding: 1.8mm 0; border-bottom: 0.26mm solid var(--line); }
+  .params dt, .params dd { margin: 0; }
+  .params dt { color: var(--muted); }
+  .params dd { text-align: right; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 400; color: var(--muted); padding: 0 0 1.8mm; border-bottom: 0.26mm solid var(--ink); }
+  td { padding: 1.8mm 0; border-bottom: 0.26mm solid var(--line); vertical-align: top; }
+  td.src { color: var(--muted); }
+  .num-r { text-align: right; white-space: nowrap; }
+  .ok, .bad { white-space: nowrap; font-weight: 500; }
+  .ok::before, .bad::before { content: ""; display: inline-block; width: 2mm; height: 2mm; border-radius: 50%; margin-right: 1.5mm; vertical-align: 0.1mm; }
+  .ok::before { background: var(--accent); }
+  .bad { color: var(--warn); }
+  .bad::before { background: var(--warn); }
+</style>
+</head>
+<body>
+
+<!-- ======================= STRONA 1 ======================= -->
+<section class="sheet">
+  <div class="p1">
+    <div class="hero">
+      <img class="logo" src="{{LOGO}}" alt="logo">                 <!-- logoDataUrl; brak logo → company.name białym tekstem na grafitowym pasku -->
+      <img class="render" src="{{IMG}}" alt="wizualizacja">        <!-- image3d; brak → sam szary panel -->
+      <span class="caption">Wizualizacja poglądowa</span>
+    </div>
+
+    <div class="main">
+      <div class="top">
+        <div>
+          <div class="num-label">Oferta nr</div>
+          <div class="num display">DRX-2026-0003</div>               <!-- settings.offerNumber (brak → sam napis „Oferta”) -->
+          <div class="muted" style="margin-top:1mm">z dnia 06.11.2026</div>
+        </div>
+        <div class="valid">
+          <div class="label">Ważna do</div>
+          <strong>20.11.2026</strong>                                <!-- data + validityDays (dni kalendarzowe, jak dziś) -->
+        </div>
+      </div>
+
+      <div class="people">
+        <div><span>Klient</span><b>Wola Rasztowska</b>tel. 792 118 030<br>biuro@twojaksiegowosc.pl</div>   <!-- settings.client -->
+        <div><span>Opiekun oferty</span><b>[Imię i nazwisko]</b>tel. [numer]<br>[e-mail]</div>              <!-- company.contactName/Phone/Email -->
+      </div>
+
+      <div class="eyebrow">Schody drewniane z montażem</div>          <!-- settings.offerEyebrow (domyślnie wg modułu / montażu) -->
+      <h1 class="display">Schody dębowe kl. AB, klasyczne z&nbsp;noskiem <span class="sub">podstopnie czarny MDF</span></h1>  <!-- settings.offerTitle + offerSubtitle -->
+
+      <div class="spec">                                              <!-- 5–7 najkrótszych wierszy z facts.rows (wartości), drobno -->
+        <div>Stopnie proste gr. 40 (kr/rogi) · 16 szt.</div>
+        <div>Podest gr. 40, 1050×2000 · 1 szt.</div>
+        <div>Podstopnice MDF czarne 16×190 · 18 szt.</div>
+        <div>Nosek na piętro ×2000 · 1 szt. · cokół dębowy 12×60 · 23 mb</div>
+        <div>Słupy dębowe 70×70×1100 · 3 szt.</div>
+        <div>Poręcze 40×70 · dł. 2800, 2600, 1000</div>
+        <div>Rurki aluminiowe czarne fi 20 · 18 mb</div>
+      </div>
+
+      <div class="lines">                                             <!-- offer.lines; > MAX_P1_LINES → zamiast nich wiersz .more -->
+        <div class="line"><span class="name">Schody dębowe – komplet</span><span class="net">10&nbsp;396,00&nbsp;zł</span></div>
+        <div class="line"><span class="name">Balustrada dębowa</span><span class="net">2&nbsp;482,00&nbsp;zł</span></div>
+        <div class="line"><span class="name">Montaż i wykończenie<span class="detail">przygotowanie podłoża, barwienie, lakier lub olej</span></span><span class="net">13&nbsp;100,00&nbsp;zł</span></div>
+        <!-- <div class="more">Szczegółowa wycena (12 pozycji) — strona 2</div> -->
+      </div>
+      <div class="sum"><span>Razem netto</span><span>25&nbsp;978,00&nbsp;zł</span></div>
+      <div class="sum"><span>VAT 8%</span><span>2&nbsp;078,24&nbsp;zł</span></div>
+
+      <div class="gross">
+        <div><div class="label">Razem brutto</div><div class="label">z dostawą i montażem</div></div>   <!-- „z dostawą” tylko gdy deliveryIncluded; „i montażem” gdy jest pozycja montażu -->
+        <div class="amount display">28&nbsp;056,24&nbsp;zł</div>
+      </div>
+
+      <div class="notes">                                             <!-- tylko gdy settings.notes niepuste -->
+        <b>Istotne uwagi</b>
+        <p>[Treść uwag z pola „Uwagi” — np. warunki płatności, zakres prac po stronie Klienta.]</p>
+      </div>
+
+      <div class="facts">
+        <div>
+          <div class="label">Termin realizacji</div>
+          <div class="big">3–5 tygodni</div>                         <!-- settings.leadTime -->
+          <div class="muted">gotowe schody na miejscu</div>
+        </div>
+        <div>
+          <div class="label">Dostawa</div>
+          <div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>   <!-- deliveryIncluded -->
+          <div class="muted">Wycena po pomiarach i ocenie wykonawcy.</div>      <!-- stała stopka oferty -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div><span style="font-weight:600">Drewex sp.j.</span><span class="dim">ul. Wawrzyna 2, Cegielnia</span><span class="dim">05-250 Radzymin · NIP [—]</span></div>
+    <div><span>+48 22 786 62 98</span><span>drewex@drewex.net.pl</span><span class="www">www.drewex.net.pl</span></div>
+    <div class="right"><span style="font-weight:600">Biuro i fabryka</span><span class="dim">pn–pt 7:00–16:00</span><span class="dim">sob. 7:00–14:00</span></div>   <!-- company.hours (nowe, wielowierszowe) -->
+  </footer>
+</section>
+
+<!-- ======================= STRONA 2 ======================= -->
+<section class="sheet flow">
+  <div class="p2">
+    <div class="p2-head">
+      <img src="{{LOGO}}" alt="logo">
+      <div class="t"><b>Oferta nr DRX-2026-0003</b> · dane techniczne</div>
+    </div>
+
+    <!-- (gdy pozycji > MAX_P1_LINES) <h2>Szczegółowa wycena</h2> + tabela: Pozycja | Ilość | Cena netto | Wartość netto -->
+
+    <h2>Rzut z góry</h2>
+    <figure class="plan">
+      <svg viewBox="0 0 400 200" role="img" aria-label="Rzut z góry (miejsce na planSvg)"><rect x="0.5" y="0.5" width="399" height="199" fill="none" stroke="#B9BABC" stroke-dasharray="4 4"/><text x="200" y="104" text-anchor="middle" font-size="12" fill="#5E5F61">planSvg</text></svg>
+      <figcaption>Wymiary w mm</figcaption>
+    </figure>
+
+    <h2>Parametry schodów</h2>
+    <dl class="params">                                               <!-- facts.rows -->
+      <div><dt>Rodzaj</dt><dd>[wartość]</dd></div>
+      <div><dt>Stopnie</dt><dd>16 prostych, 1 podest</dd></div>
+      <div><dt>Wysokość całkowita</dt><dd>[mm]</dd></div>
+      <div><dt>Wysokość stopnia</dt><dd>[mm]</dd></div>
+      <div><dt>Materiał</dt><dd>Dąb, kl. AB</dd></div>
+      <div><dt>Grubość stopnia</dt><dd>40 mm, podstopnice 16 mm</dd></div>
+      <div><dt>Krawędź stopni</dt><dd>[wartość]</dd></div>
+      <div><dt>Balustrada</dt><dd>[wartość]</dd></div>
+    </dl>
+
+    <h2>Wygoda i zgodność z przepisami</h2>                            <!-- tylko gdy showComfort -->
+    <table>
+      <tr><th>Parametr</th><th>Wartość</th><th>Wymaganie</th><th class="num-r">Ocena</th></tr>
+      <tr><td>Wzór Blondela 2h + s</td><td>[mm]</td><td>600–650 mm <span class="muted">(WT § 69 ust. 4)</span></td><td class="num-r"><span class="ok">spełnia</span></td></tr>
+      <tr><td>Wysokość stopnia</td><td>[mm]</td><td>do 190 mm <span class="muted">(WT § 68)</span></td><td class="num-r"><span class="ok">spełnia</span></td></tr>
+      <tr><td>Szerokość biegu</td><td>[mm]</td><td>min. 800 mm <span class="muted">(WT § 68)</span></td><td class="num-r"><span class="bad">poza zakresem</span></td></tr>
+      <tr><td>Kąt nachylenia</td><td>[°]</td><td>do 36° <span class="muted">(WT § 69)</span></td><td class="num-r"><span class="ok">spełnia</span></td></tr>
+    </table>
+
+    <p class="muted" style="margin:5mm 0 0">Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).</p>
+  </div>
+
+  <footer>
+    <div><span style="font-weight:600">Drewex sp.j.</span><span class="dim">ul. Wawrzyna 2, Cegielnia</span><span class="dim">05-250 Radzymin · NIP [—]</span></div>
+    <div><span>+48 22 786 62 98</span><span>drewex@drewex.net.pl</span><span class="www">www.drewex.net.pl</span></div>
+    <div class="right"><span style="font-weight:600">Biuro i fabryka</span><span class="dim">pn–pt 7:00–16:00</span><span class="dim">sob. 7:00–14:00</span></div>
+  </footer>
+</section>
+
+</body>
+</html>

@@ -25,6 +25,8 @@ import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd,
 import { WALL_TYPES, POST_CAP_LABELS } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
+import { buildModernOfferHTML, HERO_BACKGROUND, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
+import { fitViewToBox } from '../../scene/offerFraming.js';
 import { printHtml } from '../../app/printHtml.js';
 import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
 import { createScene } from '../../scene/sceneSetup.js';
@@ -608,12 +610,14 @@ export function mountCladdingApp(rootEl, host = {}) {
 
   // --- the offer (stage 6): the quote as the client's offer — the SHARED offer document (offer/offerDocument.js) ---
   const COMPANY_KEY = 'stair3d.company'; // the same company data as the self-supporting offer (this browser)
+  // (as offer/offerModel.js createDefaultCompany: + the offer's handler and the opening hours — the modern offer)
+  const COMPANY_FIELDS = { name: '', address: '', nip: '', phone: '', email: '', www: '', contactName: '', contactPhone: '', contactEmail: '', hours: '' };
   const readCompany = () => {
     try {
       const c = JSON.parse(localStorage.getItem(COMPANY_KEY) || 'null') || {};
-      return { name: '', address: '', nip: '', phone: '', email: '', www: '', ...Object.fromEntries(Object.entries(c).filter(([, v]) => typeof v === 'string')) };
+      return { ...COMPANY_FIELDS, ...Object.fromEntries(Object.entries(c).filter(([, v]) => typeof v === 'string')) };
     } catch {
-      return { name: '', address: '', nip: '', phone: '', email: '', www: '' };
+      return { ...COMPANY_FIELDS };
     }
   };
   let company = readCompany();
@@ -637,6 +641,8 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${field('client.name', 'Klient', o.client.name)}${field('client.address', 'Adres', o.client.address)}${field('client.phone', 'Telefon', o.client.phone)}${field('client.email', 'E-mail', o.client.email)}
       <label class="clad-field">Nr oferty <span><input type="text" data-offer="offerNumber" value="${escapeHtml(o.offerNumber)}" /><button type="button" data-offer-number title="Zaproponuj numer">#</button></span></label>
       ${field('validityDays', 'Ważna [dni]', o.validityDays, 'number')}
+      <label class="clad-field">Styl oferty <select data-offer="offerStyle"><option value="classic" ${o.offerStyle !== 'modern' ? 'selected' : ''}>klasyczny</option><option value="modern" ${o.offerStyle === 'modern' ? 'selected' : ''}>nowoczesny</option></select></label>
+      ${o.offerStyle === 'modern' ? `${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
@@ -651,7 +657,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <div class="clad-hint clad-client-status"></div>`;
     const c = company;
     const cf = (k, label) => `<label class="clad-field">${label} <input type="text" data-company="${k}" value="${escapeHtml(c[k] || '')}" /></label>`;
-    $('.clad-company').innerHTML = `${cf('name', 'Nazwa')}${cf('address', 'Adres')}${cf('nip', 'NIP')}${cf('phone', 'Telefon')}${cf('email', 'E-mail')}${cf('www', 'WWW')}<div class="clad-hint">Te same dane co w ofercie schodów samonośnych; logo — z trybu Prezentacji.</div>`;
+    $('.clad-company').innerHTML = `${cf('name', 'Nazwa')}${cf('address', 'Adres')}${cf('nip', 'NIP')}${cf('phone', 'Telefon')}${cf('email', 'E-mail')}${cf('www', 'WWW')}<div class="clad-subhead">Opiekun oferty (styl nowoczesny)</div>${cf('contactName', 'Imię i nazwisko')}${cf('contactPhone', 'Telefon')}${cf('contactEmail', 'E-mail')}<label class="clad-field clad-notes">Godziny otwarcia <textarea data-company="hours" rows="2" placeholder="pn–pt 7:00–16:00&#10;sob. 7:00–14:00">${escapeHtml(c.hours || '')}</textarea></label><div class="clad-hint">Te same dane co w ofercie schodów samonośnych; logo — z trybu Prezentacji.</div>`;
   }
   const offerChanged = () => {
     state.offer = sanitizeCladdingOffer(state.offer);
@@ -710,7 +716,9 @@ export function mountCladdingApp(rootEl, host = {}) {
     }
   });
   // the offer's 3D picture: the module's own scene in the standard iso view (created if the 3D was never opened)
-  function offerImage3D() {
+  // the modern offer asks for its portrait box on its own background, the stair filling it (scene/offerFraming.js): a
+  // studio picture — no grid / axes / slab / linked floor, the floor only as its shadow
+  function offerImage3D({ width = 1600, height = 1000, background = null, fit = false } = {}) {
     if (!sceneApi) {
       const prev = state.view;
       setView('3d');
@@ -718,9 +726,34 @@ export function mountCladdingApp(rootEl, host = {}) {
     }
     if (!sceneApi || !root) return null;
     const box = new THREE.Box3().setFromObject(root);
-    const center = box.getCenter(new THREE.Vector3());
-    const radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
-    return sceneApi.renderViewImage({ width: 1600, height: 1000, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+    let center = box.getCenter(new THREE.Vector3());
+    let radius = Math.max(1000, box.getSize(new THREE.Vector3()).length() / 2);
+    if (!background) return sceneApi.renderViewImage({ width, height, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+    const room = root.getObjectByName('Room');
+    const switched = [
+      [sceneApi.helpers.grid, false],
+      [sceneApi.helpers.axes, false],
+      [sceneApi.helpers.ground, false],
+      [sceneApi.helpers.shadowCatcher, true],
+      ...(room ? [[room, false]] : []),
+      ...(state.floor?.group ? [[state.floor.group, false]] : []),
+    ];
+    const was = switched.map(([o]) => o.visible);
+    switched.forEach(([o, v]) => (o.visible = v));
+    const backgroundWas = sceneApi.scene.background;
+    sceneApi.setBackground(background);
+    try {
+      if (fit) {
+        // (the stair only: the box without the room / the linked floor)
+        const stairBox = new THREE.Box3();
+        for (const c of root.children) if (c.visible && c.name !== 'Room') stairBox.expandByObject(c);
+        ({ center, radius } = fitViewToBox(stairBox, { aspect: width / height, fovDeg: sceneApi.camera.fov }));
+      }
+      return sceneApi.renderViewImage({ width, height, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.92);
+    } finally {
+      switched.forEach(([o], i) => (o.visible = was[i]));
+      sceneApi.scene.background = backgroundWas;
+    }
   }
   // the model 3D for the client (export/clientModel.js + the shared export/clientModelExport.js and its viewer)
   async function clientModel(kind) {
@@ -750,17 +783,18 @@ export function mountCladdingApp(rootEl, host = {}) {
       return;
     }
     const facts = claddingFacts(state.built, state.quote);
-    const html = buildOfferHTML({
+    const modern = state.offer.offerStyle === 'modern';
+    const input = {
       offer,
       facts,
       settings: state.offer,
       company,
       logoDataUrl: readLogo(),
-      image3d: offerImage3D(),
+      image3d: modern ? offerImage3D({ width: 1120, height: Math.round((1120 * HERO_BOX_MM.height) / HERO_BOX_MM.width), background: HERO_BACKGROUND, fit: true }) : offerImage3D(),
       planSvg: renderCladdingPlanSVG(state.built, { clientView: true }),
       projectName: state.projectName,
-    });
-    printHtml(html);
+    };
+    printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));
   }
   rootEl.querySelectorAll('[data-pane="offer"]').forEach((b) => b.addEventListener('click', () => renderOffer()));
 

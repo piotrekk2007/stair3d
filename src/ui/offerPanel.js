@@ -3,7 +3,7 @@
 // and a live preview of the offer's lines and totals. Computes nothing itself: the lines come from offer/offerModel.js
 // buildOffer, the PDF from offer/offerDocument.js (printed by main.js).
 
-import { OFFER_VAT_RATES } from '../offer/offerModel.js';
+import { OFFER_VAT_RATES, OFFER_STYLES } from '../offer/offerModel.js';
 import { money } from '../offer/offerDocument.js';
 import { escapeHtml as esc } from '../util/format.js';
 
@@ -19,6 +19,17 @@ export function createOfferPanel(container, handlers) {
   panel.innerHTML = `
     <div class="of-actions">
       <button type="button" data-of="generate" class="of-primary" title="Otwiera okno drukowania — wybierz „Zapisz jako PDF”">📄 Generuj ofertę (PDF)</button>
+    </div>
+    <label class="of-row">Styl oferty
+      <select data-set="offerStyle" data-str>${Object.entries(OFFER_STYLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+    </label>
+    <div data-of="modern" hidden>
+      <label class="of-row">Tytuł<input type="text" data-set="offerTitle" placeholder="np. Schody dębowe kl. AB, klasyczne z noskiem"></label>
+      <label class="of-row">Podtytuł<input type="text" data-set="offerSubtitle" placeholder="np. podstopnie czarny MDF"></label>
+      <label class="of-row">Termin realizacji<input type="text" data-set="leadTime"></label>
+      <label class="of-row">Opis terminu<input type="text" data-set="leadTimeNote"></label>
+      <label class="of-check"><input type="checkbox" data-set="deliveryIncluded"> Cena zawiera dostawę („Ceny zawierają koszt dostawy na miejsce”)</label>
+      <div class="of-hint">Styl nowoczesny: strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne (rzut, parametry, wygoda). Pusty tytuł = „Schody — materiał”.</div>
     </div>
     <h4>Model 3D dla klienta</h4>
     <div class="of-actions of-client-model">
@@ -62,12 +73,19 @@ export function createOfferPanel(container, handlers) {
       <label class="of-row">Telefon<input type="text" data-company="phone"></label>
       <label class="of-row">E-mail<input type="text" data-company="email"></label>
       <label class="of-row">WWW<input type="text" data-company="www"></label>
+      <div class="of-sub">Opiekun oferty (styl nowoczesny)</div>
+      <label class="of-row">Imię i nazwisko<input type="text" data-company="contactName"></label>
+      <label class="of-row">Telefon<input type="text" data-company="contactPhone"></label>
+      <label class="of-row">E-mail<input type="text" data-company="contactEmail"></label>
+      <label class="of-row of-col">Godziny otwarcia<textarea rows="2" data-company="hours" placeholder="pn–pt 7:00–16:00&#10;sob. 7:00–14:00"></textarea></label>
       <div class="of-hint">Logo w nagłówku to to samo logo co w trybie Prezentacji (Widok 3D → Prezentacja → „Wczytaj logo…”).</div>
     </details>
   `;
   container.appendChild(panel);
 
-  const value = (el) => (el.type === 'number' ? Number(el.value) || 0 : el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? Number(el.value) : el.value);
+  // (a select is a number — the VAT — unless marked data-str: the style)
+  const value = (el) => (el.type === 'number' ? Number(el.value) || 0 : el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' && el.dataset.str === undefined ? Number(el.value) : el.value);
+  const showModern = () => (panel.querySelector('[data-of="modern"]').hidden = panel.querySelector('[data-set="offerStyle"]').value !== 'modern');
   panel.addEventListener('input', (e) => {
     const el = e.target;
     if (el.dataset.set) handlers.onSettings({ [el.dataset.set]: value(el) });
@@ -77,6 +95,7 @@ export function createOfferPanel(container, handlers) {
   panel.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.set && (el.type === 'checkbox' || el.tagName === 'SELECT')) handlers.onSettings({ [el.dataset.set]: value(el) });
+    if (el.dataset.set === 'offerStyle') showModern();
     if (el.dataset.cat !== undefined) {
       const picked = [...panel.querySelectorAll('[data-cat]')].filter((c) => c.checked).map((c) => c.dataset.cat);
       handlers.onSettings({ separateCategories: picked });
@@ -97,6 +116,7 @@ export function fillOfferForm(panel, settings, company) {
   }
   for (const el of panel.querySelectorAll('[data-client]')) el.value = settings.client?.[el.dataset.client] ?? '';
   for (const el of panel.querySelectorAll('[data-company]')) el.value = company?.[el.dataset.company] ?? '';
+  panel.querySelector('[data-of="modern"]').hidden = settings.offerStyle !== 'modern';
 }
 
 /** Refreshes the preview part only (lines, totals, warnings, category checkboxes). */

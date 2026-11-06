@@ -55,6 +55,7 @@ import { renderReferenceStair } from './geometry/referenceStairRenderer.js';
 import { buildCladdingFloorFromFile, CLADDING_PROJECT_TYPE } from './cladding/floorStair.js';
 import { parseCladdingProjectFile } from './cladding/projectFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
+import { fitViewToBox } from './scene/offerFraming.js';
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
 import { createHistory, commit, undo as historyUndo, redo as historyRedo, canUndo, canRedo } from './history/modelHistory.js';
@@ -617,24 +618,33 @@ const logo = createPresentationLogo({ hostEl: ws.mainEl, viewportEl: viewport, o
 
 // Obraz 3D do oferty: wygląd jak w trybie prezentacji (bez siatki, osi, stropu i nakładek technicznych), osobna kamera
 // w widoku izometrycznym; potem przywrócenie tego, co było widać.
-function offerImage3D() {
+// The modern offer (offer/offerDocumentModern.js) asks for its own size + background and a FIT framing
+// (scene/offerFraming.js): the stair filling the portrait box, rendered on the box's colour, the floor as a shadow only.
+function offerImage3D({ width = 1400, height = 1000, background = null, fit = false } = {}) {
   if (!lastModels) return null;
   const b = lastModels.planLayout.bounds;
   const rise = lastModels.fullConfig.totalRise;
-  const center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
+  let center = planToWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rise / 2);
   // a little more room than the on-screen "Dopasuj" — the whole stair with its posts must fit the picture
-  const radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
+  let radius = 0.6 * Math.hypot(b.maxX - b.minX, b.maxY - b.minY, rise);
+  if (fit && currentRoot) ({ center, radius } = fitViewToBox(new THREE.Box3().setFromObject(currentRoot), { aspect: width / height, fovDeg: sceneApi.camera.fov }));
   const hidden = [sceneApi.helpers.grid, sceneApi.helpers.axes, sceneApi.helpers.shadowCatcher, currentCeiling, currentWalls, currentReference, currentDebugOverlay, currentJointMarkers, currentDimLabels, currentStringerLengthLabels, currentWinderBlankLabels].filter(Boolean);
   const was = hidden.map((o) => o.visible);
   hidden.forEach((o) => (o.visible = false));
   const groundWas = sceneApi.helpers.ground.visible;
-  sceneApi.helpers.ground.visible = true;
+  const backgroundWas = sceneApi.scene.background;
+  // (a studio picture on the box's colour: the floor only as its shadow, so the background stays one even colour)
+  sceneApi.helpers.ground.visible = !background;
+  sceneApi.helpers.shadowCatcher.visible = !!background;
+  if (background) sceneApi.setBackground(background);
   applySelectionHighlight(currentRoot, null);
   try {
-    return sceneApi.renderViewImage({ width: 1400, height: 1000, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.9);
+    return sceneApi.renderViewImage({ width, height, view: 'iso', center, radius }).toDataURL('image/jpeg', 0.92);
   } finally {
     hidden.forEach((o, i) => (o.visible = was[i]));
     sceneApi.helpers.ground.visible = groundWas;
+    // (the shadow catcher is in `hidden` — restored with it)
+    sceneApi.scene.background = backgroundWas;
     applySelectionHighlight(currentRoot, viewState.clientMode ? null : selection);
   }
 }
