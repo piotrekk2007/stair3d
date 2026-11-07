@@ -114,14 +114,21 @@ export function buildCladdingModel(concrete, config) {
   // (behind the tread: up into the tread above's groove; a carpet riser butts on its loose tongue)
   const overlap = carpet ? 0 : config.riserTopOverlapMm;
   const els = concrete.elements;
-  // an edge of an element lying on a front edge of the next one (the riser there stands on / behind it)
+  // an edge of an element lying on a front edge of the next one (the riser there stands on / behind it) — on its line
+  // AND overlapping it (user report 2026-11-06: a U landing's front lies on the line of the return flight's first front
+  // edge without touching it, and lost its nosing to a riser that is not there)
   const onFrontOf = (edge, next) =>
     !!next &&
     next.edges.some((f) => {
       if (f.role !== 'front') return false;
       const t = unit(f.a, f.b);
       const off = (p) => Math.abs((p.x - f.a.x) * t.y - (p.y - f.a.y) * t.x);
-      return off(edge.a) < 0.5 && off(edge.b) < 0.5;
+      if (!(off(edge.a) < 0.5 && off(edge.b) < 0.5)) return false;
+      const along = (p) => (p.x - f.a.x) * t.x + (p.y - f.a.y) * t.y;
+      const fl = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y);
+      const lo = Math.max(0, Math.min(along(edge.a), along(edge.b)));
+      const hi = Math.min(fl, Math.max(along(edge.a), along(edge.b)));
+      return hi - lo > 1;
     });
   const treads = [];
   const risers = [];
@@ -165,7 +172,15 @@ export function buildCladdingModel(concrete, config) {
     const profiledLengthMm = outline.reduce((sum, p, k) => (exposed[k] ? sum + Math.hypot(outline[(k + 1) % outline.length].x - p.x, outline[(k + 1) % outline.length].y - p.y) : sum), 0);
     const fronts = e.edges.filter((edge) => edge.role === 'front');
     const longest = fronts.reduce((best, edge) => (!best || Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y) > Math.hypot(best.b.x - best.a.x, best.b.y - best.a.y) ? edge : best), null);
-    const grain = longest ? unit(longest.a, longest.b) : { x: 1, y: 0 };
+    // the grain: along the front (as the joiners lay a tread); a landing deeper than it is wide along the front — its
+    // boards along the longer side (user report 2026-11-06: boards ~2.5 m long go lengthwise on most landings)
+    const frontDir = longest ? unit(longest.a, longest.b) : { x: 1, y: 0 };
+    let grain = frontDir;
+    if (e.kind === 'landing') {
+      const across = { x: 0 - frontDir.y, y: frontDir.x + 0 }; // (no −0)
+      const extent = (d) => Math.max(...outline.map((p) => p.x * d.x + p.y * d.y)) - Math.min(...outline.map((p) => p.x * d.x + p.y * d.y));
+      if (extent(across) > 1.1 * extent(frontDir)) grain = across; // (clearly deeper — a near-square one stays as a tread)
+    }
     treads.push({
       id: `${e.kind}-${e.index}`,
       index: e.index,
@@ -179,6 +194,8 @@ export function buildCladdingModel(concrete, config) {
       // the production blank (stage 4 prices it): along the grain × across
       ...boardSize(outline, grain),
       grain,
+      // (a floor-board landing's nosing piece: a strip along the front — its grain along it)
+      nosingGrain: frontDir,
       finish: e.kind === 'landing' ? e.finish || 'wood' : 'wood',
       // a floor-board landing (user, 2026-11-04): a solid nosing piece along its front hiding the OSB, the rest OSB +
       // floor boards, all flush on top

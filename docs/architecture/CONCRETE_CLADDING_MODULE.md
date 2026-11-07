@@ -641,3 +641,14 @@ pieces keep their own polygons (plan, measure) and get `bodyId`; the 3D draws ea
 (`claddingRenderer.js foldedWallGeometry`: one strip per straight segment so no triangle spans a corner, the outline's
 edges closed, no inner faces). Test: `sideWalls.test.js` (low / above / under on both flights of the L: one body, the
 corner at (−120, 2990) / (120, 2750), one mesh).
+
+## A U landing's nosing; the grain on landings (user report 2026-11-06, fixed)
+
+A U landing got no front nosing (nor did its floor-board nosing piece): `claddingModel.js onFrontOf` — "a riser of the
+next element stands behind this edge" — tested only that the edge lay on the LINE of the next element's front edge;
+a U landing's front lies on the line of the return flight's first front edge without touching it, so it was cut back
+by the riser's thickness instead of nosed. It now also needs the two to overlap (> 1 mm). The grain: a tread / a landing
+along its front (as the joiners lay it); a landing clearly deeper than it is wide along the front (> 10 %) along its
+depth — the boards (~2.5 m) lengthwise; a floor-board landing's boards along the same grain (they were turned across
+in the 3D), its nosing piece along the front (`tread.nosingGrain`, also its DXF piece). The production blank's
+length / depth follow the grain. Test: `__tests__/landingNosing.test.js`.

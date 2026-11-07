@@ -80,7 +80,7 @@ export function claddingPieces(built) {
     const code = `${landing ? 'PD' : 'ST'}-${pad(t.index + 1)}`;
     const notes = [`${t.thicknessMm} mm`, t.profile?.kind && t.profile.kind !== 'square' ? `profil: ${{ chamfer: `fazka ${t.profile.sizeMm}`, round: `R${t.profile.sizeMm}`, bullnose: 'półwałek' }[t.profile.kind]}` : '', t.starter ? 'zapraszający' : '', kindOf.get(t.index) === 'winder' ? 'zabiegowy' : ''].filter(Boolean);
     if (t.parts) {
-      if (t.parts.nosing) pieces.push({ row: 'treads', code: `${code}N`, name: `Nosek podestu ${t.index + 1}`, pts: toLocal(t.parts.nosing.outline, t.grain), notes: [`${t.parts.nosing.topZ - t.parts.nosing.bottomZ} mm`] });
+      if (t.parts.nosing) pieces.push({ row: 'treads', code: `${code}N`, name: `Nosek podestu ${t.index + 1}`, pts: toLocal(t.parts.nosing.outline, t.nosingGrain || t.grain), notes: [`${t.parts.nosing.topZ - t.parts.nosing.bottomZ} mm`] });
       continue;
     }
     // the milled edges (front, nosed sides) on their own layer when the tread is profiled

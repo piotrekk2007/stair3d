@@ -305,9 +305,10 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
     if (t.parts) {
       // a floor-board landing: the solid nosing, the OSB, the boards on it
       const { nosing, osb, boards } = t.parts;
-      if (nosing) treads.add(Object.assign(new THREE.Mesh(prismGeometry(nosing.outline, nosing.bottomZ, nosing.topZ), wood()), { name: `LandingNosing-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:nosing`, grainDirection: grainOf(t) } }));
+      if (nosing) treads.add(Object.assign(new THREE.Mesh(prismGeometry(nosing.outline, nosing.bottomZ, nosing.topZ), wood()), { name: `LandingNosing-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:nosing`, grainDirection: [t.nosingGrain.x, 0, -t.nosingGrain.y] } }));
       if (osb) treads.add(Object.assign(new THREE.Mesh(prismGeometry(osb.outline, osb.bottomZ, osb.topZ), osbMaterial), { name: `LandingOSB-${t.index}` }));
-      if (boards) treads.add(Object.assign(new THREE.Mesh(prismGeometry(boards.outline, boards.bottomZ, boards.topZ), wood()), { name: `LandingBoards-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:boards`, grainDirection: [t.grain.y, 0, t.grain.x] } }));
+      // (the boards along the landing's grain — lengthwise; they were turned across before, user report 2026-11-06)
+      if (boards) treads.add(Object.assign(new THREE.Mesh(prismGeometry(boards.outline, boards.bottomZ, boards.topZ), wood()), { name: `LandingBoards-${t.index}`, userData: { geometrySourceId: `cladding:${t.id}:boards`, grainDirection: grainOf(t) } }));
       continue;
     }
     const mesh = new THREE.Mesh(treadGeometry(t), wood());
