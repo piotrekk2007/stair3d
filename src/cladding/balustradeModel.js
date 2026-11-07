@@ -369,6 +369,10 @@ export function buildBalustrade(built, config) {
   const diagnostics = [];
   for (const run of buildSideRuns(built.concrete, config)) {
     if (!run.pieces.length) continue;
+    // a U landing's back edge (sideRuns.js `end`) shares the incoming flight's side key, but a handrail / balustrade
+    // set for that flight's side is not meant for it (user report 2026-11-06: a wall handrail appeared along the end
+    // wall) — only the skirting and the cover stringer follow it there
+    if (run.end) continue;
     if (run.walled) {
       if (!config.wallRails?.[run.key.flight]?.[run.key.side]) continue;
       const w = run.wall;

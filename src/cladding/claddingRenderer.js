@@ -132,10 +132,31 @@ function planeBoardGeometry(board) {
     pos.needsUpdate = true;
     g.computeVertexNormals();
   }
-  // (a mirrored basis turns the faces inside out — the materials are two-sided)
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(board.dir.x, 0, -board.dir.y), new THREE.Vector3(0, 1, 0), new THREE.Vector3(board.normal.x, 0, -board.normal.y));
   m.setPosition(board.origin.x, 0, -board.origin.y);
   g.applyMatrix4(m);
+  // a mirrored basis turns the faces inside out — turned back here (user report 2026-11-06: the appearance's materials
+  // are one-sided, so a skirting board showed its BACK face, in the wall's plane — washed out and flickering in it)
+  if (m.determinant() < 0) flipWinding(g);
+  return g;
+}
+
+/** Every triangle's winding reversed (its 2nd and 3rd corners swapped in each attribute), the normals recomputed. */
+export function flipWinding(g) {
+  if (g.index) {
+    const a = g.index.array;
+    for (let i = 0; i + 2 < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2], a[i + 1]];
+    g.index.needsUpdate = true;
+  } else {
+    for (const attr of Object.values(g.attributes)) {
+      const n = attr.itemSize;
+      const arr = attr.array;
+      for (let t = 0; t + 3 * n <= arr.length; t += 3 * n)
+        for (let k = 0; k < n; k++) [arr[t + n + k], arr[t + 2 * n + k]] = [arr[t + 2 * n + k], arr[t + n + k]];
+      attr.needsUpdate = true;
+    }
+  }
+  g.computeVertexNormals();
   return g;
 }
 // A folded wall (sideWallsModel.js joinSideWalls): the region between its bottom and top lines in (cs, z) laid on its

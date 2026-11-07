@@ -670,3 +670,12 @@ incoming flight's board ended in the end wall at the corner (no board there to m
 end board and both are cut (`cornerCuts`). The same runs give the balustrade and the cover stringers along an open U
 end. Test: `__tests__/uSkirting.test.js` (both turns, raked / stepped: the end board corner to corner on the wall's
 face, cut at both corners, the return flight's board from the back corner, no part in a wall).
+
+Two follow-ups (user report 2026-11-06): (1) the skirting looked washed out and flickering in the wall — every board
+built by `claddingRenderer.js planeBoardGeometry` (skirting, cover stringers, side walls) on a mirrored basis came out
+inside out, and the appearance's materials are one-sided, so the board's BACK face showed, in the wall's plane
+(z-fighting under the see-through wall). The winding is now turned back on a mirrored basis (`flipWinding`). (2) A
+wall handrail appeared along the U's end wall: the end run shares the incoming flight's side key, so a handrail /
+balustrade set for that side followed it — `balustradeModel.js` now skips the end runs (the skirting, cover stringer,
+the walls that are not full ones and the LED in the skirting still follow them). Tests in `__tests__/uSkirting.test.js`
+(a positive signed volume of every board mesh; no wall handrail along a U end).

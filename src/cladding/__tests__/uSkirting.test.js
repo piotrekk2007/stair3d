@@ -55,3 +55,39 @@ for (const turn of ['u-left', 'u-right'])
               for (const w of b.walls) assert.ok(!pointInPolygon(x, w.outline), `${k.id} at s ${Math.round(pt.s)} in the wall`);
             }
     });
+
+// user report 2026-11-06: the skirting looked washed out and flickering in the wall — its mesh was inside out (a
+// mirrored basis) and the appearance's one-sided material showed its back face, in the wall's plane; and a wall
+// handrail appeared along the U's end wall, never asked for
+test('every skirting / cover-stringer mesh faces outward (a positive signed volume); no wall handrail along a U end', async () => {
+  const { renderCladdingStair } = await import('../claddingRenderer.js');
+  for (const turn of ['u-left', 'u-right'])
+    for (const style of ['raked', 'stepped']) {
+      const b = build(turn, style);
+      const root = renderCladdingStair(b);
+      let n = 0;
+      root.traverse((o) => {
+        if (!o.isMesh || !/^(skirting|cover-stringer)-/.test(o.name)) return;
+        const p = o.geometry.attributes.position;
+        const idx = o.geometry.index ? [...o.geometry.index.array] : [...Array(p.count).keys()];
+        let vol = 0;
+        for (let i = 0; i < idx.length; i += 3) {
+          const [a, c, d] = [idx[i], idx[i + 1], idx[i + 2]].map((k) => [p.getX(k), p.getY(k), p.getZ(k)]);
+          vol += (a[0] * (c[1] * d[2] - c[2] * d[1]) - a[1] * (c[0] * d[2] - c[2] * d[0]) + a[2] * (c[0] * d[1] - c[1] * d[0])) / 6;
+        }
+        assert.ok(vol > 0, `${turn} ${style} ${o.name}: faces outward (${vol.toFixed(0)})`);
+        n++;
+      });
+      assert.ok(n >= 3, 'the boards are there');
+    }
+  const outer = 'right';
+  const withRails = buildCladdingStair(
+    sanitizeCladdingConfig({
+      ...createDefaultCladdingConfig(),
+      sequence: [steps(4), { kind: 'landing', riseMm: 180, depthMm: 1000, turn: 'u-left', gapMm: 200 }, steps(4)],
+      wallList: [0, 1].map((flight) => ({ id: `w${flight}`, flight, side: outer, type: 'full', from: null, to: null })),
+      wallRails: { 0: { right: true }, 1: { right: true } },
+    }),
+  );
+  assert.deepEqual(withRails.balustrade.wallRails.map((w) => w.id).sort(), ['wall-rail-0-right', 'wall-rail-1-right']);
+});
