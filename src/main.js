@@ -56,6 +56,7 @@ import { buildCladdingFloorFromFile, CLADDING_PROJECT_TYPE } from './cladding/fl
 import { parseCladdingProjectFile } from './cladding/projectFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
 import { createAiRenderPanel } from './app/aiRenderPanel.js';
+import { createOfferFramesPanel } from './app/offerFramesPanel.js';
 import { linkedFloorOfferPart, stairFloorOfferLines } from './app/linkedFloorOffer.js';
 import { claddingFloorOfferPart } from './cladding/floorOffer.js';
 import { fitViewToBox } from './scene/offerFraming.js';
@@ -574,6 +575,7 @@ function setClientMode(on) {
   } else {
     handleViewChange('showCeiling', ceilingBeforeClientMode);
     aiPanel.close();
+    framesPanel.close();
   }
   refreshUI(gui); // suwaki/checkboxy w panelu parametrów odzwierciedlają zmiany viewState
   sceneApi.setBackground(on ? viewportHudApi.hud.querySelector('[data-bg]').value : '#eef1f5');
@@ -612,7 +614,11 @@ const viewportHudApi = createViewportHud(ws.mainEl, {
   },
   onBackgroundChange: (hex) => sceneApi.setBackground(hex),
   onSnapshot: () => savePresentationSnapshot({ sceneApi, logo, projectName: projectMeta.name }),
-  onAiRender: () => aiPanel.toggle(),
+  onAiRender: () => {
+    framesPanel.close();
+    aiPanel.toggle();
+  },
+  onOfferFrames: () => framesPanel.toggle(),
   onLogoFile: (file) => logo.loadFile(file),
   onLogoRemove: () => logo.remove(),
   onLogoSettings: (patch) => logo.update(patch),
@@ -640,6 +646,17 @@ const aiPanel = createAiRenderPanel({
   getAbsent: () => offer?.aiAbsent() || [],
   onUse: (img, { full }) => offer?.setHeroImage({ img, full, source: 'ai' }),
   getUsed: () => offer?.heroImage(),
+});
+// „🖼 Kadry do oferty” (user request 2026-11-07): frames from the presentation view — a gallery on the offer's last
+// page, or the hero picture
+const framesPanel = createOfferFramesPanel({
+  hostEl: ws.mainEl,
+  viewportEl: viewport,
+  getSceneApi: () => sceneApi,
+  getGallery: () => offer?.gallery() || [],
+  onGallery: (list) => offer?.setGallery(list),
+  onHero: (img, { full }) => offer?.setHeroImage({ img, full, source: 'frame' }),
+  onOpen: () => aiPanel.close(),
 });
 
 // Obraz 3D do oferty: wygląd jak w trybie prezentacji (bez siatki, osi, stropu i nakładek technicznych), osobna kamera

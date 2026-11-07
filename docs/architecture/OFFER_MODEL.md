@@ -166,3 +166,15 @@ prices**, **all the items in one list** (no split per floor), the technical page
   no longer blocks THIS project's takeoff: the linked floor's findings (`REFERENCE-STAIR-HEADROOM` / `-INVALID`) are
   listed but non-blocking (`takeoff/validationGate.js NON_BLOCKING_RULES`, user decision 2026-11-07).
 Tests: `src/offer/__tests__/linkedFloorOffer.test.js`.
+
+## Frames for the offer (user request 2026-11-07)
+
+Presentation mode (both modules) → „🖼 Kadry do oferty” (`app/offerFramesPanel.js`, the AI panel's look; one of the
+two panels open at a time): a frame over the 3D view in the chosen format, the user's own camera rendered in it
+(`sceneSetup.js renderFrameImage`), „＋ Dodaj ten kadr”:
+- „do galerii na ostatniej stronie” (3:2, 1500 × 1000 px) — several, reordered / removed in the panel; both documents
+  take `gallery: [dataUrl]` → „Wizualizacje”, two per row, at the end (modern: the last sheet — a sheet 2 for it even
+  with `technicalSheet: false`; classic: after the notes);
+- „obraz po lewej” (the full-height strip, or the 9:16 box) — the modern hero instead of the automatic render, as the
+  AI picture (`source: 'frame'`, „kadr z prezentacji” in „Obraz po lewej”).
+The „Oferta” tab shows „Wizualizacje na ostatniej stronie: N kadrów” with „Wyczyść”. Session only (not in the project).

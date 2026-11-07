@@ -28,6 +28,9 @@ const CSS = `
   .images { display: flex; flex-direction: column; gap: 4mm; margin-top: 4mm; }
   .images figure { margin: 0; border: 1px solid #e3d6c6; border-radius: 2mm; padding: 2mm; text-align: center; break-inside: avoid; }
   .images img { width: 100%; height: auto; max-height: 112mm; object-fit: contain; }
+  .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 3mm; }
+  .gallery figure { margin: 0; break-inside: avoid; }
+  .gallery img { width: 100%; height: auto; display: block; border-radius: 2mm; }
   .images svg { width: 100%; height: 110mm; display: block; }
   .images figcaption { font-size: 8.5pt; color: #777; }
   table { width: 100%; border-collapse: collapse; break-inside: avoid; }
@@ -55,7 +58,7 @@ const CSS = `
  *   date?: Date}} input
  * @returns {string} a complete HTML document
  */
-export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [] }) {
+export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [], gallery = [] }) {
   // calendar days (not 24 h steps — a DST change would move the date by a day)
   const valid = new Date(date.getFullYear(), date.getMonth(), date.getDate() + (settings.validityDays || 30));
   const companyLines = [company.address, company.nip ? `NIP: ${company.nip}` : '', [company.phone, company.email].filter(Boolean).join(' · '), company.www].filter(Boolean);
@@ -109,6 +112,7 @@ export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataU
     <tr class="gross"><td>Razem brutto</td><td class="num">${money(offer.totals.gross)}</td></tr>
   </table>
   ${settings.notes ? `<h2>Uwagi</h2><div class="notes">${esc(settings.notes)}</div>` : ''}
+  ${(gallery || []).length ? `<h2>Wizualizacje</h2><div class="gallery">${gallery.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div>` : ''}
   <footer>Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).</footer>
 </div></body></html>`;
 }

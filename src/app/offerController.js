@@ -6,7 +6,7 @@
 import { buildOffer, mergeSummaries, appendOfferLines, stairFacts, stairAiAbsent, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
 import { buildOfferHTML } from '../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../offer/offerDocumentModern.js';
-import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus } from '../ui/offerPanel.js';
+import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus, setOfferGalleryStatus } from '../ui/offerPanel.js';
 import { summarizeByCategory } from '../ui/takeoffView.js';
 import { printHtml } from './printHtml.js';
 
@@ -31,6 +31,8 @@ export function createOfferController(opts) {
   // the modern hero's own picture (an AI render from the presentation mode, or a file) — this session only, not the
   // project (test, 2026-11-06): {img (data URL), full (the whole sheet's height, else the 84 × 150 box), source}
   let hero = null;
+  // the gallery of frames from the presentation (app/offerFramesPanel.js) — the offer's last page; session only
+  let gallery = [];
   let company = (() => {
     try {
       return sanitizeCompany(JSON.parse(localStorage.getItem(COMPANY_STORAGE_KEY) || 'null'));
@@ -79,6 +81,7 @@ export function createOfferController(opts) {
       image3d: modern && hero ? hero.img : modern ? opts.renderImage3D({ width: 960, height: Math.round((960 * HERO_FULL_MM.height) / HERO_FULL_MM.width), background: HERO_BACKGROUND, fit: true, slab: true, fill: 0.5 }) : opts.renderImage3D(),
       planSvg: opts.renderPlanSVG(),
       floors: c.counted ? [{ name: c.counted.name, facts: c.counted.facts, planSvg: c.counted.planSvg }] : [],
+      gallery,
       projectName: opts.getProjectName(),
     };
     printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));
@@ -109,6 +112,7 @@ export function createOfferController(opts) {
       r.readAsDataURL(file);
     },
     onHeroRemove: () => setHeroImage(null),
+    onGalleryClear: () => setGallery([]),
     onClientModel: (kind) => opts.onClientModel?.(kind),
   });
   fillOfferForm(panel, settings, company);
@@ -136,5 +140,10 @@ export function createOfferController(opts) {
     setOfferHeroStatus(panel, hero);
   }
 
-  return { refresh, load, settings: () => settings, facts, aiAbsent, setHeroImage, heroImage: () => hero };
+  function setGallery(list) {
+    gallery = [...(list || [])];
+    setOfferGalleryStatus(panel, gallery.length);
+  }
+
+  return { refresh, load, settings: () => settings, facts, aiAbsent, setHeroImage, heroImage: () => hero, setGallery, gallery: () => gallery };
 }

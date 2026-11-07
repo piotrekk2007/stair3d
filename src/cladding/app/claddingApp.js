@@ -44,6 +44,7 @@ import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../expor
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
 import { createAiRenderPanel } from '../../app/aiRenderPanel.js';
+import { createOfferFramesPanel } from '../../app/offerFramesPanel.js';
 import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../../scene/presentationImage.js';
 
 const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
@@ -112,6 +113,7 @@ export function mountCladdingApp(rootEl, host = {}) {
         <div class="clad-present-bar">
           <button type="button" data-present="photo" title="Widok 3D w podwójnej rozdzielczości z logo — plik PNG">📷 Zapisz zdjęcie</button>
           <button type="button" data-present="ai" title="Kadr z widoku → realistyczny obraz z AI (Gemini) do oferty nowoczesnej — test">✨ Obraz AI do oferty</button>
+          <button type="button" data-present="frames" title="Kadry z widoku 3D do oferty: galeria na ostatniej stronie albo obraz po lewej">🖼 Kadry do oferty</button>
           <label title="Strop nad schodami"><input type="checkbox" data-present="slab" /> Strop</label>
           <label title="Ściany przy schodach"><input type="checkbox" data-present="walls" checked /> Ściany</label>
           <span class="clad-sep"></span>
@@ -633,6 +635,8 @@ export function mountCladdingApp(rootEl, host = {}) {
   let company = readCompany();
   // the modern hero's own picture (an AI render from the presentation, or a file) — this session only (test, 2026-11-06)
   let aiHero = null;
+  // the frames chosen in the presentation for the offer's last page (the shared app/offerFramesPanel.js) — session only
+  let offerGallery = [];
   const readLogo = () => {
     try {
       const l = JSON.parse(localStorage.getItem('stair3d.presentationLogo') || 'null');
@@ -654,10 +658,11 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Nr oferty <span><input type="text" data-offer="offerNumber" value="${escapeHtml(o.offerNumber)}" /><button type="button" data-offer-number title="Zaproponuj numer">#</button></span></label>
       ${field('validityDays', 'Ważna [dni]', o.validityDays, 'number')}
       <label class="clad-field">Styl oferty <select data-offer="offerStyle"><option value="classic" ${o.offerStyle !== 'modern' ? 'selected' : ''}>klasyczny</option><option value="modern" ${o.offerStyle === 'modern' ? 'selected' : ''}>nowoczesny</option></select></label>
-      ${o.offerStyle === 'modern' ? `${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><label class="clad-field">Kod QR z kontaktem <input type="checkbox" data-offer="showContactQr" ${o.showContactQr ? 'checked' : ''} /></label><div class="clad-field">Obraz po lewej: <b>${aiHero ? `${aiHero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} (${aiHero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height}`})` : 'wizualizacja 3D'}</b> <button type="button" data-hero-file title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button>${aiHero ? ' <button type="button" data-hero-remove>Wróć do wizualizacji 3D</button>' : ''}<input type="file" accept="image/*" data-hero-input hidden /></div><div class="clad-hint">Obraz AI: 🎬 Prezentacja → „✨ Obraz AI do oferty” (test).</div><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
+      ${o.offerStyle === 'modern' ? `${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><label class="clad-field">Kod QR z kontaktem <input type="checkbox" data-offer="showContactQr" ${o.showContactQr ? 'checked' : ''} /></label><div class="clad-field">Obraz po lewej: <b>${aiHero ? `${{ ai: 'obraz AI', frame: 'kadr z prezentacji' }[aiHero.source] || 'obraz z pliku'} (${aiHero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height}`})` : 'wizualizacja 3D'}</b> <button type="button" data-hero-file title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button>${aiHero ? ' <button type="button" data-hero-remove>Wróć do wizualizacji 3D</button>' : ''}<input type="file" accept="image/*" data-hero-input hidden /></div><div class="clad-hint">Obraz AI: 🎬 Prezentacja → „✨ Obraz AI do oferty” (test); kadr z widoku 3D: „🖼 Kadry do oferty”.</div><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
+      <div class="clad-field">Wizualizacje na ostatniej stronie: <b>${offerGallery.length ? `${offerGallery.length} ${offerGallery.length === 1 ? 'kadr' : offerGallery.length < 5 ? 'kadry' : 'kadrów'}` : 'brak (🎬 Prezentacja → „🖼 Kadry do oferty”)'}</b>${offerGallery.length ? ' <button type="button" data-gallery-clear>Wyczyść</button>' : ''}</div>
       ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : state.floor.reference.other?.kind === 'cladding' ? 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.' : 'Schody samonośne (inny typ) — wycenione własnym cennikiem z ich projektu (z CNC + projekt i montażem), pozycje razem z tymi; w danych technicznych ich rzut i parametry.'}</div>` : ''}
       <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
@@ -723,6 +728,9 @@ export function mountCladdingApp(rootEl, host = {}) {
       b.parentElement.querySelector('[data-hero-input]').click();
     } else if (b.dataset.heroRemove !== undefined) {
       aiHero = null;
+      renderOffer();
+    } else if (b.dataset.galleryClear !== undefined) {
+      offerGallery = [];
       renderOffer();
     } else if (b.dataset.printEstimate !== undefined) {
       printHtml(buildEstimateHTML({ quote: buildCladdingQuote(state.built, state.quote), projectName: state.projectName }));
@@ -853,6 +861,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       planSvg: renderCladdingPlanSVG(state.built, { clientView: true }),
       projectName: state.projectName,
       floors: counted ? [{ name: counted.name, facts: counted.facts, planSvg: counted.planSvg }] : [],
+      gallery: offerGallery,
     };
     printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));
   }
@@ -1506,6 +1515,22 @@ export function mountCladdingApp(rootEl, host = {}) {
     },
     getUsed: () => aiHero,
   });
+  // „🖼 Kadry do oferty” (user request 2026-11-07)
+  const framesPanel = createOfferFramesPanel({
+    hostEl: $('.clad-main'),
+    viewportEl: view3dEl,
+    getSceneApi: () => sceneApi,
+    getGallery: () => offerGallery,
+    onGallery: (list) => {
+      offerGallery = [...list];
+      renderOffer();
+    },
+    onHero: (img, { full }) => {
+      aiHero = { img, full, source: 'frame' };
+      renderOffer();
+    },
+    onOpen: () => aiPanel.close(),
+  });
   // the 3D view's layers (user request 2026-11-05, as the self-supporting HUD's „Warstwy”): view state only, not the
   // config / the project; remembered in this browser
   const LAYERS = [
@@ -1576,6 +1601,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     } else {
       setView(present.viewBefore);
       aiPanel.close();
+      framesPanel.close();
     }
     applyPresentation();
     // the canvas follows its box (the side panels hidden / back), then the stair is framed again
@@ -1587,7 +1613,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     const act = ev.target.closest('[data-present]')?.dataset.present;
     if (act === 'exit') setPresentation(false);
     else if (act === 'photo' && sceneApi) savePresentationSnapshot({ sceneApi, logo, projectName: state.projectName || 'schody-na-beton' });
-    else if (act === 'ai') aiPanel.toggle();
+    else if (act === 'ai') {
+      framesPanel.close();
+      aiPanel.toggle();
+    } else if (act === 'frames') framesPanel.toggle();
     else if (act === 'logo') presentBar.querySelector('[data-present="logo-file"]').click();
     else if (act === 'logo-remove') logo.remove();
   });

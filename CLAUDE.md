@@ -508,6 +508,8 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   `appendOfferLines`, `claddingOffer.js mergeQuotes` / `quoteFromOfferLines`, `app/linkedFloorOffer.js`,
   `cladding/floorOffer.js`), its plan + parameters on the technical page (`floors` input of both documents); two KINDS
   of stair (concrete + self-supporting) are each priced from their own file (`stairFilePrices`, `ownOffer`).
+  „🖼 Kadry do oferty” in both presentation modes (`app/offerFramesPanel.js`): frames from the user's camera — a
+  gallery on the offer's last page (`gallery` input of both documents, „Wizualizacje”) or the hero picture; session only.
 
 ## Plan 2D and workspace UI
 

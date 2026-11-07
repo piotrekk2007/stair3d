@@ -34,7 +34,7 @@ export function createOfferPanel(container, handlers) {
       <div class="of-row of-col">Obraz po lewej<span class="of-inline"><span data-of="hero-status">wizualizacja 3D (automatycznie)</span></span>
         <span class="of-inline"><button type="button" data-of="hero-file" title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button><button type="button" data-of="hero-remove" hidden>Wróć do wizualizacji 3D</button></span>
         <input type="file" accept="image/*" data-of="hero-input" hidden></div>
-      <div class="of-hint">Obraz AI: tryb Prezentacji → „✨ Obraz AI do oferty” (test).</div>
+      <div class="of-hint">Obraz AI: tryb Prezentacji → „✨ Obraz AI do oferty” (test); kadr z widoku 3D: „🖼 Kadry do oferty”.</div>
       <div class="of-hint">Styl nowoczesny: strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne (rzut, parametry, wygoda). Pusty tytuł = „Schody — materiał”.</div>
     </div>
     <h4>Model 3D dla klienta</h4>
@@ -69,6 +69,7 @@ export function createOfferPanel(container, handlers) {
     <label class="of-row">Numer oferty<span class="of-inline"><input type="text" data-set="offerNumber"><button type="button" data-of="suggest" title="Nadaj numer z bieżącej daty">Nadaj</button></span></label>
     <label class="of-row">Ważna (dni)<input type="number" min="1" step="1" data-set="validityDays"></label>
     <label class="of-check"><input type="checkbox" data-set="showComfort"> Pokaż sekcję „Wygoda i zgodność z przepisami”</label>
+    <div class="of-row of-col">Wizualizacje na ostatniej stronie<span class="of-inline"><span data-of="gallery-status">brak (tryb Prezentacji → „🖼 Kadry do oferty”)</span><button type="button" data-of="gallery-clear" hidden>Wyczyść</button></span></div>
     <label class="of-check"><input type="checkbox" data-set="includeLinkedFloor"> Dolicz podpięte piętro (wyżej / niżej) do tej oferty</label>
     <div class="of-hint" data-of="floor-status">Brak podpiętego piętra (folder „2. Budynek” — bieg wyżej / niżej).</div>
     <label class="of-row of-col">Uwagi (drukowane w ofercie)<textarea rows="3" data-set="notes"></textarea></label>
@@ -121,12 +122,13 @@ export function createOfferPanel(container, handlers) {
     if (f) handlers.onHeroFile?.(f);
   });
   panel.querySelector('[data-of="hero-remove"]').addEventListener('click', () => handlers.onHeroRemove?.());
+  panel.querySelector('[data-of="gallery-clear"]').addEventListener('click', () => handlers.onGalleryClear?.());
   return panel;
 }
 
 /** The modern hero's picture in the panel: null = the 3D render. */
 export function setOfferHeroStatus(panel, hero) {
-  panel.querySelector('[data-of="hero-status"]').textContent = !hero ? 'wizualizacja 3D (automatycznie)' : `${hero.source === 'ai' ? 'obraz AI' : 'obraz z pliku'} — ${hero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height} mm`}`;
+  panel.querySelector('[data-of="hero-status"]').textContent = !hero ? 'wizualizacja 3D (automatycznie)' : `${{ ai: 'obraz AI', frame: 'kadr z prezentacji' }[hero.source] || 'obraz z pliku'} — ${hero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height} mm`}`;
   panel.querySelector('[data-of="hero-remove"]').hidden = !hero;
 }
 
@@ -174,4 +176,10 @@ export function updateOfferPanel(panel, { offer, categories, settings, floor = n
       : '<div class="of-hint">Brak wycenionych kategorii materiału.</div>';
   }
   for (const c of cats.querySelectorAll('[data-cat]')) c.checked = settings.separateCategories.includes(c.dataset.cat);
+}
+
+/** The gallery of frames for the offer's last page (app/offerFramesPanel.js). */
+export function setOfferGalleryStatus(panel, n) {
+  panel.querySelector('[data-of="gallery-status"]').textContent = n ? `${n} ${n === 1 ? 'kadr' : n < 5 ? 'kadry' : 'kadrów'} z prezentacji` : 'brak (tryb Prezentacji → „🖼 Kadry do oferty”)';
+  panel.querySelector('[data-of="gallery-clear"]').hidden = !n;
 }

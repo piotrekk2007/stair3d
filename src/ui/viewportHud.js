@@ -40,11 +40,12 @@ const VIEWS = [
  * @param {(hex: string) => void} opts.onBackgroundChange
  * @param {() => void} [opts.onSnapshot]                 „Zapisz zdjęcie" (tryb prezentacji)
  * @param {() => void} [opts.onAiRender]                 „✨ Obraz AI do oferty" (tryb prezentacji, test)
+ * @param {() => void} [opts.onOfferFrames]              „🖼 Kadry do oferty" (tryb prezentacji)
  * @param {(file: File) => void} [opts.onLogoFile]       wybrany plik logo
  * @param {() => void} [opts.onLogoRemove]
  * @param {(patch: {corner?: string, sizePct?: number}) => void} [opts.onLogoSettings]
  */
-export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onHeadroomChange, onBackgroundChange, onSnapshot, onAiRender, onLogoFile, onLogoRemove, onLogoSettings, onMeasureToggle, onMeasureClear }) {
+export function createViewportHud(container, { layers, viewState, onLayerChange, onStandardView, onCameraMode, onCeilingChange, onWallsChange, onJointsChange, onHeadroomChange, onBackgroundChange, onSnapshot, onAiRender, onOfferFrames, onLogoFile, onLogoRemove, onLogoSettings, onMeasureToggle, onMeasureClear }) {
   const hud = document.createElement('div');
   hud.id = 'viewport-hud';
   hud.innerHTML = `
@@ -90,6 +91,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       <div class="vh-title">Zdjęcie dla Klienta</div>
       <button type="button" data-snapshot class="vh-primary" title="Zapisuje bieżący widok jako obraz PNG (2× rozdzielczość ekranu), z logo, jeśli jest wczytane">📷 Zapisz zdjęcie (PNG)</button>
       <button type="button" data-ai-render title="Kadr z widoku → realistyczny obraz z AI (Gemini) do oferty nowoczesnej — test">✨ Obraz AI do oferty</button>
+      <button type="button" data-offer-frames title="Kadry z widoku 3D do oferty: galeria na ostatniej stronie albo obraz po lewej">🖼 Kadry do oferty</button>
       <div class="vh-buttons">
         <button type="button" data-logo-load title="Logo firmy na zdjęciach i w prezentacji (PNG/JPG/SVG; zapamiętane w tej przeglądarce)">Wczytaj logo…</button>
         <button type="button" data-logo-remove hidden>Usuń logo</button>
@@ -133,6 +135,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
   const fileInput = hud.querySelector('[data-logo-file]');
   hud.querySelector('[data-snapshot]').addEventListener('click', () => onSnapshot && onSnapshot());
   hud.querySelector('[data-ai-render]').addEventListener('click', () => onAiRender?.());
+  hud.querySelector('[data-offer-frames]').addEventListener('click', () => onOfferFrames?.());
   hud.querySelector('[data-logo-load]').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     const file = fileInput.files && fileInput.files[0];

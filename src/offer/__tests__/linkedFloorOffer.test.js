@@ -143,3 +143,22 @@ test('two kinds of stair: each floor priced from its own project file (its price
   const material = stairFloorSummary(fromConcrete.reference.other, filePrices).summary.lines.filter((l) => l.cost > 0).reduce((s, l) => s + l.cost, 0);
   assert.ok(Math.abs(sum(lines.filter((l) => l.kind === 'material')) - (material + 1000)) < 0.02, 'its own material + its own CNC + projekt');
 });
+
+// user request 2026-11-07: frames chosen in the presentation — a gallery on the offer's last page
+test('the gallery of frames on the last page of both documents (and a sheet 2 for it even without the technical data)', async () => {
+  const { FRAME_FORMATS } = await import('../../app/offerFramesPanel.js');
+  const offer = { lines: [{ kind: 'extra', label: 'X', net: 100 }], totals: { net: 100, vat: 23, gross: 123, vatRatePct: 23 } };
+  const facts = { rows: [['Rodzaj', 'L']], comfort: [] };
+  const gallery = ['data:image/jpeg;base64,AA', 'data:image/jpeg;base64,BB'];
+  const modern = buildModernOfferHTML({ offer, facts, settings: createDefaultOfferSettings(), gallery });
+  assert.match(modern, /<h2>Wizualizacje<\/h2><div class="gallery"><figure><img src="data:image\/jpeg;base64,AA"[^>]*><\/figure><figure><img src="data:image\/jpeg;base64,BB"/);
+  const lastSheet = modern.split('<section class="sheet').at(-1);
+  assert.match(lastSheet, /Wizualizacje/, 'on the last sheet');
+  const noTech = buildModernOfferHTML({ offer, facts, settings: { ...createDefaultOfferSettings(), technicalSheet: false }, gallery });
+  assert.equal(noTech.split('<section class="sheet').length - 1, 2, 'a sheet 2 for the gallery');
+  assert.match(buildOfferHTML({ offer, facts, settings: createDefaultOfferSettings(), gallery }), /<h2>Wizualizacje<\/h2><div class="gallery">/);
+  assert.doesNotMatch(buildModernOfferHTML({ offer, facts, settings: createDefaultOfferSettings() }), /Wizualizacje/);
+  // the formats: the gallery landscape 3:2, the hero ones at the hero's ratios
+  assert.equal(FRAME_FORMATS.gallery.width / FRAME_FORMATS.gallery.height, 1.5);
+  assert.ok(FRAME_FORMATS.heroFull.height > FRAME_FORMATS.heroFull.width * 2.5);
+});

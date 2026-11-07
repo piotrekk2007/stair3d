@@ -1948,3 +1948,9 @@ code {
 .ai-panel .ai-result img { width: 100%; display: block; border: 1px solid #d8d9db; }
 .ai-panel .ai-result figcaption { font-size: 11px; color: #5e5f61; text-align: center; }
 .ai-panel .ai-used { background: #eef6dd; padding: 4px 6px; border-radius: 4px; }
+/* „Kadry do oferty” (app/offerFramesPanel.js — the AI panel's look) */
+.offer-frames-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.offer-frames-list figure { margin: 0; }
+.offer-frames-list img { width: 100%; display: block; border: 1px solid #d8d9db; }
+.offer-frames-list figcaption { display: flex; gap: 3px; align-items: center; font-size: 11px; color: #5e5f61; margin-top: 2px; }
+.offer-frames-list figcaption button { padding: 0 5px; font-size: 11px; }

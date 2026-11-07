@@ -137,6 +137,9 @@ const CSS = `
   .params dt { color: var(--muted); }
   .params dd { text-align: right; font-weight: 500; }
   .notes2 { margin: 0; color: var(--muted); white-space: pre-wrap; }
+  .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .gallery figure { margin: 0; break-inside: avoid; }
+  .gallery img { width: 100%; height: auto; display: block; border-radius: 1.6mm; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; }
   tr { break-inside: avoid; }
   th { text-align: left; font-weight: 400; color: var(--muted); padding: 0 0 1.8mm; border-bottom: 0.26mm solid var(--ink); }
@@ -260,7 +263,7 @@ const lineDetail = (l) => [l.detail, l.qty != null ? `${qtyFmt.format(l.qty)} ${
  *   date?: Date}} input
  * @returns {string} a complete HTML document (two sheets)
  */
-export function buildModernOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [] }) {
+export function buildModernOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [], gallery = [] }) {
   const s = settings || {};
   const c = company || {};
   // calendar days (not 24 h steps — a DST change would move the date by a day), as the classic offer
@@ -341,7 +344,9 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
           return fig + rows;
         })
         .join('');
-  const body2 = `${table}${notes2}${planFig}${params}${otherFloors}${comfort}`;
+  // the frames chosen in the presentation mode (app/offerFramesPanel.js — user request 2026-11-07): on the last page
+  const galleryHTML = (gallery || []).length ? `<h2>Wizualizacje</h2><div class="gallery">${gallery.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div>` : '';
+  const body2 = `${table}${notes2}${planFig}${params}${otherFloors}${comfort}${galleryHTML}`;
   const sheet2 = body2 ? `<section class="sheet flow"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;

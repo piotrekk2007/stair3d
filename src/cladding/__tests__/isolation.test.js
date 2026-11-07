@@ -34,6 +34,8 @@ const ALLOWED_SHARED = new Set([
   'scene/offerFraming.js',
   // the AI render of the offer's picture (test, 2026-11-06) — the shared panel of both presentation modes
   'app/aiRenderPanel.js',
+  // the frames for the offer (user request 2026-11-07) — the shared panel of both presentation modes
+  'app/offerFramesPanel.js',
   'app/printHtml.js',
   // the browser download of a text file (the module writes its own DXF / OBJ / DAE text — export/)
   'export/downloadTextFile.js',
