@@ -36,9 +36,27 @@ export function claddingAsFloor(built, { withRoot = false } = {}) {
     elevation: { top: t.topZ + dz, bottom: undersideZ(byIndex.get(t.index), config.concreteSlabThicknessMm) + dz },
   }));
   let root = null;
+  let slabMesh = null;
+  let wallsMesh = null;
   if (withRoot) {
-    root = renderCladdingStair(built, { room: false });
+    // the stair, and apart from it its slab (always — a linked floor shows its ceiling, user request 2026-11-06) and
+    // its walls: the room taken out of the root so the view switches them on their own
+    root = renderCladdingStair({ ...built, config: { ...config, showSlab: true } }, { room: true });
     root.position.y = dz;
+    const room = root.getObjectByName('Room');
+    if (room) {
+      root.remove(room);
+      const slab = room.getObjectByName('Slab');
+      if (slab) {
+        room.remove(slab);
+        slabMesh = slab;
+        slabMesh.position.y += dz;
+      }
+      if (room.children.length) {
+        wallsMesh = room;
+        wallsMesh.position.y += dz;
+      }
+    }
   }
   return {
     kind: 'cladding',
@@ -47,6 +65,8 @@ export function claddingAsFloor(built, { withRoot = false } = {}) {
     ceilingFit: { openingOutline: built.slab?.opening ?? null },
     postModels: [],
     root,
+    slabMesh,
+    wallsMesh,
   };
 }
 

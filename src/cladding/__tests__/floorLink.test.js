@@ -56,3 +56,25 @@ test('the concrete stair with a self-supporting floor above: the shared check fr
   assert.ok(ref.clearances.length > 0, 'clearances measured inside our opening');
   assert.ok(ref.diagnostics.every((d) => d.ruleId === 'REFERENCE-STAIR-HEADROOM'));
 });
+
+// user request 2026-11-06: the linked floor showed only its stair — its slab (the upper floor's ceiling) and its walls
+// as their own groups the view switches on / off
+test('a linked floor brings its slab and walls along (ReferenceSlab / ReferenceWalls), the stair root without them', async () => {
+  const { renderReferenceStair } = await import('../../geometry/referenceStairRenderer.js');
+  registerReferenceBuilder(CLADDING_PROJECT_TYPE, buildCladdingFloorFromFile);
+  // a concrete floor with walls (its slab off in its own view — still shown as the linked floor's ceiling)
+  const walled = { ...createDefaultCladdingConfig(), showSlab: false, wallList: [{ id: 'a', flight: 0, side: 'left', type: 'full', from: null, to: null }] };
+  const floor = buildCladdingFloorFromFile(claddingProjectToFile({ config: walled }));
+  assert.ok(floor.slabMesh?.isObject3D, 'its slab');
+  assert.ok(floor.wallsMesh?.isObject3D, 'its walls');
+  assert.equal(floor.root.getObjectByName('Room'), undefined, 'not inside the stair root');
+  // a self-supporting project linked to a concrete floor above: the 3D carries both groups
+  const own = buildStaircase({ ...createDefaultConfig(), stairPending: false, referenceStair: { name: 'Piętro', level: 'above', file: claddingProjectToFile({ config: walled }), dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false } });
+  assert.ok(own.referenceMesh.getObjectByName('ReferenceSlab'), 'the slab group');
+  assert.ok(own.referenceMesh.getObjectByName('ReferenceWalls'), 'the walls group');
+  // a self-supporting floor (its ceilingMesh) linked from the concrete module
+  const upper = JSON.parse(JSON.stringify(buildProjectPayload({ ...createDefaultConfig(), stairPending: false })));
+  const fromModule = claddingAsFloor(buildCladdingStair({ ...createDefaultCladdingConfig(), referenceFloor: { name: 'Piętro', level: 'above', file: upper, dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false } }));
+  const group = renderReferenceStair(buildReferenceModel(fromModule, buildStaircase));
+  assert.ok(group.getObjectByName('ReferenceSlab'), 'a self-supporting floor’s ceiling');
+});

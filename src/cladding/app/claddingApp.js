@@ -1480,9 +1480,12 @@ export function mountCladdingApp(rootEl, host = {}) {
     ['walls', 'Ściany'],
     ['slab', 'Strop'],
     ['floor', 'Piętro wyżej / niżej'],
+    ['floorSlab', '— jego strop'],
+    ['floorWalls', '— jego ściany'],
   ];
   const layers = (() => {
-    const all = Object.fromEntries(LAYERS.map(([k]) => [k, true]));
+    // (the linked floor's walls off by default — they hide the stairs; user request 2026-11-06)
+    const all = { ...Object.fromEntries(LAYERS.map(([k]) => [k, true])), floorWalls: false };
     try {
       return { ...all, ...JSON.parse(localStorage.getItem('stair3d.claddingLayers') || '{}') };
     } catch {
@@ -1511,7 +1514,13 @@ export function mountCladdingApp(rootEl, host = {}) {
     sceneApi.helpers.shadowCatcher.visible = technical;
     // the layers (+ the presentation's own slab / walls switches)
     for (const c of root?.children || []) if (c.name in layers) c.visible = layers[c.name];
-    if (state.floor?.group) state.floor.group.visible = layers.floor;
+    if (state.floor?.group) {
+      state.floor.group.visible = layers.floor;
+      const slab = state.floor.group.getObjectByName('ReferenceSlab');
+      const walls = state.floor.group.getObjectByName('ReferenceWalls');
+      if (slab) slab.visible = layers.floorSlab;
+      if (walls) walls.visible = layers.floorWalls;
+    }
     const room = root?.getObjectByName('Room');
     room?.traverse((o) => {
       if (!o.isMesh) return;

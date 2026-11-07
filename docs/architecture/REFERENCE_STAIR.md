@@ -41,3 +41,13 @@ Heights: + this stair's rise (above) or − its own rise (below) — `referenceT
   bieg” (`main.js swapReferenceStair`: this project becomes the reference of the other one — `inverseReference`: without a
   mirror θ' = −θ, d' = −R(−θ)·d; with one θ' = θ, d' = −R(θ)·M·d — and the other file becomes the project being edited;
   each is saved in its own file), remove, and the tightest clearance found.
+
+## Its slab and walls in 3D (user request 2026-11-06)
+
+The other floor showed only its stair. `referenceStairRenderer.js` now places, in the same frame as its stair, its
+slab and its walls as their own groups — `ReferenceSlab` (a self-supporting floor's `ceilingMesh`, a concrete one's
+`slabMesh`, always built for a linked floor whatever its own „Pokaż strop z otworem”) and `ReferenceWalls` (`wallsMesh`;
+`cladding/floorStair.js claddingAsFloor` takes the module's `Room` out of its root and splits it). Switched on / off:
+the self-supporting panel's „Widok 3D” — „Pokaż piętro wyżej / niżej”, „— jego strop” (on), „— jego ściany” (off by
+default: they hide the stairs) — `viewState.showReference*`; the concrete module's 3D „Warstwy” — „— jego strop” /
+„— jego ściany” under „Piętro wyżej / niżej”. Test: `src/cladding/__tests__/floorLink.test.js`.

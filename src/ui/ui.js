@@ -930,6 +930,10 @@ export function createUI({
   const view = gui.addFolder('Widok 3D');
   view.add(viewState, 'showCeiling').name('Pokaż strop').onChange((v) => onViewChange('showCeiling', v));
   view.add(viewState, 'showWalls').name('Pokaż ściany klatki').onChange((v) => onViewChange('showWalls', v));
+  // the stair on the next floor and its own slab / walls (user request 2026-11-06)
+  view.add(viewState, 'showReference').name('Pokaż piętro wyżej / niżej').onChange((v) => onViewChange('showReference', v));
+  view.add(viewState, 'showReferenceSlab').name('— jego strop').onChange((v) => onViewChange('showReferenceSlab', v));
+  view.add(viewState, 'showReferenceWalls').name('— jego ściany').onChange((v) => onViewChange('showReferenceWalls', v));
   // the headroom under the opening (scene/headroomOverlay.js) — in the presentation mode too
   view.add(viewState, 'showHeadroom').name('Pokaż skrajnię pod stropem').onChange((v) => onViewChange('showHeadroom', v));
   view.add(viewState, 'showDimensions').name('Pokaż wymiary').onChange((v) => onViewChange('showDimensions', v));

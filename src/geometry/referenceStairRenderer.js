@@ -20,6 +20,18 @@ export function renderReferenceStair(reference) {
   wrap.rotation.y = (ref.rotationDeg * Math.PI) / 180;
   wrap.position.set(ref.dxMm, transform.dz, -ref.dyMm);
   placed.add(reference.other.root);
+  // its slab and walls (user request 2026-11-06 — the upper floor's ceiling was missing): the other project's own
+  // meshes in the same frame as its stair, each in a named group the view switches on / off
+  // ('ReferenceSlab' / 'ReferenceWalls'; a self-supporting floor's ceilingMesh / wallsMesh, a concrete one's slabMesh /
+  // wallsMesh)
+  const other = reference.other;
+  for (const [name, mesh] of [['ReferenceSlab', other.slabMesh ?? other.ceilingMesh], ['ReferenceWalls', other.wallsMesh]]) {
+    if (!mesh) continue;
+    const g = new THREE.Group();
+    g.name = name;
+    g.add(mesh);
+    placed.add(g);
+  }
   wrap.add(placed);
   group.add(wrap);
   for (const m of reference.markers || []) {

@@ -83,6 +83,8 @@ const viewState = {
   showCeiling: true,
   showWalls: true, // the stairwell room's walls (stairwell.js stairwellWalls), when there is a room
   showReference: true, // the stair on the next floor (geometry/referenceStair.js)
+  showReferenceSlab: true, // … its slab (its ceiling) — user request 2026-11-06
+  showReferenceWalls: false, // … its walls (off by default: they hide the stairs)
   showHeadroom: false, // the headroom curtain under the opening (scene/headroomOverlay.js) — also in the presentation mode
   showDimensions: true,
   showStringerLengths: false,
@@ -525,7 +527,13 @@ function applyOverlayVisibility() {
   const technical = !viewState.clientMode;
   if (currentCeiling) currentCeiling.visible = viewState.showCeiling;
   if (currentWalls) currentWalls.visible = viewState.showWalls;
-  if (currentReference) currentReference.visible = viewState.showReference;
+  if (currentReference) {
+    currentReference.visible = viewState.showReference;
+    const slab = currentReference.getObjectByName('ReferenceSlab');
+    const walls = currentReference.getObjectByName('ReferenceWalls');
+    if (slab) slab.visible = viewState.showReferenceSlab;
+    if (walls) walls.visible = viewState.showReferenceWalls;
+  }
   // the headroom is meant for the client too: shown in the presentation mode as well
   if (currentHeadroom) currentHeadroom.visible = viewState.showHeadroom && !config.stairPending;
   const stair = !config.stairPending; // (nothing of the stair before "Generuj schody")
@@ -1095,7 +1103,7 @@ function handleViewChange(key, value) {
   if (key === 'showCeiling') viewportHudApi.syncCeiling(value);
   if (key === 'showWalls') viewportHudApi.syncWalls(value);
   if (key === 'showHeadroom') viewportHudApi.syncHeadroom(value);
-  if (['showCeiling', 'showWalls', 'showReference', 'showHeadroom', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
+  if (['showCeiling', 'showWalls', 'showReference', 'showReferenceSlab', 'showReferenceWalls', 'showHeadroom', 'showDimensions', 'showStringerLengths', 'showWinderBlanks', 'showDebug', 'showJoints'].includes(key)) applyOverlayVisibility();
   if (['plan2dShowWinderBlanks', 'plan2dEditMode', 'plan2dLayers'].includes(key)) regeneratePlan2D();
   if (key === 'plan2dEditMode') syncPlanEditButton();
 }

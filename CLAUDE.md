@@ -215,7 +215,8 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   opening, every lower tread's clearance up to the upper stair's underside (`stairParts`) < `minHeadroom` → ERROR
   (another project kind as the other floor: a builder per file `_type` — `registerReferenceBuilder`, the concrete module)
   `REFERENCE-STAIR-HEADROOM` on this project's element (gate); plan layer, panel folder 2 (load, place, „⇅ Zamień” =
-  `inverseReference`, remove).
+  `inverseReference`, remove); in 3D with its own slab and walls (`ReferenceSlab` / `ReferenceWalls` groups, switched in
+  „Widok 3D” — `viewState.showReferenceSlab` / `showReferenceWalls` — and in the concrete module's „Warstwy”).
 - **Headroom in 3D** (`headroomModel.js` → `built.headroom`, `scene/headroomOverlay.js`, user request 2026-10-20):
   along every opening edge, the soffit down to the first tread just past the edge on the slab side (plan outlines and
   tread tops like `deriveCeilingFit`, none at the exit) = translucent curtains, green ≥ `minHeadroom`, red below; the
