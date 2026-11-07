@@ -140,3 +140,26 @@ riser material, wanga pricing mode); „📂 Wczytaj cały cennik” applies suc
 
 A landing's stock rectangle is the smallest one round its outline (`stockGeometry.js minAreaRectUV`): its `direction`
 (read off its L-shaped outer chain) ran diagonally and a 1080 × 1020 landing was priced as 1486 × 1483.
+
+## Two floors in one offer (user request 2026-11-07)
+
+„Dolicz podpięte piętro (wyżej / niżej) do tej oferty” (`includeLinkedFloor`, both modules, off by default) counts the
+linked floor (geometry/referenceStair.js — its own project file) into this offer. User decisions: **this project's
+prices**, **all the items in one list** (no split per floor), the technical page for **both floors**.
+- Self-supporting + self-supporting: the floor's takeoff priced with this project's price list / waste / board pricing
+  (its own waivers — `app/linkedFloorOffer.js stairFloorSummary`); the two summaries merged by category
+  (`offerModel.js mergeSummaries`) before `buildOffer` — one material line, one CNC + projekt, separate categories summed.
+- Self-supporting + concrete floor: `cladding/floorOffer.js claddingFloorOfferPart` (handed in by main.js) quotes it with
+  this project's price list / board pricing and the floor's OWN labour (a self-supporting project has none); its
+  „groups” lines added (`appendOfferLines`: this offer's discount, same label / unit merged, before the installation,
+  this offer's VAT).
+- Concrete + concrete: the floor quoted with this project's whole quote settings, the two quotes merged
+  (`claddingOffer.js mergeQuotes` — ids prefixed, the detailed lines marked with the floor's name, groups sum by themselves).
+- Concrete + self-supporting floor: the app prices it (main.js `priceLinkedStair` → `stairFloorOfferLines`, the material
+  lines without CNC / installation) with the module's price list / board pricing; the lines as quote lines
+  (`quoteFromOfferLines`) merged.
+- The installation, CNC + projekt and VAT once — this project's. A floor whose own takeoff is blocked by its findings is
+  not counted (a warning / the panel says so). Both documents take `floors: [{name, facts, planSvg}]` — „<name> — rzut z
+  góry / parameters” on the technical page (classic: after the own parameters). Note: a floor placed over the stair
+  can block THIS project's takeoff by its headroom check (`REFERENCE-STAIR-HEADROOM`) — fix the placement first.
+Tests: `src/offer/__tests__/linkedFloorOffer.test.js`.

@@ -3,7 +3,7 @@
 // preview and printing to PDF. Lines and sums come from offer/offerModel.js out of what the takeoff already priced;
 // this module only gathers the inputs and pictures.
 
-import { buildOffer, stairFacts, stairAiAbsent, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
+import { buildOffer, mergeSummaries, appendOfferLines, stairFacts, stairAiAbsent, separableCategories, createDefaultOfferSettings, sanitizeOfferSettings, sanitizeCompany, suggestOfferNumber } from '../offer/offerModel.js';
 import { buildOfferHTML } from '../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../offer/offerDocumentModern.js';
 import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus } from '../ui/offerPanel.js';
@@ -42,17 +42,21 @@ export function createOfferController(opts) {
   function current() {
     const takeoff = opts.getTakeoff();
     if (!takeoff) return null;
-    const summary = summarizeByCategory(takeoff.items, { winderStepIds: opts.getWinderStepIds() });
-    return {
-      summary,
-      offer: buildOffer({ summary, manualItems: opts.getTakeoffSettings().manualItems, settings, blocked: takeoff.status === 'BLOCKED' }),
-    };
+    // the linked floor counted in (app/linkedFloorOffer.js — this project's prices, one list; user request 2026-11-07)
+    const floor = opts.getLinkedFloorOffer?.() || null;
+    const counted = settings.includeLinkedFloor && floor && !floor.blocked ? floor : null;
+    let summary = summarizeByCategory(takeoff.items, { winderStepIds: opts.getWinderStepIds() });
+    if (counted?.kind === 'stair' && counted.summary) summary = mergeSummaries(summary, counted.summary);
+    let offer = buildOffer({ summary, manualItems: opts.getTakeoffSettings().manualItems, settings, blocked: takeoff.status === 'BLOCKED' });
+    if (counted?.kind === 'cladding') offer = appendOfferLines(offer, counted.lines, settings);
+    if (settings.includeLinkedFloor && floor?.blocked) offer.warnings.push(`Piętro „${floor.name}”: jego kosztorys jest zablokowany przez błędy walidacji — nie zostało doliczone.`);
+    return { summary, offer, floor, counted };
   }
 
   function refresh() {
     const c = current();
     if (!c) return;
-    updateOfferPanel(panel, { offer: c.offer, categories: separableCategories(c.summary), settings });
+    updateOfferPanel(panel, { offer: c.offer, categories: separableCategories(c.summary), settings, floor: c.floor });
   }
 
   function generatePDF() {
@@ -74,6 +78,7 @@ export function createOfferController(opts) {
       // (the modern hero: the render at the strip's ratio, on its background, with the slab, framed half way)
       image3d: modern && hero ? hero.img : modern ? opts.renderImage3D({ width: 960, height: Math.round((960 * HERO_FULL_MM.height) / HERO_FULL_MM.width), background: HERO_BACKGROUND, fit: true, slab: true, fill: 0.5 }) : opts.renderImage3D(),
       planSvg: opts.renderPlanSVG(),
+      floors: c.counted ? [{ name: c.counted.name, facts: c.counted.facts, planSvg: c.counted.planSvg }] : [],
       projectName: opts.getProjectName(),
     };
     printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));

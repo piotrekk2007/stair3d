@@ -28,7 +28,8 @@ import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
 import { fitViewToBox } from '../../scene/offerFraming.js';
 import { printHtml } from '../../app/printHtml.js';
-import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, claddingAiAbsent, buildEstimateHTML, suggestOfferNumber, OFFER_MODES } from '../quote/claddingOffer.js';
+import { createDefaultCladdingOffer, sanitizeCladdingOffer, buildCladdingOffer, claddingFacts, claddingAiAbsent, buildEstimateHTML, suggestOfferNumber, OFFER_MODES, mergeQuotes, quoteFromOfferLines } from '../quote/claddingOffer.js';
+import { claddingFloorOfferPart } from '../floorOffer.js';
 import { createScene } from '../../scene/sceneSetup.js';
 import { fitToBounds, zoomAt, panBy } from '../../plan2d/viewport.js';
 import { createHistory, commit, undo, redo, canUndo, canRedo } from '../../history/modelHistory.js';
@@ -49,9 +50,10 @@ const r0 = (n) => (Number.isFinite(n) ? Math.round(n) : '');
 
 /**
  * @param {HTMLElement} rootEl
- * @param {{linkFloor?: Function, readFloorFile?: Function}} host  from the app shell (main.js): the shared check of a
- *   linked floor (the other floor built, placed, the headroom checked — geometry/referenceStair.js) and the reading of
- *   a floor file of either kind; without them the floor link is not offered
+ * @param {{linkFloor?: Function, readFloorFile?: Function, priceLinkedStair?: Function}} host  from the app shell (main.js):
+ *   the shared check of a linked floor (the other floor built, placed, the headroom checked — geometry/referenceStair.js),
+ *   the reading of a floor file of either kind (without them the floor link is not offered), and the pricing of a
+ *   linked SELF-SUPPORTING floor for this offer (app/linkedFloorOffer.js — the module never imports the engine)
  */
 export function mountCladdingApp(rootEl, host = {}) {
   const state = { config: createDefaultCladdingConfig(), projectName: '', notes: '', selected: null, view: 'plan', built: null, quote: createDefaultQuoteSettings(), offer: createDefaultCladdingOffer(), appearance: defaultAppearance(), pane: 'measure' };
@@ -636,7 +638,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   function renderOffer() {
     if (state.pane !== 'offer' || !state.built) return;
     const o = state.offer;
-    const q = buildCladdingQuote(state.built, state.quote);
+    const { q, floor } = offerQuote();
     const offer = buildCladdingOffer(q, o);
     const field = (path, label, value, type = 'text') => `<label class="clad-field">${label} <input type="${type}" data-offer="${path}" value="${escapeHtml(String(value ?? ''))}" /></label>`;
     const rowHtml = (r) => `<tr class="${r.hidden ? 'clad-hidden-row' : ''}"><td><input type="checkbox" data-line-show="${escapeHtml(r.id)}" ${r.hidden ? '' : 'checked'} title="w ofercie" /></td><td><input type="text" data-line-label="${escapeHtml(r.id)}" value="${escapeHtml(r.label)}" /></td><td class="n">${money(r.net)}</td></tr>`;
@@ -650,6 +652,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
+      ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.'}</div>` : ''}
       <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
       <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
@@ -796,8 +799,35 @@ export function mountCladdingApp(rootEl, host = {}) {
     const html = clientViewerHTML({ glbBase64: arrayBufferToBase64(glb), title: state.projectName || 'Schody na beton', logo: readLogo(), facts: claddingClientFacts(state.built, state.quote), runtime });
     downloadTextFile(html, `${name}.html`, 'text/html');
   }
-  function printOffer() {
+  // the linked floor counted into the offer (user decisions 2026-11-07: THIS project's prices — its whole quote settings
+  // for a concrete floor, its price list / board pricing for a self-supporting one priced by the app — all the items in
+  // one list, the technical page for both floors): {name, quote?, blocked?, facts, planSvg} or null
+  function linkedFloorPart() {
+    const ref = state.floor?.reference;
+    if (!ref || ref.error || !ref.other) return null;
+    const name = ref.name || (ref.level === 'above' ? 'piętro wyżej' : 'piętro niżej');
+    try {
+      if (ref.other.kind === 'cladding') {
+        const p = claddingFloorOfferPart(ref.ref.file, { quoteSettings: state.quote });
+        return { name, quote: p.quote, facts: p.facts, planSvg: p.planSvg };
+      }
+      if (!host.priceLinkedStair) return null;
+      const p = host.priceLinkedStair(ref, { priceList: state.quote.priceList, boardPricing: state.quote.boardPricing });
+      if (!p) return null;
+      return { name, blocked: !!p.blocked, quote: p.blocked ? null : quoteFromOfferLines(p.lines, buildCladdingQuote(state.built, state.quote).totals.vatPct), facts: p.facts, planSvg: p.planSvg };
+    } catch (e) {
+      return { name, error: e.message };
+    }
+  }
+  /** The offer's quote: this floor's, plus the linked floor's when counted in. */
+  function offerQuote() {
     const q = buildCladdingQuote(state.built, state.quote);
+    const floor = linkedFloorPart();
+    const counted = state.offer.includeLinkedFloor && floor?.quote ? floor : null;
+    return { q: counted ? mergeQuotes(q, counted.quote, counted.name) : q, floor, counted };
+  }
+  function printOffer() {
+    const { q, counted } = offerQuote();
     const offer = buildCladdingOffer(q, state.offer);
     if (!offer.lines.length) {
       window.alert('Brak pozycji z ceną — uzupełnij cennik w zakładce Kosztorys.');
@@ -815,6 +845,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       image3d: modern && aiHero ? aiHero.img : modern ? offerImage3D({ width: 960, height: Math.round((960 * HERO_FULL_MM.height) / HERO_FULL_MM.width), background: HERO_BACKGROUND, fit: true, fill: 0.5 }) : offerImage3D(),
       planSvg: renderCladdingPlanSVG(state.built, { clientView: true }),
       projectName: state.projectName,
+      floors: counted ? [{ name: counted.name, facts: counted.facts, planSvg: counted.planSvg }] : [],
     };
     printHtml(modern ? buildModernOfferHTML(input) : buildOfferHTML(input));
   }

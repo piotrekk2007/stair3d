@@ -69,6 +69,8 @@ export function createOfferPanel(container, handlers) {
     <label class="of-row">Numer oferty<span class="of-inline"><input type="text" data-set="offerNumber"><button type="button" data-of="suggest" title="Nadaj numer z bieżącej daty">Nadaj</button></span></label>
     <label class="of-row">Ważna (dni)<input type="number" min="1" step="1" data-set="validityDays"></label>
     <label class="of-check"><input type="checkbox" data-set="showComfort"> Pokaż sekcję „Wygoda i zgodność z przepisami”</label>
+    <label class="of-check"><input type="checkbox" data-set="includeLinkedFloor"> Dolicz podpięte piętro (wyżej / niżej) do tej oferty</label>
+    <div class="of-hint" data-of="floor-status">Brak podpiętego piętra (folder „2. Budynek” — bieg wyżej / niżej).</div>
     <label class="of-row of-col">Uwagi (drukowane w ofercie)<textarea rows="3" data-set="notes"></textarea></label>
 
     <details class="of-company">
@@ -141,7 +143,15 @@ export function fillOfferForm(panel, settings, company) {
 }
 
 /** Refreshes the preview part only (lines, totals, warnings, category checkboxes). */
-export function updateOfferPanel(panel, { offer, categories, settings }) {
+export function updateOfferPanel(panel, { offer, categories, settings, floor = null }) {
+  // the linked floor (app/linkedFloorOffer.js): what is counted in, with which prices
+  panel.querySelector('[data-of="floor-status"]').textContent = !floor
+    ? 'Brak podpiętego piętra (folder „2. Budynek” — bieg wyżej / niżej).'
+    : !settings.includeLinkedFloor
+      ? `Podpięte: „${floor.name}” — nie doliczone.`
+      : floor.blocked
+        ? `„${floor.name}”: jego kosztorys jest zablokowany przez błędy — nie doliczone (otwórz jego projekt i rozwiąż błędy).`
+        : `Doliczone: „${floor.name}” — wycenione cennikiem tego projektu, pozycje razem z tymi; na stronie z danymi technicznymi jego rzut i parametry.`;
   panel.querySelector('[data-of="warnings"]').innerHTML = offer.warnings.map((w) => `<div class="of-warn">⚠ ${esc(w)}</div>`).join('');
   const rows = offer.lines
     .map((l) => `<tr><td>${esc(l.label)}${l.detail ? `<div class="of-detail">${esc(l.detail)}</div>` : ''}</td><td class="num">${money(l.net)}</td></tr>`)

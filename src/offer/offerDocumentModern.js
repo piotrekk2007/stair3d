@@ -260,7 +260,7 @@ const lineDetail = (l) => [l.detail, l.qty != null ? `${qtyFmt.format(l.qty)} ${
  *   date?: Date}} input
  * @returns {string} a complete HTML document (two sheets)
  */
-export function buildModernOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date() }) {
+export function buildModernOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [] }) {
   const s = settings || {};
   const c = company || {};
   // calendar days (not 24 h steps — a DST change would move the date by a day), as the classic offer
@@ -330,7 +330,18 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
           .map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.value)}</td><td>${esc(x.requirement)} <span class="muted">(${esc(x.source)})</span></td><td class="num-r"><span class="${x.ok ? 'ok' : 'bad'}">${x.ok ? 'spełnia' : 'poza zakresem'}</span></td></tr>`)
           .join('')}</table>`
       : '';
-  const body2 = `${table}${notes2}${planFig}${params}${comfort}`;
+  // the other floors counted into this offer (user request 2026-11-07): their plan and parameters too
+  const otherFloors = !technical
+    ? ''
+    : (floors || [])
+        .map((f) => {
+          const name = esc(f.name || 'Drugie piętro');
+          const fig = f.planSvg ? `<h2>${name} — rzut z góry</h2><figure class="plan">${f.planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
+          const rows = (f.facts?.rows || []).length ? `<h2>${name} — parametry schodów</h2><dl class="params">${f.facts.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '';
+          return fig + rows;
+        })
+        .join('');
+  const body2 = `${table}${notes2}${planFig}${params}${otherFloors}${comfort}`;
   const sheet2 = body2 ? `<section class="sheet flow"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;

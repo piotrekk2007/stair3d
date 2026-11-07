@@ -52,6 +52,10 @@ The self-supporting engine must not be touched: it works and the user does not w
      `app/aiRenderPanel.js` on the allow-list (its button in the presentation bar, the result as the module's
      `aiHero` — also „Z pliku…” in the offer panel), `sceneSetup.js renderFrameImage` (a new method, nothing else
      changed);
+   - (made 2026-11-07, user request) two floors in one offer: main.js hands the module `priceLinkedStair` (a linked
+     self-supporting floor priced by `app/linkedFloorOffer.js stairFloorOfferLines` with the module's price list) and
+     itself imports `cladding/floorOffer.js claddingFloorOfferPart` (a linked concrete floor quoted for a self-supporting
+     offer — injected into `app/linkedFloorOffer.js`, which never imports the module); the documents' `floors` input;
    - nothing else without asking the user first.
 4. The project file of the module is its own type (`_type: 'schody3d-beton'`, own version and migrations) — the
    self-supporting `projectIO.js` stays as it is.

@@ -55,7 +55,7 @@ const CSS = `
  *   date?: Date}} input
  * @returns {string} a complete HTML document
  */
-export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date() }) {
+export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataUrl = null, image3d = null, planSvg = null, projectName = '', date = new Date(), floors = [] }) {
   // calendar days (not 24 h steps — a DST change would move the date by a day)
   const valid = new Date(date.getFullYear(), date.getMonth(), date.getDate() + (settings.validityDays || 30));
   const companyLines = [company.address, company.nip ? `NIP: ${company.nip}` : '', [company.phone, company.email].filter(Boolean).join(' · '), company.www].filter(Boolean);
@@ -92,6 +92,13 @@ export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataU
   </div>` : ''}
   <h2>Parametry schodów</h2>
   <table class="params">${facts.rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+  ${(floors || [])
+    .map(
+      (f) => `<h2>${esc(f.name || 'Drugie piętro')} — parametry schodów</h2>
+  ${f.planSvg ? `<div class="images"><figure>${f.planSvg}<figcaption>Rzut z góry (wymiary w mm)</figcaption></figure></div>` : ''}
+  <table class="params">${(f.facts?.rows || []).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>`,
+    )
+    .join('')}
   ${settings.showComfort !== false ? `<h2>Wygoda i zgodność z przepisami</h2>
   <table class="comfort"><tr><th>Parametr</th><th>Wartość</th><th>Wymaganie</th><th></th></tr>${comfortRows}</table>` : ''}
   <h2>Wycena</h2>

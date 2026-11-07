@@ -54,6 +54,7 @@ export function createDefaultOfferSettings() {
     leadTimeNote: DEFAULT_LEAD_TIME_NOTE,
     deliveryIncluded: true,
     showContactQr: false,
+    includeLinkedFloor: false,
   };
 }
 
@@ -90,6 +91,8 @@ export function sanitizeOfferStyleFields(value) {
     deliveryIncluded: v.deliveryIncluded !== false,
     // stage 2 (2026-11-06): the contact QR beside „Dostawa” (offer/contactCard.js) — switched on by hand
     showContactQr: v.showContactQr === true,
+    // the linked floor (geometry/referenceStair.js) counted into this offer — user request 2026-11-07
+    includeLinkedFloor: v.includeLinkedFloor === true,
   };
 }
 
@@ -243,6 +246,47 @@ export function stairAiAbsent(config, railingModel) {
   if (config.stairConstruction === 'cantilever') out.push('stringers');
   else if (metal) out.push('woodStringers');
   return out;
+}
+
+/**
+ * Two takeoff summaries as one (the linked floor counted into the offer — user decisions 2026-11-07: this project's
+ * prices, ALL the items in one list): the categories of the same name summed (count, cost, unpriced), the order kept
+ * (this floor's first, the other's new ones after).
+ */
+export function mergeSummaries(a, b) {
+  const byLabel = new Map();
+  for (const l of [...(a?.lines || []), ...(b?.lines || [])]) {
+    const m = byLabel.get(l.label);
+    if (!m) byLabel.set(l.label, { ...l });
+    else Object.assign(m, { count: (m.count || 0) + (l.count || 0), cost: round2((m.cost || 0) + (l.cost || 0)), unpriced: (m.unpriced || 0) + (l.unpriced || 0) });
+  }
+  const lines = [...byLabel.values()];
+  return { lines, total: round2(lines.reduce((s, l) => s + (l.cost || 0), 0)), unpricedCount: lines.reduce((s, l) => s + (l.unpriced || 0), 0) };
+}
+
+/**
+ * An offer with another floor's lines (a concrete floor's — cladding/floorOffer.js) added: the discount of this offer
+ * applied to them, lines of the same label / unit / kind merged, put before the installation; the totals again at this
+ * offer's VAT.
+ */
+export function appendOfferLines(offer, extra, settings) {
+  const s = sanitizeOfferSettings(settings);
+  const keep = 1 - s.discountPct / 100;
+  const lines = offer.lines.filter((l) => l.kind !== 'installation').map((l) => ({ ...l }));
+  for (const x of extra || []) {
+    const net = round2(x.net * keep);
+    if (!(net > 0)) continue;
+    const same = lines.find((l) => l.label === x.label && (l.unit || '') === (x.unit || '') && l.kind === (x.kind || 'extra'));
+    if (same) {
+      same.net = round2(same.net + net);
+      if (same.qty != null && x.qty != null) same.qty += x.qty;
+      if (same.qty) same.unitNet = round2(same.net / same.qty);
+    } else lines.push({ kind: x.kind || 'extra', label: x.label, detail: x.detail || '', qty: x.qty ?? null, unit: x.unit || '', unitNet: x.qty ? round2(net / x.qty) : null, net });
+  }
+  lines.push(...offer.lines.filter((l) => l.kind === 'installation'));
+  const net = round2(lines.reduce((sum, l) => sum + l.net, 0));
+  const vat = round2((net * s.vatRatePct) / 100);
+  return { ...offer, lines, totals: { net, vat, gross: round2(net + vat), vatRatePct: s.vatRatePct } };
 }
 
 /** Offer number suggestion: OF/YYYY/MMDD-HHMM. */

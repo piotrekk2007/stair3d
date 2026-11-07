@@ -29,6 +29,7 @@ export function createDefaultCladdingOffer() {
     leadTimeNote: 'gotowe schody na miejscu',
     deliveryIncluded: true,
     showContactQr: false, // (stage 2: a QR with the company's contact beside „Dostawa”)
+    includeLinkedFloor: false, // the linked floor counted into this offer (user request 2026-11-07)
   };
 }
 
@@ -63,6 +64,7 @@ export function sanitizeCladdingOffer(raw) {
     leadTimeNote: typeof s.leadTimeNote === 'string' ? s.leadTimeNote : d.leadTimeNote,
     deliveryIncluded: s.deliveryIncluded !== false,
     showContactQr: s.showContactQr === true,
+    includeLinkedFloor: s.includeLinkedFloor === true,
   };
 }
 
@@ -74,6 +76,32 @@ const round2 = (n) => Math.round(n * 100) / 100;
  * @returns {{lines: {id, label, detail, qty, unit, unitNet, net}[], totals: {net, vatRatePct, vat, gross}, rows: object[]}}
  *   `rows` = every candidate line (shown in the editor, hidden ones too)
  */
+/**
+ * Two quotes as one (the linked floor counted into this offer — user decisions 2026-11-07: this project's prices, all
+ * the items in ONE list): the other floor's lines added (their ids prefixed, their element names marked with the
+ * floor's name — two „Stopień 3” would read as one), the groups then sum by themselves; the totals added, the VAT this
+ * quote's.
+ */
+export function mergeQuotes(a, b, floorName = '') {
+  const mark = floorName ? ` (${floorName})` : '';
+  const lines = [...a.lines, ...b.lines.map((l) => ({ ...l, id: `floor2:${l.id}`, name: `${l.name}${mark}` }))];
+  const materialNet = round2(a.totals.materialNet + b.totals.materialNet);
+  const labourNet = round2(a.totals.labourNet + b.totals.labourNet);
+  const net = round2(a.totals.net + b.totals.net);
+  const vat = round2((net * a.totals.vatPct) / 100);
+  return { lines, totals: { materialNet, labourNet, net, vatPct: a.totals.vatPct, vat, gross: round2(net + vat) }, unpriced: (a.unpriced || 0) + (b.unpriced || 0) };
+}
+
+/**
+ * Offer lines of another kind of stair (a self-supporting floor priced by the app — app/linkedFloorOffer.js) as quote
+ * lines, so they flow through every mode (groups by their label, detailed one by one, split = material).
+ */
+export function quoteFromOfferLines(lines, vatPct) {
+  const q = lines.map((l, k) => ({ id: `floor2:stair-${k}`, name: l.label, group: l.label, dims: l.detail || '', qty: 1, unit: 'kpl', total: round2(l.net) }));
+  const net = round2(q.reduce((s, l) => s + l.total, 0));
+  return { lines: q, totals: { materialNet: net, labourNet: 0, net, vatPct, vat: round2((net * vatPct) / 100), gross: round2(net + (net * vatPct) / 100) }, unpriced: 0 };
+}
+
 export function buildCladdingOffer(quote, offer) {
   const k = 1 - offer.discountPct / 100;
   let rows;

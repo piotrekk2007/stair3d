@@ -56,6 +56,8 @@ import { buildCladdingFloorFromFile, CLADDING_PROJECT_TYPE } from './cladding/fl
 import { parseCladdingProjectFile } from './cladding/projectFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from './app/presentation.js';
 import { createAiRenderPanel } from './app/aiRenderPanel.js';
+import { linkedFloorOfferPart, stairFloorOfferLines } from './app/linkedFloorOffer.js';
+import { claddingFloorOfferPart } from './cladding/floorOffer.js';
 import { fitViewToBox } from './scene/offerFraming.js';
 import { createOfferController } from './app/offerController.js';
 import { createExports, projectFileBaseName } from './app/exports.js';
@@ -270,6 +272,8 @@ async function setModule(module) {
         return { reference, group: renderReferenceStair(reference) };
       },
       readFloorFile: readFloorFile,
+      // a self-supporting floor counted into the module's offer: priced here (the module never imports the engine)
+      priceLinkedStair: (reference, prices) => stairFloorOfferLines(reference, { prices, renderStairPlan: (m) => offerPlanSVG(m) }),
     });
   }
   claddingApp?.setActive(module === 'cladding');
@@ -675,21 +679,23 @@ function offerImage3D({ width = 1400, height = 1000, background = null, fit = fa
 }
 
 // Rzut do oferty: ten sam renderer planu co zakładka Plan 2D, dopasowany do całych schodów, bez warstw edycyjnych.
-function offerPlanSVG() {
-  if (!lastModels) return null;
-  const viewport = fitToBounds(planSvgBounds(lastModels.planLayout), 900, 700, PLAN_VIEW_MARGIN_MM);
-  return renderPlan2DSVG(lastModels.planLayout, config, lastModels.derived, {
+// (also the linked floor's own plan for the offer's technical page — its models, its config)
+function offerPlanSVG(models = lastModels) {
+  if (!models) return null;
+  const m = models;
+  const viewport = fitToBounds(planSvgBounds(m.planLayout), 900, 700, PLAN_VIEW_MARGIN_MM);
+  return renderPlan2DSVG(m.planLayout, m === lastModels ? config : m.fullConfig, m.derived, {
     viewport,
     showWinderBlanks: false,
     layers: { widths: true, walkline: true, runBoundaries: true, stepBoundaries: false, stringers: true, railing: true, ceilingOpening: false },
     clientView: true, // no editing aids in the client's offer
-    posts: lastModels.postModels || [],
-    stringerModels: lastModels.stringerModels,
-    stringerConstruction: lastModels.stringerConstruction,
-    metalStructure: lastModels.metalStructure || null,
-    concrete: lastModels.concrete || null,
-    ceilingRods: lastModels.ceilingRods || null,
-    railingModel: lastModels.railingModel ?? null,
+    posts: m.postModels || [],
+    stringerModels: m.stringerModels,
+    stringerConstruction: m.stringerConstruction,
+    metalStructure: m.metalStructure || null,
+    concrete: m.concrete || null,
+    ceilingRods: m.ceilingRods || null,
+    railingModel: m.railingModel ?? null,
   });
 }
 
@@ -1540,7 +1546,9 @@ offer = createOfferController({
   getLogoDataUrl: () => logo.dataUrl(),
   getProjectName: () => projectMeta.name,
   renderImage3D: offerImage3D,
-  renderPlanSVG: offerPlanSVG,
+  renderPlanSVG: () => offerPlanSVG(),
+  // the linked floor counted into the offer (app/linkedFloorOffer.js): priced with this project's price list
+  getLinkedFloorOffer: () => linkedFloorOfferPart(lastModels?.reference, { prices: takeoffSettings, renderStairPlan: (m) => offerPlanSVG(m), priceCladdingFloor: claddingFloorOfferPart }),
   onClientModel: (kind) =>
     exporter.clientModel(kind).catch((e) => {
       console.error(e);

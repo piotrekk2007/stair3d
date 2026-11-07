@@ -502,7 +502,10 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   geometry, counts, materials) → Google `gemini-2.5-flash-image` (the user's key, `localStorage stair3d.ai`, header
   only) → the modern hero („Obraz po lewej”: 3D / AI / from a file; session only). The prompt also lists what the stair
   does NOT have (`stairAiAbsent` / `claddingAiAbsent` → `AI_ABSENT`: no balustrade, risers, LED, stringers… — never add
-  it) and ends with a final check against the frame.
+  it) and ends with a final check against the frame. Two floors in one offer: `includeLinkedFloor` (both modules) —
+  the linked floor priced with THIS project's prices, all items in one list (`offerModel.js mergeSummaries` /
+  `appendOfferLines`, `claddingOffer.js mergeQuotes` / `quoteFromOfferLines`, `app/linkedFloorOffer.js`,
+  `cladding/floorOffer.js`), its plan + parameters on the technical page (`floors` input of both documents).
 
 ## Plan 2D and workspace UI
 
