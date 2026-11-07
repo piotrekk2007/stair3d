@@ -149,17 +149,20 @@ prices**, **all the items in one list** (no split per floor), the technical page
 - Self-supporting + self-supporting: the floor's takeoff priced with this project's price list / waste / board pricing
   (its own waivers — `app/linkedFloorOffer.js stairFloorSummary`); the two summaries merged by category
   (`offerModel.js mergeSummaries`) before `buildOffer` — one material line, one CNC + projekt, separate categories summed.
-- Self-supporting + concrete floor: `cladding/floorOffer.js claddingFloorOfferPart` (handed in by main.js) quotes it with
-  this project's price list / board pricing and the floor's OWN labour (a self-supporting project has none); its
-  „groups” lines added (`appendOfferLines`: this offer's discount, same label / unit merged, before the installation,
-  this offer's VAT).
+- **Two kinds of stair** (user decision 2026-11-07 — a self-supporting and a concrete project price differently: the
+  wangi in one, the richer installation labour in the other): each floor priced from **its own project file**.
+  Self-supporting + concrete floor: `cladding/floorOffer.js claddingFloorOfferPart(file, {ownOffer: true})` (handed in
+  by main.js) — its quote with its own price list and labour, its own offer's lines (mode, names, hidden rows, extras),
+  the discount 0; added with `appendOfferLines` (this offer's discount once, same label / unit merged, before the
+  installation, this offer's VAT).
 - Concrete + concrete: the floor quoted with this project's whole quote settings, the two quotes merged
   (`claddingOffer.js mergeQuotes` — ids prefixed, the detailed lines marked with the floor's name, groups sum by themselves).
-- Concrete + self-supporting floor: the app prices it (main.js `priceLinkedStair` → `stairFloorOfferLines`, the material
-  lines without CNC / installation) with the module's price list / board pricing; the lines as quote lines
-  (`quoteFromOfferLines`) merged.
-- The installation, CNC + projekt and VAT once — this project's. A floor whose own takeoff is blocked by its findings is
+- Concrete + self-supporting floor: the app prices it from its own file (main.js `priceLinkedStair` →
+  `stairFloorOfferLines`: `stairFilePrices` — its price list, waste, board pricing, manual rows — and its own offer's CNC
+  + projekt and installation, the discount 0); the lines as quote lines (`quoteFromOfferLines`) merged.
+- Two floors of the same kind: the installation, CNC + projekt and VAT once — this project's. A floor whose own takeoff is blocked by its findings is
   not counted (a warning / the panel says so). Both documents take `floors: [{name, facts, planSvg}]` — „<name> — rzut z
   góry / parameters” on the technical page (classic: after the own parameters). Note: a floor placed over the stair
-  can block THIS project's takeoff by its headroom check (`REFERENCE-STAIR-HEADROOM`) — fix the placement first.
+  no longer blocks THIS project's takeoff: the linked floor's findings (`REFERENCE-STAIR-HEADROOM` / `-INVALID`) are
+  listed but non-blocking (`takeoff/validationGate.js NON_BLOCKING_RULES`, user decision 2026-11-07).
 Tests: `src/offer/__tests__/linkedFloorOffer.test.js`.

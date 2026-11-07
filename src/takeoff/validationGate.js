@@ -35,6 +35,9 @@ function collectStringerConstructionDiagnostics(stringerConstruction) {
   return all;
 }
 
+/** Findings shown but never blocking the takeoff: the linked floor's placement (geometry/referenceStair.js). */
+export const NON_BLOCKING_RULES = new Set(['REFERENCE-STAIR-HEADROOM', 'REFERENCE-STAIR-INVALID']);
+
 /**
  * @param {Object} models  { fullConfig|config, derived, planLayout, treadModels, riserModels,
  *   stringerModels, stringerConstruction, postModels } — the same shape buildStaircase()
@@ -66,7 +69,10 @@ export function runTakeoffValidationGate(models, options = {}) {
   const warnings = active.filter((d) => d.severity === 'WARNING');
   const info = active.filter((d) => d.severity === 'INFO');
 
-  const status = errors.length > 0 ? GATE_STATUS.BLOCKED : warnings.length > 0 ? GATE_STATUS.WARNING : GATE_STATUS.OK;
+  // the linked floor's own findings (its placement — the passage under the upper stair) are reported, but never block
+  // this project's takeoff: they say nothing about its quantities (user decision 2026-11-07)
+  const blocking = errors.filter((d) => !NON_BLOCKING_RULES.has(d.ruleId));
+  const status = blocking.length > 0 ? GATE_STATUS.BLOCKED : errors.length > 0 || warnings.length > 0 ? GATE_STATUS.WARNING : GATE_STATUS.OK;
 
   return { status, diagnostics, activeDiagnostics: active, waivedDiagnostics: waived, staleWaivers, errors, warnings, info };
 }

@@ -658,7 +658,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
-      ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.'}</div>` : ''}
+      ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : state.floor.reference.other?.kind === 'cladding' ? 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.' : 'Schody samonośne (inny typ) — wycenione własnym cennikiem z ich projektu (z CNC + projekt i montażem), pozycje razem z tymi; w danych technicznych ich rzut i parametry.'}</div>` : ''}
       <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
       <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
@@ -818,7 +818,8 @@ export function mountCladdingApp(rootEl, host = {}) {
         return { name, quote: p.quote, facts: p.facts, planSvg: p.planSvg };
       }
       if (!host.priceLinkedStair) return null;
-      const p = host.priceLinkedStair(ref, { priceList: state.quote.priceList, boardPricing: state.quote.boardPricing });
+      // (another kind of stair: priced from its own file by the app — user decision 2026-11-07)
+      const p = host.priceLinkedStair(ref);
       if (!p) return null;
       return { name, blocked: !!p.blocked, quote: p.blocked ? null : quoteFromOfferLines(p.lines, buildCladdingQuote(state.built, state.quote).totals.vatPct), facts: p.facts, planSvg: p.planSvg };
     } catch (e) {

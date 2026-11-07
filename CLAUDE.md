@@ -428,7 +428,8 @@ Docs: [CONSTRAINTS_AND_VALIDATION.md](docs/architecture/CONSTRAINTS_AND_VALIDATI
 - **Takeoff validation gate** (`takeoff/validationGate.js`): validator + stringer construction + joints + cantilever + metal structure +
   railing + structural + stairwell-fit diagnostics; any active ERROR → takeoff BLOCKED. Walidacja tab and Kosztorys show
   the same list. Waivers (`diagnostics/waivers.js`, `(ruleId, elementId)`, saved in the project) un-block without
-  hiding or changing any number.
+  hiding or changing any number. The linked floor's findings (`REFERENCE-STAIR-HEADROOM` / `-INVALID`) are listed
+  but never block (`NON_BLOCKING_RULES`, user decision 2026-11-07).
 - `validation/pipeline.js` (8-stage `runValidationPipeline`) is a standalone entry point, not wired into the UI.
 
 ## Structural check (orientative) — `src/structural/`
@@ -505,7 +506,8 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   it) and ends with a final check against the frame. Two floors in one offer: `includeLinkedFloor` (both modules) —
   the linked floor priced with THIS project's prices, all items in one list (`offerModel.js mergeSummaries` /
   `appendOfferLines`, `claddingOffer.js mergeQuotes` / `quoteFromOfferLines`, `app/linkedFloorOffer.js`,
-  `cladding/floorOffer.js`), its plan + parameters on the technical page (`floors` input of both documents).
+  `cladding/floorOffer.js`), its plan + parameters on the technical page (`floors` input of both documents); two KINDS
+  of stair (concrete + self-supporting) are each priced from their own file (`stairFilePrices`, `ownOffer`).
 
 ## Plan 2D and workspace UI
 

@@ -15,11 +15,14 @@ import { renderCladdingPlanSVG } from './claddingPlanRenderer.js';
  *   concrete project offering), or only the price list / board pricing (a self-supporting one — the labour then the file's)
  * @returns {{built, quote, facts, planSvg, lines}}  lines = the offer's „groups” lines (no discount, no extras)
  */
-export function claddingFloorOfferPart(file, { quoteSettings = null, priceList = null, boardPricing = null } = {}) {
+export function claddingFloorOfferPart(file, { quoteSettings = null, priceList = null, boardPricing = null, ownOffer = false } = {}) {
   const parsed = parseCladdingProjectFile(file);
   const built = buildCladdingStair({ ...parsed.config, referenceFloor: null });
   const qs = quoteSettings || { ...parsed.quote, ...(priceList ? { priceList } : {}), ...(boardPricing ? { boardPricing } : {}) };
   const quote = buildCladdingQuote(built, qs);
-  const lines = buildCladdingOffer(quote, { ...createDefaultCladdingOffer(), mode: 'groups' }).lines.map((l) => ({ kind: 'extra', label: l.label, detail: l.detail || '', qty: null, unit: '', net: l.net }));
+  // (`ownOffer`: another kind of stair offering — the floor as ITS OWN offer would show it: its lines' mode, names,
+  // hidden rows and extra items; the discount left to the offering project)
+  const offerSettings = ownOffer ? { ...parsed.offer, discountPct: 0 } : { ...createDefaultCladdingOffer(), mode: 'groups' };
+  const lines = buildCladdingOffer(quote, offerSettings).lines.map((l) => ({ kind: 'extra', label: l.label, detail: l.detail || '', qty: l.extra ? l.qty : null, unit: l.extra ? l.unit : '', net: l.net }));
   return { built, quote, facts: claddingFacts(built, qs), planSvg: renderCladdingPlanSVG(built, { clientView: true }), lines };
 }

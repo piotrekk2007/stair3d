@@ -151,7 +151,7 @@ export function updateOfferPanel(panel, { offer, categories, settings, floor = n
       ? `Podpięte: „${floor.name}” — nie doliczone.`
       : floor.blocked
         ? `„${floor.name}”: jego kosztorys jest zablokowany przez błędy — nie doliczone (otwórz jego projekt i rozwiąż błędy).`
-        : `Doliczone: „${floor.name}” — wycenione cennikiem tego projektu, pozycje razem z tymi; na stronie z danymi technicznymi jego rzut i parametry.`;
+        : `Doliczone: „${floor.name}” — wycenione ${floor.kind === 'cladding' ? 'własnym cennikiem i robocizną z jego projektu (inny typ schodów)' : 'cennikiem tego projektu'}, pozycje razem z tymi; na stronie z danymi technicznymi jego rzut i parametry.`;
   panel.querySelector('[data-of="warnings"]').innerHTML = offer.warnings.map((w) => `<div class="of-warn">⚠ ${esc(w)}</div>`).join('');
   const rows = offer.lines
     .map((l) => `<tr><td>${esc(l.label)}${l.detail ? `<div class="of-detail">${esc(l.detail)}</div>` : ''}</td><td class="num">${money(l.net)}</td></tr>`)

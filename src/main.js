@@ -273,7 +273,8 @@ async function setModule(module) {
       },
       readFloorFile: readFloorFile,
       // a self-supporting floor counted into the module's offer: priced here (the module never imports the engine)
-      priceLinkedStair: (reference, prices) => stairFloorOfferLines(reference, { prices, renderStairPlan: (m) => offerPlanSVG(m) }),
+      // (another kind of stair: priced from its own file — user decision 2026-11-07)
+      priceLinkedStair: (reference) => stairFloorOfferLines(reference, { renderStairPlan: (m) => offerPlanSVG(m) }),
     });
   }
   claddingApp?.setActive(module === 'cladding');
@@ -1548,7 +1549,8 @@ offer = createOfferController({
   renderImage3D: offerImage3D,
   renderPlanSVG: () => offerPlanSVG(),
   // the linked floor counted into the offer (app/linkedFloorOffer.js): priced with this project's price list
-  getLinkedFloorOffer: () => linkedFloorOfferPart(lastModels?.reference, { prices: takeoffSettings, renderStairPlan: (m) => offerPlanSVG(m), priceCladdingFloor: claddingFloorOfferPart }),
+  // (a concrete floor = another kind of stair: priced from its own file — its quote, labour, extras; user decision 2026-11-07)
+  getLinkedFloorOffer: () => linkedFloorOfferPart(lastModels?.reference, { prices: takeoffSettings, renderStairPlan: (m) => offerPlanSVG(m), priceCladdingFloor: (file) => claddingFloorOfferPart(file, { ownOffer: true }) }),
   onClientModel: (kind) =>
     exporter.clientModel(kind).catch((e) => {
       console.error(e);

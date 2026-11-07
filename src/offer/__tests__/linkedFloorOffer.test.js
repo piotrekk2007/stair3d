@@ -108,3 +108,38 @@ test('a linked floor whose own takeoff is blocked by its findings: reported, not
   assert.equal(part.blocked, true);
   assert.equal(part.summary, null);
 });
+
+// user decisions 2026-11-07: (1) the linked floor's placement (the passage under the upper stair) never blocks this
+// project's takeoff; (2) two KINDS of stair are each priced from their own project file
+test('a linked floor standing over the stair: its headroom error is reported but does not block the takeoff', async () => {
+  const { runTakeoffValidationGate } = await import('../../takeoff/validationGate.js');
+  const own = buildStaircase({ ...start(), referenceStair: { name: 'Piętro', level: 'above', file: stairFile(), dxMm: 0, dyMm: 0, rotationDeg: 0, mirror: false } });
+  const gate = runTakeoffValidationGate(own, {});
+  assert.ok(gate.errors.some((d) => d.ruleId === 'REFERENCE-STAIR-HEADROOM'), 'the clash is there (the test means something)');
+  assert.notEqual(gate.status, 'BLOCKED');
+  assert.ok(gate.activeDiagnostics.some((d) => d.ruleId === 'REFERENCE-STAIR-HEADROOM'), 'still listed');
+});
+
+test('two kinds of stair: each floor priced from its own project file (its price list, labour, CNC + installation)', async () => {
+  const { stairFilePrices } = await import('../../app/linkedFloorOffer.js');
+  registerReferenceBuilder(CLADDING_PROJECT_TYPE, buildCladdingFloorFromFile);
+  // a concrete floor with ITS OWN labour rates, linked to a self-supporting project
+  const qs = createDefaultQuoteSettings();
+  qs.labour.forEach((r) => (r.rate = 55));
+  const file = claddingProjectToFile({ config: createDefaultCladdingConfig(), quote: qs });
+  const own = claddingFloorOfferPart(file, { ownOffer: true });
+  const fromStair = buildStaircase({ ...start(), referenceStair: { name: 'Beton', level: 'above', file, dxMm: 9000, dyMm: 0, rotationDeg: 0, mirror: false } });
+  const part = linkedFloorOfferPart(fromStair.reference, { prices, priceCladdingFloor: (f) => claddingFloorOfferPart(f, { ownOffer: true }) });
+  const sum = (ls) => Math.round(ls.reduce((s, l) => s + l.net, 0) * 100) / 100;
+  assert.equal(sum(part.lines), sum(own.lines));
+  assert.equal(own.quote.totals.labourNet > 0, true, 'its labour priced (55 zł per item)');
+  // a self-supporting floor linked to a concrete project: its own file's prices, CNC + projekt and installation
+  const stairPayload = stairFile();
+  stairPayload.offer = { ...createDefaultOfferSettings(), cncProjectCostNet: 1000, installationCostNet: 700 };
+  const fromConcrete = buildStaircase({ ...start(), referenceStair: { name: 'Drewno', level: 'above', file: stairPayload, dxMm: 9000, dyMm: 0, rotationDeg: 0, mirror: false } });
+  const lines = stairFloorOfferLines(fromConcrete.reference).lines;
+  assert.ok(lines.some((l) => l.kind === 'installation' && l.net === 700), 'its own installation');
+  const filePrices = stairFilePrices(stairPayload);
+  const material = stairFloorSummary(fromConcrete.reference.other, filePrices).summary.lines.filter((l) => l.cost > 0).reduce((s, l) => s + l.cost, 0);
+  assert.ok(Math.abs(sum(lines.filter((l) => l.kind === 'material')) - (material + 1000)) < 0.02, 'its own material + its own CNC + projekt');
+});
