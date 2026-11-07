@@ -17,7 +17,7 @@ import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.
 import { claddingAsFloor } from '../floorStair.js';
 import { sNearest, RAILING_INFILLS, GLASS_TINTS } from '../balustradeModel.js';
 import { buildCladdingQuote } from '../quote/claddingQuote.js';
-import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS } from '../quote/labour.js';
+import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS, claddingPricesOf, applyCladdingPrices } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
@@ -557,9 +557,14 @@ export function mountCladdingApp(rootEl, host = {}) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const read = applyPriceListFile(state.quote, reader.result);
+        const data = JSON.parse(reader.result);
+        // a concrete PROJECT file: its whole quote settings' prices (the shared part + the module's)
+        const source = data?._type === 'schody3d-beton' ? { _type: 'schody3d-cennik', ...(data.quote || {}) } : data;
+        const read = applyPriceListFile(state.quote, source);
+        const block = data?._type === 'schody3d-beton' ? claddingPricesOf(sanitizeQuoteSettings(data.quote)) : data?.cladding;
+        if (block) state.quote = applyCladdingPrices(state.quote, block);
         quoteChanged();
-        meta(`Wczytano cennik: ${read.prices} cen, ${read.boards} wierszy desek, ${read.posts} przekrojów słupów`);
+        meta(`Wczytano cennik: ${read.prices} cen, ${read.boards} wierszy desek, ${read.posts} przekrojów słupów${block ? `, robocizna (${block.labour?.length || 0} stawek)` : ' — bez robocizny (plik z modułu samonośnego)'}`);
       } catch (e) {
         window.alert(`Nie można wczytać cennika: ${e.message}`);
       }
@@ -587,7 +592,8 @@ export function mountCladdingApp(rootEl, host = {}) {
       state.quote.boardPricing.postPrices.splice(Number(b.dataset.postDel), 1);
       quoteChanged();
     } else if (b.dataset.pricelistSave !== undefined) {
-      download(JSON.stringify(priceListToFile(state.quote), null, 2), 'cennik-schody.json');
+      // (the shared file + the module's own block: the labour rates and prices — labour.js claddingPricesOf)
+      download(JSON.stringify({ ...priceListToFile(state.quote), cladding: claddingPricesOf(state.quote) }, null, 2), 'cennik-schody.json');
     } else if (b.dataset.pricelistAll !== undefined) {
       priceListAllInput.click();
     }

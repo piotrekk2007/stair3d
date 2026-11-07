@@ -102,3 +102,30 @@ export function sanitizeQuoteSettings(raw) {
     boardPricing: s.boardPricing && typeof s.boardPricing === 'object' ? sanitizeBoardPricing(s.boardPricing) : createDefaultBoardPricing(),
   };
 }
+
+// --- the module's own prices in the whole price list file (user report 2026-11-07: „Zapisz cały cennik” lost the labour
+// rates — the shared file, takeoff/priceListFile.js, carries only the price list / waste / board pricing). Saved as
+// its own block `cladding` beside them (the self-supporting side reads the file and ignores it): the labour rates
+// (every item's rate, the user's own items whole), the lump-sum switches, the per-m² / per-mb prices. Not the job's
+// choices (installation on / off, edge channels on / off).
+const PRICE_KEYS = ['floorboardPerM2', 'osbPerM2', 'skirtingPerMb', 'looseTonguePerMb', 'edgeChannelsPerTread'];
+
+/** The module's prices as the file block. */
+export function claddingPricesOf(settings) {
+  return {
+    labour: (settings.labour || []).map(({ id, label, unit, rate, qty }) => ({ id, label, unit, rate, ...(id.startsWith('own-') ? { qty } : {}) })),
+    lumps: { ...(settings.lumps || {}) },
+    ...Object.fromEntries(PRICE_KEYS.map((k) => [k, settings[k]])),
+  };
+}
+
+/** The settings with a file's module block applied (sanitized; the job's own choices kept). */
+export function applyCladdingPrices(settings, block) {
+  if (!block || typeof block !== 'object') return settings;
+  return sanitizeQuoteSettings({
+    ...settings,
+    ...(Array.isArray(block.labour) ? { labour: block.labour } : {}),
+    ...(block.lumps && typeof block.lumps === 'object' ? { lumps: block.lumps } : {}),
+    ...Object.fromEntries(PRICE_KEYS.filter((k) => Number.isFinite(Number(block[k]))).map((k) => [k, Number(block[k])])),
+  });
+}

@@ -683,3 +683,13 @@ wall handrail appeared along the U's end wall: the end run shares the incoming f
 balustrade set for that side followed it — `balustradeModel.js` now skips the end runs (the skirting, cover stringer,
 the walls that are not full ones and the LED in the skirting still follow them). Tests in `__tests__/uSkirting.test.js`
 (a positive signed volume of every board mesh; no wall handrail along a U end).
+
+## The whole price list file with the labour (user report 2026-11-07, fixed)
+
+„💾 Zapisz cały cennik” wrote the shared file (`takeoff/priceListFile.js`: price list, waste, board pricing) — the
+module's labour rates and its own prices were lost. The module now adds its own block `cladding` to that file
+(`quote/labour.js claddingPricesOf`: every labour item's rate, the user's own items whole, the lump-sum switches, the
+floor-board / OSB / skirting / loose-tongue / edge-channel prices; not the job's choices — installation, edge channels
+on / off) and „📂 Wczytaj cały cennik” applies it (`applyCladdingPrices`, sanitized); a self-supporting file (no block)
+leaves the labour as it is, a concrete PROJECT file gives its whole quote's prices. The shared reader / writer is
+unchanged (the self-supporting side ignores the block). Test: `__tests__/priceListFile.test.js`.
