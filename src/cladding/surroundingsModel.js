@@ -24,6 +24,11 @@ export function edgeWallKey(element, edge) {
   const f = element.flight;
   if (edge.role === 'left' || edge.role === 'right') {
     if (element.kind === 'step') return { flight: f, side: edge.role };
+    // a U landing's side on the return flight's line (user report 2026-11-06: a wall along the return flight stopped at
+    // the landing — this side was the incoming flight's other side, its inner one by the gap): the return flight's
+    // outer side (walking up it: the right one after a left U, the left one after a right U)
+    if (element.kind === 'landing' && element.turn === 'u-left' && edge.role === 'left') return { flight: f + 1, side: 'right' };
+    if (element.kind === 'landing' && element.turn === 'u-right' && edge.role === 'right') return { flight: f + 1, side: 'left' };
     const t = unit(edge.a, edge.b);
     const along = Math.abs(t.x * element.frame.f.x + t.y * element.frame.f.y) > 0.7;
     return { flight: along ? f : f + 1, side: edge.role };

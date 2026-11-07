@@ -652,3 +652,9 @@ along its front (as the joiners lay it); a landing clearly deeper than it is wid
 depth — the boards (~2.5 m) lengthwise; a floor-board landing's boards along the same grain (they were turned across
 in the 3D), its nosing piece along the front (`tread.nosingGrain`, also its DXF piece). The production blank's
 length / depth follow the grain. Test: `__tests__/landingNosing.test.js`.
+
+A U landing's side on the return flight's line (user report 2026-11-06, fixed): `surroundingsModel.js edgeWallKey`
+gave it the INCOMING flight's other side (its inner one, by the gap) — a wall along the return flight stopped at the
+landing, and a wall on flight A's inner side appeared on the landing's far edge. It is now the return flight's outer
+side (after a left U its right, after a right U its left) — walls, side nosings, skirting / cover stringers and the
+balustrade read the same key. Test: `__tests__/landingNosing.test.js`.

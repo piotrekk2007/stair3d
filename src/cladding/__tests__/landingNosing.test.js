@@ -47,3 +47,24 @@ test('the grain on a landing: along the front, lengthwise on a clearly deeper on
   assert.deepEqual(meshes[`LandingNosing-${t.index}`].userData.grainDirection, [t.nosingGrain.x, 0, -t.nosingGrain.y]);
   assert.deepEqual(t.nosingGrain, { x: 1, y: 0 });
 });
+
+// user report 2026-11-06: a wall along the return flight of a U stopped at the landing — the landing's side on that
+// line was the incoming flight's other (inner) side
+test('a U landing: its side on the return flight’s line walls with the return flight’s outer side', async () => {
+  const { edgeWallKey } = await import('../surroundingsModel.js');
+  for (const [turn, role, side] of [['u-left', 'left', 'right'], ['u-right', 'right', 'left']]) {
+    const b = build({ turn, gapMm: 200 }, { wallList: [{ id: 'c', flight: 1, side, type: 'full', from: null, to: null }] });
+    const e = b.concrete.elements.find((x) => x.kind === 'landing');
+    const edge = e.edges.find((x) => x.role === role);
+    assert.deepEqual(edgeWallKey(e, edge), { flight: 1, side }, turn);
+    // one wall from the return flight on along the landing's side; the landing has no side nosing there
+    assert.equal(b.walls.length, 1, turn);
+    const xs = b.walls[0].segments.flatMap((s) => [s.a.x, s.b.x]);
+    assert.ok(xs.every((x) => Math.abs(x - edge.a.x) < 1e-6), `${turn}: on the landing's outer line`);
+    assert.ok(b.walls[0].segments.some((s) => Math.abs(s.a.y - edge.a.y) < 1e-6 || Math.abs(s.b.y - edge.a.y) < 1e-6), `${turn}: along the landing`);
+    assert.equal(b.cladding.treads.find((t) => t.index === e.index).nosing[role === 'left' ? 'leftMm' : 'rightMm'], 0);
+    // the incoming flight's inner side (by the gap) does NOT wall the landing's far side any more
+    const inner = build({ turn, gapMm: 200 }, { wallList: [{ id: 'a', flight: 0, side: role, type: 'full', from: null, to: null }] });
+    assert.ok(inner.walls.flatMap((w) => w.segments).every((s) => Math.abs(s.a.x - edge.a.x) > 1), `${turn}: no wall on the far side from flight A's inner side`);
+  }
+});
