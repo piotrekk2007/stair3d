@@ -39,24 +39,42 @@ export function buildSideRuns(concrete, config) {
       if (edge.role === e.exitSide) continue;
       const key = edgeWallKey(e, edge);
       if (!key || (edge.role === 'back' && !key)) continue;
-      const frame = frames.get(key.flight);
-      if (!frame) continue;
+      const flightFrame = frames.get(key.flight);
+      if (!flightFrame) continue;
+      let frame = flightFrame;
+      let id = `${key.flight}:${key.side}`;
+      let idBase = null;
+      if (Math.abs(dot({ x: edge.b.x - edge.a.x, y: edge.b.y - edge.a.y }, flightFrame.f)) < 1) {
+        // an edge square to its flight: a U landing's back edge — the end wall (user report 2026-11-06: no skirting
+        // there). Its own run along it, walking from the incoming flight's side to the return flight's: r = the side's
+        // outward direction turned to the frame's convention (r = f turned clockwise), f from it
+        if (e.kind !== 'landing') continue;
+        const len = Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y);
+        const out = { x: (edge.b.y - edge.a.y) / len, y: -(edge.b.x - edge.a.x) / len };
+        const k = key.side === 'left' ? -1 : 1;
+        const r = { x: out.x * k, y: out.y * k };
+        const f = { x: -r.y, y: r.x };
+        const o = dot({ x: edge.b.x - edge.a.x, y: edge.b.y - edge.a.y }, f) > 0 ? edge.a : edge.b;
+        frame = { o, f, r };
+        id = `${key.flight}:${key.side}:end`;
+        idBase = `${key.flight}-${key.side}-end`;
+      }
       const sa = dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.f);
       const sb = dot({ x: edge.b.x - frame.o.x, y: edge.b.y - frame.o.y }, frame.f);
-      // (an edge square to the flight — a landing's back edge seen from the next flight is along it; one square to
-      // its own flight adds no length)
       if (Math.abs(sb - sa) < 1) continue;
-      const id = `${key.flight}:${key.side}`;
-      if (!runs.has(id)) runs.set(id, { key, frame, u: dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.r), pieces: [] });
+      if (!runs.has(id)) runs.set(id, { key, frame, idBase, u: dot({ x: edge.a.x - frame.o.x, y: edge.a.y - frame.o.y }, frame.r), pieces: [] });
       const lo = Math.min(sa, sb);
       const hi = Math.max(sa, sb);
       const soffit = soffitAt(e, config.concreteSlabThicknessMm);
       // (split where a wall ends part-way along it — each piece its wall; `cutStart` / `cutEnd` = that end is such a
       // cut, not the element's own end; the soffit interpolated)
-      const spans = config.wallIndex ? config.wallIndex.spansOf(e, edge) : [{ s0: sa, s1: sb, wall: wallOn(key, config, e.index) }];
+      const spans = config.wallIndex ? config.wallIndex.spansOf(e, edge) : [{ a: edge.a, b: edge.b, s0: sa, s1: sb, wall: wallOn(key, config, e.index) }];
       for (const sp of spans) {
-        const p0 = Math.min(sp.s0, sp.s1);
-        const p1 = Math.max(sp.s0, sp.s1);
+        // (in this run's own frame — the wall index measures along the flight, which an end-wall run is not)
+        const q0 = sp.a ? dot({ x: sp.a.x - frame.o.x, y: sp.a.y - frame.o.y }, frame.f) : sp.s0;
+        const q1 = sp.b ? dot({ x: sp.b.x - frame.o.x, y: sp.b.y - frame.o.y }, frame.f) : sp.s1;
+        const p0 = Math.min(q0, q1);
+        const p1 = Math.max(q0, q1);
         const at = (s) => soffit.front + (soffit.back - soffit.front) * ((s - lo) / (hi - lo || 1));
         runs.get(id).pieces.push({ element: e, s0: p0, s1: p1, top: finishedTop(e), concreteTop: e.topZ, below, flat: e.kind === 'landing', soffit: { front: at(p0), back: at(p1) }, wall: sp.wall, cutStart: p0 > lo + 1e-6, cutEnd: p1 < hi - 1e-6 });
       }
@@ -72,8 +90,9 @@ export function buildSideRuns(concrete, config) {
     for (const p of r.pieces) {
       const wid = p.wall?.id ?? null;
       if (!seg || seg.wallId !== wid) {
-        const k = out.filter((x) => x.key.flight === r.key.flight && x.key.side === r.key.side).length;
-        seg = { key: r.key, frame: r.frame, u: r.u, pieces: [], wall: p.wall, wallId: wid, walled: !!p.wall && p.wall.type !== 'under', seg: k, id: `${r.key.flight}-${r.key.side}${k ? `-s${k}` : ''}` };
+        const k = out.filter((x) => x.key.flight === r.key.flight && x.key.side === r.key.side && !!x.end === !!r.idBase).length;
+        const base = r.idBase || `${r.key.flight}-${r.key.side}`;
+        seg = { key: r.key, frame: r.frame, u: r.u, pieces: [], wall: p.wall, wallId: wid, walled: !!p.wall && p.wall.type !== 'under', seg: k, end: !!r.idBase, id: `${base}${k ? `-s${k}` : ''}` };
         out.push(seg);
       }
       seg.pieces.push(p);

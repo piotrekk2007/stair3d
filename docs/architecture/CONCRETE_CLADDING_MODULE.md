@@ -658,3 +658,15 @@ gave it the INCOMING flight's other side (its inner one, by the gap) — a wall 
 landing, and a wall on flight A's inner side appeared on the landing's far edge. It is now the return flight's outer
 side (after a left U its right, after a right U its left) — walls, side nosings, skirting / cover stringers and the
 balustrade read the same key. Test: `__tests__/landingNosing.test.js`.
+
+The skirting on a U stair (user report 2026-11-06, fixed): (1) the landing's long BACK edge (the end wall) got no
+skirting — it belongs to the incoming flight's outer side, but a run measures along its flight and that edge is square
+to it (zero length). `sideRuns.js` now gives such an edge its own run (`<flight>-<side>-end`) in its own frame along it,
+walking from the incoming flight's corner to the return flight's (r = the side's outward direction, f = r turned
+back); the wall index's spans are measured from their end points in the run's own frame. (2) A U landing's far side
+was skipped as "the side the next flight leaves from" — `concreteModel.js exitSide` is now set for 90° turns only (a U
+leaves through its front's covered part), so that side gets its skirting / side nosing / cover stringer. (3) The
+incoming flight's board ended in the end wall at the corner (no board there to meet, no corner cut) — now it meets the
+end board and both are cut (`cornerCuts`). The same runs give the balustrade and the cover stringers along an open U
+end. Test: `__tests__/uSkirting.test.js` (both turns, raked / stepped: the end board corner to corner on the wall's
+face, cut at both corners, the return flight's board from the back corner, no part in a wall).

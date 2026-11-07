@@ -598,7 +598,9 @@ wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / 
 `plan2d/planMeasure.js` snap) and 3D „📏 Miarka” (the shared `scene/measureTool.js`). Full walls are one piece per run (`surroundingsModel.js joinWallSegments` / `wallOutline`: the stretches chained,
 the corners mitred); the other walls (low / above / under) likewise round a turn (`sideWallsModel.js joinSideWalls` →
 `built.sideWallBodies`, drawn by `claddingRenderer.js foldedWallGeometry`). A landing's grain runs along its front, along its depth when clearly deeper (floor boards with it, the nosing piece
-along the front); a U landing keeps its front nosing (`onFrontOf` needs the riser's edge to overlap). The plan's walking line runs
+along the front); a U landing keeps its front nosing (`onFrontOf` needs the riser's edge to overlap); its far side belongs to the return
+flight's outer side and its back edge (the end wall) has its own side run (`sideRuns.js` `<flight>-<side>-end`) — skirting,
+cover stringer, balustrade along it. The plan's walking line runs
 smoothly (`walkingLine.js`: the flights' axes, the zones' walklines, the landings' turn corners rounded by tangent
 arcs). Later (user): the regulation
 warnings for the finished sizes, contract / payment-schedule documents. Later (user): contract / payment-schedule documents.

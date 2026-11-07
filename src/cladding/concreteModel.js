@@ -138,7 +138,7 @@ export function buildConcreteModel(config) {
       u0 = a0 - G - Wn;
       coveredFrom = { side: 'left', u: a0 - G };
     }
-    elements.push(rectElement({ ...item, goingMm: depth, widthMm: u1 - u0 }, { flight, frame, u0, u1, v0: v, v1: v + depth, topZ: z, bottomZ, exitSide: item.turn === 'none' ? null : item.turn.endsWith('left') ? 'left' : 'right', coveredFrom }));
+    elements.push(rectElement({ ...item, goingMm: depth, widthMm: u1 - u0 }, { flight, frame, u0, u1, v0: v, v1: v + depth, topZ: z, bottomZ, exitSide: item.turn === 'left' || item.turn === 'right' ? item.turn : null, coveredFrom }));
     // a U landing's gap between the two flights (the incoming one's inner line … the return one's): in this frame
     if (G > 0) elements[elements.length - 1].gap = { side: item.turn === 'u-right' ? 'right' : 'left', uFrom: item.turn === 'u-right' ? a1 : a0 - G, widthMm: G, v0: v, flightIn: flight, flightOut: flight + 1, groupIndex: item.groupIndex };
     i += 1;
