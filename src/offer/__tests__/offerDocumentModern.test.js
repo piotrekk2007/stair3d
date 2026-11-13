@@ -38,7 +38,8 @@ test('sheet 1: the number, the date, „Ważna do” (calendar days), the client
   assert.match(p1, /Ważna do<\/div><strong>20\.11\.2026/);
   assert.match(p1, /<span>Klient<\/span><b>Jan Kowalski<\/b>tel\. 600 100 200<br>jan@example\.pl/);
   assert.match(p1, /<span>Opiekun oferty<\/span><b>Anna Nowak<\/b>tel\. 501 000 000<br>anna@drewex\.net\.pl/);
-  assert.match(h, /<section class="sheet flow">/, 'sheet 2 grows');
+  // sheet 2 ONE fixed A4 when only the stair's data are on it (user request 2026-11-13); it grows only with the price table / long notes
+  assert.match(h, /<section class="sheet fit">/, 'sheet 2 fits one page');
   assert.match(h, new RegExp(`background: ${HERO_BACKGROUND}`));
   // the footer on both sheets, the hours as lines
   assert.equal((h.match(/<footer>/g) || []).length, 2);

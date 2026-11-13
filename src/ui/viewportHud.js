@@ -91,7 +91,7 @@ export function createViewportHud(container, { layers, viewState, onLayerChange,
       <div class="vh-title">Zdjęcie dla Klienta</div>
       <button type="button" data-snapshot class="vh-primary" title="Zapisuje bieżący widok jako obraz PNG (2× rozdzielczość ekranu), z logo, jeśli jest wczytane">📷 Zapisz zdjęcie (PNG)</button>
       <button type="button" data-ai-render title="Kadr z widoku → realistyczny obraz z AI (Gemini) do oferty nowoczesnej — test">✨ Obraz AI do oferty</button>
-      <button type="button" data-offer-frames title="Kadry z widoku 3D do oferty: galeria na ostatniej stronie albo obraz po lewej">🖼 Kadry do oferty</button>
+      <button type="button" data-offer-frames title="Kadry z widoku 3D do oferty: galeria na osobnej stronie (do 6) albo obraz po lewej">🖼 Kadry do oferty</button>
       <div class="vh-buttons">
         <button type="button" data-logo-load title="Logo firmy na zdjęciach i w prezentacji (PNG/JPG/SVG; zapamiętane w tej przeglądarce)">Wczytaj logo…</button>
         <button type="button" data-logo-remove hidden>Usuń logo</button>

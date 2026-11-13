@@ -25,6 +25,7 @@ export function createOfferPanel(container, handlers) {
       <select data-set="offerStyle" data-str>${Object.entries(OFFER_STYLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
     </label>
     <div data-of="modern" hidden>
+      <label class="of-row">Nadtytuł<input type="text" data-set="offerEyebrow" placeholder="pusty = „Schody drewniane [z montażem]”"></label>
       <label class="of-row">Tytuł<input type="text" data-set="offerTitle" placeholder="np. Schody dębowe kl. AB, klasyczne z noskiem"></label>
       <label class="of-row">Podtytuł<input type="text" data-set="offerSubtitle" placeholder="np. podstopnie czarny MDF"></label>
       <label class="of-row">Termin realizacji<input type="text" data-set="leadTime"></label>
@@ -69,7 +70,7 @@ export function createOfferPanel(container, handlers) {
     <label class="of-row">Numer oferty<span class="of-inline"><input type="text" data-set="offerNumber"><button type="button" data-of="suggest" title="Nadaj numer z bieżącej daty">Nadaj</button></span></label>
     <label class="of-row">Ważna (dni)<input type="number" min="1" step="1" data-set="validityDays"></label>
     <label class="of-check"><input type="checkbox" data-set="showComfort"> Pokaż sekcję „Wygoda i zgodność z przepisami”</label>
-    <div class="of-row of-col">Wizualizacje na ostatniej stronie<span class="of-inline"><span data-of="gallery-status">brak (tryb Prezentacji → „🖼 Kadry do oferty”)</span><button type="button" data-of="gallery-clear" hidden>Wyczyść</button></span></div>
+    <div class="of-row of-col">Wizualizacje — osobna strona (do 6 kadrów)<span class="of-inline"><span data-of="gallery-status">brak (tryb Prezentacji → „🖼 Kadry do oferty”)</span><button type="button" data-of="gallery-clear" hidden>Wyczyść</button></span></div>
     <label class="of-check"><input type="checkbox" data-set="includeLinkedFloor"> Dolicz podpięte piętro (wyżej / niżej) do tej oferty</label>
     <div class="of-hint" data-of="floor-status">Brak podpiętego piętra (folder „2. Budynek” — bieg wyżej / niżej).</div>
     <label class="of-row of-col">Uwagi (drukowane w ofercie)<textarea rows="3" data-set="notes"></textarea></label>

@@ -50,6 +50,7 @@ export function createDefaultOfferSettings() {
     offerStyle: 'classic',
     offerTitle: '',
     offerSubtitle: '',
+    offerEyebrow: '',
     leadTime: DEFAULT_LEAD_TIME,
     leadTimeNote: DEFAULT_LEAD_TIME_NOTE,
     deliveryIncluded: true,
@@ -86,6 +87,8 @@ export function sanitizeOfferStyleFields(value) {
     offerStyle: Object.keys(OFFER_STYLES).includes(v.offerStyle) ? v.offerStyle : 'classic',
     offerTitle: str(v.offerTitle),
     offerSubtitle: str(v.offerSubtitle),
+    // the line above the title ('' = automatic: „Schody drewniane [z montażem]”) — user request 2026-11-13
+    offerEyebrow: str(v.offerEyebrow),
     leadTime: typeof v.leadTime === 'string' ? v.leadTime : DEFAULT_LEAD_TIME,
     leadTimeNote: typeof v.leadTimeNote === 'string' ? v.leadTimeNote : DEFAULT_LEAD_TIME_NOTE,
     deliveryIncluded: v.deliveryIncluded !== false,

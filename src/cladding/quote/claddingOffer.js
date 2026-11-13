@@ -25,6 +25,7 @@ export function createDefaultCladdingOffer() {
     offerStyle: 'classic',
     offerTitle: '',
     offerSubtitle: '',
+    offerEyebrow: '', // the line above the title ('' = automatic — user request 2026-11-13)
     leadTime: '3–5 tygodni',
     leadTimeNote: 'gotowe schody na miejscu',
     deliveryIncluded: true,
@@ -60,6 +61,7 @@ export function sanitizeCladdingOffer(raw) {
     offerStyle: s.offerStyle === 'modern' ? 'modern' : 'classic',
     offerTitle: str(s.offerTitle),
     offerSubtitle: str(s.offerSubtitle),
+    offerEyebrow: str(s.offerEyebrow),
     leadTime: typeof s.leadTime === 'string' ? s.leadTime : d.leadTime,
     leadTimeNote: typeof s.leadTimeNote === 'string' ? s.leadTimeNote : d.leadTimeNote,
     deliveryIncluded: s.deliveryIncluded !== false,

@@ -162,3 +162,45 @@ test('the gallery of frames on the last page of both documents (and a sheet 2 fo
   assert.equal(FRAME_FORMATS.gallery.width / FRAME_FORMATS.gallery.height, 1.5);
   assert.ok(FRAME_FORMATS.heroFull.height > FRAME_FORMATS.heroFull.width * 2.5);
 });
+
+// user request 2026-11-13: sheet 1 the offer, sheet 2 the stair's data, the frames ALWAYS on a sheet of their own
+// (a fixed A4 with its footer, ≤ 6 frames); a linked floor's data on its own sheet too
+test('modern offer: the frames on their own fixed sheet (≤ 6, footer), sheet 2 without them, a linked floor on its own sheet', async () => {
+  const { GALLERY_MAX } = await import('../offerDocumentModern.js');
+  const offer = { lines: [{ kind: 'extra', label: 'X', net: 100 }], totals: { net: 100, vat: 23, gross: 123, vatRatePct: 23 } };
+  const facts = { rows: [['Rodzaj', 'L']], comfort: [] };
+  const gallery = Array.from({ length: 8 }, (_, i) => `data:image/jpeg;base64,F${i}`);
+  const floors = [{ name: 'Piętro', facts: { rows: [['Liczba stopni', '14']] }, planSvg: '<svg id="p2"></svg>' }];
+  const html = buildModernOfferHTML({ offer, facts, settings: createDefaultOfferSettings(), planSvg: '<svg id="p1"></svg>', gallery, floors });
+  const sheets = html.split('<section class="sheet').slice(1);
+  assert.equal(sheets.length, 4, 'offer, data, the floor, the frames');
+  assert.doesNotMatch(sheets[1], /Wizualizacje|Piętro/, 'sheet 2 only the stair’s data');
+  assert.match(sheets[1], /^ fit">/, 'sheet 2 ONE fixed A4 (the plan takes the rest), its footer at the bottom of page 2');
+  assert.match(sheets[2], /Piętro — rzut z góry/);
+  assert.match(sheets[3], /^"><div class="p2">/, 'a FIXED sheet (not .flow)');
+  assert.match(sheets[3], /Wizualizacje/);
+  assert.match(sheets[3], /<footer>/);
+  assert.equal(GALLERY_MAX, 6);
+  assert.equal((sheets[3].match(/<figure>/g) || []).length, 6, 'at most 6 frames');
+  assert.equal((buildOfferHTML({ offer, facts, settings: createDefaultOfferSettings(), gallery }).match(/<figure><img/g) || []).length, 6, 'the classic one too');
+});
+
+test('modern offer: the eyebrow is a setting of both modules; the riser height always in page 1’s description', async () => {
+  const { specLines } = await import('../offerDocumentModern.js');
+  assert.equal(sanitizeOfferSettings({ offerEyebrow: 'Schody dębowe' }).offerEyebrow, 'Schody dębowe');
+  assert.equal(createDefaultOfferSettings().offerEyebrow, '');
+  assert.equal(sanitizeCladdingOffer({ offerEyebrow: 'Okładziny' }).offerEyebrow, 'Okładziny');
+  const offer = { lines: [{ kind: 'extra', label: 'X', net: 100 }], totals: { net: 100, vat: 23, gross: 123, vatRatePct: 23 } };
+  const html = buildModernOfferHTML({ offer, facts: { rows: [], comfort: [] }, settings: sanitizeOfferSettings({ offerStyle: 'modern', offerEyebrow: 'Na wymiar' }) });
+  assert.match(html, /<div class="eyebrow">Na wymiar<\/div>/);
+  // a real stair's facts: more rows than the description takes — the riser height (a long row) is still in it
+  const built = buildStaircase(start());
+  const { stairFacts } = await import('../offerModel.js');
+  const f = stairFacts(built.fullConfig, built.derived, { material: 'Dąb lity, klasa A/B, lakierowany na mat' });
+  assert.ok(f.rows.length > 7);
+  const spec = specLines(f);
+  assert.ok(spec.length <= 7);
+  const at = spec.findIndex((t) => /^Wysokość podstopnia: /.test(t));
+  assert.ok(at >= 0 && at < 4, `the riser height in the first 4 lines (${spec.join(' | ')})`);
+  assert.match(specLines({ rows: [['Wysokość stopnia (po wykończeniu)', '172–176 mm']] })[0], /^Wysokość podstopnia \(po wykończeniu\): 172–176 mm/);
+});

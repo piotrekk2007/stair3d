@@ -6,7 +6,9 @@
 //    pozycji) — strona 2”), the totals, the gross amount, the notes (long ones go to sheet 2), the lead time and the
 //    delivery;
 //  * sheet 2 — grows with its content: the detailed price table (when the lines moved there), the notes (when moved),
-//    the plan, the stair's parameters, the comfort table.
+//    the plan, the stair's parameters, the comfort table;
+//  * then (user request 2026-11-13) a sheet per linked floor counted in (its plan, its parameters) and a FIXED A4 of the
+//    presentation frames („Wizualizacje”, ≤ GALLERY_MAX, 2 × 3) — each with the footer at its bottom.
 // The SAME input as buildOfferHTML (offer, facts, settings, company, logoDataUrl, image3d, planSvg, projectName, date)
 // — used by both modules (the concrete module's facts come from cladding/quote/claddingOffer.js). Pure: a string out;
 // every text through escapeHtml. Never shows the CNC + projekt amount (it is inside the material lines).
@@ -17,7 +19,7 @@
 // height (HERO_FULL_MM) instead of the 84 × 150 mm box.
 
 import { escapeHtml as esc } from '../util/format.js';
-import { money } from './offerDocument.js';
+import { money, GALLERY_MAX } from './offerDocument.js';
 import { contactCardText } from './contactCard.js';
 import { qrSvg } from '../util/qrCode.js';
 
@@ -27,6 +29,7 @@ const NOTES_P1_MAX_CHARS = 280;
 const NOTES_P1_MAX_LINES = 4;
 const LONG_TITLE_CHARS = 60;
 const SPEC_MAX_LINES = 7;
+export { GALLERY_MAX };
 /** The hero box's background — the 3D render is made on exactly this colour (it melts into the box). */
 export const HERO_BACKGROUND = '#ECECEB';
 /** The hero render's box (mm) — render the 3D picture at this ratio. */
@@ -81,7 +84,8 @@ const CSS = `
   .valid { text-align: right; }
   .valid strong { display: inline-block; font-size: 11pt; font-weight: 600; margin-top: 1mm; padding-bottom: 0.8mm; border-bottom: 0.8mm solid var(--accent); }
 
-  .people { margin-top: 4.8mm; padding-top: 3.2mm; border-top: 0.26mm solid var(--line); display: grid; grid-template-columns: 1fr 1fr; column-gap: 5mm; color: var(--muted); }
+  /* the client / handler block ~10 % smaller than the design's (user request 2026-11-13) */
+  .people { margin-top: 4.3mm; padding-top: 2.9mm; border-top: 0.26mm solid var(--line); display: grid; grid-template-columns: 1fr 1fr; column-gap: 5mm; color: var(--muted); font-size: 8.1pt; }
   .people b { display: block; color: var(--ink); font-weight: 500; }
 
   .eyebrow { margin-top: 6.8mm; font-size: 9.75pt; font-weight: 500; color: var(--muted); }
@@ -130,6 +134,10 @@ const CSS = `
   h2 { font-family: var(--display); font-size: 13.5pt; font-weight: 600; letter-spacing: -0.01em; margin: 7mm 0 2.6mm; break-after: avoid; }
   .plan { margin: 0; background: var(--surface); border-radius: 1.6mm; padding: 4mm; break-inside: avoid; }
   .plan svg, .plan img { width: 100%; height: 90mm; display: block; }
+  /* sheet 2 as ONE fixed A4 (user request 2026-11-13 — its footer at the bottom of page 2): the plan takes what the
+     parameters and the comfort table leave */
+  .sheet.fit .plan { flex: 1 1 0; min-height: 45mm; max-height: 120mm; display: flex; flex-direction: column; }
+  .sheet.fit .plan svg, .sheet.fit .plan img { flex: 1 1 0; min-height: 0; height: auto; }
   .plan figcaption { margin-top: 2mm; color: var(--muted); }
   .params { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; margin: 0; }
   .params div { display: flex; justify-content: space-between; gap: 4mm; padding: 1.8mm 0; border-bottom: 0.26mm solid var(--line); }
@@ -138,8 +146,9 @@ const CSS = `
   .params dd { text-align: right; font-weight: 500; }
   .notes2 { margin: 0; color: var(--muted); white-space: pre-wrap; }
   .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .gallery.one { grid-template-columns: 1fr; }
   .gallery figure { margin: 0; break-inside: avoid; }
-  .gallery img { width: 100%; height: auto; display: block; border-radius: 1.6mm; background: var(--surface); }
+  .gallery img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; height: auto; display: block; border-radius: 1.6mm; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; }
   tr { break-inside: avoid; }
   th { text-align: left; font-weight: 400; color: var(--muted); padding: 0 0 1.8mm; border-bottom: 0.26mm solid var(--ink); }
@@ -170,12 +179,22 @@ function defaultTitle(facts) {
   return material && material !== '—' ? `${base} — ${material}` : base;
 }
 
-/** Up to SPEC_MAX_LINES of the stair's facts (not „Montaż”): the shortest ones when there are more, in their order. */
-function specLines(facts) {
-  const rows = (facts.rows || []).filter(([k]) => k !== 'Montaż').map(([k, v], i) => ({ i, text: `${k}: ${v}` }));
-  if (rows.length <= SPEC_MAX_LINES) return rows.map((r) => r.text);
-  const keep = new Set([...rows].sort((a, b) => a.text.length - b.text.length).slice(0, SPEC_MAX_LINES).map((r) => r.i));
-  return rows.filter((r) => keep.has(r.i)).map((r) => r.text);
+// the riser height is always in page 1's description (user request 2026-11-13), named as the client reads it
+const SPEC_LABELS = { 'Wysokość stopnia (wznios)': 'Wysokość podstopnia', 'Wysokość stopnia (po wykończeniu)': 'Wysokość podstopnia (po wykończeniu)' };
+/**
+ * Up to SPEC_MAX_LINES of the stair's facts (not „Montaż”), in their order: the riser height always, the shortest
+ * of the others when there are more. Sheet 1's budget shortens the list from its end — the riser height stays in the
+ * first lines it keeps.
+ */
+export function specLines(facts) {
+  const rows = (facts.rows || []).filter(([k]) => k !== 'Montaż').map(([k, v], i) => ({ i, key: !!SPEC_LABELS[k], text: `${SPEC_LABELS[k] || k}: ${v}` }));
+  const keep = new Set(rows.filter((r) => r.key).map((r) => r.i));
+  for (const r of [...rows].filter((r) => !r.key).sort((a, b) => a.text.length - b.text.length)) if (keep.size < SPEC_MAX_LINES) keep.add(r.i);
+  const kept = rows.filter((r) => keep.has(r.i));
+  // the shortening pops from the end: the riser height moves up to the 4th line at the latest (the shortest list)
+  const at = kept.findIndex((r) => r.key);
+  if (at > 3) kept.splice(3, 0, ...kept.splice(at, 1));
+  return kept.map((r) => r.text);
 }
 
 const notesGoToP2 = (notes) => notes.length > NOTES_P1_MAX_CHARS || notes.split('\n').length > NOTES_P1_MAX_LINES;
@@ -187,9 +206,10 @@ const notesGoToP2 = (notes) => notes.length > NOTES_P1_MAX_CHARS || notes.split(
 const MAIN_HEIGHT_MM = 297 - 21 - 10.5 - 7.5; // the sheet less the footer and .main's paddings
 const SAFETY_MM = 5;
 const LINE_MM = { text: 4.6, name: 5.4, title: 8.7, titleLong: 7.0 };
+const PEOPLE_SCALE = 0.9; // .people's type (8.1 pt of 9)
 // the characters per line were measured at the design's 103 mm column — scaled to this one
 const charsAt = (n) => Math.floor((n * MAIN_CONTENT_MM) / 103);
-const CHARS = Object.fromEntries(Object.entries({ spec: 58, name: 36, detail: 44, notes: 54, title: 22, titleLong: 28, people: 30 }).map(([k, n]) => [k, charsAt(n)]));
+const CHARS = Object.fromEntries(Object.entries({ spec: 58, name: 36, detail: 44, notes: 54, title: 22, titleLong: 28, people: 33 }).map(([k, n]) => [k, charsAt(n)]));
 
 // a display text's width in em (Inter Tight 600, rounded up a little): narrow punctuation and spaces, digits, letters
 const EM = { ' ': 0.27, ' ': 0.27, ',': 0.27, '.': 0.27, ':': 0.27, 'ł': 0.3, 'i': 0.28, 'l': 0.28, 'j': 0.28, 't': 0.36, 'f': 0.36, 'r': 0.4, '/': 0.4, '-': 0.4, '–': 0.56, m: 0.88, w: 0.8, M: 0.9, W: 1.0 };
@@ -200,7 +220,7 @@ const wrapped = (text, perLine) => String(text || '').split('\n').reduce((n, p) 
 
 export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime, qr = false }) {
   let h = 19; // number, its label, the date
-  if (peopleRows) h += 8 + (peopleRows + 1) * LINE_MM.text;
+  if (peopleRows) h += 7.2 + (peopleRows + 1) * LINE_MM.text * PEOPLE_SCALE;
   h += 6.8 + 4.9; // the eyebrow
   h += 2 + wrapped(titleText, long ? CHARS.titleLong : CHARS.title) * (long ? LINE_MM.titleLong : LINE_MM.title);
   if (spec.length) h += 3.7 + spec.reduce((n, t) => n + wrapped(t, CHARS.spec), 0) * LINE_MM.text;
@@ -318,7 +338,8 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   </div></div>${footerHTML(c)}</section>`;
 
   // --- sheet 2
-  const head = `<div class="p2-head">${logoDataUrl ? `<img src="${esc(logoDataUrl)}" alt="logo">` : `<span class="name">${esc(c.name || '')}</span>`}<div class="t"><b>${number ? `Oferta nr ${number}` : 'Oferta'}</b> · dane techniczne</div></div>`;
+  const headOf = (what) => `<div class="p2-head">${logoDataUrl ? `<img src="${esc(logoDataUrl)}" alt="logo">` : `<span class="name">${esc(c.name || '')}</span>`}<div class="t"><b>${number ? `Oferta nr ${number}` : 'Oferta'}</b> · ${what}</div></div>`;
+  const head = headOf('dane techniczne');
   const table = linesP2
     ? `<h2>Szczegółowa wycena</h2><table><tr><th>Lp.</th><th>Pozycja</th><th class="num-r">Ilość</th><th class="num-r">Cena netto</th><th class="num-r">Wartość netto</th></tr>${offer.lines
         .map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.label)}${l.detail ? `<span class="detail2">${esc(l.detail)}</span>` : ''}</td><td class="num-r">${l.qty != null ? `${qtyFmt.format(l.qty)} ${esc(l.unit || '')}` : '1 kpl.'}</td><td class="num-r">${nb(money(l.unitNet != null ? l.unitNet : l.net))}</td><td class="num-r">${nb(money(l.net))}</td></tr>`)
@@ -334,20 +355,27 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
           .join('')}</table>`
       : '';
   // the other floors counted into this offer (user request 2026-11-07): their plan and parameters too
-  const otherFloors = !technical
+  // — each on a sheet of its own after sheet 2 (user request 2026-11-13: sheet 2 one page, its footer at the bottom)
+  const floorSheets = !technical
     ? ''
     : (floors || [])
         .map((f) => {
           const name = esc(f.name || 'Drugie piętro');
           const fig = f.planSvg ? `<h2>${name} — rzut z góry</h2><figure class="plan">${f.planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
           const rows = (f.facts?.rows || []).length ? `<h2>${name} — parametry schodów</h2><dl class="params">${f.facts.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '';
-          return fig + rows;
+          return fig || rows ? `<section class="sheet flow"><div class="p2">${headOf(`${name} — dane techniczne`)}${fig}${rows}</div>${footerHTML(c)}</section>` : '';
         })
         .join('');
   // the frames chosen in the presentation mode (app/offerFramesPanel.js — user request 2026-11-07): on the last page
-  const galleryHTML = (gallery || []).length ? `<h2>Wizualizacje</h2><div class="gallery">${gallery.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div>` : '';
-  const body2 = `${table}${notes2}${planFig}${params}${otherFloors}${comfort}${galleryHTML}`;
-  const sheet2 = body2 ? `<section class="sheet flow"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
+  // — ALWAYS a sheet of their own (user request 2026-11-13): sheet 1 the offer, sheet 2 the stair's data, sheet 3 the
+  // frames (at most GALLERY_MAX, 2 × 3 at 3:2 — fits the fixed A4 with its footer at the bottom)
+  const frames = (gallery || []).slice(0, GALLERY_MAX);
+  const sheet3 = frames.length
+    ? `<section class="sheet"><div class="p2">${headOf('wizualizacje')}<h2>Wizualizacje</h2><div class="gallery${frames.length === 1 ? ' one' : ''}">${frames.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div></div>${footerHTML(c)}</section>`
+    : '';
+  const body2 = `${table}${notes2}${planFig}${params}${comfort}`;
+  // (the detailed price table or long notes moved here: it grows over more pages as before)
+  const sheet2 = body2 ? `<section class="sheet ${table || notes2 ? 'flow' : 'fit'}"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;
   return `<!DOCTYPE html>
@@ -355,5 +383,5 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
 <style>${CSS}</style></head>
-<body>${sheet1}${sheet2}</body></html>`;
+<body>${sheet1}${sheet2}${floorSheets}${sheet3}</body></html>`;
 }

@@ -6,6 +6,9 @@
 
 import { escapeHtml as esc } from '../util/format.js';
 
+/** The most frames of the presentation on the offer's visualisation page (both documents, the frames panel). */
+export const GALLERY_MAX = 6;
+
 const moneyFmt = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const money = (v) => `${moneyFmt.format(v || 0).replace(/ /g, ' ')} zł`;
 const qtyFmt = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 });
@@ -112,7 +115,7 @@ export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataU
     <tr class="gross"><td>Razem brutto</td><td class="num">${money(offer.totals.gross)}</td></tr>
   </table>
   ${settings.notes ? `<h2>Uwagi</h2><div class="notes">${esc(settings.notes)}</div>` : ''}
-  ${(gallery || []).length ? `<h2>Wizualizacje</h2><div class="gallery">${gallery.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div>` : ''}
+  ${(gallery || []).length ? `<h2>Wizualizacje</h2><div class="gallery">${gallery.slice(0, GALLERY_MAX).map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div>` : ''}
   <footer>Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).</footer>
 </div></body></html>`;
 }

@@ -69,9 +69,19 @@ wychodziły 8 mm poza arkusz), a niższy limit zabierałby pozycje także tam, g
 stronę 2, po czym to, co zdjęto, wraca, gdzie znów się mieści. Tytuł dłuższy niż 2 linie (lub > 60 znaków) jest o
 stopień mniejszy.
 
+**Układ arkuszy (prośba użytkownika 2026-11-13)**: strona 1 — oferta; strona 2 — dane schodów (rzut, parametry,
+wygoda) jako JEDEN stały arkusz A4 (`.sheet.fit`: rzut zajmuje to, co zostawiają parametry i tabela wygody, 45–120 mm —
+domyślne schody L miały 312 mm i stopka spadała na następną kartkę); gdy przeszła tam szczegółowa wycena albo długie
+uwagi, strona 2 rośnie jak dotąd (`.sheet.flow`); każde połączone piętro na WŁASNYM arkuszu (rzut + parametry); kadry
+z prezentacji ZAWSZE na osobnym, stałym arkuszu „Wizualizacje” (≤ `GALLERY_MAX` = 6, 2 × 3 w proporcji 3:2, jeden kadr
+na całą szerokość) — każdy arkusz ze stopką na dole. Blok Klient / Opiekun oferty ~10 % mniejszy (8,1 pt, mniejsze
+odstępy; budżet `PEOPLE_SCALE`). Opis pod tytułem (`specLines`) zawsze zawiera wysokość podstopnia („Wysokość
+podstopnia”, w module „Na beton” „(po wykończeniu)”) — najpóźniej w 4. linii, bo budżet skraca listę od końca.
+
 Opcjonalne teksty wejścia (dla oferty pisanej ręcznie, poza aplikacją; brak pola = jak dotąd, `''` = nic):
 `heroCaption` (podpis obrazka, domyślnie „Wizualizacja poglądowa”), `offerEyebrow` (nadtytuł, domyślnie z pozycji
-montażu), `deliveryNote` („Wycena po pomiarach i ocenie wykonawcy.”), `closingNote` (zdanie na końcu strony 2),
+montażu — od 2026-11-13 też ustawienie oferty obu modułów, pole „Nadtytuł” w bloku stylu nowoczesnego, pusty =
+automatycznie), `deliveryNote` („Wycena po pomiarach i ocenie wykonawcy.”), `closingNote` (zdanie na końcu strony 2),
 `technicalSheet: false` (bez rzutu / parametrów / wygody — strona 2 tylko, gdy przeszła tam wycena albo uwagi),
 `heroFull: true` (obrazek na całą wysokość pola po lewej, 84 × 276 mm — `HERO_FULL_MM`, zamiast kadru 84 × 150 mm).
 
@@ -172,9 +182,10 @@ Tests: `src/offer/__tests__/linkedFloorOffer.test.js`.
 Presentation mode (both modules) → „🖼 Kadry do oferty” (`app/offerFramesPanel.js`, the AI panel's look; one of the
 two panels open at a time): a frame over the 3D view in the chosen format, the user's own camera rendered in it
 (`sceneSetup.js renderFrameImage`), „＋ Dodaj ten kadr”:
-- „do galerii na ostatniej stronie” (3:2, 1500 × 1000 px) — several, reordered / removed in the panel; both documents
-  take `gallery: [dataUrl]` → „Wizualizacje”, two per row, at the end (modern: the last sheet — a sheet 2 for it even
-  with `technicalSheet: false`; classic: after the notes);
+- „do galerii” (3:2, 1500 × 1000 px) — at most `GALLERY_MAX` (6; the panel refuses a 7th), reordered / removed in the
+  panel; both documents take `gallery: [dataUrl]` → „Wizualizacje”, two per row, at the end (modern: a fixed sheet of
+  their own, 2 × 3, also with `technicalSheet: false` — user request 2026-11-13; classic: after the notes; both print
+  only the first 6);
 - „obraz po lewej” (the full-height strip, or the 9:16 box) — the modern hero instead of the automatic render, as the
   AI picture (`source: 'frame'`, „kadr z prezentacji” in „Obraz po lewej”).
-The „Oferta” tab shows „Wizualizacje na ostatniej stronie: N kadrów” with „Wyczyść”. Session only (not in the project).
+The „Oferta” tab shows „Wizualizacje — osobna strona (do 6 kadrów): N kadrów” with „Wyczyść”. Session only (not in the project).

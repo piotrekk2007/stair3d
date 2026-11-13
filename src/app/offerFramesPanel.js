@@ -1,12 +1,13 @@
 // „🖼 Kadry do oferty” (DOM; user request 2026-11-07): frames chosen in the presentation mode of either module, as the
 // AI frame is — a frame drawn over the 3D view in the chosen format, the user's own camera rendered in it
 // (sceneSetup.js renderFrameImage):
-//  - „do galerii” (3:2): the offer's last page shows them under „Wizualizacje” (several, ordered, removable);
+//  - „do galerii” (3:2): the offer's last page shows them under „Wizualizacje” (≤ GALLERY_MAX, ordered, removable;
+//    the modern offer: a sheet of their own, 2 × 3);
 //  - „obraz po lewej” (the hero strip over the whole height, or the 9:16 box): the modern offer's hero instead of the
 //    automatic render (as the AI picture — the module's `onHero`).
 // Kept for the session (not in the project — pictures are big), as the AI picture.
 
-import { HERO_FULL_MM, HERO_BOX_MM } from '../offer/offerDocumentModern.js';
+import { HERO_FULL_MM, HERO_BOX_MM, GALLERY_MAX } from '../offer/offerDocumentModern.js';
 import { frameInViewport } from '../scene/sceneSetup.js';
 
 export const FRAME_FORMATS = Object.freeze({
@@ -57,7 +58,7 @@ export function createOfferFramesPanel({ hostEl, viewportEl, getSceneApi, getGal
       <label class="ai-row">Kadr <select data-of="format">${Object.entries(FRAME_FORMATS).map(([k, f]) => `<option value="${k}"${k === format ? ' selected' : ''}>${f.label}</option>`).join('')}</select></label>
       <div class="ai-actions"><button type="button" class="ai-primary" data-of="add">＋ Dodaj ten kadr</button></div>
       <div class="ai-status" data-of="status">${status}</div>
-      <div class="ai-hint">W galerii: ${list.length} ${list.length === 1 ? 'kadr' : list.length > 1 && list.length < 5 ? 'kadry' : 'kadrów'}${list.length ? ' — kolejność jak w ofercie' : ''}.</div>
+      <div class="ai-hint">W galerii: ${list.length} z ${GALLERY_MAX} kadrów${list.length ? ' — kolejność jak w ofercie (osobna strona „Wizualizacje”)' : ''}.</div>
       <div class="offer-frames-list">${list
         .map(
           (src, i) => `<figure><img src="${src}" alt="kadr ${i + 1}"><figcaption>${i + 1}
@@ -88,6 +89,7 @@ export function createOfferFramesPanel({ hostEl, viewportEl, getSceneApi, getGal
       const fmt = FRAME_FORMATS[format];
       const img = api.renderFrameImage({ width: fmt.width, height: fmt.height }).toDataURL('image/jpeg', 0.9);
       if (format === 'gallery') {
+        if (list.length >= GALLERY_MAX) return render(`W galerii jest już ${GALLERY_MAX} kadrów (najwięcej na stronie „Wizualizacje”) — usuń któryś, aby dodać nowy.`);
         onGallery([...list, img]);
         return render(`Dodano kadr ${list.length + 1} do galerii.`);
       }
