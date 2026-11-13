@@ -115,6 +115,9 @@ export function createDefaultCladdingConfig() {
     wallRailBracketSpacingMm: 1000, // at most between brackets
     wallRailBracketEndMm: 150, // the outer brackets in from the ends
     wallRailReturn: false, // both ends turned into the wall
+    // per walled stretch (sideRuns.js run id — user request 2026-11-13): {on?, fromMm?, toMm? (cut back from the start /
+    // the end), heightMm?, return?} — absent = as the flight side's switch / the settings above
+    wallRailEdits: {},
     railingAntresola: false,
     railingHeightMm: 900, // the handrail's top above the noses (PL-LEGAL-H-01 0.9 m — DO WERYFIKACJI)
     railingAntresolaHeightMm: 1100, // above the floor (WT § 298 — DO WERYFIKACJI)
@@ -173,6 +176,20 @@ function sanitizeReferenceFloor(ref) {
 }
 
 // {[flight]: {left, right}} — booleans only
+function sanitizeWallRailEdits(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!v || typeof v !== 'object') continue;
+    const e = {};
+    if (typeof v.on === 'boolean') e.on = v.on;
+    for (const f of ['fromMm', 'toMm']) if (Number.isFinite(Number(v[f])) && v[f] !== null && Number(v[f]) > 0) e[f] = Math.round(Number(v[f]));
+    if (Number.isFinite(Number(v.heightMm)) && v.heightMm !== null && v.heightMm !== '') e.heightMm = Math.min(1500, Math.max(600, Math.round(Number(v.heightMm))));
+    if (typeof v.return === 'boolean') e.return = v.return;
+    if (Object.keys(e).length) out[k] = e;
+  }
+  return out;
+}
+
 function sanitizePostEdits(raw) {
   const out = {};
   for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
@@ -336,6 +353,7 @@ export function sanitizeCladdingConfig(raw) {
     wallRailBracketSpacingMm: num(c.wallRailBracketSpacingMm, d.wallRailBracketSpacingMm, 300, 2000),
     wallRailBracketEndMm: num(c.wallRailBracketEndMm, d.wallRailBracketEndMm, 0, 500),
     wallRailReturn: !!c.wallRailReturn,
+    wallRailEdits: sanitizeWallRailEdits(c.wallRailEdits),
     railingAntresola: !!c.railingAntresola,
     railingHeightMm: num(c.railingHeightMm, d.railingHeightMm, 600, 1500),
     railingAntresolaHeightMm: num(c.railingAntresolaHeightMm, d.railingAntresolaHeightMm, 600, 1500),

@@ -99,7 +99,7 @@ export function mountCladdingApp(rootEl, host = {}) {
           <label class="clad-field">Ostatnia wysokość do stropu [mm] <input type="number" class="clad-exit" placeholder="jak ostatni stopień" /></label>
         </section>
         <section class="clad-box"><h3>Ściany przy biegach</h3><div class="clad-walls"></div></section>
-        <section class="clad-box"><h3>Listwy, wangi obiciowe, balustrada</h3><div class="clad-sides"></div></section>
+        <section class="clad-box"><h3>Listwy, wangi obiciowe, balustrada</h3><div class="clad-sides"></div><div class="clad-wall-rails"></div></section>
         <section class="clad-box clad-floor-box"><h3>Piętro wyżej / niżej</h3><div class="clad-floor"></div></section>
         <section class="clad-box clad-gui"><h3>Wykończenie</h3></section>
         <section class="clad-box"><h3>Kolory i wykończenie (prezentacja)</h3><div class="clad-colors"></div></section>
@@ -953,6 +953,57 @@ export function mountCladdingApp(rootEl, host = {}) {
     });
   });
 
+  // the wall handrails one by one (user request 2026-11-13: „generują się jak chcą”): per walled stretch on / off, cut
+  // back from either end, its own height, the ends into the wall — also on the plan („▮ Słupy”: drag an end, click)
+  const editWallRail = (runId, fn, opts) =>
+    change((c) => {
+      const all = { ...(c.wallRailEdits || {}) };
+      const e = { ...(all[runId] || {}) };
+      fn(e);
+      all[runId] = e;
+      c.wallRailEdits = all;
+    }, opts);
+  const wallRailsEl = $('.clad-wall-rails');
+  function renderWallRails() {
+    const b = state.built?.balustrade;
+    const rails = b?.wallRails || [];
+    const spots = b?.wallRailSpots || [];
+    const c = state.config;
+    if (!rails.length && !spots.length) {
+      wallRailsEl.innerHTML = '';
+      return;
+    }
+    const num = (run, f, v, title, ph = '0') => `<label title="${title}">${f === 'heightMm' ? 'wys.' : f === 'fromMm' ? 'od pocz. −' : 'od końca −'}<input type="number" min="0" step="10" class="clad-small" data-wr="${escapeHtml(run)}" data-wr-f="${f}" value="${v ?? ''}" placeholder="${ph}" /></label>`;
+    const row = (w) => {
+      const e = c.wallRailEdits?.[w.runId] || {};
+      return `<div class="clad-row clad-wall-rail-row"><label><input type="checkbox" data-wr="${escapeHtml(w.runId)}" data-wr-f="on" checked /> ${escapeHtml(w.label)}</label>
+        ${num(w.runId, 'fromMm', e.fromMm, 'Skrócona od początku (dołu) o [mm] — albo przeciągnij jej koniec na planie w trybie „▮ Słupy”')}
+        ${num(w.runId, 'toMm', e.toMm, 'Skrócona od końca (góry) o [mm]')}
+        ${num(w.runId, 'heightMm', e.heightMm, 'Wysokość nad noskami [mm] (puste = jak w ustawieniach)', String(c.wallRailHeightMm))}
+        <label title="Końce zawinięte do ściany"><select data-wr="${escapeHtml(w.runId)}" data-wr-f="return"><option value="" ${e.return === undefined ? 'selected' : ''}>końce: jak w ustawieniach</option><option value="1" ${e.return === true ? 'selected' : ''}>końce zawinięte</option><option value="0" ${e.return === false ? 'selected' : ''}>końce proste</option></select></label>
+        <span class="clad-hint">${Math.round(w.lengthMm)} mm, ${w.brackets.length} uchwyty</span></div>`;
+    };
+    wallRailsEl.innerHTML =
+      '<div class="clad-subhead">Poręcze przyścienne</div>' +
+      rails.map(row).join('') +
+      spots.map((w) => `<div class="clad-row"><label><input type="checkbox" data-wr="${escapeHtml(w.runId)}" data-wr-f="on" /> ${escapeHtml(w.label)} — bez poręczy</label></div>`).join('') +
+      '<div class="clad-hint">Każdy odcinek przy ścianie osobno: włącz / wyłącz, skróć od dołu / góry, własna wysokość, końce. Na planie w trybie „▮ Słupy”: przeciągnij kółko na końcu poręczy (przyciąga do krawędzi stopni), klik na poręczy = usuń, klik na przerywanej linii przy ścianie = dodaj.</div>';
+  }
+  wallRailsEl.addEventListener('change', (ev) => {
+    const runId = ev.target.dataset.wr;
+    const f = ev.target.dataset.wrF;
+    if (!runId || !f) return;
+    const v = ev.target.value;
+    editWallRail(runId, (e) => {
+      if (f === 'on') e.on = ev.target.checked;
+      else if (f === 'return') {
+        if (v === '') delete e.return;
+        else e.return = v === '1';
+      } else if (v === '' || !Number.isFinite(Number(v))) delete e[f];
+      else e[f] = Math.max(0, Math.round(Number(v)));
+    });
+  });
+
   // the walls (user request 2026-11-05): a LIST — each a flight's side from one step to another with its type
   // (wallEdits.js); also edited on the plan („▥ Ściany”: a click on a step's side). A walled side gets no side nosing.
   const wallsEl = $('.clad-walls');
@@ -1182,7 +1233,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   let planMode = 'select';
   const MODE_HINTS = {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
-    posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć',
+    posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć; poręcz przyścienna — przeciągnij kółko na jej końcu (skróć), klik na niej = usuń, klik na przerywanej linii przy ścianie = dodaj',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
     trim: 'FAJKA: klik na krawędzi otworu = obróbka (nosek + deska na stropie) tak / nie; zielona — z fajką, szara — bez, pomarańczowa — wyjście ze schodów (tam nosek antresoli). Wymiary — w „Wykończenie → Obróbka otworu (fajka)”',
     walls: 'ŚCIANY: przeciągnij kółko na końcu ściany wzdłuż boku (przyciąga do krawędzi stopni, co 10 mm — ściana może kończyć się w połowie stopnia), klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
@@ -1251,6 +1302,14 @@ export function mountCladdingApp(rootEl, host = {}) {
       return true;
     }
     if (planMode === 'posts') {
+      // a wall handrail: a click on it = none there, on a dashed walled stretch = one there (user request 2026-11-13)
+      const wallRailHit = target.closest?.('.clad-wall-rail-line, .clad-wall-rail-spot');
+      if (wallRailHit) {
+        const runId = wallRailHit.dataset.run;
+        const on = wallRailHit.classList.contains('clad-wall-rail-spot');
+        editWallRail(runId, (e) => (e.on = on));
+        return true;
+      }
       const post = target.closest?.('.clad-post');
       const ghost = target.closest?.('.clad-post-ghost');
       const line = target.closest?.('.clad-rail-line');
@@ -1346,7 +1405,9 @@ export function mountCladdingApp(rootEl, host = {}) {
     const handle = ev.target.closest?.('.clad-edge-handle');
     const vertex = planMode === 'opening' ? ev.target.closest?.('.clad-opening-vertex') : null;
     const wallEnd = planMode === 'walls' ? ev.target.closest?.('.clad-wall-end') : null;
-    drag = { x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, at: planAt(ev), vertex: vertex ? Number(vertex.dataset.vertex) : null, wallEnd: wallEnd ? { k: Number(wallEnd.dataset.wallEnd.split(':')[0]), end: wallEnd.dataset.wallEnd.split(':')[1] } : null, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
+    const railEnd = planMode === 'posts' ? ev.target.closest?.('.clad-wall-rail-end') : null;
+    drag = {
+      wallRail: railEnd ? { runId: railEnd.dataset.run, end: railEnd.dataset.end } : null, x: ev.clientX, y: ev.clientY, moved: false, target: ev.target, at: planAt(ev), vertex: vertex ? Number(vertex.dataset.vertex) : null, wallEnd: wallEnd ? { k: Number(wallEnd.dataset.wallEnd.split(':')[0]), end: wallEnd.dataset.wallEnd.split(':')[1] } : null, handle: handle ? { zone: Number(handle.dataset.zone), edge: Number(handle.dataset.edge), end: handle.dataset.end } : null };
     planEl.setPointerCapture(ev.pointerId);
   });
   planEl.addEventListener('pointermove', (ev) => {
@@ -1364,6 +1425,27 @@ export function mountCladdingApp(rootEl, host = {}) {
         (c) => {
           const o = manualOpening(c);
           o[drag.vertex] = { x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 };
+        },
+        { record: false }
+      );
+      return;
+    }
+    if (drag.wallRail) {
+      // a wall handrail's end dragged along its wall (snapped to the steps' edges within 12 px, else 10 mm)
+      const run = (state.built.sideRuns || []).find((r) => r.id === drag.wallRail.runId);
+      const rail = (state.built.balustrade?.wallRails || []).find((w) => w.runId === drag.wallRail.runId);
+      if (!run || !rail) return;
+      const p = planAt(ev);
+      let s = (p.x - run.frame.o.x) * run.frame.f.x + (p.y - run.frame.o.y) * run.frame.f.y;
+      const edges = run.pieces.flatMap((q) => [q.s0, q.s1]);
+      const near = edges.reduce((best, e) => (Math.abs(e - s) < Math.abs(best - s) ? e : best), Infinity);
+      s = Math.abs(near - s) <= 12 * mmPerPx() ? near : Math.round(s / 10) * 10;
+      drag.moved = true;
+      editWallRail(
+        drag.wallRail.runId,
+        (e) => {
+          if (drag.wallRail.end === 'start') e.fromMm = Math.max(0, Math.round(s - rail.runS0));
+          else e.toMm = Math.max(0, Math.round(rail.runS1 - s));
         },
         { record: false }
       );
@@ -1418,7 +1500,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderPlan();
   });
   planEl.addEventListener('pointerup', () => {
-    if ((drag?.handle || drag?.wallEnd || (drag?.vertex !== null && drag?.vertex !== undefined)) && drag.moved) {
+    if ((drag?.handle || drag?.wallEnd || drag?.wallRail || (drag?.vertex !== null && drag?.vertex !== undefined)) && drag.moved) {
       commitHistory();
       renderSequence();
     } else if (drag && !drag.moved) {
@@ -1667,6 +1749,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     renderReport();
     renderWalls();
     renderSides();
+    renderWallRails();
     renderColors();
     renderFloorPanel();
     renderQuote();

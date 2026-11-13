@@ -29,12 +29,23 @@ function crossing(a1, b1, a2, b2) {
   return { x: a1.x + r.x * t, y: a1.y + r.y * t };
 }
 
-/** The opening's edges: `[{k, a, b, exit, on}]` — `exit` = along the stair's last back edge (no trim there). */
+/**
+ * The opening's edges: `[{k, a, b, exit, on}]` — `exit` = along the stair's last back edge (no trim there): on its line
+ * AND overlapping it. (A U stair's opening edge over the lower flight lies on the exit's line too — it was taken for
+ * the exit, so no trim could be put there: user report 2026-11-13.)
+ */
 export function trimEdges(built, config) {
   const o = built.slab?.opening || [];
   const last = built.concrete.elements.at(-1);
   const exitEdges = (last?.edges || []).filter((e) => e.role === 'back');
-  const onExit = (a, b) => exitEdges.some((e) => [a, b].every((p) => Math.abs((e.b.x - e.a.x) * (p.y - e.a.y) - (e.b.y - e.a.y) * (p.x - e.a.x)) / (dist(e.a, e.b) || 1) < 1));
+  const onExit = (a, b) =>
+    exitEdges.some((e) => {
+      const l = dist(e.a, e.b) || 1;
+      if (![a, b].every((p) => Math.abs((e.b.x - e.a.x) * (p.y - e.a.y) - (e.b.y - e.a.y) * (p.x - e.a.x)) / l < 1)) return false;
+      // the overlap along the back edge's line (mm)
+      const u = (p) => ((p.x - e.a.x) * (e.b.x - e.a.x) + (p.y - e.a.y) * (e.b.y - e.a.y)) / l;
+      return Math.min(l, Math.max(u(a), u(b))) - Math.max(0, Math.min(u(a), u(b))) > 1;
+    });
   return o.map((a, k) => {
     const b = o[(k + 1) % o.length];
     const exit = onExit(a, b);
@@ -99,11 +110,19 @@ export function buildOpeningTrim(built, config) {
       const O = lines[other.k];
       const v = which === 'start' ? e.a : e.b;
       // (a trimmed neighbour, or the antresola nosing ending at this corner)
+      const own = L[side][which === 'start' ? 0 : 1];
       if ((other.on || (other.exit && O.nosing && nosingAt(v))) && other.k !== e.k) {
         const c = crossing(L[side][0], L[side][1], O[side][0], O[side][1]);
         if (c) return c;
+        // straight on into the antresola nosing (the same line): the trim runs on to the nosing's end, butted square
+        const nz = other.exit && O.nosing && nosingAt(v);
+        if (nz) {
+          const q = nz.edge[endNear(nz, v)];
+          const s = (q.x - v.x) * L.t.x + (q.y - v.y) * L.t.y;
+          return add(own, L.t, s);
+        }
       }
-      return L[side][which === 'start' ? 0 : 1];
+      return own;
     };
     const p = (side) => [endAt('start', side), endAt('end', side)];
     const inner = p('inner');
@@ -135,6 +154,8 @@ export function buildOpeningTrim(built, config) {
       const atCorner = endNear(nz, e.a) === end ? prev : endNear(nz, e.b) === end ? next : null;
       if (!atCorner?.on) return null;
       const O = lines[atCorner.k];
+      // (straight on: the trim comes up to the nosing's end — the nosing stays as it is)
+      if (!crossing(L.inner[0], L.inner[1], O.inner[0], O.inner[1])) return null;
       return { inner: crossing(L.inner[0], L.inner[1], O.inner[0], O.inner[1]), outer: crossing(L.outer[0], L.outer[1], O.outer[0], O.outer[1]) };
     });
     if (!ends[0] && !ends[1]) continue;

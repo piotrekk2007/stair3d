@@ -122,10 +122,26 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
       return line + rail + bal + glass + posts + ghosts;
     })
     .join('');
-  // the wall handrails: the handrail line and a tick per bracket to the wall
-  const wallRailXML = (built.balustrade?.wallRails || [])
-    .map((w) => `<polyline class="clad-wall-rail" points="${pts(w.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>` + w.brackets.map((b) => `<line x1="${fmt(b.wall.x)}" y1="${fmt(-b.wall.y)}" x2="${fmt(b.rail.x)}" y2="${fmt(-b.rail.y)}" stroke="#6b7177" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join(''))
-    .join('');
+  // the wall handrails: the handrail line and a tick per bracket to the wall; in the post mode („▮ Słupy” — user request
+  // 2026-11-13) each one's ends to drag along its wall, a click on it = none there, a walled stretch without one dashed
+  // (a click = a wall handrail there)
+  const railEditing = mode === 'posts';
+  const handlePx = (mmPerPx || (viewport?.width ?? 4000) / 1000) * 6;
+  const wallRailXML =
+    (built.balustrade?.wallRails || [])
+      .map(
+        (w) =>
+          `<polyline class="clad-wall-rail" points="${pts(w.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>` +
+          w.brackets.map((b) => `<line x1="${fmt(b.wall.x)}" y1="${fmt(-b.wall.y)}" x2="${fmt(b.rail.x)}" y2="${fmt(-b.rail.y)}" stroke="#6b7177" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join('') +
+          (railEditing
+            ? `<line class="clad-wall-rail-line" data-run="${escapeHtml(w.runId)}" x1="${fmt(w.ends.start.x)}" y1="${fmt(-w.ends.start.y)}" x2="${fmt(w.ends.end.x)}" y2="${fmt(-w.ends.end.y)}" stroke="#7a4b22" stroke-opacity="0.3" stroke-width="14" ${HAIR}><title>Poręcz przyścienna — kliknij, żeby ją usunąć; przeciągnij kółko na końcu, żeby ją skrócić</title></line>` +
+              ['start', 'end'].map((end) => `<circle class="clad-wall-rail-end" data-run="${escapeHtml(w.runId)}" data-end="${end}" cx="${fmt(w.ends[end].x)}" cy="${fmt(-w.ends[end].y)}" r="${fmt(handlePx)}" fill="#fff" stroke="#7a4b22" stroke-width="2" ${HAIR}><title>Koniec poręczy przyściennej — przeciągnij wzdłuż ściany</title></circle>`).join('')
+            : ''),
+      )
+      .join('') +
+    (railEditing
+      ? (built.balustrade?.wallRailSpots || []).map((w) => `<line class="clad-wall-rail-spot" data-run="${escapeHtml(w.runId)}" x1="${fmt(w.a.x)}" y1="${fmt(-w.a.y)}" x2="${fmt(w.b.x)}" y2="${fmt(-w.b.y)}" stroke="#7a4b22" stroke-opacity="0.55" stroke-width="6" stroke-dasharray="10,6" ${HAIR}><title>Przy ścianie bez poręczy — kliknij, żeby dodać poręcz przyścienną</title></line>`).join('')
+      : '');
   // the LED strips (ledModel.js): a warm line
   const ledXML = (built.led?.strips || []).map((s) => `<polyline class="clad-led" points="${pts(s.points)}" fill="none" stroke="#f0b400" stroke-width="2.5" pointer-events="none" ${HAIR}/>`).join('');
   const riserXML = cladding.risers.map((r) => `<polygon class="clad-riser" points="${pts(r.outline)}" fill="#bfa77a" stroke="#6d4b2a" stroke-width="0.8" pointer-events="none" ${HAIR}/>`).join('');

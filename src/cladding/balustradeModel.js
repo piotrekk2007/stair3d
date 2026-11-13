@@ -307,9 +307,18 @@ function section(line, config) {
       }
     }
   }
-  // the handrail: end to end at its top, its centre line half its height lower; on the glass with glass on the side
-  const ss = [line.s0, ...line.top.map((q) => q.s).filter((s) => s > line.s0 && s < line.s1), ...line.corners, line.s1].sort((a, b) => a - b).filter((s, k, all) => k === 0 || s - all[k - 1] > 1e-6);
-  const handrail = ss.map((s) => ({ ...line.at(s), z: topAt(s) - config.handrailHeightMm / 2 }));
+  // the handrail: at its top, its centre line half its height lower; on the glass with glass on the side. It stops AT an
+  // end post — its face towards the run (user report 2026-11-13: it ran on through the post to its far face, and its
+  // square end stuck out past it on the pitch; the renderer cuts that end plumb, `plumb`)
+  const half = size / 2;
+  const startPost = line.closed ? null : posts.find((p) => p.s - line.s0 <= size + 1e-6);
+  const endPost = line.closed ? null : [...posts].reverse().find((p) => line.s1 - p.s <= size + 1e-6);
+  let h0 = startPost ? startPost.s + half : line.s0;
+  let h1 = endPost && endPost !== startPost ? endPost.s - half : line.s1;
+  if (h1 - h0 < 1) [h0, h1] = [line.s0, line.s1];
+  const stops = (a, b) => [a, ...line.top.map((q) => q.s).filter((s) => s > a && s < b), ...line.corners.filter((s) => s > a && s < b), b].sort((x, y) => x - y).filter((s, k, all) => k === 0 || s - all[k - 1] > 1e-6);
+  const ss = stops(line.s0, line.s1);
+  const handrail = stops(h0, h1).map((s) => ({ ...line.at(s), z: topAt(s) - config.handrailHeightMm / 2 }));
   let length = 0;
   for (let k = 1; k < handrail.length; k++) length += Math.hypot(handrail[k].x - handrail[k - 1].x, handrail[k].y - handrail[k - 1].y, handrail[k].z - handrail[k - 1].z);
   return {
@@ -322,6 +331,8 @@ function section(line, config) {
     // the plan line for the editor (posts added / removed by s along it)
     path: ss.map((s) => ({ s, ...line.at(s) })),
     handrail,
+    // the handrail's ends at a post: cut plumb (flush with the post's face)
+    plumb: { start: h0 > line.s0 + 1e-6, end: h1 < line.s1 - 1e-6 },
     posts: postModels,
     removedPosts: spots.filter((p) => removed.has(p.id)).map((p) => ({ id: p.id, s: p.s, at: line.at(p.s) })),
     balusters,
@@ -341,17 +352,47 @@ function section(line, config) {
  * evenly ≤ `wallRailBracketSpacingMm` apart, the outer ones `wallRailBracketEndMm` in from the ends (at least two).
  * A wall "above the steps" lower than the handrail (+ 50 mm for the bracket) carries none — WARNING CLAD-WALL-RAIL-LOW.
  */
+/** A walled run's wall handrail edits (`wallRailEdits[run.id]`, user request 2026-11-13) with the defaults. */
+export function wallRailEditOf(config, run) {
+  const e = config.wallRailEdits?.[run.id] || {};
+  return {
+    on: typeof e.on === 'boolean' ? e.on : !!config.wallRails?.[run.key.flight]?.[run.key.side],
+    fromMm: e.fromMm || 0,
+    toMm: e.toMm || 0,
+    heightMm: e.heightMm ?? config.wallRailHeightMm,
+    return: typeof e.return === 'boolean' ? e.return : !!config.wallRailReturn,
+  };
+}
+
+/** A walled run's name for the lists: „bieg 1 P, stopnie 3–9” (numbers as on the plan, a landing „P10”). */
+export function wallRunLabel(run) {
+  const nums = run.pieces.map((p) => `${p.flat ? 'P' : ''}${p.element.index + 1}`);
+  const range = nums.length > 1 ? `${nums[0]}–${nums.at(-1)}` : nums[0] || '';
+  const what = run.pieces.every((p) => p.flat) ? 'podest' : run.pieces.length > 1 ? 'stopnie' : 'stopień';
+  return `bieg ${run.key.flight + 1} ${run.key.side === 'left' ? 'L' : 'P'}${range ? `, ${what} ${range}` : ''}`;
+}
+
+/** The least length of a wall handrail cut back by hand (mm). */
+export const WALL_RAIL_MIN_MM = 200;
+
 function wallRail(run, config) {
   const { pieces } = run;
   const id = `wall-rail-${run.id}`;
-  const top = topOver(pieces, config.wallRailHeightMm);
+  const edit = wallRailEditOf(config, run);
+  const top = topOver(pieces, edit.heightMm);
   const off = -(config.wallRailClearanceMm + config.handrailWidthMm / 2);
-  const s0 = pieces[0].s0;
-  const s1 = pieces[pieces.length - 1].s1;
+  // the run's own extent and the rail's — cut back from either end by hand (dragged on the plan, mode „▮ Słupy”)
+  const runS0 = pieces[0].s0;
+  const runS1 = pieces[pieces.length - 1].s1;
+  const len = runS1 - runS0;
+  const from = Math.max(0, Math.min(edit.fromMm, len - WALL_RAIL_MIN_MM));
+  const to = Math.max(0, Math.min(edit.toMm, len - WALL_RAIL_MIN_MM - from));
+  const s0 = runS0 + from;
+  const s1 = runS1 - to;
   const zc = (s) => zAt(top, s) - config.handrailHeightMm / 2;
   const ss = [s0, ...top.map((q) => q.s).filter((s) => s > s0 + 1e-6 && s < s1 - 1e-6), s1];
   let handrail = ss.map((s) => ({ ...runPoint(run, s, off), z: zc(s) }));
-  if (config.wallRailReturn) handrail = [{ ...runPoint(run, s0, 0), z: zc(s0) }, ...handrail, { ...runPoint(run, s1, 0), z: zc(s1) }];
+  if (edit.return) handrail = [{ ...runPoint(run, s0, 0), z: zc(s0) }, ...handrail, { ...runPoint(run, s1, 0), z: zc(s1) }];
   const a = s0 + config.wallRailBracketEndMm;
   const b = s1 - config.wallRailBracketEndMm;
   const count = Math.max(2, Math.ceil((b - a) / config.wallRailBracketSpacingMm - 1e-9) + 1);
@@ -359,13 +400,15 @@ function wallRail(run, config) {
   const brackets = spots.map((s) => ({ s, wall: runPoint(run, s, 0), rail: runPoint(run, s, off), z: zc(s) - config.handrailHeightMm / 2 }));
   let lengthMm = 0;
   for (let k = 1; k < handrail.length; k++) lengthMm += Math.hypot(handrail[k].x - handrail[k - 1].x, handrail[k].y - handrail[k - 1].y, handrail[k].z - handrail[k - 1].z);
-  return { id, kind: 'wall', key: run.key, handrail, brackets, lengthMm, treadCount: pieces.filter((p) => !p.flat).length, outward: runOutward(run) };
+  const treadCount = pieces.filter((p) => !p.flat && p.s1 > s0 + 1 && p.s0 < s1 - 1).length;
+  return { id, runId: run.id, label: wallRunLabel(run), kind: 'wall', key: run.key, handrail, brackets, lengthMm, treadCount, outward: runOutward(run), s0, s1, runS0, runS1, fromMm: from, toMm: to, heightMm: edit.heightMm, return: edit.return, ends: { start: runPoint(run, s0, off), end: runPoint(run, s1, off) } };
 }
 
 /** @returns {{sections: object[], wallRails: object[], diagnostics: object[]}} */
 export function buildBalustrade(built, config) {
   const lines = [];
   const wallRails = [];
+  const wallRailSpots = [];
   const diagnostics = [];
   for (const run of buildSideRuns(built.concrete, config)) {
     if (!run.pieces.length) continue;
@@ -374,11 +417,17 @@ export function buildBalustrade(built, config) {
     // wall) — only the skirting and the cover stringer follow it there
     if (run.end) continue;
     if (run.walled) {
-      if (!config.wallRails?.[run.key.flight]?.[run.key.side]) continue;
+      const edit = wallRailEditOf(config, run);
+      if (!edit.on) {
+        // (a walled stretch without one: offered on the plan — a click puts one there)
+        const off = -(config.wallRailClearanceMm + config.handrailWidthMm / 2);
+        wallRailSpots.push({ runId: run.id, label: wallRunLabel(run), key: run.key, a: runPoint(run, run.pieces[0].s0, off), b: runPoint(run, run.pieces.at(-1).s1, off) });
+        continue;
+      }
       const w = run.wall;
-      const need = config.wallRailHeightMm + 50;
+      const need = edit.heightMm + 50;
       if ((w?.type === 'low' || w?.type === 'above') && w.heightAboveMm > 0 && w.heightAboveMm < need) {
-        diagnostics.push(createDiagnostic({ ruleId: 'CLAD-WALL-RAIL-LOW', severity: 'WARNING', elementType: 'railing', elementId: `wall-rail-${run.id}`, parameter: 'heightAboveMm', value: w.heightAboveMm, expected: `>= ${need}`, unit: 'mm', message: `Bieg ${run.key.flight + 1}, strona ${run.key.side === 'left' ? 'lewa' : 'prawa'}: ściana ma tylko ${w.heightAboveMm} mm nad noskami — poręcz przyścienna (${config.wallRailHeightMm} mm + uchwyt) się na niej nie zmieści. Podnieś ścianę albo daj balustradę.` }));
+        diagnostics.push(createDiagnostic({ ruleId: 'CLAD-WALL-RAIL-LOW', severity: 'WARNING', elementType: 'railing', elementId: `wall-rail-${run.id}`, parameter: 'heightAboveMm', value: w.heightAboveMm, expected: `>= ${need}`, unit: 'mm', message: `Bieg ${run.key.flight + 1}, strona ${run.key.side === 'left' ? 'lewa' : 'prawa'}: ściana ma tylko ${w.heightAboveMm} mm nad noskami — poręcz przyścienna (${edit.heightMm} mm + uchwyt) się na niej nie zmieści. Podnieś ścianę albo daj balustradę.` }));
         continue;
       }
       wallRails.push(wallRail(run, config));
@@ -388,7 +437,7 @@ export function buildBalustrade(built, config) {
     lines.push(stairLine(run, config));
   }
   if (config.railingAntresola) lines.push(...antresolaLines(built, config));
-  return { sections: lines.map((l) => section(l, config)), wallRails, diagnostics };
+  return { sections: lines.map((l) => section(l, config)), wallRails, wallRailSpots, diagnostics };
 }
 
 /** The nearest point of a section's line to a plan point → its s (for adding a post on the plan). */

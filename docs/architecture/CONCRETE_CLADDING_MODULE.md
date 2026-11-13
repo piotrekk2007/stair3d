@@ -256,7 +256,9 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   top stepped under the treads — the side nosing over it — or raked `coverStringerAboveMm` over the noses — then no
   side nosing there, `surroundingsModel.js edgeHasRakedCover`).
 - `balustradeModel.js buildBalustrade` — the module's own balustrade (the self-supporting railingSolver.js untouched):
-  `railingSides {[flight]: {left, right}}` (open sides only): a decorative post at each end, the handrail
+  `railingSides {[flight]: {left, right}}` (open sides only): a decorative post at each end (the handrail stops at its
+  face towards the run, that end cut PLUMB — `section.plumb`, `claddingRenderer.js railPiece`; user report 2026-11-13:
+  it ran on through the post to its far face and its square end stuck out past it on the pitch), the handrail
   `railingHeightMm` over the noses (level over a landing), `balustersPerTread` on the treads (on a landing ≤
   `railingMaxClearMm` apart), the axis `railingInsetMm` in from the tread ends; `railingAntresola`: round the opening
   on the floor above (`antresolaSetbackMm` back, `railingAntresolaHeightMm`), not on the exit edge, a post at every
@@ -452,6 +454,10 @@ neck, dome) and `none` (the shaft to the top). Tests: `__tests__/trimCaps.test.j
   nosing + riser board, `trimBoardDepthMm` = `exitNosingDepthMm`), so the corner cut is one straight 45° line; the panel's
   „Wymiary jak nosek antresoli (45°)” switches back to them, the sliders set own values. The trim model returns the nosing's mitred outline
   (`exitNosingOutlines`), the orchestrator puts it on the nosing (`mitred`, its length anew).
+- The exit edge = an opening edge on the last back edge's line AND overlapping it (user report 2026-11-13: a U's opening
+  edge over the lower flight lies on that line too and was taken for the exit — no trim could go there). A trimmed edge
+  running straight on into the antresola nosing goes on to the nosing's end, butted square. Tests:
+  `__tests__/railEditsAndTrim.test.js`.
 - The 3D view's layers (bottom right, „Warstwy”, as the self-supporting HUD): concrete, treads (+ noses, trims),
   risers, skirting / cover stringers, balustrade, LED, walls, slab, the linked floor — view state only, remembered in
   this browser (`stair3d.claddingLayers`); the presentation's own slab / walls switches on top.
@@ -541,6 +547,13 @@ bracket an arm + stub + wall plate, in the `Railing` group), plan (the line + a 
 (`ledHandrailEnabled`), the quote („Poręcz przyścienna” per mb — `railing-handrail` —, „Uchwyty” per piece —
 `railing-wall-bracket` — from the shared list, labour `wall-rail` per mb). Folder „Poręcz przyścienna”. Tests:
 `__tests__/wallRail.test.js`.
+- One by one (user request 2026-11-13: „generują się jak chcą”): `wallRailEdits[run id]` (`sideRuns.js` — every walled
+  stretch) `{on, fromMm, toMm, heightMm, return}` — absent = the flight side's switch / the folder's settings
+  (`wallRailEditOf`); `fromMm` / `toMm` cut it back from its start / end (kept ≥ `WALL_RAIL_MIN_MM` 200), the brackets
+  spread anew over what is left. A walled stretch without one → `wallRailSpots`. Edited in the list „Poręcze
+  przyścienne” under the sides table (on, od pocz. −, od końca −, wys., końce) and on the plan in „▮ Słupy”: the rail's end
+  circles dragged along the wall (snapped to the steps' edges within 12 px, else 10 mm), a click on the rail = none
+  there, on the dashed walled stretch = one there. Tests: `__tests__/railEditsAndTrim.test.js`.
 
 ## The presentation mode (user request 2026-11-05, as built)
 
