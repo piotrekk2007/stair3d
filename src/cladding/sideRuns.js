@@ -29,6 +29,16 @@ export function buildSideRuns(concrete, config) {
   // every flight's frame: from its first straight step (a flight that is only winders / a landing has none)
   const frames = new Map();
   for (const e of els) if (e.kind === 'step' && !frames.has(e.flight)) frames.set(e.flight, e.frame);
+  // a flight that is only a winder zone (a stair starting with winders at a corner — user report 2026-11-13: no
+  // skirting along its wall): the zone's own frame (its incoming direction); the flight after a zone the stair ends with
+  // (no step of its own): the zone's frame turned 90° its way (r = f turned clockwise — a right turn walks on along r)
+  for (const e of els) if (e.kind === 'winder' && e.frame && !frames.has(e.flight)) frames.set(e.flight, e.frame);
+  for (const e of els) {
+    if (e.kind !== 'winder' || !e.frame || frames.has(e.flight + 1)) continue;
+    const k = e.turn === 'left' ? -1 : 1;
+    const f = { x: e.frame.r.x * k, y: e.frame.r.y * k };
+    frames.set(e.flight + 1, { o: e.frame.o, f, r: { x: f.y, y: -f.x } });
+  }
   const finishedTop = (e) => e.topZ + finishThicknessMm(e, config);
   const runs = new Map();
   els.forEach((e, i) => {

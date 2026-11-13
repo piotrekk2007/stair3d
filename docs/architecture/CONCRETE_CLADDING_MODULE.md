@@ -249,6 +249,10 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   step's side, a landing's / zone's side by its direction, an L landing's back edge for the next flight; never the side
   a turning landing's next flight leaves from) with s along the flight, the finished top, the height below, the
   concrete's soffit (`soffitAt`); `walled` from the walls. One source for the three elements below.
+  The flight's frame (its s direction) = its first straight step's; a flight that is ONLY a winder zone (the stair
+  starting with winders at a corner) takes the zone's own frame, and the flight after a zone the stair ENDS with (no
+  step of its own) the zone's frame turned 90° its way (user report 2026-11-13: no skirting along the zone's wall —
+  such a flight had no frame, so no run). Tests: `__tests__/winderFlightRuns.test.js`.
 - `finishModel.js buildFinishBoards` — boards in their own vertical plane (polygon in s / z, `origin`, `dir`,
   `normal`, thickness; blank along the top line): the SKIRTING on a walled side (`skirtingEnabled`, bottom cut to the
   finished treads and risers, top raked through the noses + `skirtingHeightMm` — one board —, or STEPPED;

@@ -594,7 +594,8 @@ joiners do (`finishModel.js steppedSkirtingParts`: horizontal on the treads, ver
 vertical ones notched for the noses), cut through its thickness at a turn's wall corner (`cornerCuts`); every tread
 typed L / P / CZ / PL by its side nosings (`treadSideType`, settable per tread). Walls as a LIST per flight side and
 step range (`config.wallList`, `wallEdits.js`, types full / low / above — from the stair's concrete up — / under; the
-plan mode „▥ Ściany”); the side runs split where the wall changes (`run.id`). Risers behind the tread below and into the tread above's
+plan mode „▥ Ściany”); the side runs split where the wall changes (`run.id`); a flight that is only a winder zone (or follows a final one)
+gets its frame from the zone, so its walls get skirting too. Risers behind the tread below and into the tread above's
 groove (`riserMount 'behind'`, `riserTopOverlapMm`) or carpet ones between the treads on loose tongues (`'carpet'`,
 priced per mb); the quote option „kanały i obróbka krawędzi” (per tread). The production order „🏭 Zamówienie PDF”
 (`export/productionOrder.js`: groups with the edges + profile drawings, „t x w x l - typ - n szt.”, large type; the
