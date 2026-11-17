@@ -230,7 +230,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
 - `treadSolver.js` `TreadModel`: elevation, direction, widths, nominal/final edges, nosed `outline`, `winderInfo`
   (passthrough), `winderBlank` (`winderBlank.js` — the production blank incl. nosing, used by plan/3D labels/takeoff),
   `notch` (underside groove for the riser overlap: `strip`, `undersides` so the nosing keeps full thickness, `outline`
-  for the DXF). Nosing slides front corners along the tread's FINAL sides (`nosingUtils.sideDirection`); the corners
+  for the DXF). A LANDING's front is a tread's front (user report 2026-11-17): nosed, its riser behind the edge
+  (`inward` always), the groove, the wanga's `riserRecess` — it used to be an un-nosed plate with its riser in front,
+  16 mm into the tread below. Nosing slides front corners along the tread's FINAL sides (`nosingUtils.sideDirection`); the corners
   are the OUTLINE's own on the front edge's line (`withOutlineFrontCorners` — a triangular winder's apex, which then
   slides along its back edge; also the riser groove).
 - **Starter steps** (stopnie zapraszające, `starterSteps.js`, user decisions 2026-10-20 — the block version withdrawn;

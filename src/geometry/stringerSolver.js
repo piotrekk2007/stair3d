@@ -240,7 +240,8 @@ export function buildStringerModel(planLayout, config, side) {
         const tread = planLayout.treads[b.treadIndex];
         // The wanga steps back by the riser board's own thickness (the riser stands in that gap) — NOT by
         // the nosing, which is only an overhang measured forward from the riser face.
-        const riserRecess = hasRiserBoards && tread.type !== 'landing' && riserBoardThickness > 0 ? riserBoardThickness : 0;
+        // (a landing too: its riser stands behind its front edge like a tread's — user report 2026-11-17)
+        const riserRecess = hasRiserBoards && riserBoardThickness > 0 ? riserBoardThickness : 0;
         return {
           ...b,
           bearingElevation: (tread.index + 1) * riserHeight - treadThickness,

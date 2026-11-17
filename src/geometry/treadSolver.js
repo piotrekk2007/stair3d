@@ -162,14 +162,14 @@ function applyNosing(tread, nosing) {
 // just in the opposite direction, to get the notch's own BACK boundary (the groove spans from
 // there forward to the tread's own structural front edge).
 //
-// Never for a landing: its innerChain is empty by design (nominalEdgesOf's own doc comment) so
-// shiftFrontEdge (which needs innerChain[1]) has nothing to recede along — the same reason nosing
-// itself is already zeroed for a landing.
+// A landing too (user report 2026-11-17): its front is a tread's front — nosing, the riser behind its front edge and
+// this groove; shiftFrontEdge takes the sides from the OUTLINE (its chains are only a fallback), so a landing's
+// empty innerChain does not matter.
 function buildNotch(tread, config) {
   const { hasRiserBoards, riserBoardThickness, riserTopOverlapMm } = config;
-  if (!hasRiserBoards || tread.type === 'landing') return null;
+  if (!hasRiserBoards) return null;
   if (!(riserTopOverlapMm > 0) || !(riserBoardThickness > 0)) return null;
-  if (!(tread.innerChain?.length > 1) || !(tread.outerChain?.length > 1)) return null;
+  if (tread.type !== 'landing' && (!(tread.innerChain?.length > 1) || !(tread.outerChain?.length > 1))) return null;
 
   const t = withOutlineFrontCorners(tread);
   const [inner0, outer0] = t.frontEdge;
@@ -202,9 +202,9 @@ export function notchUndersides(outline, strip) {
  */
 export function buildTreadModel(tread, config) {
   const { riserHeight, treadThickness, nosing } = config;
-  const isLanding = tread.type === 'landing';
-  // podest to płaska płyta, bez wysuniętego noska; a starter step's outline already has its nosing (starterSteps.js)
-  const effectiveNosing = isLanding || tread.starter ? 0 : nosing;
+  // a landing's front is nosed like every tread's (user report 2026-11-17 — it had none, and its riser stood in
+  // front of its edge, 16 mm into the tread below); a starter step's outline already has its nosing (starterSteps.js)
+  const effectiveNosing = tread.starter ? 0 : nosing;
 
   const { front: frontNominal, back: backNominal } = nominalEdgesOf(tread, config);
   const frontEdge = { nominal: frontNominal, final: tread.frontEdge, overridden: !edgesEqual(frontNominal, tread.frontEdge) };

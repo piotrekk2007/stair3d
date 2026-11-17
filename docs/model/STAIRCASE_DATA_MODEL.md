@@ -319,7 +319,7 @@ Stopień jako **obiekt geometryczny**, nie cztery przypadkowe punkty.
     backEdge.finalOuter, frontEdge.finalOuter]` (kolejność jak dziś w `planLayout.js`)
   - `topSurface: {elevation: Z_top(globalIndex), outline}` (góra stopnia)
   - `bottomSurface: {elevation: Z_bottom(globalIndex), outline}` (spód stopnia)
-  - `nosingLine` (tylko gdy nie jest to stopień podestowy — landing nie ma noska)
+  - `nosingLine` (podest też — od 2026-11-17 czoło podestu ma nosek, podstopień za krawędzią i rowek jak stopień)
   - `area` (pole `outline`, do walidacji degeneracji — dzisiejszy `signedArea`)
 - **Zależy od:** `frontEdge`, `backEdge` (oba `TreadEdge`), macierzystego `Run`
   (`localWalkingDirection` dla zabiegu), `Staircase.treadThickness/nosing/riserHeight`.

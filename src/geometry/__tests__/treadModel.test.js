@@ -80,23 +80,43 @@ test('buildTreadModels builds one model per tread, in order', () => {
   models.forEach((m, i) => assert.equal(m.index, i));
 });
 
-test('landing tread has no nosing applied to its outline (outline == raw outline)', () => {
+// user report 2026-11-17: the landings had no nosing (a flat plate by an old decision) — their front is a tread's front
+test('a landing is nosed at its front edge like a tread (L landing; U with two landings, each one)', () => {
   const { config, planLayout } = build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 2, treadsLegB: 2 });
   const landing = planLayout.treads.find((t) => t.type === 'landing');
   const model = buildTreadModel(landing, config);
-  assert.deepEqual(model.outline, landing.outline);
+  const [a, b] = landing.frontEdge;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  // the farthest outline point in front of the front edge (towards the tread below) = the nosing
+  const below = planLayout.treads[landing.index - 1];
+  const cb = below.outline.reduce((s, q) => ({ x: s.x + q.x, y: s.y + q.y }), { x: 0, y: 0 });
+  let n = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len };
+  if ((cb.x / below.outline.length - a.x) * n.x + (cb.y / below.outline.length - a.y) * n.y < 0) n = { x: -n.x, y: -n.y };
+  const ahead = (o) => Math.max(...o.map((q) => (q.x - a.x) * n.x + (q.y - a.y) * n.y));
+  assert.ok(Math.abs(ahead(landing.outline)) < 1e-6, 'the raw outline ends at the front edge');
+  assert.ok(Math.abs(ahead(model.outline) - config.nosing) < 1e-6, `nosed by ${config.nosing} mm`);
+
+  const u = build({ stairType: 'U', turn1Type: 'landing', turn2Type: 'landing', treadsLegA: 4, treadsLegB: 1, treadsLegC: 4, mergeLandings: false, uSingleWinderZone: false });
+  const landings = buildTreadModels(u.planLayout, u.config).filter((m) => m.type === 'landing');
+  assert.equal(landings.length, 2);
+  for (const m of landings) {
+    const raw = u.planLayout.treads[m.index].outline;
+    assert.notDeepEqual(m.outline, raw, `landing ${m.index} nosed`);
+  }
 });
 
 // TreadModel.notch: a groove cut into a tread's own underside so the riser below it can overlap
 // riserTopOverlapMm UP into it (see riserSolver.js RiserModel.elevation.top) without a wood-
 // movement light gap. Only exists when there is something to notch for.
-test('notch is null with no riser boards, on a landing, and with overlap/riser-thickness at 0', () => {
+test('notch is null with no riser boards and with overlap/riser-thickness at 0; a landing has one (its riser under it)', () => {
   const noRisers = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: false });
   assert.equal(buildTreadModel(noRisers.planLayout.treads[1], noRisers.config).notch, null);
 
   const landingCase = build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 2, treadsLegB: 2, hasRiserBoards: true });
   const landing = landingCase.planLayout.treads.find((t) => t.type === 'landing');
-  assert.equal(buildTreadModel(landing, landingCase.config).notch, null);
+  const notch = buildTreadModel(landing, landingCase.config).notch;
+  assert.ok(notch, 'the landing gets the groove for its riser (user report 2026-11-17)');
+  assert.equal(notch.strip.length, 4);
 
   const zeroOverlap = build({ stairType: 'straight', treadsLegA: 3, hasRiserBoards: true, riserTopOverlapMm: 0 });
   assert.equal(buildTreadModel(zeroOverlap.planLayout.treads[1], zeroOverlap.config).notch, null);

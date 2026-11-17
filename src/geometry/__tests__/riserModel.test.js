@@ -32,15 +32,24 @@ test('straight tread: one panel, zero direction spread', () => {
   assert.equal(model.inward, true);
 });
 
-test('landing tread: riser thickness/direction use the landing-specific config, inward=false', () => {
+// user report 2026-11-17: the landing's riser stood IN FRONT of its edge (inward=false) — over the back of the tread
+// below it, colliding with it; it stands behind the edge, under the landing, like every tread's riser
+test('landing tread: its riser behind its front edge (inward), not into the tread below', () => {
   const { config, planLayout } = build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 2, treadsLegB: 2, riserBoardThickness: 22 });
   const landing = planLayout.treads.find((t) => t.type === 'landing');
   const model = buildRiserModel(landing, config);
 
   assert.equal(model.type, 'landing');
   assert.equal(model.thickness, 22);
-  assert.equal(model.inward, false);
+  assert.equal(model.inward, true);
   assert.equal(model.panels.length, 1);
+  // the panel's thickness goes along its direction = into the landing (away from the tread below)
+  const below = planLayout.treads[landing.index - 1];
+  const [p] = model.panels;
+  const mid = { x: (p.p0.x + p.p1.x) / 2 + p.direction.x * 11, y: (p.p0.y + p.p1.y) / 2 + p.direction.y * 11 };
+  const cBelow = below.outline.reduce((s, q) => ({ x: s.x + q.x / below.outline.length, y: s.y + q.y / below.outline.length }), { x: 0, y: 0 });
+  const dEdge = (q) => (q.x - p.p0.x) * p.direction.x + (q.y - p.p0.y) * p.direction.y;
+  assert.ok(dEdge(mid) > 0 && dEdge(cBelow) < 0, 'the riser board lies on the landing\'s side of its edge');
 });
 
 test('winder tread: builds a fan of WINDER_RISER_FAN_PANELS panels', () => {

@@ -818,3 +818,14 @@ test('no top-riser housing without risers, on a cut (overlay) wanga, and the boa
   const onGeo = buildStringerConstructionGeometry(buildStringerModel(on.planLayout, on.config, 'outer'), on.config);
   assert.ok(onGeo[onGeo.length - 1].ends.end.u > offGeo[offGeo.length - 1].ends.end.u, 'with the top riser the housed board reaches further');
 });
+
+// user report 2026-11-17: a landing's riser stands behind its front edge like a tread's, so the wanga steps back for it
+// there too (it had riserRecess 0 — the riser stood in front of the landing, in the tread below)
+test('a landing bearing steps back by the riser thickness (its riser under it, like a tread\'s)', () => {
+  const { config, planLayout } = build({ stairType: 'L', turn1Type: 'landing', treadsLegA: 3, treadsLegB: 3, hasRiserBoards: true, riserBoardThickness: 18, stringerConstructionTypeOuter: 'cut' });
+  const model = buildStringerModel(planLayout, config, 'outer');
+  const landingIndex = planLayout.treads.find((t) => t.type === 'landing').index;
+  const bearings = model.segments.flatMap((s) => s.treadBearings).filter((b) => b.treadIndex === landingIndex && b.ownsStart);
+  assert.ok(bearings.length > 0);
+  for (const b of bearings) assert.equal(b.riserRecess, 18);
+});

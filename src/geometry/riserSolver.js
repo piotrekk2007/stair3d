@@ -104,8 +104,9 @@ export function angleBetweenDeg(a, b) {
  * @property {'straight'|'winder'|'landing'} type
  * @property {{bottom:number, top:number}} elevation
  * @property {number} thickness  mm
- * @property {boolean} inward    Czy grubość idzie do wnętrza schodów (stopień) czy na
- *   zewnątrz (podest) — patrz historyczny komentarz w git log tego pliku.
+ * @property {boolean} inward    Grubość idzie do wnętrza schodów (za krawędź czołową, pod stopień) —
+ *   zawsze true; podest był kiedyś `false` (podstopień przed krawędzią, w tył niższego stopnia — zmienione
+ *   2026-11-17, zgłoszenie użytkownika).
  * @property {RiserFrontEdge} frontEdge  Nominal/final split — patrz nagłówek pliku.
  * @property {RiserPanel[]} panels  1 panel (prosty/podest) albo WINDER_RISER_FAN_PANELS
  *   (zabieg) — ZAWSZE zbudowane z `frontEdge.final`.
@@ -157,7 +158,6 @@ function buildStraightOrLandingPanel(tread, finalEdge) {
  */
 export function buildRiserModel(tread, config) {
   const { riserHeight, treadThickness, riserBoardThickness, riserTopOverlapMm } = config;
-  const isLanding = tread.type === 'landing';
   // The riser board's own physical thickness is ALWAYS config.riserBoardThickness — a real,
   // independently configured material dimension (a sheet of plywood, an MDF board), never
   // derived from `nosing` (the tread's own overhang past the riser line, an unrelated
@@ -167,7 +167,9 @@ export function buildRiserModel(tread, config) {
   // stringerSolver.js's `riserRecess` (how far the wanga steps back for the riser) equals this same
   // riserBoardThickness; nosing is only an overhang measured forward from the riser face.
   const thickness = riserBoardThickness;
-  const inward = !isLanding;
+  // always behind the front edge, under the tread (a landing too — user report 2026-11-17: standing in front of the
+  // landing's edge it took the back 16 mm of the tread below, and the landing had no nosing over it)
+  const inward = true;
 
   // Góra podstopnia i-tego = spód i-tego stopnia (patrz treadSolver.js: spód = (i+1)*h -
   // grubość_stopnia); cała bryła obniżona o treadThickness względem teoretycznej linii
