@@ -946,6 +946,22 @@ function railingSAlong(sectionId, raw, mmPerPx) {
   }
   return best ? best.s : Math.round(along / 10) * 10;
 }
+// A wall handrail's end dragged on the plan (railingSolver.js wallOnlySection, user request 2026-11-17): `s` along the
+// section's path → that end's cut back (`wallFromMm` / `wallToMm`); null = back to the section's own end.
+function wallRailEndDrag(sectionId, key, s, final) {
+  const built = lastModels?.railingModel?.sections?.find((x) => x.id === sectionId);
+  const section = (config.railingSections || []).find((x) => x.id === sectionId);
+  if (!built?.wallEdit || !section) return;
+  const field = key === 'wall-start' ? 'wallFromMm' : 'wallToMm';
+  const cut = s === null ? 0 : Math.max(0, Math.round(key === 'wall-start' ? s : built.wallEdit.totalMm - s));
+  if (cut > 0) section[field] = cut;
+  else delete section[field];
+  rebuild();
+  if (final) {
+    uiRefresh?.();
+    commitHistory();
+  }
+}
 function applyRailingPosts(change, { final = true } = {}) {
   config.railingPostEdits = applyRailingPostEdit(config.railingPostEdits, change);
   rebuild();
@@ -1883,10 +1899,11 @@ planApi = attachPlanInteractions({
   onRailingPostDrag: (sectionId, manualId, raw, final, mmPerPx, spotKey) => {
     const s = railingSAlong(sectionId, raw, mmPerPx);
     if (s === null) return;
-    if (manualId) applyRailingPosts({ action: 'move', sectionId, id: manualId, s }, { final });
+    if (spotKey === 'wall-start' || spotKey === 'wall-end') wallRailEndDrag(sectionId, spotKey, s, final);
+    else if (manualId) applyRailingPosts({ action: 'move', sectionId, id: manualId, s }, { final });
     else if (spotKey) applyRailingPosts({ action: 'move-auto', sectionId, key: spotKey, s }, { final });
   },
-  onRailingPostReset: (sectionId, key) => applyRailingPosts({ action: 'reset-auto', sectionId, key }),
+  onRailingPostReset: (sectionId, key) => (key === 'wall-start' || key === 'wall-end' ? wallRailEndDrag(sectionId, key, null, true) : applyRailingPosts({ action: 'reset-auto', sectionId, key })),
   // a starter step's handle dragged on the plan (geometry/starterSteps.js starterDragValue): one undo step per drag
   onStarterHandleDrag: (index, kind, point, final) => {
     const tread = lastModels?.planLayout?.treads?.[index];

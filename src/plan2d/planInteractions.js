@@ -744,7 +744,7 @@ export function attachPlanInteractions(opts) {
       const { sectionId, manualId, spotKey, postId, moved, last } = dragState;
       dragState = null;
       if (moved && last) onRailingPostDrag(sectionId, manualId, last, true, mmPerPx(), spotKey);
-      else if (onPostClick) onPostClick(postId); // a click without a drag selects it
+      else if (onPostClick && postId) onPostClick(postId); // a click without a drag selects it (a wall handrail's end has none)
       return;
     }
 

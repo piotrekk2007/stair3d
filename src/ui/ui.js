@@ -851,6 +851,7 @@ export function createUI({
         if (mount.value === 'wall') s.mount = 'wall';
         else delete s.mount;
         commitSections();
+        renderSections();
       });
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -863,6 +864,47 @@ export function createUI({
       });
       row.append(side, from, document.createTextNode('–'), to, mount, remove);
       sectionsBox.appendChild(row);
+      // a wall handrail's own edits (user request 2026-11-17; railingSolver.js wallOnlySection): cut back from either
+      // end, its own height, its ends — the ends are also dragged on the plan („▮ Słupki”)
+      if (s.mount === 'wall') {
+        const wallRow = document.createElement('div');
+        wallRow.className = 'railing-section-row railing-wall-row';
+        const num = (key, label, title, placeholder = '0') => {
+          const wrap = document.createElement('label');
+          wrap.title = title;
+          wrap.append(document.createTextNode(label));
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = '0';
+          input.step = '10';
+          input.placeholder = placeholder;
+          input.value = s[key] ? String(s[key]) : '';
+          input.addEventListener('change', () => {
+            const v = Math.round(Number(input.value));
+            if (input.value === '' || !Number.isFinite(v) || v <= 0) delete s[key];
+            else s[key] = v;
+            commitSections();
+            renderSections();
+          });
+          wrap.append(input);
+          return wrap;
+        };
+        const ends = document.createElement('select');
+        ends.title = 'Zakończenia poręczy przy ścianie';
+        [['straight', 'końce proste'], ['return', 'końce zawinięte do ściany']].forEach(([value, label]) => ends.add(new Option(label, value, false, (s.wallEnds || 'straight') === value)));
+        ends.addEventListener('change', () => {
+          if (ends.value === 'return') s.wallEnds = 'return';
+          else delete s.wallEnds;
+          commitSections();
+        });
+        wallRow.append(
+          num('wallFromMm', 'od pocz. −', 'Skróć poręcz od początku odcinka [mm, wzdłuż biegu] — albo przeciągnij jej koniec na planie w trybie „▮ Słupki”'),
+          num('wallToMm', 'od końca −', 'Skróć poręcz od końca odcinka [mm, wzdłuż biegu] — albo przeciągnij jej koniec na planie w trybie „▮ Słupki”'),
+          num('wallHeightMm', 'wys.', 'Góra poręczy nad linią nosków [mm] — puste = jak balustrada', String(config.railingHeightMm)),
+          ends
+        );
+        sectionsBox.appendChild(wallRow);
+      }
     });
     const add = document.createElement('button');
     add.type = 'button';

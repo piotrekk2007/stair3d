@@ -452,6 +452,16 @@ export function railingPostEditXML(railingModel, selection = null) {
   }
   for (const s of railingModel.sections || []) {
     if (!s.valid || !(s.path?.length >= 2)) continue;
+    // a wall handrail (railingSolver.js wallOnlySection, user request 2026-11-17): its two ends, dragged along the path
+    // (= cut back from that end), right-click = back to the section's end; no posts to add
+    if (s.wallEdit) {
+      const w = s.wallEdit;
+      for (const [key, at, cut] of [['wall-start', w.start, w.fromMm], ['wall-end', w.end, w.toMm]]) {
+        const tip = `Koniec poręczy przy ścianie${cut > 0 ? ` (skrócona o ${Math.round(cut)} mm)` : ''}: przeciągnij wzdłuż biegu${cut > 0 ? ', prawy klik — do końca odcinka' : ''}`;
+        xml += `<rect class="railing-post-handle wall-rail-end" data-section-id="${s.id}" data-post-id="" data-kind="wall-end" data-s="" data-manual-id="" data-spot-key="${key}" data-movable="1" data-moved="${cut > 0 ? 1 : 0}" data-suppressible="0" x="${fmt(at.x - px(6))}" y="${fmt(-at.y - px(6))}" width="${fmt(px(12))}" height="${fmt(px(12))}" fill="#e07b00" fill-opacity="${cut > 0 ? 1 : 0.55}" stroke="#5a3d24" stroke-width="2" ${HAIR} pointer-events="all"><title>${tip}</title></rect>`;
+      }
+      continue;
+    }
     xml += `<polyline class="railing-path-hit" data-section-id="${s.id}" points="${s.path.map((p) => `${fmt(p.x)},${fmt(-p.y)}`).join(' ')}" fill="none" stroke="#1a5fb4" stroke-opacity="0.12" stroke-width="${px(18)}" stroke-linecap="round" pointer-events="stroke"><title>Kliknij, żeby dodać słupek</title></polyline>`;
     for (const g of s.suppressedCorners || []) {
       xml += `<circle class="railing-post-ghost" data-section-id="${s.id}" data-s="${g.s}" cx="${fmt(g.at.x)}" cy="${fmt(-g.at.y)}" r="${px(8)}" fill="#fff" fill-opacity="0.6" stroke="#888" stroke-width="1.5" stroke-dasharray="3 2" ${HAIR} pointer-events="all"><title>Słupek narożny wyłączony — kliknij, żeby go przywrócić</title></circle>`;

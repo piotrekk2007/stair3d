@@ -88,8 +88,24 @@ export function sanitizeRailingSections(raw) {
     let id = typeof s.id === 'string' && s.id ? s.id : `railing-${i}`;
     while (seen.has(id)) id = `${id}-x`;
     seen.add(id);
-    out.push({ id, side: s.side, fromStep: s.fromStep, toStep: s.toStep ?? null, ...(s.mount === 'wall' ? { mount: 'wall' } : {}) });
+    out.push({ id, side: s.side, fromStep: s.fromStep, toStep: s.toStep ?? null, ...(s.mount === 'wall' ? { mount: 'wall', ...sanitizeWallRailFields(s) } : {}) });
   });
+  return out;
+}
+
+/** The wall handrail's ends (user request 2026-11-17): cut square, or a return piece back to the wall. */
+export const WALL_RAIL_ENDS = Object.freeze(['straight', 'return']);
+/** A wall handrail shorter than this along its path is not cut back further. */
+export const WALL_RAIL_MIN_MM = 200;
+// a wall-only section's own edits (user request 2026-11-17 — the wall handrail could not be edited at all): cut back
+// from its start / end along its path (mm), its own height over the nosing line, its ends
+function sanitizeWallRailFields(s) {
+  const out = {};
+  const mm = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Number(v)) : 0);
+  if (mm(s.wallFromMm)) out.wallFromMm = mm(s.wallFromMm);
+  if (mm(s.wallToMm)) out.wallToMm = mm(s.wallToMm);
+  if (mm(s.wallHeightMm)) out.wallHeightMm = mm(s.wallHeightMm);
+  if (s.wallEnds === 'return') out.wallEnds = 'return';
   return out;
 }
 
@@ -831,7 +847,7 @@ const WALL_BRACKET_FROM_END_MM = 150;
 
 // One wall handrail: the stretch's nosing nodes moved from the balustrade's line to the wall rail's line, simplified,
 // at the handrail's height; brackets spread evenly, the first and last WALL_BRACKET_FROM_END_MM from its ends.
-function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight }) {
+function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight, returns = false }) {
   const width = config.railingHandrailWidthMm || 0;
   const clearance = config.railingWallRailClearanceMm ?? RAILING_WALL_RAIL_CLEARANCE_MM;
   const gap = Math.max(0, Number(config.stairwellWallGapMm) || 0);
@@ -852,6 +868,20 @@ function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight
     if (lengthMm > SAME_POINT_MM) pieces.push({ start, end, lengthMm });
   }
   if (!pieces.length) return null;
+  // the ends turned back to the wall (`returns`): a level piece from the rail's end square into the wall's face
+  if (returns) {
+    const reach = clearance + width / 2;
+    const toWallAt = (a, b) => {
+      const across = rotate90CW(unit({ x: b.x - a.x, y: b.y - a.y }));
+      return { x: -across.x * sign * reach, y: -across.y * sign * reach };
+    };
+    const s0 = pieces[0].start;
+    const w0 = toWallAt(path[0], path[1]);
+    const e1 = pieces[pieces.length - 1].end;
+    const w1 = toWallAt(path[path.length - 2], path[path.length - 1]);
+    pieces.unshift({ start: { x: s0.x + w0.x, y: s0.y + w0.y, z: s0.z }, end: { ...s0 }, lengthMm: reach, wallReturn: 'start' });
+    pieces.push({ start: { ...e1 }, end: { x: e1.x + w1.x, y: e1.y + w1.y, z: e1.z }, lengthMm: reach, wallReturn: 'end' });
+  }
   annotateCuts(pieces, handrailHeight);
   // brackets
   const spacing = Math.max(200, config.railingWallBracketSpacingMm ?? RAILING_WALL_BRACKET_SPACING_MM);
@@ -877,19 +907,50 @@ function buildWallRail(stretch, { config, sign, offsetMm, centre, handrailHeight
 // A section that is only a wall handrail (`mount: 'wall'`, user request 2026-11-03 — the wall side of a stair whose
 // open side has rods from the ceiling): its whole path on brackets like the wall handrail past a moved end
 // (buildWallRail), no posts, no infill.
-function wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, railTop }) {
-  const centre = (p) => ({ x: p.x, y: p.y, z: railTop(p.z) - handrailHeight / 2 });
-  const wallRail = buildWallRail({ path: nodes }, { config, sign, offsetMm, centre, handrailHeight });
+// Its own edits (user request 2026-11-17, `sanitizeWallRailFields`): cut back `wallFromMm` / `wallToMm` along the
+// path (plan mm; at least WALL_RAIL_MIN_MM stays), its top `wallHeightMm` over the nosing line (absent = the
+// balustrade's railingHeightMm), `wallEnds: 'return'` = both ends turned back into the wall. `wallEdit` = what the
+// plan's handles and the panel read (the ends' plan points on the path, their distances along it).
+function wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, section }) {
+  const cum = [0];
+  for (let i = 1; i < nodes.length; i++) cum.push(cum[i - 1] + planDist(nodes[i - 1], nodes[i]));
+  const total = cum[cum.length - 1];
+  const room = Math.max(0, total - WALL_RAIL_MIN_MM);
+  const fromMm = Math.min(room, Math.max(0, section.wallFromMm || 0));
+  const toMm = Math.min(room - fromMm, Math.max(0, section.wallToMm || 0));
+  const heightMm = section.wallHeightMm > 0 ? section.wallHeightMm : config.railingHeightMm;
+  const ends = section.wallEnds === 'return' ? 'return' : 'straight';
+  const kept = trimNodesAlong(nodes, cum, fromMm, total - toMm);
+  const centre = (p) => ({ x: p.x, y: p.y, z: p.z + heightMm - handrailHeight / 2 });
+  const wallRail = buildWallRail({ path: kept }, { config, sign, offsetMm, centre, handrailHeight, returns: ends === 'return' });
   Object.assign(base, { mount: 'wall', posts: [], postSpots: [], postTopNeeds: {}, wallRailEnds: { start: false, end: false }, baseRail: null });
+  base.wallEdit = { totalMm: total, fromMm, toMm, heightMm, ownHeight: section.wallHeightMm > 0, ends, startS: fromMm, endS: total - toMm, start: { x: kept[0].x, y: kept[0].y }, end: { x: kept[kept.length - 1].x, y: kept[kept.length - 1].y } };
   if (!wallRail) {
     base.diagnostics.push(diag(base.id, 'RAILING-SECTION-INVALID', `Poręcz przyścienna ${base.id}: brak długości do poprowadzenia poręczy — pominięta.`));
     return base;
   }
   base.runs = [{ key: 'wall-all', startPostId: null, endPostId: null, pieces: wallRail.pieces, bent: false, wallRail: true, brackets: wallRail.brackets, startAtPostFace: false, endAtPostFace: false, startOffsetMm: 0, endOffsetMm: 0 }];
   base.handrail = { pieces: wallRail.pieces, totalLengthMm: wallRail.pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
-  base.heightAboveNosing = { minMm: config.railingHeightMm, maxMm: config.railingHeightMm };
+  base.heightAboveNosing = { minMm: heightMm, maxMm: heightMm };
   base.valid = true;
   return base;
+}
+
+// The nodes between plan distances a ≤ b along them (cum = their cumulative plan distances), the cut ends
+// interpolated (z too).
+function trimNodesAlong(nodes, cum, a, b) {
+  const at = (s) => {
+    const i = Math.max(0, Math.min(nodes.length - 2, cum.findIndex((c, j) => j > 0 && c >= s - 1e-9) - 1));
+    const len = cum[i + 1] - cum[i];
+    const t = len > 0 ? Math.max(0, Math.min(1, (s - cum[i]) / len)) : 0;
+    const p = nodes[i];
+    const q = nodes[i + 1];
+    return { ...p, x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t, z: p.z + (q.z - p.z) * t };
+  };
+  const out = [at(a)];
+  for (let i = 0; i < nodes.length; i++) if (cum[i] > a + SAME_POINT_MM && cum[i] < b - SAME_POINT_MM) out.push({ ...nodes[i] });
+  out.push(at(b));
+  return out;
 }
 
 function buildSection(section, ctx) {
@@ -951,7 +1012,7 @@ function buildSection(section, ctx) {
     return !!best && concreteTreads.has(best.index);
   };
   base.path = nodes.map((n) => ({ x: n.x, y: n.y })); // the whole wanga-side path (plan), also where no handrail can follow it
-  if (section.mount === 'wall') return wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, railTop });
+  if (section.mount === 'wall') return wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, section });
 
   const reuseDistance = config.postSize * POST_REUSE_TOLERANCE_FACTOR;
   const existingNear = (p) => (postModels || []).find((post) => Math.hypot(post.position.x - p.x, post.position.y - p.y) < reuseDistance) ?? null;

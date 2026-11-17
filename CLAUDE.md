@@ -376,7 +376,9 @@ Docs: [RAILING_MODEL.md](docs/architecture/RAILING_MODEL.md), [CANTILEVER_MODEL.
   (default; WARNING `CEILING-RODS-BRACKET` > 250 mm) or to the upper ceiling (totalRise + `ceilingRodsTopAboveFloorMm`); WARNING
   `CEILING-RODS-GAP` over `railingMaxClearMm`; 3D (`ceilingRodsRenderer.js`, `Railing` layer), plan dots, takeoff
   (`buildCeilingRodItems`, BALUSTER items by length, `railing-ceiling-rod` per piece), tread DXF through holes (Ø + 2 mm). A balustrade section with
-  `mount: 'wall'` is only a wall handrail on brackets along its whole path (`railingSolver.js wallOnlySection`).
+  `mount: 'wall'` is only a wall handrail on brackets along its path (`railingSolver.js wallOnlySection`) — cut back
+  from either end (`wallFromMm` / `wallToMm`), its own height (`wallHeightMm`), ends square or turned to the wall
+  (`wallEnds`): the panel's row under the section + its ends dragged on the plan („▮ Słupki”; user request 2026-11-17).
 - Glass (`railingGlass.js`, `railingInfill` balusters | glass-side (rotule Ø30, handrail on the glass) | glass-posts
   (one pane per span post to post, clamps on posts, post at every plan corner, spans split with the THINNER post));
   VSG 4.4.2/5.5.2, pane ≤ 1800 mm, tint clear/optiwhite/grey/bronze; other numbers DO WERYFIKACJI.

@@ -478,5 +478,15 @@ wall on the other side.
   (`buildWallRail`: `railingWallRailClearanceMm` off the wall, brackets every `railingWallBracketSpacingMm`), one run
   `wall-all` with `wallRail: true`, no posts, no infill; read by every consumer of wall-rail runs (3D, plan, takeoff
   handrail + brackets, structural spans). Allowed on either side, also without a stairwell wall.
+  **Its own edits** (user request 2026-11-17 — the wall handrail could not be edited at all; fields on the section,
+  `sanitizeWallRailFields`, kept only while `mount: 'wall'`): `wallFromMm` / `wallToMm` cut it back from its start /
+  end along the path (plan mm; at least `WALL_RAIL_MIN_MM` 200 stays; `trimNodesAlong`), `wallHeightMm` its own top
+  over the nosing line (absent = `railingHeightMm`; `heightAboveNosing` follows it, so PL-LEGAL-H-01 too),
+  `wallEnds: 'return'` both ends turned back into the wall (a level piece from the rail's end to the wall face,
+  clearance + half the width, `wallReturn: 'start'|'end'`, mitred to the rail, in the takeoff's length). The built
+  section carries `wallEdit {totalMm, fromMm, toMm, heightMm, ends, startS, endS, start, end}`. Panel: under the
+  section's row „od pocz. − / od końca − / wys. / końce”; plan mode „▮ Słupki”: the two ends as orange squares
+  (`.wall-rail-end`, `railingPostEditXML`) dragged along the path (snap to tread edges / 10 mm — `main.js
+  wallRailEndDrag`), right-click = back to the section's end; no posts are added on its path.
 
-Tests: `geometry/__tests__/ceilingRods.test.js`.
+Tests: `geometry/__tests__/ceilingRods.test.js`, `geometry/__tests__/wallRailEdits.test.js`.
