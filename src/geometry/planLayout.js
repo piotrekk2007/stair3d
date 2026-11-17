@@ -734,11 +734,12 @@ function buildHalfTurnLocal(params, treadsIn, windersCount, treadsOut) {
   const geo = off === null ? null : halfTurnWinderGeometry({ ...params, walklineOffset: off }, treadsIn, windersCount);
   if (!geo) return null;
   const { stairWidth: W, treadGoing: g } = params;
-  const { s0, Yc, c1, c2, xInnerC, xOuterC, yZoneEndC } = geo;
+  const { s0, c1, c2, xInnerC, xOuterC, yOuter, yZoneEndC } = geo;
   const zoneEnd = treadsIn + windersCount;
   const yEnd = yZoneEndC - treadsOut * g;
-  const Oc1 = { x: 0, y: Yc + W };
-  const Oc2 = { x: xOuterC, y: Yc + W };
+  // (flight C's own width and the zone's own depth to the end wall — winderArc.js halfTurnSizes)
+  const Oc1 = { x: 0, y: yOuter };
+  const Oc2 = { x: xOuterC, y: yOuter };
   const distinct = (pts) => pts.filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > 1e-9);
   const outerPath = [{ x: 0, y: 0 }, Oc1, Oc2, { x: xOuterC, y: yEnd }];
   const innerPath = distinct([{ x: W, y: 0 }, c1, c2, { x: xInnerC, y: yEnd }]);
@@ -963,7 +964,7 @@ function buildMultiTurnLayout(config, numTurnsOverride, { reverseSecond = false 
 
   // U with no middle flight laid out as ONE 180° winder zone (config.uSingleWinderZone — winderArc.js isHalfTurnU)
   const half = numTurns === 2 && isHalfTurnU(config)
-    ? buildHalfTurnLocal({ ...params, stringerThickness: config.stringerThickness, postSize: config.postSize, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) }, treadsLegA, halfTurnWinderCount(config), treadsLegC)
+    ? buildHalfTurnLocal({ ...params, stairWidthC: widthC, zoneDepth: widthB, stringerThickness: config.stringerThickness, postSize: config.postSize, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) }, treadsLegA, halfTurnWinderCount(config), treadsLegC)
     : null;
   if (half) return finishLayout(config, { outerFullPath: half.outerPath, innerFullPath: half.innerPath, treads: half.treads, turns: [half.turnInfo], walkPath: half.walkline.path, walkPoints: half.walkline.points });
 

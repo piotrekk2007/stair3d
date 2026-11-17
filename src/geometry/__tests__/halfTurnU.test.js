@@ -264,3 +264,45 @@ test('regression: postless inner wangi meet flush — the piece past a corner ke
     for (const line of [top, bottom]) for (let k = 1; k < line.length; k++) assert.ok(line[k].u >= line[k - 1].u - 1e-6, `${g.segmentId}: the contour steps back at u = ${line[k].u}`);
   }
 });
+
+// user report 2026-11-17 ("test_SM_3"): a U with one 180° zone where flight A is wider than flight C and the zone's
+// depth to the end wall is set by the wall between the flights — the widths of C and B were ignored (C came out as A,
+// B did not change), and the stairwell's rigid B was met as 2 × A
+test('one 180° zone: flight C its own width, the zone its own depth to the end wall (stairWidthB); null = as before', () => {
+  const t = 40;
+  const gap = 120; // axis gap → inner-line gap 80
+  const base = layout({ uAxisGapMm: gap });
+  const own = layout({ uAxisGapMm: gap, stairWidth: 1150, stairWidthC: 1000, stairWidthB: 1300 });
+  const xs = (p) => p.map((q) => q.x);
+  const ys = (p) => p.map((q) => q.y);
+  // the outer line: A at x = 0, C's outer side at A + inner gap + C, the end wall at the dusza line + the depth
+  const outer = own.outerFullPath;
+  assert.ok(near(Math.max(...xs(outer)), 1150 + (gap - t) + 1000, 1e-6), `C's outer side ${Math.max(...xs(outer))}`);
+  const turn = own.turns[0];
+  assert.ok(near(Math.max(...ys(outer)) - turn.centre.y, 1300, 1e-6), 'the end wall 1300 past the dusza line');
+  // the last straight tread of C spans C's width (its inner line at A + gap, its outer at + C)
+  const last = own.treads.at(-1);
+  const span = Math.abs(last.frontEdge[1].x - last.frontEdge[0].x);
+  assert.ok(near(span, 1000 - 2 * 20, 1e-6), `C's tread ${span} (1000 less the housing recess 20 at both wangi)`);
+  // nothing set: the zone as it was (one width, the end wall one width past the dusza line)
+  const def = layout({ uAxisGapMm: gap, stairWidthC: null, stairWidthB: null });
+  assert.deepEqual(def.outerFullPath, base.outerFullPath);
+  assert.ok(near(Math.max(...ys(def.outerFullPath)) - def.turns[0].centre.y, 900, 1e-6));
+});
+
+test('one 180° zone in a stairwell with a rigid B: the axis gap = B − A − C + board (C its own width), B met exactly', async () => {
+  const { buildStaircase } = await import('../buildStaircase.js');
+  const room = { stairwellRoomEnabled: true, stairwellSideAState: 'free', stairwellSideBState: 'rigid', stairwellSideBMm: 2380, stairwellSideCState: 'main', stairwellSideCMm: 3320, stairwellSideAMm: 3320, uWindersTotal: 6, totalRise: 3440, stairPending: false };
+  const b = buildStaircase(cfg({ ...room, stairWidth: 1150, stairWidthC: 1111, stairWidthB: 1024 }));
+  assert.equal(b.stairwellFit.values.uAxisGapMm, 2380 - 1150 - 1111 + 40);
+  const side = (s) => b.stairwell.sides.find((x) => x.side === s);
+  assert.ok(Math.abs(side('B').achieved - 2380) <= 1, `B ${side('B').achieved}`);
+  assert.ok(Math.abs(side('C').achieved - 3320) <= 1, `C ${side('C').achieved}`);
+  assert.equal(b.fullConfig.stairWidth, 1150, 'A kept');
+  assert.equal(b.fullConfig.stairWidthC, 1111, 'C kept');
+  // a B narrower than the two flights: both narrowed by the same amount
+  const tight = buildStaircase(cfg({ ...room, stairWidth: 1150, stairWidthC: 1111, stairWidthB: 1024, stairwellSideBMm: 2000 }));
+  const v = tight.stairwellFit.values;
+  assert.ok(Math.abs(1150 - v.stairWidth - (1111 - v.stairWidthC)) < 1e-6, `both by the same: ${v.stairWidth} / ${v.stairWidthC}`);
+  assert.ok(Math.abs(v.stairWidth + v.stairWidthC - 40 - 2000) < 1e-6, 'axis gap 0 then');
+});

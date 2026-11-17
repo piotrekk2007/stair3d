@@ -335,13 +335,21 @@ export function solveStairwellFit(config, opts = {}) {
   };
 }
 
+// A one-zone U's two flight widths: A's and C's own (`stairWidthC`, null = A's — winderArc.js halfTurnSizes; user
+// request 2026-11-17: A, B (the zone's depth) and C independent)
+export function oneZoneWidths(config) {
+  const wA = Number(config.stairWidth) || 0;
+  return { wA, wC: Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : wA, ownC: Number(config.stairWidthC) > 0 };
+}
+
 // The axis gap of a U laid out as one 180° winder zone that makes its side B come out at `targetB`
-// (B = 2 × stairWidth + axisGap − stringerThickness, planLayout.js buildHalfTurnLocal); null when it does not apply or
-// would be negative.
+// (B = width A + width C + axisGap − stringerThickness, planLayout.js buildHalfTurnLocal); null when it does not apply
+// or would be negative.
 function oneZoneAxisGapFor(config, targetB) {
   const oneZone = !!config.uSingleWinderZone && config.stairType === 'U' && config.turn1Type === 'winder' && config.turn2Type === 'winder';
   if (!oneZone || !(targetB > 0)) return null;
-  const gap = targetB - 2 * config.stairWidth + (Number(config.stringerThickness) || 0);
+  const { wA, wC } = oneZoneWidths(config);
+  const gap = targetB - wA - wC + (Number(config.stringerThickness) || 0);
   return gap >= 0 ? Math.round(gap * 1000) / 1000 : null;
 }
 
@@ -414,12 +422,18 @@ export function solveFixedSides(config) {
   const given = Number(config.stairWidth) || 0;
   const zone = isOneZoneU(config);
   const B = plan.targets.B;
-  const width = zone && B !== null && 2 * given - t > B ? (B + t) / 2 : given;
+  // a one-zone U whose fixed B is narrower than its two flights (axis gap < 0): both narrowed by the same amount (C
+  // follows A when it has no width of its own)
+  const { wC: givenC, ownC } = oneZoneWidths(config);
+  const excess = zone && B !== null ? given + givenC - t - B : 0;
+  const width = excess > 0 ? given - excess / 2 : given;
+  const widthC = excess > 0 && ownC ? givenC - excess / 2 : null;
   const run = (w) =>
     solveStairwellFit(
       {
         ...config,
         stairWidth: w,
+        ...(widthC !== null ? { stairWidthC: widthC } : {}),
         stairwellFitEnabled: true,
         stairwellSideAMm: plan.targets.A ?? 0,
         stairwellSideBMm: plan.targets.B ?? 0,
@@ -429,7 +443,7 @@ export function solveFixedSides(config) {
       { freeSides: plan.free, allowInfeasible: true },
     );
   const fit = run(width);
-  let values = fit.values ? { ...fit.values, ...(Math.abs(width - given) > 1e-9 ? { stairWidth: width } : {}) } : null;
+  let values = fit.values ? { ...fit.values, ...(Math.abs(width - given) > 1e-9 ? { stairWidth: width } : {}), ...(widthC !== null ? { stairWidthC: widthC } : {}) } : null;
   let sides = fit.sides;
   // every rigid side exact (user decision 2026-10-23): the counts and the going above make the main side exact and the
   // others as close as one going allows; the rest is taken up by shifting each turn's winders along the walkline (its

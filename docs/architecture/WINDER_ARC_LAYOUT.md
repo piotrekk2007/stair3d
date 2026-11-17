@@ -148,6 +148,14 @@ dotąd).
   swój punkt na linii wewnętrznej; końce przy duszy rozłożone równo wzdłuż linii A, odcinka duszy i linii C (każdy zabieg
   ma tę samą szerokość przy duszy). Gdy półokrąg się nie mieści, linia biegu jest przysuwana do duszy
   (`fittingHalfTurnOffset`, jak przy ćwiartce).
+- Three sizes of their own (user request 2026-11-17, `halfTurnSizes`): flight A's width (`stairWidth`), flight C's
+  (`stairWidthC`) and the zone's DEPTH from the dusza line to the end wall (`stairWidthB` — the end of the wall between
+  the flights to the end wall); each null = A's width (the zone as before). The walkline and the inner ends do not
+  change (both measured from the dusza); the outer line is A at x = 0, the end wall at y = dusza line + depth, C's outer
+  side at A + g + C, and every edge is carried on to it. The offset must stay under both widths, the half circle inside
+  the depth. A stairwell's rigid B is then met by the axis gap = B − A − C + board (`stairwellFit.js oneZoneWidths` /
+  `oneZoneAxisGapFor`); a B narrower than both flights narrows A and C by the same amount (`solveFixedSides`; C only when
+  it has its own width). Tests: `halfTurnU.test.js` (the last two).
 - Rzut (`planLayout.js buildHalfTurnLocal`): jeden zakręt `turns[0]` z `halfTurn: true`, `innerCorners`/`outerCorners`
   (po dwa narożniki), `centre` (środek półokręgu), `postSpots`. Stopień przy środku duszy, którego krawędzie przednia i
   tylna przecinają się (dusza zachodząca, g < 0), ma zarys od punktu przecięcia — leży on w słupie, który i tak ten

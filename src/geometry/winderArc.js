@@ -175,22 +175,32 @@ export function halfTurnInnerGap(axisGapMm, stringerThicknessMm) {
   return d - t;
 }
 
+/** The 180° zone's three sizes (user request 2026-11-17): flight A's width, flight C's (`stairWidthC`) and the zone's
+ * depth from the dusza line to the end wall (`stairWidthB` — what flight B's width is in a U with a middle flight); each
+ * null / 0 = flight A's width (the zone as it was: one width, square round the dusza). */
+export function halfTurnSizes(params) {
+  const W = params.stairWidth;
+  const own = (v) => (Number(v) > 0 ? Number(v) : W);
+  return { wA: W, wC: own(params.stairWidthC), depth: own(params.zoneDepth) };
+}
+
 /**
- * @param {{stairWidth:number, treadGoing:number, walklineOffset:number, innerGap:number}} params
+ * @param {{stairWidth:number, stairWidthC?:number, zoneDepth?:number, treadGoing:number, walklineOffset:number,
+ *   innerGap:number}} params
  * @param {number} treadsIn  straight treads of flight A
  * @param {number} windersCount  all the winders of the zone
  * @returns {null | {s0, s1, Yc, arcEnd, R, centre, c1, c2, xInnerC, xOuterC, yZoneEndC, boundaries, walkAt, tangentAt,
  *   arcPoints, duszaWidth}}  null when the half circle does not fit in the zone
  */
 export function halfTurnWinderGeometry(params, treadsIn, windersCount) {
-  const W = params.stairWidth;
+  const { wA: W, wC, depth } = halfTurnSizes(params);
   const g = params.treadGoing;
   const off = params.walklineOffset;
   const gap = params.innerGap;
   const R = off + gap / 2;
   const Lw = windersCount * g;
   const q = (Math.PI * R) / 2; // half the half circle's length
-  if (!(windersCount >= 1) || !(g > 0) || !(off > 0) || !(off < W) || !(R > 0) || !(W + gap > 0) || Lw - 2 * q < MIN_DUSZA_ZONE_MM) return null;
+  if (!(windersCount >= 1) || !(g > 0) || !(off > 0) || !(off < Math.min(W, wC)) || !(R > 0) || !(W + gap > 0) || !(depth > R) || Lw - 2 * q < MIN_DUSZA_ZONE_MM) return null;
 
   const s0 = treadsIn * g;
   const before = Lw / 2;
@@ -198,7 +208,8 @@ export function halfTurnWinderGeometry(params, treadsIn, windersCount) {
   const arcEnd = Yc + 2 * q;
   const s1 = s0 + Lw;
   const xInnerC = W + gap;
-  const xOuterC = xInnerC + W;
+  const xOuterC = xInnerC + wC;
+  const yOuter = Yc + depth;
   const centre = { x: W + gap / 2, y: Yc };
   const yZoneEndC = Yc - (s1 - arcEnd);
   const c1 = { x: W, y: Yc };
@@ -233,7 +244,7 @@ export function halfTurnWinderGeometry(params, treadsIn, windersCount) {
     return innerPath[innerPath.length - 1];
   };
 
-  const outerLine = [{ x: 0, y: s0 - 1e6 }, { x: 0, y: Yc + W }, { x: xOuterC, y: Yc + W }, { x: xOuterC, y: yZoneEndC - 1e6 }];
+  const outerLine = [{ x: 0, y: s0 - 1e6 }, { x: 0, y: yOuter }, { x: xOuterC, y: yOuter }, { x: xOuterC, y: yZoneEndC - 1e6 }];
   const boundaries = [];
   for (let k = 0; k <= windersCount; k++) {
     const station = s0 + k * g;
@@ -248,7 +259,7 @@ export function halfTurnWinderGeometry(params, treadsIn, windersCount) {
   const steps = Math.max(2, Math.ceil(180 / ARC_SAMPLE_DEG));
   for (let i = 0; i <= steps; i++) arcPoints.push(walkAt(Yc + (2 * q * i) / steps));
 
-  return { s0, s1, Yc, arcEnd, R, centre, c1, c2, xInnerC, xOuterC, yZoneEndC, innerPath, boundaries, walkAt, tangentAt, arcPoints, duszaWidth: (g * innerTotal) / Lw };
+  return { s0, s1, Yc, arcEnd, R, centre, c1, c2, xInnerC, xOuterC, yOuter, yZoneEndC, innerPath, boundaries, walkAt, tangentAt, arcPoints, duszaWidth: (g * innerTotal) / Lw };
 }
 
 /**
@@ -259,7 +270,8 @@ export function fittingHalfTurnOffset(params, windersCount) {
   const Lw = windersCount * params.treadGoing;
   if (!(windersCount >= 1) || !(params.treadGoing > 0) || !(params.stairWidth > 0)) return null;
   const gap = params.innerGap;
-  const configured = Math.min(params.walklineOffset, params.stairWidth - 1);
+  const { wA, wC } = halfTurnSizes(params);
+  const configured = Math.min(params.walklineOffset, Math.min(wA, wC) - 1);
   const arcOf = (off) => Math.PI * (off + gap / 2);
   if (configured > 0 && configured + gap / 2 > 0 && Lw - arcOf(configured) >= MIN_DUSZA_ZONE_MM) return configured;
   const dusza = Math.min(windersCount * (params.minInnerWidth > 0 ? params.minInnerWidth : 0), Lw / 2);

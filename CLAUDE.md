@@ -115,7 +115,9 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   `uWindersTotal` winders on a walkline with a HALF CIRCLE round the dusza's middle, zone centred on it; flights A
   and C set by the distance between their inner wangi AXES (`uAxisGapMm`, 0 = C's wanga over A's; inner-line gap =
   axis gap − board thickness, may be negative). One turn `{halfTurn, innerCorners, outerCorners, centre, postSpots}`;
-  one central post on the axes (two corner posts when the gap is wider than post − board). `winderArc.js
+  one central post on the axes (two corner posts when the gap is wider than post − board). Flight C its own width
+  (`stairWidthC`) and the zone its own depth to the end wall (`stairWidthB`; null = A's width — `winderArc.js
+  halfTurnSizes`, user request 2026-11-17); a rigid stairwell B → axis gap = B − A − C + board. `winderArc.js
   halfTurnWinderGeometry`, `planLayout.js buildHalfTurnLocal`; doc section in WINDER_ARC_LAYOUT.md. Stacked inner wangi
   (axis gap < board thickness) overlap in height near the post: NOT trimmed (user decision, variant 2) — WARNING
   `STRINGER-STACKED-OVERLAP` on C's board with the amount and the fix (post-face points in "Profil wangi";

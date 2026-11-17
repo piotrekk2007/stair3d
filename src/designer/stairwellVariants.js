@@ -98,10 +98,12 @@ export function planStairwellVariants(config) {
     for (const n of around(naturalWinders(config, false), WINDERS_PER_TURN_RANGE)) push(`S-w${n}`, `S, 2 × ${n} zabiegowe`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: false, windersPerTurn: n }, userWidth);
     push('S-landing', 'S, podesty', { turn1Type: 'landing', turn2Type: 'landing', uSingleWinderZone: false, mergeLandings: false }, userWidth);
   } else {
-    // one 180° zone needs B ≥ 2 × width − board (axis gap ≥ 0): the width narrows to that when B is fixed
+    // one 180° zone needs B ≥ width A + width C − board (axis gap ≥ 0): A narrows to that when B is fixed (flight C's
+    // own width kept — stairWidthC, null = A's)
     const B = targets.B;
-    const zoneWidth = B !== null ? Math.min(userWidth, (B + t) / 2) : userWidth;
-    const axisGap = B !== null ? B - 2 * zoneWidth + t : Number(config.uAxisGapMm) || 0;
+    const ownC = Number(config.stairWidthC) > 0 ? Number(config.stairWidthC) : null;
+    const zoneWidth = B !== null ? Math.min(userWidth, ownC !== null ? B + t - ownC : (B + t) / 2) : userWidth;
+    const axisGap = B !== null ? B - zoneWidth - (ownC ?? zoneWidth) + t : Number(config.uAxisGapMm) || 0;
     const zone = (n) => push(`U-zone${n}`, `U, strefa 180°, ${n} zabiegowych`, { turn1Type: 'winder', turn2Type: 'winder', uSingleWinderZone: true, uWindersTotal: n, treadsLegB: 0 }, zoneWidth);
     if (axisGap <= U_ZONE_MAX_AXIS_GAP_MM) {
       for (const n of around(naturalWinders(config, true), ZONE_WINDERS_RANGE)) zone(n);

@@ -464,7 +464,7 @@ function checkTurnFeasibility(turnType, windersPerTurn, treadGoing, walklineOffs
 // The one 180° zone (winderArc.js): feasible when its half circle fits at the configured walkline offset.
 function checkHalfTurnFeasibility(config) {
   const count = halfTurnWinderCount(config);
-  const params = { stairWidth: config.stairWidth, treadGoing: config.treadGoing, walklineOffset: config.walklineOffset, minInnerWidth: config.minInnerWidth, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) };
+  const params = { stairWidth: config.stairWidth, stairWidthC: config.stairWidthC, zoneDepth: config.stairWidthB, treadGoing: config.treadGoing, walklineOffset: config.walklineOffset, minInnerWidth: config.minInnerWidth, innerGap: halfTurnInnerGap(config.uAxisGapMm, config.stringerThickness) };
   const fitted = fittingHalfTurnOffset(params, count);
   const geo = fitted === null ? null : halfTurnWinderGeometry({ ...params, walklineOffset: fitted }, 0, count);
   if (!geo) {
