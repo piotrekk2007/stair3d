@@ -5,10 +5,12 @@
 //    handler, the title, a short specification, the lines (≤ MAX_P1_LINES — else one line „Szczegółowa wycena (N
 //    pozycji) — strona 2”), the totals, the gross amount, the notes (long ones go to sheet 2), the lead time and the
 //    delivery;
-//  * sheet 2 — grows with its content: the detailed price table (when the lines moved there), the notes (when moved),
-//    the plan, the stair's parameters, the comfort table;
+//  * sheet 2 — ONE fixed A4: the notes (when moved off sheet 1 and they fit), the plan (it takes what is left), the
+//    stair's parameters and the comfort table side by side in two columns (user request 2026-11-17);
 //  * then (user request 2026-11-13) a sheet per linked floor counted in (its plan, its parameters) and a FIXED A4 of the
-//    presentation frames („Wizualizacje”, ≤ GALLERY_MAX, 2 × 3) — each with the footer at its bottom.
+//    presentation frames („Wizualizacje”, ≤ GALLERY_MAX, 2 × 3) — each with the footer at its bottom;
+//  * last, an APPENDIX (user request 2026-11-17 — „Załącznik”, smaller type, it may run over pages): the detailed price
+//    table when the lines left sheet 1, with the totals under it, and notes too long for sheet 2.
 // The SAME input as buildOfferHTML (offer, facts, settings, company, logoDataUrl, image3d, planSvg, projectName, date)
 // — used by both modules (the concrete module's facts come from cladding/quote/claddingOffer.js). Pure: a string out;
 // every text through escapeHtml. Never shows the CNC + projekt amount (it is inside the material lines).
@@ -136,7 +138,7 @@ const CSS = `
   .plan svg, .plan img { width: 100%; height: 90mm; display: block; }
   /* sheet 2 as ONE fixed A4 (user request 2026-11-13 — its footer at the bottom of page 2): the plan takes what the
      parameters and the comfort table leave */
-  .sheet.fit .plan { flex: 1 1 0; min-height: 45mm; max-height: 120mm; display: flex; flex-direction: column; }
+  .sheet.fit .plan { flex: 1 1 0; min-height: 40mm; max-height: 125mm; display: flex; flex-direction: column; }
   .sheet.fit .plan svg, .sheet.fit .plan img { flex: 1 1 0; min-height: 0; height: auto; }
   .plan figcaption { margin-top: 2mm; color: var(--muted); }
   .params { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; margin: 0; }
@@ -145,6 +147,22 @@ const CSS = `
   .params dt { color: var(--muted); }
   .params dd { text-align: right; font-weight: 500; }
   .notes2 { margin: 0; color: var(--muted); white-space: pre-wrap; }
+  /* the parameters and the comfort side by side (user request 2026-11-17) */
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; font-size: 8.5pt; }
+  .cols2 > div { min-width: 0; }
+  .cols2 .params { grid-template-columns: 1fr; }
+  .cols2 .params div, .cols2 td { padding: 1.4mm 0; }
+  .cols2 .req { display: block; color: var(--muted); font-size: 7.5pt; }
+  /* the appendix: smaller type, compact rows */
+  .appendix { font-size: 8pt; line-height: 1.35; }
+  .appendix h2 { font-size: 12pt; margin-top: 5mm; }
+  .appendix td { padding: 1.1mm 0; }
+  .appendix th { padding-bottom: 1.2mm; }
+  .appendix .detail2 { font-size: 7.5pt; }
+  .appendix tr.tot td { border-bottom: none; padding: 1mm 0 0; }
+  .appendix tr.tot td + td { padding-left: 3mm; }
+  .appendix tr.tot td:nth-child(2) { color: var(--muted); }
+  .appendix tr.tot.g td { font-weight: 600; color: var(--ink); padding-top: 1.6mm; }
   .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
   .gallery.one { grid-template-columns: 1fr; }
   .gallery figure { margin: 0; break-inside: avoid; }
@@ -265,6 +283,25 @@ export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime,
   return plan;
 }
 
+// --- sheet 2's height (mm, follows the CSS): the notes moved off sheet 1 stay on it only when they fit with the plan
+// at its minimum and the two columns; else they go to the appendix
+const P2_HEIGHT_MM = 297 - 21 - 10.5 - 8; // the sheet less the footer and .p2's paddings
+const H2_MM = 7 + 2.6 + 6.5;
+const P2_CHARS = { notes: 105, col: 46, label: 24 };
+const COL_ROW_MM = 2.8 + 4.3 + 0.3;
+export function sheet2Height({ notes = '', plan = false, rows = [], comfort = [], closing = false }) {
+  let h = 13; // the head
+  if (notes) h += H2_MM + wrapped(notes, P2_CHARS.notes) * LINE_MM.text;
+  if (plan) h += H2_MM + 40 + 8 + 6.5; // the plan at its minimum, its padding and caption
+  const rowsH = rows.reduce((n, [k, v]) => n + COL_ROW_MM + (wrapped(`${k} ${v}`, P2_CHARS.col) - 1) * 4.3, 0);
+  const comfortH = comfort.length ? 6.5 + comfort.reduce((n, x) => n + COL_ROW_MM + 3.8 + (wrapped(x.label, P2_CHARS.label) - 1) * 4.3, 0) : 0;
+  if (rows.length && comfort.length) h += H2_MM + Math.max(rowsH, comfortH);
+  else if (rows.length) h += H2_MM + Math.ceil(rows.length / 2) * COL_ROW_MM;
+  else if (comfort.length) h += H2_MM + comfortH;
+  if (closing) h += 5 + LINE_MM.text;
+  return h;
+}
+
 function footerHTML(company) {
   const c = company || {};
   const col1 = [c.name ? `<span style="font-weight:600">${esc(c.name)}</span>` : '', c.address ? `<span class="dim">${esc(c.address)}</span>` : '', c.nip ? `<span class="dim">NIP ${esc(c.nip)}</span>` : ''].join('');
@@ -300,7 +337,6 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const card = s.showContactQr ? contactCardText(c) : null;
   const qr = card ? qrSvg(card.text, { quiet: QR_QUIET, color: '#141414' }) : null;
   const plan = planPage1({ titleText: `${title}${subtitle ? ` ${subtitle}` : ''}`, peopleRows: Math.max(clientRows, handlerRows), spec: specLines(facts), lines: offer.lines.map((l) => ({ label: l.label, detail: lineDetail(l) })), notes, leadTime: (s.leadTime || '').trim(), qr: !!qr });
-  const notesP2 = !!notes && !plan.notesOnP1;
   const linesP2 = !plan.linesOnP1;
 
   const heroCaption = textOr(s.heroCaption, 'Wizualizacja poglądowa');
@@ -308,6 +344,15 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const deliveryNote = textOr(s.deliveryNote, 'Wycena po pomiarach i ocenie wykonawcy.');
   const closingNote = textOr(s.closingNote, 'Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).');
   const technical = s.technicalSheet !== false;
+  const comfortOn = technical && s.showComfort !== false && !!facts.comfort?.length;
+  // notes off sheet 1: on sheet 2 when they fit it, else in the appendix
+  const notesOff1 = !!notes && !plan.notesOnP1;
+  const hasSheet2Data = technical && (!!planSvg || !!(facts.rows || []).length || comfortOn);
+  const notesP2 =
+    notesOff1 &&
+    sheet2Height({ notes, plan: technical && !!planSvg, rows: technical ? facts.rows || [] : [], comfort: comfortOn ? facts.comfort : [], closing: !!closingNote }) + SAFETY_MM <= P2_HEIGHT_MM &&
+    (hasSheet2Data || !linesP2);
+  const notesApp = notesOff1 && !notesP2;
 
   // --- sheet 1
   const hero = `<div class="hero">${logoDataUrl ? `<img class="logo" src="${esc(logoDataUrl)}" alt="logo">` : c.name ? `<div class="brand">${esc(c.name)}</div>` : ''}${image3d ? `<img class="render${s.heroFull ? ' full' : ''}" src="${esc(image3d)}" alt="wizualizacja">` : ''}${image3d && heroCaption ? `<span class="caption">${esc(heroCaption)}</span>` : ''}</div>`;
@@ -315,10 +360,10 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const handlerBlock = [c.contactName ? `<b>${esc(c.contactName)}</b>` : '', c.contactPhone ? `tel. ${esc(c.contactPhone)}<br>` : '', c.contactEmail ? esc(c.contactEmail) : ''].join('');
   const people = clientBlock || handlerBlock ? `<div class="people"><div>${clientBlock ? `<span>Klient</span>${clientBlock}` : ''}</div><div>${handlerBlock ? `<span>Opiekun oferty</span>${handlerBlock}` : ''}</div></div>` : '';
   const lines1 = linesP2
-    ? `<div class="more">Szczegółowa wycena (${offer.lines.length} pozycji) — strona 2</div>`
+    ? `<div class="more">Szczegółowa wycena (${offer.lines.length} pozycji) — w załączniku</div>`
     : offer.lines.map((l) => `<div class="line"><span class="name">${esc(l.label)}${lineDetail(l) ? `<span class="detail">${esc(lineDetail(l))}</span>` : ''}</span><span class="net">${nb(money(l.net))}</span></div>`).join('');
   const grossNote = delivery && install ? 'z dostawą i montażem' : delivery ? 'z dostawą' : install ? 'z montażem' : '';
-  const notesP1 = !notes ? '' : notesP2 ? '<div class="notes"><b>Istotne uwagi — strona 2</b></div>' : `<div class="notes"><b>Istotne uwagi</b><p>${esc(notes)}</p></div>`;
+  const notesP1 = !notes ? '' : notesOff1 ? `<div class="notes"><b>Istotne uwagi — ${notesP2 ? 'strona 2' : 'w załączniku'}</b></div>` : `<div class="notes"><b>Istotne uwagi</b><p>${esc(notes)}</p></div>`;
   const leadTime = (s.leadTime || '').trim();
   const qrCol = qr ? `<div class="qr"><div class="label">Zapisz kontakt</div>${qr}</div>` : '';
   const facts1 = `<div class="facts${qr ? ' with-qr' : ''}"><div>${leadTime ? `<div class="label">Termin realizacji</div><div class="big" style="font-size:${fitPt(leadTime, qr ? (MAIN_CONTENT_MM - QR_MM - 8) / 2.25 : (MAIN_CONTENT_MM - 6) / 2.25, 15, 10)}pt">${esc(leadTime)}</div>${s.leadTimeNote ? `<div class="muted">${esc(s.leadTimeNote)}</div>` : ''}` : ''}</div><div><div class="label">Dostawa</div>${delivery ? '<div class="strong">Ceny zawierają koszt dostawy na miejsce.</div>' : ''}${deliveryNote ? `<div class="muted">${esc(deliveryNote)}</div>` : ''}</div>${qrCol}</div>`;
@@ -340,20 +385,30 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   // --- sheet 2
   const headOf = (what) => `<div class="p2-head">${logoDataUrl ? `<img src="${esc(logoDataUrl)}" alt="logo">` : `<span class="name">${esc(c.name || '')}</span>`}<div class="t"><b>${number ? `Oferta nr ${number}` : 'Oferta'}</b> · ${what}</div></div>`;
   const head = headOf('dane techniczne');
+  // the appendix (user request 2026-11-17): the detailed price table with the totals under it
   const table = linesP2
     ? `<h2>Szczegółowa wycena</h2><table><tr><th>Lp.</th><th>Pozycja</th><th class="num-r">Ilość</th><th class="num-r">Cena netto</th><th class="num-r">Wartość netto</th></tr>${offer.lines
         .map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.label)}${l.detail ? `<span class="detail2">${esc(l.detail)}</span>` : ''}</td><td class="num-r">${l.qty != null ? `${qtyFmt.format(l.qty)} ${esc(l.unit || '')}` : '1 kpl.'}</td><td class="num-r">${nb(money(l.unitNet != null ? l.unitNet : l.net))}</td><td class="num-r">${nb(money(l.net))}</td></tr>`)
+        .join('')}${[
+        ['', 'Razem netto', offer.totals.net],
+        ['', `VAT ${offer.totals.vatRatePct}%`, offer.totals.vat],
+        [' g', 'Razem brutto', offer.totals.gross],
+      ]
+        .map(([k, label, v]) => `<tr class="tot${k}"><td></td><td colspan="3">${esc(label)}</td><td class="num-r">${nb(money(v))}</td></tr>`)
         .join('')}</table>`
     : '';
-  const notes2 = notesP2 ? `<h2>Istotne uwagi</h2><p class="notes2">${esc(notes)}</p>` : '';
+  const notesHTML = `<h2>Istotne uwagi</h2><p class="notes2">${esc(notes)}</p>`;
+  const notes2 = notesP2 ? notesHTML : '';
   const planFig = technical && planSvg ? `<h2>Rzut z góry</h2><figure class="plan">${planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
   const params = !technical || !(facts.rows || []).length ? '' : `<h2>Parametry schodów</h2><dl class="params">${(facts.rows || []).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
-  const comfort =
-    technical && s.showComfort !== false && facts.comfort?.length
-      ? `<h2>Wygoda i zgodność z przepisami</h2><table><tr><th>Parametr</th><th>Wartość</th><th>Wymaganie</th><th class="num-r">Ocena</th></tr>${facts.comfort
-          .map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.value)}</td><td>${esc(x.requirement)} <span class="muted">(${esc(x.source)})</span></td><td class="num-r"><span class="${x.ok ? 'ok' : 'bad'}">${x.ok ? 'spełnia' : 'poza zakresem'}</span></td></tr>`)
-          .join('')}</table>`
-      : '';
+  // compact (a column of its own): the requirement and its source under the parameter's name
+  const comfort = comfortOn
+    ? `<h2>Wygoda i zgodność z przepisami</h2><table><tr><th>Parametr</th><th class="num-r">Wartość</th><th class="num-r">Ocena</th></tr>${facts.comfort
+        .map((x) => `<tr><td>${esc(x.label)}<span class="req">${esc(x.requirement)} (${esc(x.source)})</span></td><td class="num-r">${esc(x.value)}</td><td class="num-r"><span class="${x.ok ? 'ok' : 'bad'}">${x.ok ? 'spełnia' : 'poza zakresem'}</span></td></tr>`)
+        .join('')}</table>`
+    : '';
+  // side by side (user request 2026-11-17); one of them alone takes the full width
+  const data2 = params && comfort ? `<div class="cols2"><div>${params}</div><div>${comfort}</div></div>` : `${params}${comfort}`;
   // the other floors counted into this offer (user request 2026-11-07): their plan and parameters too
   // — each on a sheet of its own after sheet 2 (user request 2026-11-13: sheet 2 one page, its footer at the bottom)
   const floorSheets = !technical
@@ -363,7 +418,7 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
           const name = esc(f.name || 'Drugie piętro');
           const fig = f.planSvg ? `<h2>${name} — rzut z góry</h2><figure class="plan">${f.planSvg}<figcaption>Wymiary w mm</figcaption></figure>` : '';
           const rows = (f.facts?.rows || []).length ? `<h2>${name} — parametry schodów</h2><dl class="params">${f.facts.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '';
-          return fig || rows ? `<section class="sheet flow"><div class="p2">${headOf(`${name} — dane techniczne`)}${fig}${rows}</div>${footerHTML(c)}</section>` : '';
+          return fig || rows ? `<section class="sheet fit"><div class="p2">${headOf(`${name} — dane techniczne`)}${fig}${rows}</div>${footerHTML(c)}</section>` : '';
         })
         .join('');
   // the frames chosen in the presentation mode (app/offerFramesPanel.js — user request 2026-11-07): on the last page
@@ -373,9 +428,14 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const sheet3 = frames.length
     ? `<section class="sheet"><div class="p2">${headOf('wizualizacje')}<h2>Wizualizacje</h2><div class="gallery${frames.length === 1 ? ' one' : ''}">${frames.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div></div>${footerHTML(c)}</section>`
     : '';
-  const body2 = `${table}${notes2}${planFig}${params}${comfort}`;
-  // (the detailed price table or long notes moved here: it grows over more pages as before)
-  const sheet2 = body2 ? `<section class="sheet ${table || notes2 ? 'flow' : 'fit'}"><div class="p2">${head}${body2}${closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : ''}</div>${footerHTML(c)}</section>` : '';
+  const body2 = `${notes2}${planFig}${data2}`;
+  const closing = closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : '';
+  // ONE fixed A4 (the price table and notes too long for it are in the appendix)
+  const sheet2 = body2 ? `<section class="sheet fit"><div class="p2">${head}${body2}${closing}</div>${footerHTML(c)}</section>` : '';
+  const appendix =
+    table || notesApp
+      ? `<section class="sheet flow appendix"><div class="p2">${headOf('załącznik')}${table}${notesApp ? notesHTML : ''}${body2 ? '' : closing}</div>${footerHTML(c)}</section>`
+      : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;
   return `<!DOCTYPE html>
@@ -383,5 +443,5 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
 <style>${CSS}</style></head>
-<body>${sheet1}${sheet2}${floorSheets}${sheet3}</body></html>`;
+<body>${sheet1}${sheet2}${floorSheets}${sheet3}${appendix}</body></html>`;
 }

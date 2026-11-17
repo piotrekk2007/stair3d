@@ -58,9 +58,9 @@ buildModernOfferHTML(input)` — **to samo wejście** co `buildOfferHTML` (`offe
 | Czcionki | Inter Tight + Inter z Google Fonts, z zapasowymi; `app/printHtml.js` czeka na `document.fonts.ready` i dekodowanie obrazów (każde ≤ 4 s), dopiero potem drukuje |
 | Kod QR (etap 2, 2026-11-06) | „Pokaż kod QR z kontaktem” (`showContactQr`, domyślnie wyłączony, w obu modułach): na stronie 1 trzecia kolumna obok „Dostawa” — „Zapisz kontakt” + kod 24 mm. Treść: `offer/contactCard.js contactCardText(company)` — vCard 3.0 (N / FN opiekuna, ORG firma, TEL opiekuna i firmy, EMAIL opiekuna albo firmy, URL, ADR), zwięzła (bez parametrów TYPE, www tak jak wpisane — pełna z adresem miała ~230 B); gdy się nie mieści w wersji 10: bez adresu, potem MECARD (bez adresu, potem bez www); bez telefonu i e-maila — bez kodu. Kod: własny enkoder `util/qrCode.js` (bajtowo UTF-8, korekcja M, wersje 1–10, maska wg 4 reguł kar, SVG jednym `<path>`, strefa ciszy 2 moduły + biały margines strony). Testy: znane wektory (RS „HELLO WORLD” 1-M, ciągi formatu M, ciągi wersji 7–10) + niezależny dekoder w teście (format, odmaskowanie, zygzak, deinterleave, syndromy RS = 0, tekst); budżet strony 1 liczy kolumnę kodu (`page1Height({qr})`) |
 
-**Co przechodzi na stronę 2** (`planPage1`): pozycje — gdy jest ich więcej niż `MAX_P1_LINES` (6), na stronie 1
-zostaje jeden wiersz „Szczegółowa wycena (N pozycji) — strona 2”, a pełna tabela (Lp. | Pozycja | Ilość | Cena netto
-| Wartość netto) jest na stronie 2; uwagi — gdy są długie (> 280 znaków lub > 4 linie). Do tego **budżet wysokości
+**Co schodzi ze strony 1** (`planPage1`): pozycje — gdy jest ich więcej niż `MAX_P1_LINES` (6), na stronie 1
+zostaje jeden wiersz „Szczegółowa wycena (N pozycji) — w załączniku”, a pełna tabela (Lp. | Pozycja | Ilość | Cena
+netto | Wartość netto) jest w ZAŁĄCZNIKU na końcu; uwagi — gdy są długie (> 280 znaków lub > 4 linie). Do tego **budżet wysokości
 strony 1** (`page1Height`, mm): oszacowanie wysokości bloków wg CSS (linie tekstu z liczby znaków na linię przy danym
 stopniu pisma, odstępy bloków; zgodne z pomiarem w przeglądarce ±2 mm) plus 5 mm zapasu. Sam limit 6 pozycji nie
 wystarcza (zmierzone: domyślny tytuł modułu „Na beton” łamie się na 3 linie i 4 pozycje + 7 linii specyfikacji + uwagi
@@ -70,19 +70,28 @@ stronę 2, po czym to, co zdjęto, wraca, gdzie znów się mieści. Tytuł dłu�
 stopień mniejszy.
 
 **Układ arkuszy (prośba użytkownika 2026-11-13)**: strona 1 — oferta; strona 2 — dane schodów (rzut, parametry,
-wygoda) jako JEDEN stały arkusz A4 (`.sheet.fit`: rzut zajmuje to, co zostawiają parametry i tabela wygody, 45–120 mm —
-domyślne schody L miały 312 mm i stopka spadała na następną kartkę); gdy przeszła tam szczegółowa wycena albo długie
-uwagi, strona 2 rośnie jak dotąd (`.sheet.flow`); każde połączone piętro na WŁASNYM arkuszu (rzut + parametry); kadry
+wygoda) jako JEDEN stały arkusz A4 (`.sheet.fit`: rzut zajmuje to, co zostawiają parametry i tabela wygody, 40–125 mm —
+domyślne schody L miały 312 mm i stopka spadała na następną kartkę); każde połączone piętro na WŁASNYM stałym arkuszu
+(rzut + parametry); kadry
 z prezentacji ZAWSZE na osobnym, stałym arkuszu „Wizualizacje” (≤ `GALLERY_MAX` = 6, 2 × 3 w proporcji 3:2, jeden kadr
 na całą szerokość) — każdy arkusz ze stopką na dole. Blok Klient / Opiekun oferty ~10 % mniejszy (8,1 pt, mniejsze
 odstępy; budżet `PEOPLE_SCALE`). Opis pod tytułem (`specLines`) zawsze zawiera wysokość podstopnia („Wysokość
 podstopnia”, w module „Na beton” „(po wykończeniu)”) — najpóźniej w 4. linii, bo budżet skraca listę od końca.
 
+**Załącznik i dwie kolumny (prośba użytkownika 2026-11-17** — ze szczegółową wyceną strona 2 rosła i układ stron się
+rozjeżdżał): strona 2 jest ZAWSZE jednym arkuszem; parametry schodów i tabela wygody stoją OBOK SIEBIE (`.cols2`, 8,5 pt,
+parametry w jednej kolumnie, w tabeli wygody wymaganie i źródło pod nazwą parametru — Parametr | Wartość | Ocena; gdy
+jest tylko jedno z nich — na całą szerokość jak dotąd). Szczegółowa wycena to ZAŁĄCZNIK — ostatni arkusz
+(`.sheet.flow.appendix`, po kadrach; nagłówek „… · załącznik”, 8 pt, ciasne wiersze, pod tabelą Razem netto / VAT /
+Razem brutto; może zająć kilka stron). Długie uwagi zdjęte ze strony 1 trafiają na stronę 2, gdy się tam mieszczą obok
+rzutu w jego minimum i obu kolumn (`sheet2Height`, mm wg CSS + 5 mm zapasu), inaczej do załącznika (na stronie 1
+„Istotne uwagi — strona 2” / „— w załączniku”).
+
 Opcjonalne teksty wejścia (dla oferty pisanej ręcznie, poza aplikacją; brak pola = jak dotąd, `''` = nic):
 `heroCaption` (podpis obrazka, domyślnie „Wizualizacja poglądowa”), `offerEyebrow` (nadtytuł, domyślnie z pozycji
 montażu — od 2026-11-13 też ustawienie oferty obu modułów, pole „Nadtytuł” w bloku stylu nowoczesnego, pusty =
 automatycznie), `deliveryNote` („Wycena po pomiarach i ocenie wykonawcy.”), `closingNote` (zdanie na końcu strony 2),
-`technicalSheet: false` (bez rzutu / parametrów / wygody — strona 2 tylko, gdy przeszła tam wycena albo uwagi),
+`technicalSheet: false` (bez rzutu / parametrów / wygody — strona 2 tylko z długimi uwagami; wycena w załączniku),
 `heroFull: true` (obrazek na całą wysokość pola po lewej, 84 × 276 mm — `HERO_FULL_MM`, zamiast kadru 84 × 150 mm).
 
 Testy: `src/offer/__tests__/offerDocumentModern.test.js`, `src/util/__tests__/qrCode.test.js`.

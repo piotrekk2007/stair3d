@@ -59,7 +59,7 @@ test('every text escaped; the CNC + projekt amount never shown; the totals as th
   assert.equal(o.totals.gross, 738);
 });
 
-test(`≤ ${MAX_P1_LINES} lines on sheet 1 (with detail and quantity); more → one line „strona 2” and the table there`, () => {
+test(`≤ ${MAX_P1_LINES} lines on sheet 1 (with detail and quantity); more → one line „w załączniku” and the table in the appendix`, () => {
   const few = html({}, MAX_P1_LINES);
   assert.equal((page(few, 1).match(/<div class="line">/g) || []).length, MAX_P1_LINES);
   assert.match(page(few, 1), /Pozycja 1<span class="detail">w tym: stopnie, wangi<\/span>/);
@@ -67,9 +67,14 @@ test(`≤ ${MAX_P1_LINES} lines on sheet 1 (with detail and quantity); more → 
   assert.doesNotMatch(few, /Szczegółowa wycena/);
   const many = html({}, 12);
   assert.equal((page(many, 1).match(/<div class="line">/g) || []).length, 0);
-  assert.match(page(many, 1), /<div class="more">Szczegółowa wycena \(12 pozycji\) — strona 2<\/div>/);
-  assert.match(page(many, 2), /<h2>Szczegółowa wycena<\/h2><table><tr><th>Lp\.<\/th><th>Pozycja<\/th><th class="num-r">Ilość<\/th><th class="num-r">Cena netto<\/th><th class="num-r">Wartość netto<\/th>/);
-  assert.equal((page(many, 2).match(/<tr><td>\d+<\/td>/g) || []).length, 12);
+  assert.match(page(many, 1), /<div class="more">Szczegółowa wycena \(12 pozycji\) — w załączniku<\/div>/);
+  // the table in the appendix — the LAST sheet (user request 2026-11-17), sheet 2 stays one A4
+  const last = many.split('<section class="sheet').at(-1);
+  assert.match(last, /^ flow appendix">/);
+  assert.match(last, /<h2>Szczegółowa wycena<\/h2><table><tr><th>Lp\.<\/th><th>Pozycja<\/th><th class="num-r">Ilość<\/th><th class="num-r">Cena netto<\/th><th class="num-r">Wartość netto<\/th>/);
+  assert.equal((last.match(/<tr><td>\d+<\/td>/g) || []).length, 12);
+  assert.match(page(many, 2), /^ fit">/);
+  assert.doesNotMatch(page(many, 2), /Szczegółowa wycena/);
   // the sums and the gross always on sheet 1
   assert.match(page(many, 1), /Razem brutto/);
 });
@@ -83,6 +88,31 @@ test('the notes: only when given; long ones (> 280 characters or > 4 lines) on s
   assert.match(page(long, 2), /<h2>Istotne uwagi<\/h2><p class="notes2">x{300}<\/p>/);
   const lines = html({ notes: 'a\nb\nc\nd\ne' });
   assert.match(page(lines, 1), /Istotne uwagi — strona 2/);
+});
+
+// user request 2026-11-17: with the detailed price table the pages fell apart — the table is an APPENDIX (last, smaller,
+// with the totals), sheet 2 stays ONE A4 with the parameters and the comfort side by side; notes too long for it go to
+// the appendix as well
+test('the detailed price table as an appendix; sheet 2 one A4, parameters | comfort in two columns', () => {
+  const h = html({}, 14, { planSvg: '<svg id="plan"></svg>', gallery: ['data:image/jpeg;base64,A'] });
+  const sheets = h.split('<section class="sheet').slice(1);
+  assert.equal(sheets.length, 4, 'offer, data, frames, appendix');
+  assert.match(sheets[1], /^ fit">/);
+  assert.match(sheets[1], /<div class="cols2"><div><h2>Parametry schodów<\/h2><dl class="params">[\s\S]*<\/dl><\/div><div><h2>Wygoda i zgodność z przepisami<\/h2><table>/);
+  assert.match(sheets[1], /Szerokość biegu<span class="req">min\. 800 mm \(WT § 68\)<\/span><\/td><td class="num-r">750 mm<\/td>/);
+  assert.match(sheets[2], /Wizualizacje/);
+  assert.match(sheets[3], /^ flow appendix">/, 'the appendix last');
+  assert.match(sheets[3], /Oferta nr DRX-2026-0003<\/b> · załącznik/);
+  assert.match(sheets[3], /<tr class="tot"><td><\/td><td colspan="3">Razem netto<\/td><td class="num-r">10&nbsp;500,00&nbsp;zł/);
+  assert.match(sheets[3], /<tr class="tot g"><td><\/td><td colspan="3">Razem brutto<\/td>/);
+  assert.match(h, /\.appendix \{ font-size: 8pt;/, 'smaller type');
+  // the comfort off → the parameters alone over the full width (two columns of rows, as before)
+  assert.doesNotMatch(page(html({ showComfort: false }), 2), /cols2/);
+  // notes that do not fit sheet 2 beside the plan and the data → the appendix
+  const huge = html({ notes: Array.from({ length: 40 }, (_, i) => `Uwaga ${i + 1}: treść uwagi.`).join('\n') }, 3, { planSvg: '<svg></svg>' });
+  assert.match(page(huge, 1), /Istotne uwagi — w załączniku/);
+  assert.doesNotMatch(page(huge, 2), /Istotne uwagi/);
+  assert.match(huge.split('<section class="sheet').at(-1), /^ flow appendix">[\s\S]*<h2>Istotne uwagi<\/h2>/);
 });
 
 test('the delivery and installation wording; the eyebrow; the default title; a long title smaller', () => {

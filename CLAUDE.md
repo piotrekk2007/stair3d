@@ -490,9 +490,10 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   8.5 mm, the number / gross amount / lead time at a fitted size `fitPt`). Modern = sheet 1 a FIXED A4 (a portrait 3D hero on
   `#ECECEB` filling its box — `scene/offerFraming.js fitViewToBox`; number, client + the offer's handler, title,
   ≤ 7 spec lines, ≤ `MAX_P1_LINES` 6 lines, sums, gross „z dostawą i montażem”, notes, lead time), sheet 2 the plan,
-  parameters, comfort as ONE fixed A4 (the plan takes the rest — `.sheet.fit`; it grows only with the detailed price table
-  / long notes moved there), then a sheet per linked floor and a fixed sheet „Wizualizacje” (≤ `GALLERY_MAX` 6 frames,
-  2 × 3), each with its footer (user request 2026-11-13; the client / handler block ~10 % smaller, the riser height
+  parameters | comfort side by side (`.cols2`) as ONE fixed A4 (the plan takes the rest — `.sheet.fit`; long notes moved
+  there only when they fit — `sheet2Height`), then a sheet per linked floor and a fixed sheet „Wizualizacje” (≤ `GALLERY_MAX` 6 frames,
+  2 × 3), each with its footer, LAST an appendix (`.sheet.flow.appendix`, 8 pt: the detailed price table + totals, notes too
+  long for sheet 2 — user request 2026-11-17) (user request 2026-11-13; the client / handler block ~10 % smaller, the riser height
   always in the description, `offerEyebrow` a setting of both modules — „Nadtytuł”). Sheet 1's height budget (`planPage1` /
   `page1Height`, mm from the CSS): notes → shorter spec → lines go to sheet 2 when it would spill. New offer fields
   `offerTitle` / `offerSubtitle` / `leadTime` / `leadTimeNote` / `deliveryIncluded`, optional company fields
