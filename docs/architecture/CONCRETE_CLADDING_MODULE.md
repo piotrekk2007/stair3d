@@ -749,3 +749,14 @@ the last back edge's LINE for the exit (the trim's rule was fixed 2026-11-13), s
 got its balustrade though the plan showed it on. Now `openingEdges.js exitEdgeTest` (on the line AND overlapping it) is
 read by the trim (`trimEdges`), the antresola (`antresolaLines`) and the plan's opening editor (the exit edge grey,
 dashed, „Wyjście ze schodów”). Test: `__tests__/harp.test.js`.
+
+**The last post on the floor** (user request 2026-11-18 — as built in reality): `railingEndOnFloorSides[flight][side]`
+(the sides table: „ostatni słup na podłodze”, offered on a side whose balustrade reaches the stair's exit — its last
+piece the last element, not a landing). `stairLine(run, config, onFloor)`: the line runs on past the exit edge to the
+end post's centre `endPostOnFloorMm` (`railingEndOnFloorMm`, else half the antresola nosing `exitNosingDepthMm` / 2, at
+least half the post — never over the opening) + half the post; the ground there is the finished floor above
+(`rawSlabTopZ + floorFinishTopMm` — the nosing's top), the side face the raw slab's top; the handrail's top runs on the
+pitch to the exit edge at the floor + `railingHeightMm` (the floor's „nose”) and level to the post; the stretch past
+the edge is a flat (balusters evenly, a harp's rods on the floor). Panel: „Słup na podłodze: oś za krawędzią wyjścia”
+in „Balustrada i słupy”. Not done: the antresola's own end post beside it is not merged with it. Test:
+`__tests__/harp.test.js`.

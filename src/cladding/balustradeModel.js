@@ -74,12 +74,30 @@ function topOver(pieces, H) {
   return top;
 }
 
-// a stair side: one straight piece along the flight (s = the run's s), the ground = the tread under s
-function stairLine(run, config) {
+/**
+ * The last post on the floor (`railingEndOnFloorSides`): its centre past the exit edge (mm) — `railingEndOnFloorMm`, or
+ * the middle of the antresola nosing on the slab (`exitNosingDepthMm` / 2), at least half the post (never over the
+ * opening).
+ */
+export function endPostOnFloorMm(config) {
+  const own = config.railingEndOnFloorMm;
+  return Math.max(config.postSizeMm / 2, own > 0 ? own : config.exitNosingDepthMm / 2);
+}
+
+// a stair side: one straight piece along the flight (s = the run's s), the ground = the tread under s. `onFloor`
+// (the last flight's side ending at the exit — user request 2026-11-18, „ostatni słup na podłodze”): the line runs on
+// past the exit edge onto the floor above, its end post's centre `postMm` past it, standing on the floor (on the
+// antresola nosing); the handrail's pitch goes on to the exit edge (the floor's „nose”) and level to that post.
+function stairLine(run, config, onFloor = null) {
   const { pieces } = run;
   const top = topOver(pieces, config.railingHeightMm);
   const s0 = pieces[0].s0;
-  const s1 = pieces[pieces.length - 1].s1;
+  const sExit = pieces[pieces.length - 1].s1;
+  const s1 = onFloor ? sExit + onFloor.postMm + config.postSizeMm / 2 : sExit;
+  if (onFloor) {
+    top[top.length - 1] = { s: sExit, z: onFloor.floorZ + config.railingHeightMm };
+    top.push({ s: s1, z: onFloor.floorZ + config.railingHeightMm });
+  }
   const glassSide = config.railingInfill === 'glass-side';
   // the line: on the treads `railingInsetMm` in from their ends, or (glass / a harp on the side) outside the concrete face
   const off = glassSide || harpSide(config) ? sideOffsetMm(config) : -config.railingInsetMm;
@@ -94,16 +112,18 @@ function stairLine(run, config) {
     dirAt: () => run.frame.f,
     corners: [],
     top,
-    groundAt: (s) => piece(s).top,
-    // glass on the side: fixed to the concrete's side face under the treads
-    baseAt: (s) => piece(s).concreteTop,
+    groundAt: (s) => (onFloor && s > sExit + 1e-6 ? onFloor.floorZ : piece(s).top),
+    // glass on the side: fixed to the concrete's side face under the treads (on the floor: the raw slab's top)
+    baseAt: (s) => (onFloor && s > sExit + 1e-6 ? onFloor.slabZ : piece(s).concreteTop),
+    // (ending on the floor: the stretch past the exit edge — no balusters per tread there, evenly as on a landing)
+    ...(onFloor ? { exitS: sExit, endOnFloor: true } : {}),
     // towards the side face from the line (a side-mounted harp's brackets)
     faceDirAt: () => {
       const o = runOutward(run);
       return { x: -o.x, y: -o.y };
     },
     treads: pieces.filter((p) => !p.flat),
-    flats: pieces.filter((p) => p.flat),
+    flats: [...pieces.filter((p) => p.flat), ...(onFloor ? [{ s0: sExit, s1, top: onFloor.floorZ, flat: true }] : [])],
     outward: runOutward(run),
   };
 }
@@ -566,7 +586,11 @@ export function buildBalustrade(built, config) {
     const { from, to } = railingRangeOf(config, run.key);
     const pieces = run.pieces.filter((p) => (from === null || p.element.index + 1 >= from) && (to === null || p.element.index + 1 <= to));
     if (!pieces.length) continue;
-    lines.push({ ...stairLine(pieces.length === run.pieces.length ? run : { ...run, pieces }, cfg), cfg });
+    // the last flight's side reaching the exit: optionally on past it, its last post on the floor above (user request
+    // 2026-11-18 — as built in reality, the newel on the antresola nosing)
+    const atExit = pieces[pieces.length - 1].element === built.concrete.elements.at(-1) && !pieces[pieces.length - 1].flat;
+    const onFloor = atExit && config.railingEndOnFloorSides?.[run.key.flight]?.[run.key.side] ? { postMm: endPostOnFloorMm(config), floorZ: built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm, slabZ: built.concrete.exit.rawSlabTopZ } : null;
+    lines.push({ ...stairLine(pieces.length === run.pieces.length ? run : { ...run, pieces }, cfg, onFloor), cfg });
   }
   if (config.railingAntresola) {
     const cfg = withInfill(railingInfillOf(config, 'antresola'));

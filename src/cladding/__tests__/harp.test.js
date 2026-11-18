@@ -181,3 +181,42 @@ test('the antresola on an opening edge over the lower flight of a U (on the exit
   assert.match(svg, /data-edge="0"[^>]*stroke="#2e7d32"/);
   assert.match(svg, /data-edge="1"[^>]*stroke="#9aa0a6"[^>]*stroke-dasharray/);
 });
+
+// user request 2026-11-18: the last flight's balustrade on past the exit, its last post on the floor above (on the
+// antresola nosing) — as it is built in reality
+test('the last post on the floor: past the exit edge by half the antresola nosing, on the finished floor, the handrail level to it', async () => {
+  const { endPostOnFloorMm } = await import('../balustradeModel.js');
+  const u = (patch = {}) =>
+    sanitizeCladdingConfig({
+      ...createDefaultCladdingConfig(),
+      sequence: [
+        { kind: 'steps', count: 9, riseMm: 185, goingMm: 270, widthMm: 1100 },
+        { kind: 'landing', riseMm: 185, depthMm: 835, turn: 'u-right', gapMm: 0, finish: 'floorboard' },
+        { kind: 'steps', count: 6, riseMm: 185, goingMm: 270, widthMm: 1130 },
+      ],
+      showSlab: true,
+      railingSides: { 0: { left: true }, 1: { left: true } },
+      ...patch,
+    });
+  const base = buildCladdingStair(u()).balustrade.sections.find((s) => s.key.flight === 1);
+  const c = u({ railingEndOnFloorSides: { 1: { left: true }, 0: { left: true } } });
+  const b = buildCladdingStair(c);
+  const s = b.balustrade.sections.find((x) => x.key.flight === 1);
+  const floorZ = b.concrete.exit.rawSlabTopZ + c.floorFinishTopMm;
+  const d = endPostOnFloorMm(c);
+  near(d, c.exitNosingDepthMm / 2, 'the nosing\'s middle');
+  const last = s.posts.at(-1);
+  near(last.s, base.s1 + d, 'its centre past the exit edge');
+  near(last.bottomZ, floorZ, 'standing on the floor above');
+  near(last.topZ, floorZ + c.railingHeightMm + c.postAboveHandrailMm, 'its top over the floor');
+  near(s.handrail.at(-1).z, floorZ + c.railingHeightMm - c.handrailHeightMm / 2, 'the handrail level at the floor post');
+  near(s.handrail.at(-1).z, s.handrail.at(-2).z, 'level from the exit edge');
+  // only where the side reaches the exit: flight 1 (it ends at the landing) is unchanged
+  const f0 = b.balustrade.sections.find((x) => x.key.flight === 0);
+  const f0Base = buildCladdingStair(u()).balustrade.sections.find((x) => x.key.flight === 0);
+  near(f0.s1, f0Base.s1, 'flight 1 unchanged');
+  // never over the opening: at least half the post past the edge; the user's own distance
+  near(endPostOnFloorMm({ ...c, railingEndOnFloorMm: 10 }), c.postSizeMm / 2, 'at least half the post');
+  near(endPostOnFloorMm({ ...c, railingEndOnFloorMm: 200 }), 200, 'own');
+  assert.deepEqual(sanitizeCladdingConfig({ ...c, railingEndOnFloorSides: { 1: { left: true, right: 'x' }, z: { left: true } } }).railingEndOnFloorSides, { 1: { left: true } });
+});

@@ -138,6 +138,10 @@ export function createDefaultCladdingConfig() {
     // per flight side the steps the balustrade runs along (user request 2026-11-18): {[flight]: {[side]: {from?, to?}}}
     // — the steps' numbers as on the plan (1-based, a landing too), absent = from the side's start / to its end
     railingRangeSides: {},
+    // the last flight's side: on past the exit, its last post on the floor above (on the antresola nosing — user request
+    // 2026-11-18): {[flight]: {[side]: true}}; the post's centre past the exit edge (null = the nosing's middle)
+    railingEndOnFloorSides: {},
+    railingEndOnFloorMm: null,
     balusterShape: 'square', // 'square' | 'round'
     // the harp (balustradeModel.js harpOf, user request 2026-11-18): rods from the treads to the ceiling — sizes ASSUMPTION
     harpMaterial: 'tube', // 'tube' (metal tube) | 'wood' (wooden balusters: balusterShape / balusterSizeMm)
@@ -450,6 +454,8 @@ export function sanitizeCladdingConfig(raw) {
     railingInfill: CLAD_INFILLS.includes(c.railingInfill) ? c.railingInfill : 'balusters',
     railingInfillSides: sanitizeInfillSides(c.railingInfillSides),
     railingRangeSides: sanitizeRangeSides(c.railingRangeSides),
+    railingEndOnFloorSides: Object.fromEntries(Object.entries(c.railingEndOnFloorSides && typeof c.railingEndOnFloorSides === 'object' ? c.railingEndOnFloorSides : {}).filter(([f, v]) => /^\d+$/.test(f) && v && typeof v === 'object').map(([f, v]) => [f, Object.fromEntries(['left', 'right'].filter((s) => v[s] === true).map((s) => [s, true]))]).filter(([, v]) => Object.keys(v).length)),
+    railingEndOnFloorMm: c.railingEndOnFloorMm === null || c.railingEndOnFloorMm === undefined || c.railingEndOnFloorMm === '' ? null : num(c.railingEndOnFloorMm, 60, 0, 1000),
     railingAntresolaInfill: CLAD_INFILLS.includes(c.railingAntresolaInfill) ? c.railingAntresolaInfill : null,
     balusterShape: c.balusterShape === 'round' ? 'round' : 'square',
     harpMaterial: c.harpMaterial === 'wood' ? 'wood' : 'tube',

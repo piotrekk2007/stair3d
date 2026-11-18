@@ -15,7 +15,7 @@ import { snapMeasurePoint } from '../../plan2d/planMeasure.js';
 import { createMeasureTool } from '../../scene/measureTool.js';
 import { claddingProjectToFile, parseCladdingProjectFile } from '../projectFile.js';
 import { claddingAsFloor } from '../floorStair.js';
-import { sNearest, RAILING_INFILLS, GLASS_TINTS } from '../balustradeModel.js';
+import { sNearest, RAILING_INFILLS, GLASS_TINTS, endPostOnFloorMm } from '../balustradeModel.js';
 import { buildCladdingQuote } from '../quote/claddingQuote.js';
 import { createDefaultQuoteSettings, sanitizeQuoteSettings, UNIT_LABELS, LABOUR_UNITS, claddingPricesOf, applyCladdingPrices } from '../quote/labour.js';
 import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
@@ -372,6 +372,16 @@ export function mountCladdingApp(rootEl, host = {}) {
     },
   };
   live(rail.add(antresolaInfill, 'v', { 'jak domyślne': '', ...Object.fromEntries(Object.entries(RAILING_INFILLS).map(([k, l]) => [l, k])) }).name('Antresola: wypełnienie'));
+  // the last post on the floor (switched per side in the sides table): its centre past the exit edge
+  const floorPost = {
+    get v() {
+      return endPostOnFloorMm(state.config);
+    },
+    set v(x) {
+      state.config.railingEndOnFloorMm = x;
+    },
+  };
+  live(rail.add(floorPost, 'v', 0, 600, 5).name('Słup na podłodze: oś za krawędzią wyjścia [mm]'));
   live(rail.add(proxy, 'railingHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
   live(rail.add(proxy, 'railingAntresolaHeightMm', 600, 1500, 10).name('Antresola: wysokość [mm]'));
   live(rail.add(proxy, 'balustersPerTread', 0, 6, 1).name('Tralki na stopień'));
@@ -977,7 +987,11 @@ export function mountCladdingApp(rootEl, host = {}) {
       const range = c.railingRangeSides?.[f]?.[side] || {};
       const infill = `<select class="clad-small" data-infill-side="${f}:${side}" title="Wypełnienie balustrady na tym boku"><option value="" ${own ? '' : 'selected'}>jak domyślne (${escapeHtml(RAILING_INFILLS[c.railingInfill])})</option>${Object.entries(RAILING_INFILLS).map(([k, l]) => `<option value="${k}" ${own === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>`;
       const num = (k, ph, title) => `<input type="number" min="1" step="1" class="clad-small clad-range" data-range-side="${f}:${side}" data-range-f="${k}" value="${range[k] ?? ''}" placeholder="${ph ?? ''}" title="${title}" />`;
-      return `<div class="clad-rail-side">${box('railingSides', f, side)} ${infill} <span class="clad-range-wrap">stopnie ${num('from', nums.length ? Math.min(...nums) : '', 'Od stopnia nr (jak na planie) — puste = od początku')}–${num('to', nums.length ? Math.max(...nums) : '', 'Do stopnia nr (jak na planie) — puste = do końca')}</span></div>`;
+      // the side reaching the stair's exit: its last post on the floor above (user request 2026-11-18)
+      const last = state.built?.concrete.elements.at(-1);
+      const atExit = runsOf(f, side).some((r) => !r.walled && !r.end && r.pieces.at(-1)?.element === last && !r.pieces.at(-1)?.flat);
+      const floor = atExit ? ` <label class="clad-range-wrap" title="Balustrada przechodzi za ostatni stopień, ostatni słup stoi na podłodze piętra (na nosku antresoli)"><input type="checkbox" data-floor-side="${f}:${side}" ${c.railingEndOnFloorSides?.[f]?.[side] ? 'checked' : ''} /> ostatni słup na podłodze</label>` : '';
+      return `<div class="clad-rail-side">${box('railingSides', f, side)} ${infill} <span class="clad-range-wrap">stopnie ${num('from', nums.length ? Math.min(...nums) : '', 'Od stopnia nr (jak na planie) — puste = od początku')}–${num('to', nums.length ? Math.max(...nums) : '', 'Do stopnia nr (jak na planie) — puste = do końca')}</span>${floor}</div>`;
     };
     sidesEl.innerHTML =
       `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th><th>poręcz przyścienna</th></tr></thead><tbody>` +
@@ -985,7 +999,19 @@ export function mountCladdingApp(rootEl, host = {}) {
       `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”) i poręcz przyścienna na uchwytach (ustawienia w „Poręcz przyścienna”).</div>`;
   }
   sidesEl.addEventListener('change', (ev) => {
-    const { infillSide, rangeSide, rangeF } = ev.target.dataset;
+    const { infillSide, rangeSide, rangeF, floorSide } = ev.target.dataset;
+    if (floorSide) {
+      const [f, side] = floorSide.split(':');
+      change((c) => {
+        const all = { ...(c.railingEndOnFloorSides || {}) };
+        const sides = { ...(all[f] || {}) };
+        if (ev.target.checked) sides[side] = true;
+        else delete sides[side];
+        all[f] = sides;
+        c.railingEndOnFloorSides = all;
+      });
+      return;
+    }
     if (infillSide) {
       const [f, side] = infillSide.split(':');
       change((c) => {
