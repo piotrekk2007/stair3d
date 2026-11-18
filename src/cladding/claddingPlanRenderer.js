@@ -6,6 +6,7 @@ import { planMeasureText } from '../plan2d/planMeasure.js';
 import { boardPolygons } from './finishModel.js';
 import { wallCells, wallEnds, wallListOf } from './wallEdits.js';
 import { trimEdges } from './openingTrimModel.js';
+import { exitEdgeTest } from './openingEdges.js';
 import { wallOn } from './surroundingsModel.js';
 import { WALL_TYPE_LABELS } from './schema.js';
 import { escapeHtml } from '../util/format.js';
@@ -48,10 +49,14 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     const o = built.slab.opening;
     const hr = Math.max(18, (viewport?.width ?? 4000) / 160);
     const off = built.config.railingAntresolaEdges || {};
+    // (the stair's exit edge never carries the antresola — the same rule as the model, openingEdges.js)
+    const isExit = exitEdgeTest(built);
     const edges = o.map((a, k) => {
       const b = o[(k + 1) % o.length];
-      const on = off[k] !== false;
-      return `<line class="clad-opening-edge" data-edge="${k}" x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${on ? '#2e7d32' : '#9aa0a6'}" stroke-width="10" stroke-opacity="0.6" ${HAIR}><title>Balustrada antresoli na tej krawędzi: ${on ? 'tak' : 'nie'} — kliknij, żeby zmienić</title></line>`;
+      const exit = isExit(a, b);
+      const on = !exit && off[k] !== false;
+      const tip = exit ? 'Wyjście ze schodów — tu nie ma balustrady antresoli' : `Balustrada antresoli na tej krawędzi: ${on ? 'tak' : 'nie'} — kliknij, żeby zmienić`;
+      return `<line class="clad-opening-edge" data-edge="${k}" x1="${fmt(a.x)}" y1="${fmt(-a.y)}" x2="${fmt(b.x)}" y2="${fmt(-b.y)}" stroke="${on ? '#2e7d32' : '#9aa0a6'}" stroke-width="10" stroke-opacity="0.6" ${exit ? 'stroke-dasharray="4,6"' : ''} ${HAIR}><title>${tip}</title></line>`;
     }).join('');
     const vertices = o.map((p, k) => `<circle class="clad-opening-vertex" data-vertex="${k}" cx="${fmt(p.x)}" cy="${fmt(-p.y)}" r="${fmt(hr)}" fill="#fff" stroke="#1f6feb" stroke-width="2" ${HAIR}><title>Przeciągnij narożnik (prawy klik — usuń)</title></circle>`).join('');
     const mids = o.map((a, k) => {

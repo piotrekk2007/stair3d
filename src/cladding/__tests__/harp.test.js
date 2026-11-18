@@ -146,3 +146,38 @@ test('a side\'s balustrade only along the steps of its range (numbers as on the 
   assert.ok(bal.balusters.length > 0 && bal.balusters.length < balFull.balusters.length);
   near(balFull.s1 - bal.s1, 3 * going, 'ends after step 13 (of 11–16)', 1);
 });
+
+// user report 2026-11-18: a U stair, the opening edge over the lower flight (on the exit edge's LINE, beside the exit)
+// switched on for the antresola got no balustrade — the antresola took every edge on that line for the exit (the
+// trim's rule was fixed on 2026-11-13, the antresola kept the old one); now one rule, openingEdges.js
+test('the antresola on an opening edge over the lower flight of a U (on the exit\'s line, not the exit) — a harp there', async () => {
+  const { exitEdgeTest } = await import('../openingEdges.js');
+  const c = sanitizeCladdingConfig({
+    ...createDefaultCladdingConfig(),
+    sequence: [
+      { kind: 'steps', count: 9, riseMm: 185, goingMm: 270, widthMm: 1100 },
+      { kind: 'landing', riseMm: 185, depthMm: 835, turn: 'u-right', gapMm: 0, finish: 'floorboard' },
+      { kind: 'steps', count: 6, riseMm: 185, goingMm: 270, widthMm: 1130 },
+    ],
+    showSlab: true,
+    openingManual: [{ x: 0, y: 810 }, { x: 1080, y: 810 }, { x: 2230, y: 810 }, { x: 2230, y: 3265 }, { x: 0, y: 3265 }],
+    railingAntresola: true,
+    railingAntresolaInfill: 'harp',
+    // only the edge over the lower flight (0) on
+    railingAntresolaEdges: { 1: false, 2: false, 3: false, 4: false },
+  });
+  const b = buildCladdingStair(c);
+  const o = b.slab.opening;
+  const isExit = exitEdgeTest(b);
+  assert.equal(isExit(o[0], o[1]), false, 'over flight 1 — beside the exit');
+  assert.equal(isExit(o[1], o[2]), true, 'the exit itself');
+  const a = b.balustrade.sections.filter((s) => s.kind === 'antresola');
+  assert.equal(a.length, 1, 'the antresola there');
+  assert.equal(a[0].infill, 'harp');
+  assert.ok(a[0].harp.rods.length > 5);
+  for (const r of a[0].harp.rods) assert.ok(r.at.x > -100 && r.at.x < 1180, 'along edge 0');
+  // the plan's opening editor says the same: edge 1 = the exit (grey, dashed), edge 0 green
+  const svg = renderCladdingPlanSVG(b, { mode: 'opening' });
+  assert.match(svg, /data-edge="0"[^>]*stroke="#2e7d32"/);
+  assert.match(svg, /data-edge="1"[^>]*stroke="#9aa0a6"[^>]*stroke-dasharray/);
+});

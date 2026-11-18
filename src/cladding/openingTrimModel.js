@@ -11,6 +11,7 @@
 // none. Sizes ASSUMPTION (as the self-supporting defaults). Pure.
 
 import { riserThicknessOf } from './claddingModel.js';
+import { exitEdgeTest } from './openingEdges.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
@@ -36,16 +37,7 @@ function crossing(a1, b1, a2, b2) {
  */
 export function trimEdges(built, config) {
   const o = built.slab?.opening || [];
-  const last = built.concrete.elements.at(-1);
-  const exitEdges = (last?.edges || []).filter((e) => e.role === 'back');
-  const onExit = (a, b) =>
-    exitEdges.some((e) => {
-      const l = dist(e.a, e.b) || 1;
-      if (![a, b].every((p) => Math.abs((e.b.x - e.a.x) * (p.y - e.a.y) - (e.b.y - e.a.y) * (p.x - e.a.x)) / l < 1)) return false;
-      // the overlap along the back edge's line (mm)
-      const u = (p) => ((p.x - e.a.x) * (e.b.x - e.a.x) + (p.y - e.a.y) * (e.b.y - e.a.y)) / l;
-      return Math.min(l, Math.max(u(a), u(b))) - Math.max(0, Math.min(u(a), u(b))) > 1;
-    });
+  const onExit = exitEdgeTest(built);
   return o.map((a, k) => {
     const b = o[(k + 1) % o.length];
     const exit = onExit(a, b);

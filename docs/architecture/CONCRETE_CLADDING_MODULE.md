@@ -743,3 +743,9 @@ is built and solved with its own copy of the config (`withInfill`), so every con
 Panel: the sides table's „balustrada” cell — per side the switch, the infill („jak domyślne (…)” or its own) and „stopnie
 od–do” (the side's first / last number as the placeholders); „Antresola: wypełnienie” in „Balustrada i słupy”. The
 offer's „Balustrada” row lists each section with its infill when they differ. Tests: `__tests__/harp.test.js`.
+
+**The opening's exit edge — one rule** (user report 2026-11-18, fixed): the antresola still took every opening edge on
+the last back edge's LINE for the exit (the trim's rule was fixed 2026-11-13), so a U's edge over the lower flight never
+got its balustrade though the plan showed it on. Now `openingEdges.js exitEdgeTest` (on the line AND overlapping it) is
+read by the trim (`trimEdges`), the antresola (`antresolaLines`) and the plan's opening editor (the exit edge grey,
+dashed, „Wyjście ze schodów”). Test: `__tests__/harp.test.js`.

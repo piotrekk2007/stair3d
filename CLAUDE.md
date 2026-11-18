@@ -607,7 +607,7 @@ groove (`riserMount 'behind'`, `riserTopOverlapMm`) or carpet ones between the t
 priced per mb); the quote option „kanały i obróbka krawędzi” (per tread). The production order „🏭 Zamówienie PDF”
 (`export/productionOrder.js`: groups with the edges + profile drawings, „t x w x l - typ - n szt.”, large type; the
 both-sides tread type is „PL”). The opening's trim „fajka” per opening
-edge (`openingTrimModel.js`, plan mode „▬ Fajka”; mitred into the antresola nosing too; the exit edge = on the last back
+edge (`openingTrimModel.js`, plan mode „▬ Fajka”; mitred into the antresola nosing too; the exit edge (one rule, `openingEdges.js exitEdgeTest`, also the antresola and the plan) = on the last back
 edge's line AND overlapping it — a U's edge over the lower flight takes a trim); the 3D view's layers; glass clamps on the posts; groups measured as finished elements (`measured`,
 `concreteFromFinished`); the posts' tops also rounded (turned) or none; a wall's end may sit
 part-way along a step (`fromOffsetMm` / `toOffsetMm`, dragged on the plan — `resolveWalls` splits the sides there). The wall handrail on brackets on a walled side

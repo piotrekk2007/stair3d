@@ -17,6 +17,7 @@
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { railingInfillOf, railingRangeOf } from './schema.js';
+import { exitEdgeTest } from './openingEdges.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
@@ -111,9 +112,9 @@ function stairLine(run, config) {
 function antresolaLines(built, config) {
   const opening = built.slab?.opening;
   if (!opening?.length) return [];
-  const last = built.concrete.elements.at(-1);
-  const exitEdges = last.edges.filter((e) => e.role === 'back');
-  const onExit = (a, b) => exitEdges.some((e) => [a, b].every((p) => Math.abs((e.b.x - e.a.x) * (p.y - e.a.y) - (e.b.y - e.a.y) * (p.x - e.a.x)) / (dist(e.a, e.b) || 1) < 1));
+  // (the exit: on the last back edge's line AND over it — openingEdges.js; a U's edge over the lower flight is free,
+  // user report 2026-11-18)
+  const onExit = exitEdgeTest(built);
   const n = opening.length;
   const free = (k) => !onExit(opening[k], opening[(k + 1) % n]) && config.railingAntresolaEdges?.[k] !== false;
   // chains of consecutive free edges (a closed loop when every edge is free)
