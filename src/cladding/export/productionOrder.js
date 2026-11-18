@@ -119,8 +119,13 @@ export function buildProductionOrder(built, quoteSettings = {}) {
   if (posts.length) groups.push({ title: `Słupy ${woodName}`, lines: grouped(posts) });
   const balusters = sections.flatMap((s) => s.balusters.map((b) => ({ dims: b.shape === 'round' ? `Ø${r0(b.size)}x${r0(Math.ceil((b.topZ - b.bottomZ) / 10) * 10)}` : dims3(b.size, b.size, Math.ceil((b.topZ - b.bottomZ) / 10) * 10), note: b.shape === 'round' ? 'toczone' : 'kwadratowe' })));
   if (balusters.length) groups.push({ title: `Tralki ${woodName}`, note: 'długości zaokrąglone w górę do 10 mm — docinane na miejscu', lines: grouped(balusters) });
+  // the harp's wooden balusters and its ceiling strips (balustradeModel.js harpOf; metal tubes are not joinery)
+  const harpWood = sections.filter((s) => s.harp?.material === 'wood').flatMap((s) => s.harp.rods.map((r) => ({ dims: s.harp.shape === 'round' ? `Ø${r0(s.harp.sizeMm)}x${r0(Math.ceil(r.lengthMm / 10) * 10)}` : dims3(s.harp.sizeMm, s.harp.sizeMm, Math.ceil(r.lengthMm / 10) * 10), note: 'harfa, od stopnia do sufitu' })));
+  if (harpWood.length) groups.push({ title: `Tralki harfy ${woodName}`, note: 'długości zaokrąglone w górę do 10 mm — docinane na miejscu', lines: grouped(harpWood) });
+  const harpStrips = sections.flatMap((s) => (s.harp?.strips || []).map((st) => ({ dims: dims3(st.thicknessMm, st.widthMm, st.lengthMm), note: `listwa montażowa harfy, ${st.ceiling === 'upper' ? 'sufit piętra' : 'spód stropu'}` })));
+  if (harpStrips.length) groups.push({ title: `Listwy montażowe harfy ${woodName}`, lines: grouped(harpStrips) });
   const rails = [
-    ...sections.map((s) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, s.lengthMm), note: s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}` })),
+    ...sections.filter((s) => !s.harp).map((s) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, s.lengthMm), note: s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}` })),
     ...(built.balustrade?.wallRails || []).map((w) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, w.lengthMm), note: `przyścienna, bieg ${w.key.flight + 1}, ${side(w.key.side)}, uchwyty ${w.brackets.length} szt.${config.wallRailReturn ? ', końce do ściany' : ''}` })),
   ];
   if (rails.length) groups.push({ title: `Poręcze ${woodName}`, lines: grouped(rails) });

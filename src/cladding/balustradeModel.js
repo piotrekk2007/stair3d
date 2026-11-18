@@ -20,7 +20,31 @@ import { createDiagnostic } from '../diagnostics/diagnostic.js';
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
-export const RAILING_INFILLS = Object.freeze({ balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu (rotule)' });
+export const RAILING_INFILLS = Object.freeze({ balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu (rotule)', harp: 'harfa (od stopni do sufitu)' });
+
+// The HARP (user request 2026-11-18 — „harfa”, as the self-supporting rods from the ceiling): rods from the treads (or
+// beside the stair's side on a bracket each) up to the ceiling — under the slab its soffit, in the opening the upper
+// floor's ceiling (`harpCeilingAboveFloorMm` over its finished floor); the antresola's from the floor to that ceiling.
+// Metal tubes (`harpMaterial: 'tube'`, Ø `harpTubeDiameterMm`) or wooden balusters (`'wood'`, `balusterShape` /
+// `balusterSizeMm`) — both priced per mb; evenly along the line, the clear gap ≤ `harpMaxClearMm`; no posts, no
+// handrail (user decision); optionally a mounting strip `harpStripThicknessMm` × `harpStripWidthMm` on the ceiling the
+// rods reach (priced per mb). Sizes ASSUMPTION / DO WERYFIKACJI.
+const isHarp = (config) => config.railingInfill === 'harp';
+// a plan point inside a polygon (ray casting)
+function insidePolygon(poly, p) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+const harpSide = (config) => isHarp(config) && config.harpMount === 'side';
+/** The harp's rod size (mm): the tube's diameter or the wooden baluster's section. */
+export const harpRodSizeMm = (config) => (config.harpMaterial === 'wood' ? config.balusterSizeMm : config.harpTubeDiameterMm);
+// a side-mounted infill's line off the stair's side face / the slab's edge (glass on the side, a harp on the side)
+const sideOffsetMm = (config) => (config.railingInfill === 'glass-side' ? config.glassStandoffMm + config.glassThicknessMm / 2 : config.harpSideStandoffMm + harpRodSizeMm(config) / 2);
 export const GLASS_TINTS = Object.freeze({ clear: { label: 'bezbarwne', color: 0xcfe7e2, opacity: 0.3 }, optiwhite: { label: 'optiwhite', color: 0xf2f7f7, opacity: 0.22 }, grey: { label: 'grafit', color: 0x4b5258, opacity: 0.5 }, bronze: { label: 'brąz', color: 0x8a6a46, opacity: 0.45 } });
 
 // a polyline of {s, z} → z at s (clamped to its ends)
@@ -55,8 +79,8 @@ function stairLine(run, config) {
   const s0 = pieces[0].s0;
   const s1 = pieces[pieces.length - 1].s1;
   const glassSide = config.railingInfill === 'glass-side';
-  // the line: on the treads `railingInsetMm` in from their ends, or (glass on the side) outside the concrete face
-  const off = glassSide ? config.glassStandoffMm + config.glassThicknessMm / 2 : -config.railingInsetMm;
+  // the line: on the treads `railingInsetMm` in from their ends, or (glass / a harp on the side) outside the concrete face
+  const off = glassSide || harpSide(config) ? sideOffsetMm(config) : -config.railingInsetMm;
   const piece = (s) => pieces.find((p) => s >= p.s0 - 1e-6 && s <= p.s1 + 1e-6) ?? (s < s0 ? pieces[0] : pieces[pieces.length - 1]);
   return {
     id: `railing-${run.id}`,
@@ -71,6 +95,11 @@ function stairLine(run, config) {
     groundAt: (s) => piece(s).top,
     // glass on the side: fixed to the concrete's side face under the treads
     baseAt: (s) => piece(s).concreteTop,
+    // towards the side face from the line (a side-mounted harp's brackets)
+    faceDirAt: () => {
+      const o = runOutward(run);
+      return { x: -o.x, y: -o.y };
+    },
     treads: pieces.filter((p) => !p.flat),
     flats: pieces.filter((p) => p.flat),
     outward: runOutward(run),
@@ -105,7 +134,7 @@ function antresolaLines(built, config) {
   }
   const floorZ = built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm;
   const glassSide = config.railingInfill === 'glass-side';
-  const d = glassSide ? -(config.glassStandoffMm + config.glassThicknessMm / 2) : config.antresolaSetbackMm;
+  const d = glassSide || harpSide(config) ? -sideOffsetMm(config) : config.antresolaSetbackMm;
   const top = floorZ + config.railingAntresolaHeightMm;
   return chains.map((edges) => {
     const closed = edges.length === n;
@@ -162,10 +191,97 @@ function antresolaLines(built, config) {
         })();
         return { x: -t.y, y: t.x };
       },
+      // towards the slab's edge face from the line (into the slab: the CCW path's right-hand side)
+      faceDirAt: (s) => {
+        const k = segAt(s);
+        const l = dist(path[k - 1], path[k]) || 1;
+        return { x: (path[k].y - path[k - 1].y) / l, y: -(path[k].x - path[k - 1].x) / l };
+      },
       closed,
       floorZ,
     };
   });
+}
+
+// --- the harp --------------------------------------------------------------------------------------------------
+
+// the rods' spots along a line: evenly, the clear gap ≤ harpMaxClearMm; an open line's outer rods `harpEndMm` (+ half
+// the rod) in from its ends, a closed loop round without a repeated one
+function harpSpots(line, d, config) {
+  const L = line.s1 - line.s0;
+  const pitch = config.harpMaxClearMm + d;
+  if (!(L > 0)) return [];
+  if (line.closed) {
+    const n = Math.max(3, Math.ceil(L / pitch - 1e-9));
+    return Array.from({ length: n }, (_, k) => line.s0 + (L * k) / n);
+  }
+  const e = Math.min(config.harpEndMm + d / 2, L / 2);
+  const span = L - 2 * e;
+  const gaps = Math.max(0, Math.ceil(span / pitch - 1e-9));
+  if (!gaps) return [line.s0 + L / 2];
+  return Array.from({ length: gaps + 1 }, (_, k) => line.s0 + e + (span * k) / gaps);
+}
+
+/**
+ * The harp on one line: its rods (plan spot, bottom / top z, which ceiling), a bracket per rod when on the side, the
+ * mounting strips on the ceilings (one piece per run of rods under the same ceiling). `ceiling` = {soffitZ, upperZ,
+ * inOpening(p)}.
+ */
+function harpOf(line, config, ceiling) {
+  const d = harpRodSizeMm(config);
+  const side = harpSide(config);
+  const strip = config.harpStrip ? config.harpStripThicknessMm : 0;
+  const rods = harpSpots(line, d, config).map((s) => {
+    const at = line.at(s);
+    // the antresola's rods stand on the floor above: always up to its ceiling
+    const upper = line.kind === 'antresola' || ceiling.inOpening(at);
+    const ceilingZ = upper ? ceiling.upperZ : ceiling.soffitZ;
+    const bottomZ = side ? line.baseAt(s) - config.harpSideBelowMm : line.groundAt(s);
+    const topZ = ceilingZ - strip;
+    return { s, at, bottomZ, topZ, lengthMm: Math.max(0, topZ - bottomZ), ceiling: upper ? 'upper' : 'soffit', ceilingZ };
+  });
+  const brackets = side
+    ? rods.map((r) => {
+        const f = line.faceDirAt(r.s);
+        const reach = config.harpSideStandoffMm + d / 2;
+        return { at: r.at, face: { x: r.at.x + f.x * reach, y: r.at.y + f.y * reach }, z: r.bottomZ + config.harpSideBelowMm / 2, reachMm: reach };
+      })
+    : [];
+  // the strips: consecutive rods under the same ceiling, from the first one − 50 mm to the last one + 50 mm along the line
+  const strips = [];
+  if (config.harpStrip && rods.length) {
+    const over = 50;
+    let group = [rods[0]];
+    const flush = () => {
+      const a = Math.max(line.s0, group[0].s - d / 2 - over);
+      const b = Math.min(line.s1, group[group.length - 1].s + d / 2 + over);
+      const ss = [a, ...(line.corners || []).filter((s) => s > a + 1e-6 && s < b - 1e-6), b];
+      const z = group[0].ceilingZ;
+      const points = ss.map((s) => ({ ...line.at(s), z }));
+      let lengthMm = 0;
+      for (let k = 1; k < points.length; k++) lengthMm += dist(points[k - 1], points[k]);
+      strips.push({ points, z, thicknessMm: config.harpStripThicknessMm, widthMm: config.harpStripWidthMm, lengthMm, ceiling: group[0].ceiling });
+    };
+    for (const r of rods.slice(1)) {
+      if (r.ceiling === group[0].ceiling) group.push(r);
+      else {
+        flush();
+        group = [r];
+      }
+    }
+    flush();
+  }
+  return {
+    material: config.harpMaterial === 'wood' ? 'wood' : 'tube',
+    mount: side ? 'side' : 'top',
+    sizeMm: d,
+    shape: config.harpMaterial === 'wood' ? config.balusterShape : 'round',
+    rods,
+    brackets,
+    strips,
+    rodsLengthMm: rods.reduce((n, r) => n + r.lengthMm, 0),
+    stripLengthMm: strips.reduce((n, s) => n + s.lengthMm, 0),
+  };
 }
 
 function crossing(l1, l2) {
@@ -197,7 +313,13 @@ function paneClamps(pa, pb, a0, b0, posts, zsAt, config) {
   return out;
 }
 
-function section(line, config) {
+function section(line, config, ceiling) {
+  // a harp: only its rods (no posts, no handrail — user decision 2026-11-18)
+  if (isHarp(config)) {
+    const harp = harpOf(line, config, ceiling);
+    const ss = [line.s0, ...(line.corners || []).filter((s) => s > line.s0 && s < line.s1), line.s1];
+    return { id: line.id, kind: line.kind, key: line.key, infill: 'harp', s0: line.s0, s1: line.s1, path: ss.map((s) => ({ s, ...line.at(s) })), handrail: [], plumb: { start: false, end: false }, posts: [], removedPosts: [], balusters: [], panes: [], fixings: 0, treadCount: line.treads.length, lengthMm: 0, harp };
+  }
   const edits = config.railingPostEdits?.[line.id] || {};
   const removed = new Set(edits.removed || []);
   const size = config.postSizeMm;
@@ -437,7 +559,15 @@ export function buildBalustrade(built, config) {
     lines.push(stairLine(run, config));
   }
   if (config.railingAntresola) lines.push(...antresolaLines(built, config));
-  return { sections: lines.map((l) => section(l, config)), wallRails, wallRailSpots, diagnostics };
+  // the ceilings a harp reaches: the slab's soffit, in its opening the upper floor's ceiling
+  const rawTop = built.concrete.exit.rawSlabTopZ;
+  const opening = built.slab?.opening || [];
+  const ceiling = {
+    soffitZ: built.slab?.bottomZ ?? rawTop - config.slabThicknessMm,
+    upperZ: (built.slab?.finishTopZ ?? rawTop + config.floorFinishTopMm) + config.harpCeilingAboveFloorMm,
+    inOpening: (p) => opening.length >= 3 && insidePolygon(opening, p),
+  };
+  return { sections: lines.map((l) => section(l, config, ceiling)), wallRails, wallRailSpots, diagnostics };
 }
 
 /** The nearest point of a section's line to a plan point → its s (for adding a post on the plan). */

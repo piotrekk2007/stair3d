@@ -49,6 +49,15 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
   for (const s of built.balustrade?.sections || []) {
     const where = s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}`;
     n += 1;
+    // the harp (balustradeModel.js harpOf): its rods (the longest; cut on site), the ceiling's strip — no handrail
+    if (s.harp) {
+      const h = s.harp;
+      const len = Math.max(0, ...h.rods.map((r) => r.lengthMm));
+      if (h.material === 'wood') rows.push({ code: `TR-${n}`, name: `Tralki harfy — ${where}`, qty: h.rods.length, lengthMm: r0(len), widthMm: r0(h.sizeMm), thicknessMm: r0(h.sizeMm), material: wood, notes: `${h.shape === 'round' ? 'okrągłe Ø' : 'kwadratowe '}${r0(h.sizeMm)} mm; od stopnia do sufitu, długość najdłuższej (razem ${r0(h.rodsLengthMm)} mm), docinane na miejscu` });
+      else rows.push({ code: `RH-${n}`, name: `Rurki harfy — ${where}`, qty: h.rods.length, lengthMm: r0(len), widthMm: r0(h.sizeMm), thicknessMm: r0(h.sizeMm), material: 'stal', notes: `rurka Ø${r0(h.sizeMm)} mm; długość najdłuższej (razem ${r0(h.rodsLengthMm)} mm)${h.brackets.length ? `; uchwyty: ${h.brackets.length} szt.` : ''}` });
+      h.strips.forEach((st, k) => rows.push({ code: `LM-${n}${h.strips.length > 1 ? `-${k + 1}` : ''}`, name: `Listwa montażowa harfy (${st.ceiling === 'upper' ? 'sufit piętra' : 'spód stropu'}) — ${where}`, qty: 1, lengthMm: r0(st.lengthMm), widthMm: r0(st.widthMm), thicknessMm: r0(st.thicknessMm), material: wood, notes: 'na suficie, rurki dochodzą do niej' }));
+      continue;
+    }
     rows.push({ code: `PR-${n}`, name: `Poręcz — ${where}`, qty: 1, lengthMm: r0(s.lengthMm), widthMm: r0(config.handrailWidthMm), thicknessMm: r0(config.handrailHeightMm), material: wood, notes: `przekrój ${handrailSize}` });
     if (s.balusters.length) {
       const len = Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ));

@@ -710,3 +710,26 @@ floor-board / OSB / skirting / loose-tongue / edge-channel prices; not the job's
 on / off) and „📂 Wczytaj cały cennik” applies it (`applyCladdingPrices`, sanitized); a self-supporting file (no block)
 leaves the labour as it is, a concrete PROJECT file gives its whole quote's prices. The shared reader / writer is
 unchanged (the self-supporting side ignores the block). Test: `__tests__/priceListFile.test.js`.
+
+## The harp (user request 2026-11-18, as built)
+
+A balustrade infill `railingInfill: 'harp'` („harfa (od stopni do sufitu)”, `balustradeModel.js harpOf`), on the
+flights' open sides and on the antresola (user decisions 2026-11-18): rods from the treads up to the ceiling — under the
+slab to its soffit (`slab.bottomZ`), in the opening (the rod's plan spot inside `slab.opening`) to the upper floor's
+ceiling (`slab.finishTopZ + harpCeilingAboveFloorMm`, 2600 ASSUMPTION); the antresola's from the floor above to that
+ceiling. Metal tubes (`harpMaterial: 'tube'`, Ø `harpTubeDiameterMm` 20) or wooden balusters (`'wood'`, the balusters'
+`balusterShape` / `balusterSizeMm`). Evenly along the line, the clear gap ≤ `harpMaxClearMm` (100), an open line's outer
+rods `harpEndMm` (50) in from its ends, a closed loop round without a repeated rod. `harpMount`: `top` (from the
+tread's top / the floor, the line `railingInsetMm` in like the balusters) or `side` (beside the stair's side face /
+hanging on the slab's edge, `harpSideStandoffMm` off it, the foot `harpSideBelowMm` below the concrete's top, ONE
+bracket per rod half way there). No posts, no handrail (user decision). `harpStrip` = a mounting strip
+`harpStripThicknessMm` × `harpStripWidthMm` (20 × 100) on the ceiling the rods reach (the rods end under it), one piece
+per run of rods under the same ceiling, 50 mm past the outer rods. The section's `harp {material, mount, sizeMm, shape,
+rods[{s, at, bottomZ, topZ, lengthMm, ceiling 'soffit'|'upper'}], brackets[{at, face, z}], strips[{points, z,
+lengthMm}], rodsLengthMm, stripLengthMm}`; `handrail`, `posts`, `balusters` empty. Read by the 3D (`HarpRod` metal /
+wood, `HarpBracket`, `HarpStrip` in the `Railing` group), the plan (dots, bracket ticks, a light band for the strip; no
+post line in „▮ Słupy”), the quote (the rods per mb — `harpTubePerMb` / `harpBalusterPerMb` —, brackets per piece —
+`harpBracketPerPiece` —, the strip per mb — `harpStripPerMb`; the module's own prices, in the whole price list file;
+labour `railing-harp` per rod), the cut list (`RH-` tubes / `TR-` wooden, `LM-` strips), the production order (the
+wooden rods, the strips) and the offer's „Balustrada” row. Panel: „Balustrada i słupy” → „Harfa”; the prices under
+„Harfa” in Kosztorys. Test: `__tests__/harp.test.js`.

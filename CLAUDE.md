@@ -613,7 +613,7 @@ edge's line AND overlapping it — a U's edge over the lower flight takes a trim
 part-way along a step (`fromOffsetMm` / `toOffsetMm`, dragged on the plan — `resolveWalls` splits the sides there). The wall handrail on brackets on a walled side
 (`wallRails`, `balustradeModel.js wallRail`; WARNING `CLAD-WALL-RAIL-LOW`), each walled stretch edited on its own
 (`wallRailEdits[run id]` on / cut back from either end / height / ends — the list „Poręcze przyścienne”, the plan's
-„▮ Słupy”: drag its ends, click it off / on); the balustrade's handrail stops at an end post's face, cut plumb. „🎬 Prezentacja” (the 3D only, the
+„▮ Słupy”: drag its ends, click it off / on); the balustrade's handrail stops at an end post's face, cut plumb. The HARP infill (user request 2026-11-18, `balustradeModel.js harpOf`): metal tubes / wooden balusters from the treads (or beside the side, a bracket each) to the slab's soffit — in the opening to the upper ceiling (`harpCeilingAboveFloorMm`) —, the antresola's floor to ceiling, evenly ≤ `harpMaxClearMm`, no posts / handrail, an optional ceiling strip 20 × 100; priced per mb / piece with the module's own `harp*` prices. „🎬 Prezentacja” (the 3D only, the
 shared logo + „Zapisz zdjęcie” — `app/presentation.js`). „⬇ Formatki CSV” (`export/cutList.js`, the DXF's pieces + the balustrade's
 wood, Excel PL). „📦 Model 3D dla klienta” in „Oferta” (HTML viewer / GLB / USDZ — the shared
 `export/clientModelExport.js` on `export/clientModel.js`). Tape measures: plan mode „📏 Miarka” (the shared

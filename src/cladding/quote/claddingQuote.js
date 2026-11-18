@@ -130,6 +130,21 @@ export function buildCladdingQuote(built, settings) {
   for (const s of built.balustrade?.sections || []) {
     const where = s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${s.key.side === 'left' ? 'lewa' : 'prawa'}`;
     const mb = round2(s.lengthMm / 1000);
+    // the harp (user request 2026-11-18): the rods per mb (a metal tube / a wooden baluster), a bracket per rod on the
+    // side, the ceiling's mounting strip per mb — the module's own prices; the fitting per rod
+    if (s.harp) {
+      const h = s.harp;
+      const rodMb = round2(h.rodsLengthMm / 1000);
+      const wood = h.material === 'wood';
+      const size = wood ? `${h.shape === 'round' ? 'Ø' : ''}${Math.round(h.sizeMm)}${h.shape === 'round' ? '' : ` × ${Math.round(h.sizeMm)}`} mm` : `Ø ${Math.round(h.sizeMm)} mm`;
+      lines.push({ id: `${s.id}-harp`, group: 'Balustrada', name: `Harfa — ${wood ? 'tralki drewniane' : 'rurki metalowe'} ${size} (${h.rods.length} szt.${h.mount === 'side' ? ', na boku' : ''}) — ${where}`, qty: rodMb, unit: 'mb', dims: `${h.rods.length} × do ${Math.round(Math.max(0, ...h.rods.map((r) => r.lengthMm)))} mm`, material: perUnit(wood ? settings.harpBalusterPerMb : settings.harpTubePerMb, rodMb, 'mb'), labour: labour('railing-harp', h.rods.length) });
+      if (h.brackets.length) lines.push({ id: `${s.id}-harp-brackets`, group: 'Balustrada', name: `Uchwyty harfy (na boku) — ${where}`, qty: h.brackets.length, unit: 'szt.', dims: '', material: perUnit(settings.harpBracketPerPiece, h.brackets.length, 'szt.'), labour: null });
+      if (h.strips.length) {
+        const sMb = round2(h.stripLengthMm / 1000);
+        lines.push({ id: `${s.id}-harp-strip`, group: 'Balustrada', name: `Listwa montażowa harfy na suficie ${Math.round(config.harpStripThicknessMm)} × ${Math.round(config.harpStripWidthMm)} mm — ${where}`, qty: sMb, unit: 'mb', dims: h.strips.map((x) => `${Math.round(x.lengthMm)} mm`).join(', '), material: perUnit(settings.harpStripPerMb, sMb, 'mb'), labour: null });
+      }
+      continue;
+    }
     // (the shared price list: the handrail per mb, a baluster per piece — takeoff/pricing.js; a post from the post
     // table by its section, per piece or per mb of its height — takeoff/boardPricing.js postPrices)
     lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });

@@ -130,8 +130,20 @@ export function createDefaultCladdingConfig() {
     handrailHeightMm: 50,
     // the infill (user request 2026-11-04 — the self-supporting types): balusters (square / round), glass between posts,
     // glass on the concrete's side (point fixings, the handrail on the glass); glass sizes ASSUMPTION / DO WERYFIKACJI
-    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side'
+    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side' | 'harp'
     balusterShape: 'square', // 'square' | 'round'
+    // the harp (balustradeModel.js harpOf, user request 2026-11-18): rods from the treads to the ceiling — sizes ASSUMPTION
+    harpMaterial: 'tube', // 'tube' (metal tube) | 'wood' (wooden balusters: balusterShape / balusterSizeMm)
+    harpMount: 'top', // 'top' (from the tread's top / the floor) | 'side' (beside the stair's side / the slab's edge, a bracket per rod)
+    harpTubeDiameterMm: 20,
+    harpMaxClearMm: 100, // the clear gap between rods (at most; § 298 — DO WERYFIKACJI)
+    harpEndMm: 50, // an open line's outer rods in from its ends (clear)
+    harpSideStandoffMm: 20, // on the side: the rod off the side face (its bracket's reach)
+    harpSideBelowMm: 100, // on the side: the rod's foot below the concrete's top (its bracket half way)
+    harpCeilingAboveFloorMm: 2600, // the upper floor's ceiling over its finished floor (the rods in the opening)
+    harpStrip: false, // a mounting strip on the ceiling the rods reach
+    harpStripThicknessMm: 20,
+    harpStripWidthMm: 100,
     glassThicknessMm: 17,
     glassMaxWidthMm: 1200,
     glassGapMm: 20,
@@ -379,8 +391,19 @@ export function sanitizeCladdingConfig(raw) {
     ledEndMarginMm: num(c.ledEndMarginMm, d.ledEndMarginMm, 0, 300),
     ledPowerWPerM: num(c.ledPowerWPerM, d.ledPowerWPerM, 0, 60),
     ledSupplyReservePct: num(c.ledSupplyReservePct, d.ledSupplyReservePct, 0, 100),
-    railingInfill: ['balusters', 'glass-posts', 'glass-side'].includes(c.railingInfill) ? c.railingInfill : 'balusters',
+    railingInfill: ['balusters', 'glass-posts', 'glass-side', 'harp'].includes(c.railingInfill) ? c.railingInfill : 'balusters',
     balusterShape: c.balusterShape === 'round' ? 'round' : 'square',
+    harpMaterial: c.harpMaterial === 'wood' ? 'wood' : 'tube',
+    harpMount: c.harpMount === 'side' ? 'side' : 'top',
+    harpTubeDiameterMm: num(c.harpTubeDiameterMm, d.harpTubeDiameterMm, 6, 60),
+    harpMaxClearMm: num(c.harpMaxClearMm, d.harpMaxClearMm, 20, 300),
+    harpEndMm: num(c.harpEndMm, d.harpEndMm, 0, 300),
+    harpSideStandoffMm: num(c.harpSideStandoffMm, d.harpSideStandoffMm, 0, 150),
+    harpSideBelowMm: num(c.harpSideBelowMm, d.harpSideBelowMm, 20, 500),
+    harpCeilingAboveFloorMm: num(c.harpCeilingAboveFloorMm, d.harpCeilingAboveFloorMm, 1800, 6000),
+    harpStrip: !!c.harpStrip,
+    harpStripThicknessMm: num(c.harpStripThicknessMm, d.harpStripThicknessMm, 5, 80),
+    harpStripWidthMm: num(c.harpStripWidthMm, d.harpStripWidthMm, 20, 300),
     glassThicknessMm: num(c.glassThicknessMm, d.glassThicknessMm, 6, 40),
     glassMaxWidthMm: num(c.glassMaxWidthMm, d.glassMaxWidthMm, 300, 3000),
     glassGapMm: num(c.glassGapMm, d.glassGapMm, 0, 100),

@@ -414,6 +414,22 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
       } else railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, MATERIALS.baluster), { name: 'Baluster' }));
     }
     for (const p of s.posts) railing.add(decorativePost(p));
+    // the harp (balustradeModel.js harpOf): its rods (metal round / wooden baluster), a bracket per rod to the side
+    // face, the mounting strip on the ceiling
+    if (s.harp) {
+      const h = s.harp;
+      const rodMat = h.material === 'wood' ? MATERIALS.baluster : steelFixing;
+      for (const r of h.rods) {
+        if (!(r.lengthMm > 0)) continue;
+        if (h.shape === 'round') {
+          const g = new THREE.CylinderGeometry(h.sizeMm / 2, h.sizeMm / 2, r.lengthMm, 16);
+          g.translate(r.at.x, (r.bottomZ + r.topZ) / 2, -r.at.y);
+          railing.add(Object.assign(new THREE.Mesh(g, rodMat), { name: 'HarpRod' }));
+        } else railing.add(Object.assign(column(r.at, r.bottomZ, r.topZ, h.sizeMm, rodMat), { name: 'HarpRod' }));
+      }
+      for (const b of h.brackets) railing.add(Object.assign(railPiece({ ...b.at, z: b.z }, { ...b.face, z: b.z }, 20, 40, steelFixing), { name: 'HarpBracket' }));
+      for (const st of h.strips) for (let k = 1; k < st.points.length; k++) railing.add(Object.assign(railPiece({ ...st.points[k - 1], z: st.z - st.thicknessMm / 2 }, { ...st.points[k], z: st.z - st.thicknessMm / 2 }, st.widthMm, st.thicknessMm, MATERIALS.railing), { name: 'HarpStrip' }));
+    }
     // glass panes (see-through, the tint) and, on the concrete's side, their point fixings
     const tint = GLASS_TINTS[config.glassTint] || GLASS_TINTS.clear;
     const glass = new THREE.MeshStandardMaterial({ color: tint.color, transparent: true, opacity: tint.opacity, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });

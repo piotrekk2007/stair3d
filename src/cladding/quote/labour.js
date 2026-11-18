@@ -32,6 +32,7 @@ export const DEFAULT_LABOUR = Object.freeze([
   { id: 'railing-stairs', label: 'Montaż balustrady na schodach (za stopień)', unit: 'szt', rate: 0 },
   { id: 'wall-rail', label: 'Montaż poręczy przyściennej', unit: 'mb', rate: 0 },
   { id: 'railing-antresola', label: 'Montaż balustrady na antresoli', unit: 'mb', rate: 0 },
+  { id: 'railing-harp', label: 'Montaż harfy (za rurkę / tralkę)', unit: 'szt', rate: 0 },
   { id: 'led', label: 'Montaż oświetlenia LED (profil + taśma)', unit: 'mb', rate: 0 },
   { id: 'measure', label: 'Pomiar', unit: 'ryczałt', rate: 0 },
   { id: 'transport', label: 'Transport', unit: 'ryczałt', rate: 0 },
@@ -52,6 +53,12 @@ export function createDefaultQuoteSettings() {
     looseTonguePerMb: 15,
     edgeChannels: false,
     edgeChannelsPerTread: 25,
+    // the harp (user request 2026-11-18): the metal tube / the wooden baluster per mb, a side bracket per piece, the
+    // ceiling's mounting strip per mb (0 = not priced yet)
+    harpTubePerMb: 0,
+    harpBalusterPerMb: 0,
+    harpBracketPerPiece: 0,
+    harpStripPerMb: 0,
     // the SHARED material list (as the self-supporting takeoff settings): by material id, and the board pricing
     priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
     wasteFactors: {},
@@ -96,6 +103,10 @@ export function sanitizeQuoteSettings(raw) {
     looseTonguePerMb: Math.max(0, num(s.looseTonguePerMb, 15)),
     edgeChannels: !!s.edgeChannels,
     edgeChannelsPerTread: Math.max(0, num(s.edgeChannelsPerTread, 25)),
+    harpTubePerMb: Math.max(0, num(s.harpTubePerMb, 0)),
+    harpBalusterPerMb: Math.max(0, num(s.harpBalusterPerMb, 0)),
+    harpBracketPerPiece: Math.max(0, num(s.harpBracketPerPiece, 0)),
+    harpStripPerMb: Math.max(0, num(s.harpStripPerMb, 0)),
     priceList: mergePriceList(s),
     wasteFactors: s.wasteFactors && typeof s.wasteFactors === 'object' ? { ...s.wasteFactors } : {},
     withInstallation: s.withInstallation !== false,
@@ -108,7 +119,7 @@ export function sanitizeQuoteSettings(raw) {
 // its own block `cladding` beside them (the self-supporting side reads the file and ignores it): the labour rates
 // (every item's rate, the user's own items whole), the lump-sum switches, the per-m² / per-mb prices. Not the job's
 // choices (installation on / off, edge channels on / off).
-const PRICE_KEYS = ['floorboardPerM2', 'osbPerM2', 'skirtingPerMb', 'looseTonguePerMb', 'edgeChannelsPerTread'];
+const PRICE_KEYS = ['floorboardPerM2', 'osbPerM2', 'skirtingPerMb', 'looseTonguePerMb', 'edgeChannelsPerTread', 'harpTubePerMb', 'harpBalusterPerMb', 'harpBracketPerPiece', 'harpStripPerMb'];
 
 /** The module's prices as the file block. */
 export function claddingPricesOf(settings) {

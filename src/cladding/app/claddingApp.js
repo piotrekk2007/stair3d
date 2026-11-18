@@ -368,6 +368,20 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'balusterShape', { kwadratowe: 'square', 'okrągłe (toczone)': 'round' }).name('Tralki'));
   live(rail.add(proxy, 'balusterSizeMm', 10, 120, 1).name('Tralka: przekrój / średnica [mm]'));
   live(rail.add(proxy, 'railingMaxClearMm', 50, 300, 5).name('Maks. prześwit (podest, antresola) [mm]'));
+  // the harp (balustradeModel.js harpOf, user request 2026-11-18): rods from the treads up to the ceiling
+  const harp = rail.addFolder('Harfa (Wypełnienie: harfa)');
+  live(harp.add(proxy, 'harpMaterial', { 'rurka metalowa': 'tube', 'tralka drewniana (kształt i przekrój jak tralki)': 'wood' }).name('Harfa: z czego'));
+  live(harp.add(proxy, 'harpMount', { 'od góry stopnia / podłogi': 'top', 'z boku schodów (uchwyt na każdą)': 'side' }).name('Harfa: mocowanie na dole'));
+  live(harp.add(proxy, 'harpTubeDiameterMm', 6, 60, 1).name('Rurka: średnica [mm]'));
+  live(harp.add(proxy, 'harpMaxClearMm', 20, 300, 5).name('Maks. prześwit między rurkami [mm]'));
+  live(harp.add(proxy, 'harpEndMm', 0, 300, 5).name('Od końca odcinka [mm]'));
+  live(harp.add(proxy, 'harpSideStandoffMm', 0, 150, 1).name('Z boku: odsunięcie od lica [mm]'));
+  live(harp.add(proxy, 'harpSideBelowMm', 20, 500, 5).name('Z boku: poniżej góry betonu [mm]'));
+  live(harp.add(proxy, 'harpCeilingAboveFloorMm', 1800, 6000, 10).name('Sufit piętra nad podłogą (w otworze) [mm]'));
+  live(harp.add(proxy, 'harpStrip').name('Listwa montażowa na suficie'));
+  live(harp.add(proxy, 'harpStripThicknessMm', 5, 80, 1).name('Listwa: grubość [mm]'));
+  live(harp.add(proxy, 'harpStripWidthMm', 20, 300, 5).name('Listwa: szerokość [mm]'));
+  harp.close();
   live(rail.add(proxy, 'handrailWidthMm', 20, 150, 1).name('Poręcz: szerokość [mm]'));
   live(rail.add(proxy, 'handrailHeightMm', 20, 150, 1).name('Poręcz: wysokość [mm]'));
   live(rail.add(proxy, 'railingInsetMm', 0, 300, 1).name('Oś od końca stopnia [mm]'));
@@ -495,6 +509,11 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Obce pióro (podstopnice dywanowe) [zł/mb] <input type="number" min="0" data-q="looseTonguePerMb" value="${s.looseTonguePerMb}" /></label>
       <label class="clad-field">Kanały i obróbka krawędzi <input type="checkbox" data-q-check="edgeChannels" ${s.edgeChannels ? 'checked' : ''} /></label>
       <label class="clad-field">— cena [zł/stopień] <input type="number" min="0" data-q="edgeChannelsPerTread" value="${s.edgeChannelsPerTread}" /></label>
+      <div class="clad-subhead">Harfa (balustrada od stopni do sufitu)</div>
+      <label class="clad-field">Rurka metalowa [zł/mb] <input type="number" min="0" data-q="harpTubePerMb" value="${s.harpTubePerMb || ''}" placeholder="0" /></label>
+      <label class="clad-field">Tralka drewniana harfy [zł/mb] <input type="number" min="0" data-q="harpBalusterPerMb" value="${s.harpBalusterPerMb || ''}" placeholder="0" /></label>
+      <label class="clad-field">Uchwyt rurki na boku [zł/szt.] <input type="number" min="0" data-q="harpBracketPerPiece" value="${s.harpBracketPerPiece || ''}" placeholder="0" /></label>
+      <label class="clad-field">Listwa montażowa na suficie [zł/mb] <input type="number" min="0" data-q="harpStripPerMb" value="${s.harpStripPerMb || ''}" placeholder="0" /></label>
       <div class="clad-subhead">Wspólny cennik (jak w schodach samonośnych)</div>
       ${SHARED_PRICES.map(([id, label, unit]) => `<label class="clad-field">${label} [zł/${unit}] <input type="number" min="0" data-price="${id}" value="${priceValue(s, id) || ''}" placeholder="0" /></label>`).join('')}
       <div class="clad-subhead">Słupy — cena wg przekroju (najmniejszy przekrój ≥ słupa)</div>

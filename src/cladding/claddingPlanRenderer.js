@@ -119,7 +119,15 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
         }).join('');
         return `<line x1="${fmt(at(s0).x)}" y1="${fmt(-at(s0).y)}" x2="${fmt(at(s1).x)}" y2="${fmt(-at(s1).y)}" stroke="#3aa6a0" stroke-width="3" pointer-events="none" ${HAIR}/>${clamps}`;
       }).join('');
-      return line + rail + bal + glass + posts + ghosts;
+      // the harp: its ceiling strip (a light band), its rods (dots — round metal or the wooden baluster's section), a
+      // bracket tick to the side face
+      const h = s.harp;
+      const harp = !h
+        ? ''
+        : h.strips.map((st) => `<polyline points="${pts(st.points)}" fill="none" stroke="#c9a77a" stroke-opacity="0.45" stroke-width="${fmt(st.widthMm)}" pointer-events="none"/>`).join('') +
+          h.brackets.map((b) => `<line x1="${fmt(b.at.x)}" y1="${fmt(-b.at.y)}" x2="${fmt(b.face.x)}" y2="${fmt(-b.face.y)}" stroke="#555" stroke-width="2" pointer-events="none" ${HAIR}/>`).join('') +
+          h.rods.map((r) => (h.shape === 'round' ? `<circle cx="${fmt(r.at.x)}" cy="${fmt(-r.at.y)}" r="${fmt(h.sizeMm / 2)}" fill="${h.material === 'wood' ? '#7a4b22' : '#555'}" pointer-events="none"/>` : `<rect x="${fmt(r.at.x - h.sizeMm / 2)}" y="${fmt(-r.at.y - h.sizeMm / 2)}" width="${fmt(h.sizeMm)}" height="${fmt(h.sizeMm)}" fill="#7a4b22" pointer-events="none"/>`)).join('');
+      return (h ? '' : line) + rail + bal + glass + harp + posts + ghosts;
     })
     .join('');
   // the wall handrails: the handrail line and a tick per bracket to the wall; in the post mode („▮ Słupy” — user request
