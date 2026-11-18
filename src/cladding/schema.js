@@ -130,7 +130,14 @@ export function createDefaultCladdingConfig() {
     handrailHeightMm: 50,
     // the infill (user request 2026-11-04 — the self-supporting types): balusters (square / round), glass between posts,
     // glass on the concrete's side (point fixings, the handrail on the glass); glass sizes ASSUMPTION / DO WERYFIKACJI
-    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side' | 'harp'
+    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side' | 'harp' — the default of every section
+    // per flight side / the antresola its own (user request 2026-11-18: a harp on flight 1, balusters on flight 2, a harp
+    // on the antresola): {[flight]: {[side]: infill}}, null = the default above — `railingInfillOf`
+    railingInfillSides: {},
+    railingAntresolaInfill: null,
+    // per flight side the steps the balustrade runs along (user request 2026-11-18): {[flight]: {[side]: {from?, to?}}}
+    // — the steps' numbers as on the plan (1-based, a landing too), absent = from the side's start / to its end
+    railingRangeSides: {},
     balusterShape: 'square', // 'square' | 'round'
     // the harp (balustradeModel.js harpOf, user request 2026-11-18): rods from the treads to the ceiling — sizes ASSUMPTION
     harpMaterial: 'tube', // 'tube' (metal tube) | 'wood' (wooden balusters: balusterShape / balusterSizeMm)
@@ -185,6 +192,55 @@ function sanitizeReferenceFloor(ref) {
   const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   const rot = (((Math.round(n(ref.rotationDeg) / 90) * 90) % 360) + 360) % 360;
   return { name: String(ref.name ?? ''), level: ref.level === 'below' ? 'below' : 'above', file: ref.file, dxMm: n(ref.dxMm), dyMm: n(ref.dyMm), rotationDeg: rot, mirror: !!ref.mirror };
+}
+
+/** The balustrade infills of the module (balustradeModel.js RAILING_INFILLS). */
+export const CLAD_INFILLS = Object.freeze(['balusters', 'glass-posts', 'glass-side', 'harp']);
+
+// {[flight]: {left?, right?: infill}} — known infills only
+function sanitizeInfillSides(raw) {
+  const out = {};
+  for (const [f, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!/^\d+$/.test(f) || !v || typeof v !== 'object') continue;
+    const sides = Object.fromEntries(['left', 'right'].filter((s) => CLAD_INFILLS.includes(v[s])).map((s) => [s, v[s]]));
+    if (Object.keys(sides).length) out[f] = sides;
+  }
+  return out;
+}
+
+// {[flight]: {left?, right?: {from?, to?}}} — whole step numbers ≥ 1
+function sanitizeRangeSides(raw) {
+  const out = {};
+  const n = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 && v !== null && v !== '' ? Number(v) : null);
+  for (const [f, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!/^\d+$/.test(f) || !v || typeof v !== 'object') continue;
+    const sides = {};
+    for (const s of ['left', 'right']) {
+      const r = v[s];
+      if (!r || typeof r !== 'object') continue;
+      const range = { ...(n(r.from) ? { from: n(r.from) } : {}), ...(n(r.to) ? { to: n(r.to) } : {}) };
+      if (Object.keys(range).length) sides[s] = range;
+    }
+    if (Object.keys(sides).length) out[f] = sides;
+  }
+  return out;
+}
+
+/** A flight side's balustrade range `{from, to}` (step numbers as on the plan; null = that end open). */
+export function railingRangeOf(config, key) {
+  const r = config.railingRangeSides?.[key?.flight]?.[key?.side];
+  return { from: r?.from ?? null, to: r?.to ?? null };
+}
+
+/**
+ * The infill of a balustrade section (user request 2026-11-18): a flight side's own (`railingInfillSides`), the
+ * antresola's own (`railingAntresolaInfill`; key 'antresola'), else the default `railingInfill`.
+ * @param {object} config
+ * @param {{flight:number, side:'left'|'right'}|'antresola'} key
+ */
+export function railingInfillOf(config, key) {
+  const own = key === 'antresola' ? config.railingAntresolaInfill : config.railingInfillSides?.[key?.flight]?.[key?.side];
+  return CLAD_INFILLS.includes(own) ? own : config.railingInfill;
 }
 
 // {[flight]: {left, right}} — booleans only
@@ -391,7 +447,10 @@ export function sanitizeCladdingConfig(raw) {
     ledEndMarginMm: num(c.ledEndMarginMm, d.ledEndMarginMm, 0, 300),
     ledPowerWPerM: num(c.ledPowerWPerM, d.ledPowerWPerM, 0, 60),
     ledSupplyReservePct: num(c.ledSupplyReservePct, d.ledSupplyReservePct, 0, 100),
-    railingInfill: ['balusters', 'glass-posts', 'glass-side', 'harp'].includes(c.railingInfill) ? c.railingInfill : 'balusters',
+    railingInfill: CLAD_INFILLS.includes(c.railingInfill) ? c.railingInfill : 'balusters',
+    railingInfillSides: sanitizeInfillSides(c.railingInfillSides),
+    railingRangeSides: sanitizeRangeSides(c.railingRangeSides),
+    railingAntresolaInfill: CLAD_INFILLS.includes(c.railingAntresolaInfill) ? c.railingAntresolaInfill : null,
     balusterShape: c.balusterShape === 'round' ? 'round' : 'square',
     harpMaterial: c.harpMaterial === 'wood' ? 'wood' : 'tube',
     harpMount: c.harpMount === 'side' ? 'side' : 'top',

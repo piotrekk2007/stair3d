@@ -361,10 +361,21 @@ export function mountCladdingApp(rootEl, host = {}) {
   fin.close();
   const rail = gui.addFolder('Balustrada i słupy');
   live(rail.add(proxy, 'railingAntresola').name('Balustrada na antresoli'));
+  // the antresola's own infill (user request 2026-11-18; '' = the default below) — the flights' sides are set in the
+  // sides table („balustrada”: the infill and the steps per side)
+  const antresolaInfill = {
+    get v() {
+      return state.config.railingAntresolaInfill || '';
+    },
+    set v(x) {
+      state.config.railingAntresolaInfill = x || null;
+    },
+  };
+  live(rail.add(antresolaInfill, 'v', { 'jak domyślne': '', ...Object.fromEntries(Object.entries(RAILING_INFILLS).map(([k, l]) => [l, k])) }).name('Antresola: wypełnienie'));
   live(rail.add(proxy, 'railingHeightMm', 600, 1500, 10).name('Wysokość nad noskami [mm]'));
   live(rail.add(proxy, 'railingAntresolaHeightMm', 600, 1500, 10).name('Antresola: wysokość [mm]'));
   live(rail.add(proxy, 'balustersPerTread', 0, 6, 1).name('Tralki na stopień'));
-  live(rail.add(proxy, 'railingInfill', Object.fromEntries(Object.entries(RAILING_INFILLS).map(([k, l]) => [l, k]))).name('Wypełnienie'));
+  live(rail.add(proxy, 'railingInfill', Object.fromEntries(Object.entries(RAILING_INFILLS).map(([k, l]) => [l, k]))).name('Wypełnienie (domyślne — na boku biegu w tabeli boków)'));
   live(rail.add(proxy, 'balusterShape', { kwadratowe: 'square', 'okrągłe (toczone)': 'round' }).name('Tralki'));
   live(rail.add(proxy, 'balusterSizeMm', 10, 120, 1).name('Tralka: przekrój / średnica [mm]'));
   live(rail.add(proxy, 'railingMaxClearMm', 50, 300, 5).name('Maks. prześwit (podest, antresola) [mm]'));
@@ -957,12 +968,51 @@ export function mountCladdingApp(rootEl, host = {}) {
     const runsOf = (f, side) => (state.built?.sideRuns || []).filter((r) => r.key.flight === f && r.key.side === side);
     const has = (f, side, atWall) => runsOf(f, side).some((r) => r.walled === atWall);
     const box = (field, f, side, atWall = false) => `<label><input type="checkbox" data-side-field="${field}" data-side="${f}:${side}" ${c[field]?.[f]?.[side] ? 'checked' : ''} ${!has(f, side, atWall) ? `disabled title="${atWall ? 'tylko przy ścianie' : 'cała strona przy ścianie'}"` : ''}/> ${side === 'left' ? 'L' : 'P'}</label>`;
+    // the balustrade per side: on / off, its own infill and the steps it runs along (user request 2026-11-18)
+    const railCell = (f, side) => {
+      const on = !!c.railingSides?.[f]?.[side];
+      if (!on) return `<div class="clad-rail-side">${box('railingSides', f, side)}</div>`;
+      const own = c.railingInfillSides?.[f]?.[side] || '';
+      const nums = runsOf(f, side).filter((r) => !r.walled && !r.end).flatMap((r) => r.pieces.map((p) => p.element.index + 1));
+      const range = c.railingRangeSides?.[f]?.[side] || {};
+      const infill = `<select class="clad-small" data-infill-side="${f}:${side}" title="Wypełnienie balustrady na tym boku"><option value="" ${own ? '' : 'selected'}>jak domyślne (${escapeHtml(RAILING_INFILLS[c.railingInfill])})</option>${Object.entries(RAILING_INFILLS).map(([k, l]) => `<option value="${k}" ${own === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>`;
+      const num = (k, ph, title) => `<input type="number" min="1" step="1" class="clad-small clad-range" data-range-side="${f}:${side}" data-range-f="${k}" value="${range[k] ?? ''}" placeholder="${ph ?? ''}" title="${title}" />`;
+      return `<div class="clad-rail-side">${box('railingSides', f, side)} ${infill} <span class="clad-range-wrap">stopnie ${num('from', nums.length ? Math.min(...nums) : '', 'Od stopnia nr (jak na planie) — puste = od początku')}–${num('to', nums.length ? Math.max(...nums) : '', 'Do stopnia nr (jak na planie) — puste = do końca')}</span></div>`;
+    };
     sidesEl.innerHTML =
       `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th><th>poręcz przyścienna</th></tr></thead><tbody>` +
-      Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${box('railingSides', f, 'left')} ${box('railingSides', f, 'right')}</td><td>${box('wallRails', f, 'left', true)} ${box('wallRails', f, 'right', true)}</td></tr>`).join('') +
+      Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${railCell(f, 'left')}${railCell(f, 'right')}</td><td>${box('wallRails', f, 'left', true)} ${box('wallRails', f, 'right', true)}</td></tr>`).join('') +
       `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”) i poręcz przyścienna na uchwytach (ustawienia w „Poręcz przyścienna”).</div>`;
   }
   sidesEl.addEventListener('change', (ev) => {
+    const { infillSide, rangeSide, rangeF } = ev.target.dataset;
+    if (infillSide) {
+      const [f, side] = infillSide.split(':');
+      change((c) => {
+        const all = { ...(c.railingInfillSides || {}) };
+        const sides = { ...(all[f] || {}) };
+        if (ev.target.value) sides[side] = ev.target.value;
+        else delete sides[side];
+        all[f] = sides;
+        c.railingInfillSides = all;
+      });
+      return;
+    }
+    if (rangeSide) {
+      const [f, side] = rangeSide.split(':');
+      const v = Math.round(Number(ev.target.value));
+      change((c) => {
+        const all = { ...(c.railingRangeSides || {}) };
+        const sides = { ...(all[f] || {}) };
+        const r = { ...(sides[side] || {}) };
+        if (ev.target.value === '' || !(v >= 1)) delete r[rangeF];
+        else r[rangeF] = v;
+        sides[side] = r;
+        all[f] = sides;
+        c.railingRangeSides = all;
+      });
+      return;
+    }
     const field = ev.target.dataset.sideField;
     if (!field) return;
     const [f, side] = ev.target.dataset.side.split(':');

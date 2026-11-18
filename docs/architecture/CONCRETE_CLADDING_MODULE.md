@@ -733,3 +733,13 @@ post line in „▮ Słupy”), the quote (the rods per mb — `harpTubePerMb` /
 labour `railing-harp` per rod), the cut list (`RH-` tubes / `TR-` wooden, `LM-` strips), the production order (the
 wooden rods, the strips) and the offer's „Balustrada” row. Panel: „Balustrada i słupy” → „Harfa”; the prices under
 „Harfa” in Kosztorys. Test: `__tests__/harp.test.js`.
+
+**Per side: the infill and the steps** (user request 2026-11-18 — a harp on flight 1, balusters on flight 2, a harp on the
+antresola; a harp only along some steps): `railingInfill` is the DEFAULT; `railingInfillSides[flight][side]` and
+`railingAntresolaInfill` override it (`schema.js railingInfillOf` — also `surroundingsModel.js edgeHasSideGlass`), and
+`railingRangeSides[flight][side] = {from?, to?}` (step numbers as on the plan, a landing too; `railingRangeOf`) keeps a
+side's balustrade to those steps (the run's pieces filtered — `buildBalustrade`; posts by hand keep their s). Each line
+is built and solved with its own copy of the config (`withInfill`), so every consumer reads `section.infill` / `harp`.
+Panel: the sides table's „balustrada” cell — per side the switch, the infill („jak domyślne (…)” or its own) and „stopnie
+od–do” (the side's first / last number as the placeholders); „Antresola: wypełnienie” in „Balustrada i słupy”. The
+offer's „Balustrada” row lists each section with its infill when they differ. Tests: `__tests__/harp.test.js`.

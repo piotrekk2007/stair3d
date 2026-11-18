@@ -16,6 +16,7 @@
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
+import { railingInfillOf, railingRangeOf } from './schema.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
@@ -532,6 +533,9 @@ export function buildBalustrade(built, config) {
   const wallRails = [];
   const wallRailSpots = [];
   const diagnostics = [];
+  // each section its own infill (user request 2026-11-18 — schema.js railingInfillOf): the line and the section read
+  // `railingInfill` off their own copy of the config
+  const withInfill = (infill) => (infill === config.railingInfill ? config : { ...config, railingInfill: infill });
   for (const run of buildSideRuns(built.concrete, config)) {
     if (!run.pieces.length) continue;
     // a U landing's back edge (sideRuns.js `end`) shares the incoming flight's side key, but a handrail / balustrade
@@ -556,9 +560,17 @@ export function buildBalustrade(built, config) {
       continue;
     }
     if (!config.railingSides?.[run.key.flight]?.[run.key.side]) continue;
-    lines.push(stairLine(run, config));
+    const cfg = withInfill(railingInfillOf(config, run.key));
+    // only the steps of the side's range (user request 2026-11-18 — a harp on steps 1–6 only): numbers as on the plan
+    const { from, to } = railingRangeOf(config, run.key);
+    const pieces = run.pieces.filter((p) => (from === null || p.element.index + 1 >= from) && (to === null || p.element.index + 1 <= to));
+    if (!pieces.length) continue;
+    lines.push({ ...stairLine(pieces.length === run.pieces.length ? run : { ...run, pieces }, cfg), cfg });
   }
-  if (config.railingAntresola) lines.push(...antresolaLines(built, config));
+  if (config.railingAntresola) {
+    const cfg = withInfill(railingInfillOf(config, 'antresola'));
+    lines.push(...antresolaLines(built, cfg).map((l) => ({ ...l, cfg })));
+  }
   // the ceilings a harp reaches: the slab's soffit, in its opening the upper floor's ceiling
   const rawTop = built.concrete.exit.rawSlabTopZ;
   const opening = built.slab?.opening || [];
@@ -567,7 +579,7 @@ export function buildBalustrade(built, config) {
     upperZ: (built.slab?.finishTopZ ?? rawTop + config.floorFinishTopMm) + config.harpCeilingAboveFloorMm,
     inOpening: (p) => opening.length >= 3 && insidePolygon(opening, p),
   };
-  return { sections: lines.map((l) => section(l, config, ceiling)), wallRails, wallRailSpots, diagnostics };
+  return { sections: lines.map((l) => section(l, l.cfg || config, ceiling)), wallRails, wallRailSpots, diagnostics };
 }
 
 /** The nearest point of a section's line to a plan point → its s (for adding a post on the plan). */

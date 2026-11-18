@@ -176,3 +176,8 @@
 /* a group measured as finished elements */
 .clad-measured { font-size: 11px; }
 .clad-measured option[value='finished'] { font-weight: 600; }
+/* the balustrade per flight side: on / off, its infill, its steps (user request 2026-11-18) */
+.clad-rail-side { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0; }
+.clad-rail-side select.clad-small { max-width: 150px; }
+.clad-rail-side .clad-range { width: 46px; }
+.clad-range-wrap { white-space: nowrap; }

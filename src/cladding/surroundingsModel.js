@@ -3,6 +3,7 @@
 // the slab above with the ceiling opening the stair needs. Pure, no Three.js.
 
 import { unionRectangles } from '../geometry/rectUnion.js';
+import { railingInfillOf } from './schema.js';
 
 const unit = (a, b) => {
   const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -44,7 +45,7 @@ export function edgeWallKey(element, edge) {
 /** Does glass on the concrete's side (balustradeModel.js, `glass-side`) stand along this edge — no side nosing there? */
 export function edgeHasSideGlass(element, edge, config) {
   const key = edgeWallKey(element, edge);
-  return !!key && config.railingInfill === 'glass-side' && !!config.railingSides?.[key.flight]?.[key.side] && !edgeHasWall(element, edge, config);
+  return !!key && railingInfillOf(config, key) === 'glass-side' && !!config.railingSides?.[key.flight]?.[key.side] && !edgeHasWall(element, edge, config);
 }
 
 /** Is this edge's side covered by a RAKED cover stringer (finishModel.js — the treads butt into it, no side nosing)? */

@@ -151,6 +151,22 @@ export function claddingAiAbsent(built) {
   return out;
 }
 
+// the offer's „Balustrada” row: one kind = as before; several (user request 2026-11-18 — a harp on one flight, balusters on
+// another) = each section with its own infill
+const INFILL_NAMES = { balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu', harp: 'harfa' };
+const CAP_NAMES = { flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula', round: 'góra zaoblona (toczona)', none: 'bez czapki' };
+function railingFact(built) {
+  const { config } = built;
+  const secs = built.balustrade?.sections || [];
+  if (!secs.length) return 'nie';
+  const harpText = (h) => `harfa — ${h.material === 'wood' ? 'tralki drewniane' : `rurki metalowe Ø${Math.round(h.sizeMm)} mm`} od ${h.mount === 'side' ? 'boku schodów' : 'stopni'} do sufitu${h.strips.length ? ', listwa montażowa na suficie' : ''}`;
+  const kinds = new Set(secs.map((s) => s.infill));
+  const count = `${secs.length} ${secs.length === 1 ? 'odcinek' : 'odcinki'}`;
+  if (kinds.size === 1) return secs[0].harp ? `${harpText(secs[0].harp)} (${count})` : `${count} (${INFILL_NAMES[secs[0].infill] || 'tralki'}; słupy: ${CAP_NAMES[config.postCap]})`;
+  const where = (s) => (s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1} ${s.key.side === 'left' ? 'L' : 'P'}`);
+  return secs.map((s) => `${where(s)}: ${s.harp ? harpText(s.harp) : INFILL_NAMES[s.infill] || 'tralki'}`).join('; ');
+}
+
 export function claddingFacts(built, quoteSettings) {
   const { concrete, cladding, config } = built;
   const steps = concrete.elements.filter((e) => e.kind === 'step').length;
@@ -161,7 +177,6 @@ export function claddingFacts(built, quoteSettings) {
   const goings = concrete.elements.filter((e) => e.kind === 'step').map((e) => e.goingMm);
   const avg = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
   const bp = quoteSettings.boardPricing || {};
-  const rail = (built.balustrade?.sections || []).length;
   const rows = [
     ['Rodzaj', 'Okładziny drewniane na biegu betonowym'],
     ['Stopnie', `${steps} prostych${winders ? `, ${winders} zabiegowych` : ''}${landings ? `, ${landings} ${landings === 1 ? 'podest' : 'podesty'}` : ''}${starters ? `, ${starters} zapraszający` : ''}`],
@@ -170,7 +185,7 @@ export function claddingFacts(built, quoteSettings) {
     ['Materiał', [bp.species, bp.cls].filter(Boolean).join(', ') || '—'],
     ['Grubość stopnia', `${config.treadThicknessMm} mm${config.riserBoards ? (config.riserMount === 'carpet' ? `, podstopnice dywanowe ${config.treadThicknessMm} mm (na obce pióro)` : `, podstopnice ${config.riserThicknessMm} mm`) : ', bez podstopnic'}`],
     ['Krawędź stopni', { square: 'prosta', chamfer: `fazka ${config.edgeProfileMm} mm`, round: `zaokrąglenie R${config.edgeProfileMm}`, bullnose: 'półwałek' }[config.edgeProfile] || '—'],
-    ['Balustrada', !rail ? 'nie' : config.railingInfill === 'harp' ? `harfa — ${config.harpMaterial === 'wood' ? 'tralki drewniane' : `rurki metalowe Ø${config.harpTubeDiameterMm} mm`} od ${config.harpMount === 'side' ? 'boku schodów' : 'stopni'} do sufitu${config.harpStrip ? ', listwa montażowa na suficie' : ''} (${rail} ${rail === 1 ? 'odcinek' : 'odcinki'})` : `${rail} ${rail === 1 ? 'odcinek' : 'odcinki'} (słupy: ${{ flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula', round: 'góra zaoblona (toczona)', none: 'bez czapki' }[config.postCap]})`],
+    ['Balustrada', railingFact(built)],
     ['Montaż', quoteSettings.withInstallation ? 'tak (VAT 8%)' : 'nie — sam materiał (VAT 23%)'],
   ];
   const h = Math.round(avg(rises.slice(1, -1).length ? rises.slice(1, -1) : rises));

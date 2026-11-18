@@ -91,3 +91,58 @@ test('the harp priced: rods per mb (tube / wooden baluster), brackets per piece,
   const cut = buildCutList(b);
   assert.ok((cut.rows || cut).some((r) => /^RH-/.test(r.code)));
 });
+
+// user request 2026-11-18: a harp on flight 1, balusters on flight 2, a harp on the antresola — and a balustrade only
+// along some steps of a side
+const twoFlights = (patch = {}) =>
+  sanitizeCladdingConfig({
+    ...createDefaultCladdingConfig(),
+    sequence: [
+      { kind: 'steps', count: 9, riseMm: 185, goingMm: 270, widthMm: 1000 },
+      { kind: 'landing', riseMm: 185, depthMm: 1000, turn: 'u-right', gapMm: 100, finish: 'wood' },
+      { kind: 'steps', count: 6, riseMm: 185, goingMm: 270, widthMm: 1000 },
+    ],
+    showSlab: true,
+    railingSides: { 0: { left: true }, 1: { left: true } },
+    railingAntresola: true,
+    railingInfill: 'balusters',
+    ...patch,
+  });
+
+test('each flight side and the antresola its own infill; the default where none is set', async () => {
+  const { railingInfillOf } = await import('../schema.js');
+  const c = twoFlights({ railingInfillSides: { 0: { left: 'harp' } }, railingAntresolaInfill: 'harp' });
+  assert.equal(railingInfillOf(c, { flight: 0, side: 'left' }), 'harp');
+  assert.equal(railingInfillOf(c, { flight: 1, side: 'left' }), 'balusters', 'the default');
+  assert.equal(railingInfillOf(c, 'antresola'), 'harp');
+  const b = buildCladdingStair(c);
+  const byFlight = (f) => b.balustrade.sections.filter((s) => s.kind === 'stairs' && s.key.flight === f);
+  assert.ok(byFlight(0).length && byFlight(0).every((s) => s.infill === 'harp' && s.harp.rods.length > 0 && !s.posts.length));
+  assert.ok(byFlight(1).length && byFlight(1).every((s) => s.infill === 'balusters' && s.balusters.length > 0 && s.posts.length > 0 && !s.harp));
+  const a = b.balustrade.sections.filter((s) => s.kind === 'antresola');
+  assert.ok(a.length && a.every((s) => s.infill === 'harp'));
+  // the quote prices each by its own kind
+  const q = buildCladdingQuote(b, createDefaultQuoteSettings());
+  assert.ok(q.lines.some((l) => /bieg 1/.test(l.name) && /^Harfa/.test(l.name)));
+  assert.ok(q.lines.some((l) => /^Tralki — bieg 2/.test(l.name)));
+  // unknown values dropped
+  assert.deepEqual(sanitizeCladdingConfig({ ...c, railingInfillSides: { 0: { left: 'x', right: 'harp' }, a: {} }, railingAntresolaInfill: 'x' }).railingInfillSides, { 0: { right: 'harp' } });
+});
+
+test('a side\'s balustrade only along the steps of its range (numbers as on the plan)', () => {
+  const full = buildCladdingStair(twoFlights({ railingInfill: 'harp', railingAntresola: false })).balustrade.sections.find((s) => s.key.flight === 0);
+  const c = twoFlights({ railingInfill: 'harp', railingAntresola: false, railingRangeSides: { 0: { left: { from: 3, to: 6 } } } });
+  const b = buildCladdingStair(c);
+  const part = b.balustrade.sections.find((s) => s.key.flight === 0);
+  const going = 270;
+  near(part.s1 - part.s0, 4 * going, 'steps 3–6 = four goings', 1);
+  assert.ok(part.harp.rods.length < full.harp.rods.length);
+  const byIndex = new Map(b.concrete.elements.map((e) => [e.index, e]));
+  assert.ok(byIndex.get(2) && part.s0 > full.s0, 'starts later');
+  // a range with no step of the side → no section there; balusters too
+  assert.equal(buildCladdingStair(twoFlights({ railingAntresola: false, railingRangeSides: { 0: { left: { from: 40 } } } })).balustrade.sections.filter((s) => s.key.flight === 0).length, 0);
+  const bal = buildCladdingStair(twoFlights({ railingAntresola: false, railingRangeSides: { 1: { left: { to: 13 } } } })).balustrade.sections.find((s) => s.key.flight === 1);
+  const balFull = buildCladdingStair(twoFlights({ railingAntresola: false })).balustrade.sections.find((s) => s.key.flight === 1);
+  assert.ok(bal.balusters.length > 0 && bal.balusters.length < balFull.balusters.length);
+  near(balFull.s1 - bal.s1, 3 * going, 'ends after step 13 (of 11–16)', 1);
+});
