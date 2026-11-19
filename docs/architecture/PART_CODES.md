@@ -33,3 +33,23 @@ Each part: `{code, itemId, sourceElementId, elementType, name (Polish), dimensio
   piece (`1/2`, `2/2` for a quantity), bulk parts (balusters, glass fixings, wall brackets) once with `× n`. A label: the
   code, the name, the sizes, the material, the project name and the date. With design errors the sheet still prints and
   says so on screen only.
+
+## The installer's sheet („Karta dla montażysty”, user request 2026-11-19)
+
+`production/installerSheet.js installerSheetHTML(models, {projectName, date, warning})` — a pure HTML document for the
+fitter to check the number and the shape of the parts, printed like the labels (`app/exports.js installerSheet` →
+`app/printHtml.js`; Kosztorys „🛠 Karta dla montażysty”, beside „🏷 Etykiety A4”; with design errors too, then it says
+so). The same codes as the labels (`buildPartList`). Colours per kind (`SHEET_COLORS`: straight / winder / landing /
+outer wanga / inner wanga / post / bearing / housing). User decisions 2026-11-19:
+- page 1: the plan (tread outlines coloured by kind with their codes, every wanga board's footprint — reference line +
+  its thickness inward — with its code, the structural posts) and a quantities table (count + the codes as ranges,
+  `codeRanges`);
+- the wangi: each board from the side (its `outerContour` in u / v), its overall length × height as dimension lines,
+  thickness, type (housed / cut), the blank (the takeoff's dimensions), a red line + the tread's number where each tread
+  bears (`treadBearings`), the housings (violet), the faces of the posts it enters — no chain of dimensions;
+- the treads: grouped when identical (`treadGroups`: the outline as cut — round a post too, `treadJointsByStep` — in the
+  tread's own frame, x along the front edge, rounded to 1 mm, the same kind and riser groove) — one drawing „× n” with
+  the codes; the front (nosed) edge red, the overall width × depth, and for a non-rectangle every edge ≥ 30 mm that is
+  not an overall dimension; winders and landings the same way (usually one each);
+- the risers grouped by size and the structural posts (section, height) as tables. No balustrade, no prices.
+Test: `production/__tests__/installerSheet.test.js`.

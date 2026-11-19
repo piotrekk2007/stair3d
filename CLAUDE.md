@@ -475,7 +475,7 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   numbered walking up — `ST-01` (= the plan's tread number), `PD`, `PS-01` (fan riser per panel `PS-06a`, top `PS-G`),
   `WZ`/`WW` (S: `WL`/`WP`), `SL`/`SB`, `PR`, `UP`, `PP`, `TR`, `SZ`, `MS`, `FJ`, `KS`; shown in the Inspektor („Kod
   elementu”); Kosztorys „🏷 Etykiety A4” prints a sticker sheet (3 × 8 / 2 × 7; code, name, sizes, material, project,
-  date; no QR).
+  date; no QR). Kosztorys „🛠 Karta dla montażysty” (`production/installerSheet.js`, user request 2026-11-19): a printable sheet for the fitter — the plan with the codes and quantities, every wanga board from the side (size, the treads' bearings numbered, housings, post faces), the treads / winders / landings from above (identical ones grouped × n, sizes, the front edge red), the risers and posts as tables; colours per kind.
 - **Model 3D for the client** (user request 2026-10-28, docs [CLIENT_MODEL.md](docs/architecture/CLIENT_MODEL.md)):
   „Oferta” tab → HTML (one self-contained file: the client's own viewer `viewer/clientViewer.js` — three.js only, bundled
   on its own by `vite.config.js clientViewerRuntime` as `virtual:client-viewer-runtime` — + the model as GLB + logo +

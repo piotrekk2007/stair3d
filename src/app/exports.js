@@ -11,6 +11,7 @@ import { downloadTextFile } from '../export/downloadTextFile.js';
 import { takeoffToCSV, takeoffToTextReport } from '../takeoff/index.js';
 import { buildPartList } from '../production/partCodes.js';
 import { labelSheetHTML } from '../production/labelSheet.js';
+import { installerSheetHTML } from '../production/installerSheet.js';
 import { printHtml } from './printHtml.js';
 import { buildClientScene, sceneToGLB, sceneToUSDZ, arrayBufferToBase64, clientViewerHTML, clientFacts } from '../export/clientModelExport.js';
 
@@ -65,6 +66,20 @@ export function createExports(opts) {
         warning: blocked ? 'Uwaga: projekt ma błędy (Walidacja) — kosztorys jest zablokowany; etykiety pokazują elementy w obecnym stanie.' : null,
       });
       printHtml(html);
+    },
+    // The installer's sheet (production/installerSheet.js, user request 2026-11-19): the plan with the codes, the wangi,
+    // the treads / winders / landings, the risers and posts — printed like the labels; with design errors too (it says so).
+    installerSheet() {
+      const m = opts.getModels();
+      if (!m || m.fullConfig?.stairPending) return;
+      const blocked = opts.getTakeoff()?.status === 'BLOCKED';
+      printHtml(
+        installerSheetHTML(m, {
+          projectName: opts.getProjectName() || '',
+          date: new Date().toLocaleDateString('pl-PL'),
+          warning: blocked ? 'Uwaga: projekt ma błędy (Walidacja) — kosztorys jest zablokowany; karta pokazuje elementy w obecnym stanie.' : null,
+        })
+      );
     },
     postDXF(postId) {
       const m = opts.getModels();

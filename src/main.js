@@ -1605,6 +1605,7 @@ const takeoffPanel = createTakeoffPanel(ws.tabBody('takeoff'), {
   onExportTrimDXF: () => exporter.trimDXF(),
   onExportTreadsDXF: () => exporter.allTreadsDXF(),
   onPrintLabels: (layout) => exporter.labels(layout),
+  onPrintInstallerSheet: () => exporter.installerSheet(),
 });
 // Edytor cennika (gatunek, cennik desek, mnożniki, ceny pozostałych materiałów, odpady): zmienia
 // tylko takeoffSettings i przelicza kosztorys — geometria i historia modelu zostają nietknięte.
