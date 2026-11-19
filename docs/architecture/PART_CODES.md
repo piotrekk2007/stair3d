@@ -52,4 +52,5 @@ outer wanga / inner wanga / post / bearing / housing). User decisions 2026-11-19
   the codes; the front (nosed) edge red, the overall width × depth, and for a non-rectangle every edge ≥ 30 mm that is
   not an overall dimension; winders and landings the same way (usually one each);
 - the risers grouped by size and the structural posts (section, height) as tables. No balustrade, no prices.
+Print layout (user report 2026-11-19 — a heading was left alone at a page's foot, a table ran on without its heading): a section's heading and its first row of cards are one kept block (`cardSection`, `.keep`), every row of cards whole; a table's title and column heads are its `<thead>` (`tableSection`), repeated by the browser on every page the table runs over, a table of ≤ 14 rows kept whole, no row split.
 Test: `production/__tests__/installerSheet.test.js`.

@@ -276,7 +276,31 @@ const CSS = `
   td.n, th.n { text-align: right; }
   .plan { border: 1px solid #ddd; border-radius: 2mm; }
   .page { break-after: page; }
+  /* print layout (user report 2026-11-19: a heading left alone at a page's foot, a table going on without its heading):
+     a section's heading stays with its first row of cards, the rows never split; a table's title and column heads are
+     its <thead>, repeated on every page it runs over; a short table is kept whole */
+  .keep { break-inside: avoid; }
+  .grid { margin-bottom: 3mm; break-inside: avoid; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th.tt { font-size: 13pt; font-weight: 600; padding: 1.5mm 3mm; background: #2B2A29; color: #fff; border-radius: 1.5mm; border: 0; }
+  thead tr.gap th { background: none; padding: 0; height: 1.5mm; border: 0; }
+  section.tsec { margin-top: 6mm; }
+  table.short { break-inside: avoid; }
 `;
+
+// a section of cards: its heading kept with the first row (on the same page), each row whole
+function cardSection(title, cards, perRow) {
+  const rows = [];
+  for (let k = 0; k < cards.length; k += perRow) rows.push(perRow > 1 ? `<div class="grid">${cards.slice(k, k + perRow).join('')}</div>` : cards[k]);
+  return `<section><div class="keep"><h2>${title}</h2>${rows[0] || ''}</div>${rows.slice(1).join('')}</section>`;
+}
+
+// a table with its title in the head (repeated on every page it runs over); up to SHORT_TABLE_ROWS rows kept whole
+const SHORT_TABLE_ROWS = 14;
+function tableSection(title, heads, rows) {
+  return `<section class="tsec"><table class="${rows.length <= SHORT_TABLE_ROWS ? 'short' : ''}"><thead><tr><th class="tt" colspan="${heads.length}">${title}</th></tr><tr class="gap"><th colspan="${heads.length}"></th></tr><tr>${heads.join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></section>`;
+}
 
 /**
  * @param {object} models  buildStaircase's result
@@ -317,22 +341,20 @@ export function installerSheetHTML(models, { projectName = '', date = '', warnin
     .map(([k, l]) => `<span><span class="sw" style="background:${SHEET_COLORS[k]}"></span>${esc(l)}</span>`)
     .join('');
   const head = `<header><div><h1>Karta dla montażysty</h1><div>${esc(projectName || 'Schody')}</div></div><div class="meta">${esc(date)}<br>kody jak na etykietach elementów</div></header>`;
-  const page1 = `<section class="page">${head}${warning ? `<div class="warn">${esc(warning)}</div>` : ''}<h2>Rzut schodów z kodami elementów</h2><div class="legend">${legend}</div>${planOverview(models, partList)}<h2>Ilości</h2><table><tr><th>Element</th><th class="n">Ilość</th><th>Kody</th></tr>${summary.map(([k, l, n, codes]) => `<tr><td>${k ? `<span class="sw" style="background:${SHEET_COLORS[k]}"></span> ` : ''}${esc(l)}</td><td class="n"><b>${n}</b></td><td>${esc(codeRanges(sortCodes(codes)))}</td></tr>`).join('')}</table></section>`;
-  const wangi = boards.length ? `<section><h2>Wangi — widok z boku (czerwone kreski: oparcie stopni, numer stopnia)</h2>${boards.map(stringerCard).join('')}</section>` : '';
+  const page1 = `<section class="page">${head}${warning ? `<div class="warn">${esc(warning)}</div>` : ''}<h2>Rzut schodów z kodami elementów</h2><div class="legend">${legend}</div>${planOverview(models, partList)}${tableSection('Ilości', ['<th>Element</th>', '<th class="n">Ilość</th>', '<th>Kody</th>'], summary.map(([k, l, n, codes]) => `<tr><td>${k ? `<span class="sw" style="background:${SHEET_COLORS[k]}"></span> ` : ''}${esc(l)}</td><td class="n"><b>${n}</b></td><td>${esc(codeRanges(sortCodes(codes)))}</td></tr>`))}</section>`;
+  const wangi = boards.length ? cardSection('Wangi — widok z boku (czerwone kreski: oparcie stopni, numer stopnia)', boards.map(stringerCard), 1) : '';
   const treadSection = (kind, title) => {
     const gs = groups.filter((g) => g.kind === kind);
-    return gs.length ? `<section><h2>${title}</h2><div class="grid">${gs.map(treadCard).join('')}</div></section>` : '';
+    return gs.length ? cardSection(title, gs.map(treadCard), 2) : '';
   };
   // the risers grouped by size, the posts one by one
   const riserRows = [...risers.reduce((m, r) => m.set(r.dimensions, [...(m.get(r.dimensions) || []), r.code]), new Map())];
-  const riserTable = risers.length ? `<section><h2>Podstopnice</h2><table><tr><th>Kody</th><th class="n">Ilość</th><th>Wymiary (dł. × wys. × gr.)</th></tr>${riserRows.map(([d, codes]) => `<tr><td>${esc(codeRanges(codes))}</td><td class="n"><b>${codes.length}</b></td><td>${esc(d)}</td></tr>`).join('')}</table></section>` : '';
+  const riserTable = risers.length ? tableSection('Podstopnice', ['<th>Kody</th>', '<th class="n">Ilość</th>', '<th>Wymiary (dł. × wys. × gr.)</th>'], riserRows.map(([d, codes]) => `<tr><td>${esc(codeRanges(codes))}</td><td class="n"><b>${codes.length}</b></td><td>${esc(d)}</td></tr>`)) : '';
   const postTable = posts.length
-    ? `<section><h2>Słupy konstrukcyjne</h2><table><tr><th>Kod</th><th>Słup</th><th>Przekrój</th><th class="n">Wysokość</th></tr>${posts
-        .map((p) => {
+    ? tableSection('Słupy konstrukcyjne', ['<th>Kod</th>', '<th>Słup</th>', '<th>Przekrój</th>', '<th class="n">Wysokość</th>'], posts.map((p) => {
           const post = postById.get(p.sourceElementId.split(':')[1]);
           return `<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.name)}</td><td>${post ? `${r0(post.size)} × ${r0(post.size)} mm` : '—'}</td><td class="n">${post ? `${r0(post.elevation.top - post.elevation.bottom)} mm` : esc(p.dimensions)}</td></tr>`;
-        })
-        .join('')}</table></section>`
+        }))
     : '';
   const title = `Karta dla montażysty${projectName ? ` — ${projectName}` : ''}`;
   return `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${page1}${wangi}${treadSection('straight', 'Stopnie proste — rzut z góry')}${treadSection('winder', 'Stopnie zabiegowe — rzut z góry')}${treadSection('landing', 'Podesty — rzut z góry')}${riserTable}${postTable}</body></html>`;

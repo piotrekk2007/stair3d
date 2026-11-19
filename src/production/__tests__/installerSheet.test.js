@@ -46,12 +46,32 @@ test('the sheet: the plan with the codes, every board from the side with its tre
   assert.ok(bearings.length > 10);
   assert.match(html, /Stopnie proste — rzut z góry/);
   assert.match(html, /Stopnie zabiegowe — rzut z góry/);
-  assert.match(html, /<h2>Podstopnice<\/h2>/);
-  assert.match(html, /<h2>Słupy konstrukcyjne<\/h2>/);
+  assert.match(html, /<th class="tt" colspan="3">Podstopnice<\/th>/);
+  assert.match(html, /<th class="tt" colspan="4">Słupy konstrukcyjne<\/th>/);
+  // the risers grouped by size: the counts add up to every riser part
+  const riserTable = html.split('>Podstopnice</th>')[1].split('</table>')[0];
+  const counted = [...riserTable.matchAll(/<td class="n"><b>(\d+)<\/b>/g)].reduce((n, m) => n + Number(m[1]), 0);
+  assert.equal(counted, parts.filter((p) => p.elementType === 'RISER').length);
   assert.doesNotMatch(html, /\bNaN\b|undefined/);
   // the quantities table: the treads' count
   const straightCount = treadGroups(b).filter((g) => g.kind === 'straight').reduce((n, g) => n + g.codes.length, 0);
   assert.match(html, new RegExp(`Stopnie proste</td><td class="n"><b>${straightCount}</b>`));
+});
+
+// user report 2026-11-19: in print a section's heading stayed alone at a page's foot, and a table went on to the next
+// page without its heading — each heading is kept with its first row, a table's title and column heads are its <thead>
+test('print layout: a heading kept with its first row of cards; a table\'s title in its repeated head', () => {
+  const html = installerSheetHTML(build({ stairType: 'L', turn1Type: 'winder' }), {});
+  for (const title of ['Wangi — widok z boku', 'Stopnie proste — rzut z góry', 'Stopnie zabiegowe — rzut z góry']) {
+    const at = html.indexOf(title);
+    const keep = html.lastIndexOf('<div class="keep"><h2>', at);
+    assert.ok(keep >= 0 && at - keep < 40, `${title}: the heading opens a kept block`);
+    assert.match(html.slice(at, at + 400), /<\/h2>(<div class="grid">)?<div class="card/, `${title}: its first card in the same block`);
+  }
+  assert.match(html, /\.keep \{ break-inside: avoid; \}/);
+  assert.match(html, /thead \{ display: table-header-group; \}/);
+  for (const title of ['Ilości', 'Podstopnice', 'Słupy konstrukcyjne']) assert.match(html, new RegExp(`<table class="[^"]*"><thead><tr><th class="tt" colspan="\\d">${title}</th>`), `${title}: in the table's head`);
+  assert.doesNotMatch(html, /<h2>(Ilości|Podstopnice|Słupy konstrukcyjne)<\/h2>/, 'no loose heading before a table');
 });
 
 test('a stair without wangi (metal) still gets its sheet — no wangi section', () => {
