@@ -4,6 +4,9 @@ import { arcWinderGeometry, fittingWalklineOffset, isHalfTurnU, halfTurnWinderCo
 
 // PL-LEGAL-A-01 (src/rules/sets/plWarunkiTechniczne.js): 0,6 m <= 2h + s <= 0,65 m for fixed indoor stairs.
 export const BLONDEL_RANGE_MM = Object.freeze({ min: 600, max: 650 });
+// Straight treads per flight (treadsLegA/B/C): the 'Proste (odc. …)' sliders' maximum and the stairwell fit's search
+// range — one number (user report 2026-11-19: 15 was too few for a long straight flight).
+export const MAX_TREADS_PER_LEG = 25;
 
 export function createDefaultConfig() {
   return {

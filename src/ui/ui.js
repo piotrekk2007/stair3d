@@ -7,7 +7,7 @@ import { HANDRAIL_PRESETS, sanitizeRailingSections } from '../geometry/railingSo
 import { stairwellDrivenFields } from '../geometry/stairwellFit.js';
 import { floorDrivenFields } from '../geometry/floors.js';
 import { TIMBER_STRENGTH_CLASSES } from '../structural/timberClasses.js';
-import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets } from '../config/schema.js';
+import { OPENING_ALIGN_TARGETS, alignedOpeningOffsets, MAX_TREADS_PER_LEG } from '../config/schema.js';
 import { OPENING_SHAPES, sanitizeOpeningPolygon, openingPolygonIssue, alignedOpeningPolygon } from '../geometry/ceilingOpening.js';
 import { escapeHtml } from '../util/format.js';
 import { sideShort, sideGenitive } from '../util/sideNames.js';
@@ -576,7 +576,7 @@ export function createUI({
   lockable(steps.add(config, 'treadGoing', 150, 320, 5).name('Głębokość stopnia [mm]'), 'treadGoing');
   // L/U can start straight away with winders (0 straight treads before the first turn); a straight stair
   // needs at least one tread, so the minimum follows the stair type.
-  const legACtrl = lockable(steps.add(config, 'treadsLegA', 0, 15, 1).name('Proste (odc. A)'), 'treadsLegA');
+  const legACtrl = lockable(steps.add(config, 'treadsLegA', 0, MAX_TREADS_PER_LEG, 1).name('Proste (odc. A)'), 'treadsLegA');
   const syncLegAMin = () => {
     const min = config.stairType === 'straight' ? 1 : 0;
     legACtrl.min(min);
@@ -590,7 +590,7 @@ export function createUI({
   syncLegAMin();
   live(steps.add(config, 'turn1Type', ['winder', 'landing'])).name('Zakręt 1: typ');
   lockable(steps.add(config, 'windersPerTurn', 2, 6, 1).name('Zabiegowe (każdy skręt)'), 'windersPerTurn');
-  lockable(steps.add(config, 'treadsLegB', 0, 15, 1).name('Proste (odc. B)'), 'treadsLegB');
+  lockable(steps.add(config, 'treadsLegB', 0, MAX_TREADS_PER_LEG, 1).name('Proste (odc. B)'), 'treadsLegB');
   live(steps.add(config, 'turn2Type', ['winder', 'landing'])).name('Zakręt 2: typ (U, S)');
   live(steps.add(config, 'mergeLandings')).name('1 duży podest (oba zakręty = landing)');
   // the landing's depth along the flight entering it (planLayout.js buildLandingLocal; null = the stair's width)
@@ -624,7 +624,7 @@ export function createUI({
   live(steps.add(widthCProxy, 'w', 500, 2000, 1)).name('Szerokość biegu C [mm] (U)').domElement.title = 'Bieg C może mieć inną szerokość niż bieg A (pole „Szerokość biegu” to szerokość biegu A). Zabiegi lub podest drugiego skrętu dopasowują się (prostokąt B × C). Także w jednej klatce zabiegowej 180° (bok B klatki = A + odstęp + C).';
   live(steps.add(config, 'uFlightGapMm', 0, 3000, 1)).name('Odstęp między biegami A i C [mm] (U z podestami)').domElement.title = 'Odległość między liniami dusz biegów A i C (np. ściana między nimi). Duży podest: ma wtedy szerokość A + odstęp + C, jego wolną krawędź między biegami niesie wanga. Dwa półpodesty: bieg B daje (liczba stopni B × głębokość stopnia) tego odstępu, resztę dokładają po równo oba półpodesty (wydłużone wzdłuż biegu B); mniejsza wartość nic nie zmienia.';
   landingDepth.domElement.title = 'Wymiar podestu wzdłuż biegu, który na niego wchodzi. Domyślnie = szerokość biegu (podest kwadratowy). Większa: bieg dalej odchodzi przy ścianie zewnętrznej; w U duży podest ma 2 szerokości × tę głębokość. Mniejsza niż szerokość biegu nie jest możliwa.';
-  lockable(steps.add(config, 'treadsLegC', 0, 15, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');
+  lockable(steps.add(config, 'treadsLegC', 0, MAX_TREADS_PER_LEG, 1).name('Proste (odc. C, U i S)'), 'treadsLegC');
   // U with no straight tread in B and two winder turns: ONE 180° winder zone round one central post (winderArc.js
   // halfTurnWinderGeometry) — the total winder count and the distance between A's and C's inner wangi axes.
   live(steps.add(config, 'uSingleWinderZone')).name('U, B = 0: jedna klatka zabiegowa 180°');

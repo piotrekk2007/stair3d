@@ -60,7 +60,7 @@ test("a turn's own split (turnSplitOffsetsMm) moves its winder zone: what one si
 });
 
 test('a rigid side that cannot be met is an ERROR saying what to change (the user values stay)', () => {
-  const b = buildStaircase(base({ stairType: 'L', treadsLegA: 4, treadsLegB: 4, stairwellSideAMm: 900, stairwellSideBMm: 6000, stairwellSideAState: 'rigid', stairwellSideBState: 'main' }));
+  const b = buildStaircase(base({ stairType: 'L', treadsLegA: 4, treadsLegB: 4, stairwellSideAMm: 900, stairwellSideBMm: 10000, stairwellSideAState: 'rigid', stairwellSideBState: 'main' }));
   const d = b.stairwell.diagnostics.find((x) => x.ruleId === 'STAIRWELL-SIDE-FIXED');
   assert.ok(d, 'reported');
   assert.equal(d.severity, 'ERROR');

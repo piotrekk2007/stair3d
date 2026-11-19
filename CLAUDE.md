@@ -89,7 +89,7 @@ Docs: [WINDER_ARC_LAYOUT.md](docs/architecture/WINDER_ARC_LAYOUT.md).
   2026-11-02, 3 winders 900 × 1080 meeting a landing 1080 deep). A U with landings: and flights A and C apart `uFlightGapMm` (between their inner lines — on a big landing: landing = A + gap + C,
   its free edge between them an inner chain on the inner wanga, a corner post at each flight; with two half landings
   flight B makes up B × going of it, both half landings the rest equally along B; `buildLandingLocal` widthIn / widthOut /
-  depthIn / depthOut; the pair-spacing constraint accepts either width or the landing's depth). Flight counts `treadsLegA/B/C` (A may be 0 for L/U: the flight starts with winders).
+  depthIn / depthOut; the pair-spacing constraint accepts either width or the landing's depth). Flight counts `treadsLegA/B/C` (A may be 0 for L/U: the flight starts with winders; at most `schema.js MAX_TREADS_PER_LEG` = 25 each — the sliders and the stairwell fit alike).
 - **S** (user request 2026-10-23, docs [S_STAIR.md](docs/architecture/S_STAIR.md)): the second turn goes the other way
   (`buildMultiTurnLayout(…, { reverseSecond })`: built natively, mirrored locally, sides swapped) — the plan keeps ONE
   inner line (turn 1's dusza) and ONE outer line (turn 2's); turn 2 and its treads carry `duszaSide: 'outer'`. Read by

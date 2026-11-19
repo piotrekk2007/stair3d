@@ -29,7 +29,7 @@
 // winder count, stair width and everything else stay the user's; only treadGoing and treadsLegA/B/C change.
 
 import { buildPlanLayout } from './planLayout.js';
-import { deriveStairData, BLONDEL_RANGE_MM } from '../config/schema.js';
+import { deriveStairData, BLONDEL_RANGE_MM, MAX_TREADS_PER_LEG } from '../config/schema.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
 import { wellEnabled, wellFixedTargets, wellSideLetters, wellMainSide, stairwellMeasureLine, lineSides, exitExtraMm } from './stairwell.js';
 
@@ -40,7 +40,7 @@ const COUNT_FIELD = { A: 'treadsLegA', B: 'treadsLegB', C: 'treadsLegC' };
 // (150: a very tight stairwell — the user's own project needed 178.6 mm, below the former 180 minimum.)
 export const FIT_GOING_RANGE_MM = { min: 150, max: 320 };
 // Straight treads per flight the fit may choose — the "Proste (odc. …)" slider range.
-export const FIT_MAX_TREADS_PER_LEG = 15;
+export const FIT_MAX_TREADS_PER_LEG = MAX_TREADS_PER_LEG;
 // Tie-break only (see above): the middle of the PL-LEGAL-A-01 band, 600–650 mm. SOFTWARE_DESIGN_CHOICE (see
 // src/rules/sets/stairwellFitAssumptions.js, STAIR3D-FIT-01), not a legal or published figure.
 export const BLONDEL_TARGET_MM = (BLONDEL_RANGE_MM.min + BLONDEL_RANGE_MM.max) / 2;

@@ -211,3 +211,17 @@ test('a U laid out as one 180° winder zone: side B (two widths + the gap betwee
   assert.ok(!stairwellDrivenFields({ ...config, stairwellSideBMm: 0 }).includes('uAxisGapMm'));
   assert.equal(solveStairwellFit({ ...config, stairwellSideBMm: 0 }).values.uAxisGapMm, undefined);
 });
+
+// user report 2026-11-19: a flight could have at most 15 straight treads (slider and fit alike) — too few for a long
+// straight flight; both now share MAX_TREADS_PER_LEG (25)
+test('a long straight flight: more than 15 treads, built and fitted', async () => {
+  const { MAX_TREADS_PER_LEG } = await import('../../config/schema.js');
+  assert.ok(MAX_TREADS_PER_LEG >= 25);
+  const built = buildStaircase({ ...createDefaultConfig(), stairPending: false, stairType: 'straight', treadsLegA: 22, totalRise: 4000 });
+  assert.equal(built.treadModels.length, 22);
+  // a 5000 mm side at a 4000 mm rise needs ~20 treads: 15 would mean a 333 mm going, past the fit's 320 mm maximum
+  const fit = solveStairwellFit(fitConfig({ stairType: 'straight', totalRise: 4000, stairwellSideAMm: 5000 }));
+  assert.ok(fit.values, fit.message);
+  assert.ok(fit.values.treadsLegA > 15, `treads ${fit.values.treadsLegA}`);
+  assert.ok(Math.abs(sidesOf(applyStairwellFit(fitConfig({ stairType: 'straight', totalRise: 4000, stairwellSideAMm: 5000 }), fit))[0] - 5000) <= SIDE_TOLERANCE_MM);
+});
