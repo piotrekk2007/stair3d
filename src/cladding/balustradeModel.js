@@ -16,7 +16,7 @@
 
 import { buildSideRuns, runPoint, runOutward } from './sideRuns.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
-import { railingInfillOf, railingRangeOf } from './schema.js';
+import { railingInfillOf, railingRangesOf } from './schema.js';
 import { exitEdgeTest } from './openingEdges.js';
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -320,15 +320,16 @@ function crossing(l1, l2) {
 // a pane's clamps: at its start (if a post stands at the stretch's start) and its end; each {s (the pane's edge),
 // postFaceS (the post's face), z}
 function paneClamps(pa, pb, a0, b0, posts, zsAt, config) {
-  const half = config.postSizeMm / 2;
   const out = [];
   const m = Math.max(1, Math.round(config.glassClampsPerSide));
   for (const [s, at, dir] of [
     [pa, a0, 1],
     [pb, b0, -1],
   ]) {
-    if (!posts.some((p) => Math.abs(p.s - at) < 1e-6)) continue;
-    const face = at + dir * half;
+    const post = posts.find((p) => Math.abs(p.s - at) < 1e-6);
+    if (!post) continue;
+    // (the post's own size — a post edited thicker)
+    const face = at + (dir * (post.size ?? config.postSizeMm)) / 2;
     const { lo, hi } = zsAt(s);
     for (let k = 0; k < m; k++) out.push({ s, postFaceS: face, z: lo + ((hi - lo) * (k + 1)) / (m + 1) });
   }
@@ -387,12 +388,19 @@ function section(line, config, ceiling) {
   const edits = config.railingPostEdits?.[line.id] || {};
   const removed = new Set(edits.removed || []);
   const size = config.postSizeMm;
+  // a post's own edits (user request 2026-11-23, as the self-supporting Inspektor): its section, its height over the
+  // handrail (0 = flush with the handrail's top), its cap — `railingPostOverrides[post id]`
+  const own = (id) => config.railingPostOverrides?.[id] || {};
+  const sizeOfId = (id) => own(id).sizeMm ?? size;
+  const sizeOf = (p) => (p ? sizeOfId(p.id) : size);
+  const postAt = (s) => posts.find((p) => Math.abs(p.s - s) < 1e-6);
   const glassSide = config.railingInfill === 'glass-side';
   const glassPosts = config.railingInfill === 'glass-posts';
   // the posts' spots: ends + corners (none of their own for glass on the side), the user's
   const spots = [];
   if (!glassSide) {
-    if (line.kind === 'stairs') spots.push({ id: `${line.id}:start`, s: line.s0 + size / 2 }, { id: `${line.id}:end`, s: line.s1 - size / 2 });
+    // (an end post's outer face at the line's end, whatever its own size)
+    if (line.kind === 'stairs') spots.push({ id: `${line.id}:start`, s: line.s0 + sizeOfId(`${line.id}:start`) / 2 }, { id: `${line.id}:end`, s: line.s1 - sizeOfId(`${line.id}:end`) / 2 });
     else {
       if (!line.closed) spots.push({ id: `${line.id}:start`, s: line.s0 }, { id: `${line.id}:end`, s: line.s1 });
       line.corners.forEach((s, k) => spots.push({ id: `${line.id}:c${k}`, s }));
@@ -416,8 +424,11 @@ function section(line, config, ceiling) {
     posts = out.sort((a, b) => a.s - b.s);
   }
   const topAt = (s) => zAt(line.top, s);
-  const postModels = posts.map((p) => ({ id: p.id, s: p.s, manual: !!p.manual, at: line.at(p.s), bottomZ: line.groundAt(p.s), topZ: topAt(p.s) + config.postAboveHandrailMm, size, cap: config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves }));
-  const clear = (s, w) => posts.every((p) => Math.abs(s - p.s) > (size + w) / 2 + 1);
+  const postModels = posts.map((p) => {
+    const o = own(p.id);
+    return { id: p.id, s: p.s, manual: !!p.manual, edited: Object.keys(o).length > 0, at: line.at(p.s), bottomZ: line.groundAt(p.s), topZ: topAt(p.s) + (o.aboveMm ?? config.postAboveHandrailMm), aboveMm: o.aboveMm ?? config.postAboveHandrailMm, size: sizeOf(p), cap: o.cap ?? config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves };
+  });
+  const clear = (s, w) => posts.every((p) => Math.abs(s - p.s) > (sizeOf(p) + w) / 2 + 1);
   // the infill
   const balusters = [];
   const panes = [];
@@ -438,8 +449,8 @@ function section(line, config, ceiling) {
     for (const f of line.flats) {
       const stops = [f.s0, ...posts.map((p) => p.s).filter((s) => s > f.s0 && s < f.s1), f.s1];
       for (let k = 1; k < stops.length; k++) {
-        const a = stops[k - 1] + (posts.some((p) => Math.abs(p.s - stops[k - 1]) < 1e-6) ? size / 2 : 0);
-        const b = stops[k] - (posts.some((p) => Math.abs(p.s - stops[k]) < 1e-6) ? size / 2 : 0);
+        const a = stops[k - 1] + (postAt(stops[k - 1]) ? sizeOf(postAt(stops[k - 1])) / 2 : 0);
+        const b = stops[k] - (postAt(stops[k]) ? sizeOf(postAt(stops[k])) / 2 : 0);
         const count = Math.max(0, Math.ceil((b - a) / (config.railingMaxClearMm + w)) - 1);
         for (let j = 1; j <= count; j++) balusters.push(at(a + ((b - a) * j) / (count + 1)));
       }
@@ -458,8 +469,8 @@ function section(line, config, ceiling) {
       let a = cuts[k - 1];
       let b = cuts[k];
       if (!glassSide) {
-        if (posts.some((p) => Math.abs(p.s - a) < 1e-6)) a += size / 2;
-        if (posts.some((p) => Math.abs(p.s - b) < 1e-6)) b -= size / 2;
+        if (postAt(a)) a += sizeOf(postAt(a)) / 2;
+        if (postAt(b)) b -= sizeOf(postAt(b)) / 2;
         a += config.glassGapMm;
         b -= config.glassGapMm;
       }
@@ -495,7 +506,7 @@ function section(line, config, ceiling) {
           // glass between posts: the metal CLAMPS holding it (user request 2026-11-05, as the self-supporting
           // railingGlass.js clamps): always on the post — at both edges of the pane where a post stands, each from the
           // post's face over the pane's edge, `glassClampsPerSide` spread evenly over the pane's height there
-          clamps: glassSide ? [] : paneClamps(pa, pb, a0, b0, posts, (s) => ({ lo: zAt(bottomLine, s), hi: zAt(topLine, s) }), config),
+          clamps: glassSide ? [] : paneClamps(pa, pb, a0, b0, posts.map((p) => ({ ...p, size: sizeOf(p) })), (s) => ({ lo: zAt(bottomLine, s), hi: zAt(topLine, s) }), config),
         });
         fixings += glassSide ? config.glassFixingsPerPane : panes[panes.length - 1].clamps.length;
       }
@@ -504,11 +515,10 @@ function section(line, config, ceiling) {
   // the handrail: at its top, its centre line half its height lower; on the glass with glass on the side. It stops AT an
   // end post — its face towards the run (user report 2026-11-13: it ran on through the post to its far face, and its
   // square end stuck out past it on the pitch; the renderer cuts that end plumb, `plumb`)
-  const half = size / 2;
-  const startPost = line.closed ? null : posts.find((p) => p.s - line.s0 <= size + 1e-6);
-  const endPost = line.closed ? null : [...posts].reverse().find((p) => line.s1 - p.s <= size + 1e-6);
-  let h0 = startPost ? startPost.s + half : line.s0;
-  let h1 = endPost && endPost !== startPost ? endPost.s - half : line.s1;
+  const startPost = line.closed ? null : posts.find((p) => p.s - line.s0 <= sizeOf(p) + 1e-6);
+  const endPost = line.closed ? null : [...posts].reverse().find((p) => line.s1 - p.s <= sizeOf(p) + 1e-6);
+  let h0 = startPost ? startPost.s + sizeOf(startPost) / 2 : line.s0;
+  let h1 = endPost && endPost !== startPost ? endPost.s - sizeOf(endPost) / 2 : line.s1;
   if (h1 - h0 < 1) [h0, h1] = [line.s0, line.s1];
   const stops = (a, b) => [a, ...line.top.map((q) => q.s).filter((s) => s > a && s < b), ...line.corners.filter((s) => s > a && s < b), b].sort((x, y) => x - y).filter((s, k, all) => k === 0 || s - all[k - 1] > 1e-6);
   const ss = stops(line.s0, line.s1);
@@ -633,15 +643,19 @@ export function buildBalustrade(built, config) {
     }
     if (!config.railingSides?.[run.key.flight]?.[run.key.side]) continue;
     const cfg = withInfill(railingInfillOf(config, run.key));
-    // only the steps of the side's range (user request 2026-11-18 — a harp on steps 1–6 only): numbers as on the plan
-    const { from, to } = railingRangeOf(config, run.key);
-    const pieces = run.pieces.filter((p) => (from === null || p.element.index + 1 >= from) && (to === null || p.element.index + 1 <= to));
-    if (!pieces.length) continue;
-    // the last flight's side reaching the exit: optionally on past it, its last post on the floor above (user request
-    // 2026-11-18 — as built in reality, the newel on the antresola nosing)
-    const atExit = pieces[pieces.length - 1].element === built.concrete.elements.at(-1) && !pieces[pieces.length - 1].flat;
-    const onFloor = atExit && config.railingEndOnFloorSides?.[run.key.flight]?.[run.key.side] ? { postMm: endPostOnFloorMm(config), floorZ: built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm, slabZ: built.concrete.exit.rawSlabTopZ } : null;
-    lines.push({ ...stairLine(pieces.length === run.pieces.length ? run : { ...run, pieces }, cfg, onFloor), cfg });
+    // only the steps of the side's ranges (user requests 2026-11-18 — a harp on steps 1–6 only — and 2026-11-23 — a
+    // straight flight with a landing: 1–9, then 11 to the end): numbers as on the plan, one section per range (the
+    // first keeps the side's id, so its post edits stay)
+    railingRangesOf(config, run.key).forEach(({ from, to }, k) => {
+      const pieces = run.pieces.filter((p) => (from === null || p.element.index + 1 >= from) && (to === null || p.element.index + 1 <= to));
+      if (!pieces.length) return;
+      // the last flight's side reaching the exit: optionally on past it, its last post on the floor above (user request
+      // 2026-11-18 — as built in reality, the newel on the antresola nosing)
+      const atExit = pieces[pieces.length - 1].element === built.concrete.elements.at(-1) && !pieces[pieces.length - 1].flat;
+      const onFloor = atExit && config.railingEndOnFloorSides?.[run.key.flight]?.[run.key.side] ? { postMm: endPostOnFloorMm(config), floorZ: built.concrete.exit.rawSlabTopZ + config.floorFinishTopMm, slabZ: built.concrete.exit.rawSlabTopZ } : null;
+      const line = stairLine(pieces.length === run.pieces.length ? run : { ...run, pieces }, cfg, onFloor);
+      lines.push({ ...line, id: k === 0 ? line.id : `${line.id}-r${k + 1}`, cfg });
+    });
   }
   if (config.railingAntresola) {
     const cfg = withInfill(railingInfillOf(config, 'antresola'));

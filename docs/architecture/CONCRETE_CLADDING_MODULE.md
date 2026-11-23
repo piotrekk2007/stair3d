@@ -754,12 +754,24 @@ wooden rods, the strips) and the offer's „Balustrada” row. Panel: „Balustr
 **Per side: the infill and the steps** (user request 2026-11-18 — a harp on flight 1, balusters on flight 2, a harp on the
 antresola; a harp only along some steps): `railingInfill` is the DEFAULT; `railingInfillSides[flight][side]` and
 `railingAntresolaInfill` override it (`schema.js railingInfillOf` — also `surroundingsModel.js edgeHasSideGlass`), and
-`railingRangeSides[flight][side] = {from?, to?}` (step numbers as on the plan, a landing too; `railingRangeOf`) keeps a
-side's balustrade to those steps (the run's pieces filtered — `buildBalustrade`; posts by hand keep their s). Each line
+`railingRangeSides[flight][side] = [{from?, to?}, …]` (step numbers as on the plan, a landing too; `railingRangesOf`;
+an older single `{from?, to?}` is read as a list of one) keeps a side's balustrade to those steps — SEVERAL pieces per
+side (user report 2026-11-23: a straight flight with a landing in it is one flight, one side — 1–9, then 11 to the end),
+each its own section (`railing-<run>` for the first, `…-r2`, `…-r3` after; the run's pieces filtered — `buildBalustrade`;
+posts by hand keep their s). „+ odcinek” ends the last open piece before the first landing after its start and starts
+the new one past it (no landing: half way). Each line
 is built and solved with its own copy of the config (`withInfill`), so every consumer reads `section.infill` / `harp`.
 Panel: the sides table's „balustrada” cell — per side the switch, the infill („jak domyślne (…)” or its own) and „stopnie
 od–do” (the side's first / last number as the placeholders); „Antresola: wypełnienie” in „Balustrada i słupy”. The
 offer's „Balustrada” row lists each section with its infill when they differ. Tests: `__tests__/harp.test.js`.
+
+**One post's own edits** (user request 2026-11-23, as the self-supporting Inspektor): `railingPostOverrides[post id] =
+{sizeMm?, aboveMm?, cap?}` — its section (an end post keeps its OUTER face at the line's end, the handrail starts / stops
+at its own face, balusters / glass / clamps keep clear of its own size), its top over the handrail's top (0 = flush,
+„Równo z poręczą” also takes the cap off), its cap; the post model carries `size` / `aboveMm` / `cap` / `edited`. In
+„▮ Słupy” a click on a post selects it (its editor in the „Pomiar” tab: przekrój, nad poręczą, czapka, „Jak wszystkie
+słupy”, „Usuń słup”), a right-click removes it. The quote / cut list group the posts by size. Tests:
+`__tests__/railingPostOverrides.test.js`.
 
 **The opening's exit edge — one rule** (user report 2026-11-18, fixed): the antresola still took every opening edge on
 the last back edge's LINE for the exit (the trim's rule was fixed 2026-11-13), so a U's edge over the lower flight never

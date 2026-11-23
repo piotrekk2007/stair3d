@@ -220,3 +220,31 @@ test('the last post on the floor: past the exit edge by half the antresola nosin
   near(endPostOnFloorMm({ ...c, railingEndOnFloorMm: 200 }), 200, 'own');
   assert.deepEqual(sanitizeCladdingConfig({ ...c, railingEndOnFloorSides: { 1: { left: true, right: 'x' }, z: { left: true } } }).railingEndOnFloorSides, { 1: { left: true } });
 });
+
+// user report 2026-11-23: a straight flight with a landing in it (one flight, one side) — the balustrade could only be
+// one range, steps 1–9 OR 11 to the end; a side now carries a list of pieces, each its own section with its own posts
+test('several pieces of balustrade on one side: a straight flight with a landing — steps 1–9 and 11 to the end', async () => {
+  const { railingRangesOf, railingRangeOf } = await import('../schema.js');
+  const straight = (ranges) =>
+    sanitizeCladdingConfig({
+      ...createDefaultCladdingConfig(),
+      sequence: [{ kind: 'steps', count: 9, riseMm: 180, goingMm: 280, widthMm: 1000 }, { kind: 'landing', riseMm: 180, depthMm: 1000, turn: 'none' }, { kind: 'steps', count: 6, riseMm: 180, goingMm: 280, widthMm: 1000 }],
+      railingSides: { 0: { right: true } },
+      railingInfill: 'balusters',
+      railingRangeSides: ranges,
+    });
+  const c = straight({ 0: { right: [{ to: 9 }, { from: 11 }] } });
+  assert.deepEqual(railingRangesOf(c, { flight: 0, side: 'right' }), [{ from: null, to: 9 }, { from: 11, to: null }]);
+  const secs = buildCladdingStair(c).balustrade.sections;
+  assert.equal(secs.length, 2, 'two sections');
+  assert.deepEqual(secs.map((s) => s.id), ['railing-0-right', 'railing-0-right-r2'], 'the first keeps the side\'s id (its post edits)');
+  near(secs[0].s1 - secs[0].s0, 9 * 280, 'steps 1–9', 1);
+  near(secs[1].s1 - secs[1].s0, 6 * 280, 'steps 11–16', 1);
+  assert.ok(secs[1].s0 - secs[0].s1 >= 1000 - 1, 'the landing left out');
+  for (const s of secs) assert.ok(s.posts.length >= 2 && s.balusters.length > 0, `${s.id}: its own posts and balusters`);
+  // an older project's single range is read as one piece
+  const old = straight({ 0: { right: { from: 3, to: 6 } } });
+  assert.deepEqual(railingRangesOf(old, { flight: 0, side: 'right' }), [{ from: 3, to: 6 }]);
+  assert.deepEqual(railingRangeOf(old, { flight: 0, side: 'right' }), { from: 3, to: 6 });
+  assert.equal(buildCladdingStair(old).balustrade.sections.length, 1);
+});

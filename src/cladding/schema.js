@@ -173,6 +173,9 @@ export function createDefaultCladdingConfig() {
     glassTint: 'clear',
     // posts by hand: {[section id]: {added: [{id, s}], removed: [post id]}}; the antresola per opening edge {[k]: false}
     railingPostEdits: {},
+    // one post's own edits (user request 2026-11-23, as the self-supporting Inspektor): {[post id]: {sizeMm?, aboveMm?
+    // (its top over the handrail's top, 0 = flush), cap?}}
+    railingPostOverrides: {},
     railingAntresolaEdges: {},
     // the ceiling opening drawn by hand (plan points) — null = the one the headroom needs (surroundingsModel.js)
     openingManual: null,
@@ -220,7 +223,9 @@ function sanitizeInfillSides(raw) {
   return out;
 }
 
-// {[flight]: {left?, right?: {from?, to?}}} — whole step numbers ≥ 1
+// {[flight]: {left?, right?: [{from?, to?}, …]}} — whole step numbers ≥ 1; a side may carry SEVERAL pieces of balustrade
+// (user report 2026-11-23: a straight flight with a landing in it — steps 1–9, then 11 to the end). An older project's
+// single {from?, to?} is read as a list of one.
 function sanitizeRangeSides(raw) {
   const out = {};
   const n = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 && v !== null && v !== '' ? Number(v) : null);
@@ -228,20 +233,28 @@ function sanitizeRangeSides(raw) {
     if (!/^\d+$/.test(f) || !v || typeof v !== 'object') continue;
     const sides = {};
     for (const s of ['left', 'right']) {
-      const r = v[s];
-      if (!r || typeof r !== 'object') continue;
-      const range = { ...(n(r.from) ? { from: n(r.from) } : {}), ...(n(r.to) ? { to: n(r.to) } : {}) };
-      if (Object.keys(range).length) sides[s] = range;
+      const list = (Array.isArray(v[s]) ? v[s] : v[s] ? [v[s]] : []).filter((r) => r && typeof r === 'object').map((r) => ({ ...(n(r.from) ? { from: n(r.from) } : {}), ...(n(r.to) ? { to: n(r.to) } : {}) }));
+      // (an empty range = the whole side: kept only beside other pieces, the list's own placeholder)
+      if (list.some((r) => Object.keys(r).length)) sides[s] = list;
     }
     if (Object.keys(sides).length) out[f] = sides;
   }
   return out;
 }
 
-/** A flight side's balustrade range `{from, to}` (step numbers as on the plan; null = that end open). */
-export function railingRangeOf(config, key) {
+/**
+ * A flight side's balustrade pieces `[{from, to}]` (step numbers as on the plan; null = that end open) — one whole-side
+ * piece when none is set.
+ */
+export function railingRangesOf(config, key) {
   const r = config.railingRangeSides?.[key?.flight]?.[key?.side];
-  return { from: r?.from ?? null, to: r?.to ?? null };
+  const list = Array.isArray(r) ? r : r ? [r] : [];
+  return (list.length ? list : [{}]).map((x) => ({ from: x?.from ?? null, to: x?.to ?? null }));
+}
+
+/** The first piece of a side's balustrade (railingRangesOf). */
+export function railingRangeOf(config, key) {
+  return railingRangesOf(config, key)[0];
 }
 
 /**
@@ -266,6 +279,20 @@ function sanitizeWallRailEdits(raw) {
     if (Number.isFinite(Number(v.heightMm)) && v.heightMm !== null && v.heightMm !== '') e.heightMm = Math.min(1500, Math.max(600, Math.round(Number(v.heightMm))));
     if (typeof v.return === 'boolean') e.return = v.return;
     if (Object.keys(e).length) out[k] = e;
+  }
+  return out;
+}
+
+// {[post id]: {sizeMm?, aboveMm?, cap?}} — only what is set
+function sanitizePostOverrides(raw) {
+  const out = {};
+  const n = (v, lo, hi) => (v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : null);
+  for (const [id, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (!v || typeof v !== 'object') continue;
+    const size = n(v.sizeMm, 40, 250);
+    const above = n(v.aboveMm, -300, 500);
+    const o = { ...(size !== null ? { sizeMm: size } : {}), ...(above !== null ? { aboveMm: above } : {}), ...(POST_CAPS.includes(v.cap) ? { cap: v.cap } : {}) };
+    if (Object.keys(o).length) out[id] = o;
   }
   return out;
 }
@@ -492,6 +519,7 @@ export function sanitizeCladdingConfig(raw) {
     glassClampsPerSide: Math.round(num(c.glassClampsPerSide, d.glassClampsPerSide, 1, 4)),
     glassTint: ['clear', 'optiwhite', 'grey', 'bronze'].includes(c.glassTint) ? c.glassTint : 'clear',
     railingPostEdits: sanitizePostEdits(c.railingPostEdits),
+    railingPostOverrides: sanitizePostOverrides(c.railingPostOverrides),
     railingAntresolaEdges: Object.fromEntries(Object.entries(c.railingAntresolaEdges && typeof c.railingAntresolaEdges === 'object' ? c.railingAntresolaEdges : {}).filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'boolean')),
     openingManual: Array.isArray(c.openingManual) && c.openingManual.length >= 3 && c.openingManual.every((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) ? c.openingManual.map((p) => ({ x: p.x, y: p.y })) : null,
   };

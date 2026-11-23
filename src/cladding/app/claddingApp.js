@@ -22,7 +22,7 @@ import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
 import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd, sideSAt } from '../wallEdits.js';
-import { WALL_TYPES, POST_CAP_LABELS, LOOP_COLORS } from '../schema.js';
+import { WALL_TYPES, POST_CAP_LABELS, LOOP_COLORS, railingRangesOf } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
@@ -995,22 +995,69 @@ export function mountCladdingApp(rootEl, host = {}) {
       if (!on) return `<div class="clad-rail-side">${box('railingSides', f, side)}</div>`;
       const own = c.railingInfillSides?.[f]?.[side] || '';
       const nums = runsOf(f, side).filter((r) => !r.walled && !r.end).flatMap((r) => r.pieces.map((p) => p.element.index + 1));
-      const range = c.railingRangeSides?.[f]?.[side] || {};
+      // its pieces (user report 2026-11-23: a straight flight with a landing — 1–9, then 11 to the end)
+      const ranges = railingRangesOf(c, { flight: Number(f), side });
       const infill = `<select class="clad-small" data-infill-side="${f}:${side}" title="Wypełnienie balustrady na tym boku"><option value="" ${own ? '' : 'selected'}>jak domyślne (${escapeHtml(RAILING_INFILLS[c.railingInfill])})</option>${Object.entries(RAILING_INFILLS).map(([k, l]) => `<option value="${k}" ${own === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>`;
-      const num = (k, ph, title) => `<input type="number" min="1" step="1" class="clad-small clad-range" data-range-side="${f}:${side}" data-range-f="${k}" value="${range[k] ?? ''}" placeholder="${ph ?? ''}" title="${title}" />`;
+      const num = (i, k, ph, title) => `<input type="number" min="1" step="1" class="clad-small clad-range" data-range-side="${f}:${side}" data-range-i="${i}" data-range-f="${k}" value="${ranges[i][k] ?? ''}" placeholder="${ph ?? ''}" title="${title}" />`;
+      const lo = nums.length ? Math.min(...nums) : '';
+      const hi = nums.length ? Math.max(...nums) : '';
+      const pieces = ranges.map((_, i) => `<span class="clad-range-wrap">${ranges.length > 1 ? `odc. ${i + 1}: ` : ''}stopnie ${num(i, 'from', lo, 'Od stopnia nr (jak na planie) — puste = od początku')}–${num(i, 'to', hi, 'Do stopnia nr (jak na planie) — puste = do końca')}${ranges.length > 1 ? ` <button type="button" class="clad-small" data-range-del="${f}:${side}:${i}" title="Usuń ten odcinek balustrady">×</button>` : ''}</span>`).join(' ');
+      const add = `<button type="button" class="clad-small" data-range-add="${f}:${side}" title="Kolejny odcinek balustrady na tym boku (np. przerwa na podeście: 1–9 i 11–16)">+ odcinek</button>`;
       // the side reaching the stair's exit: its last post on the floor above (user request 2026-11-18)
       const last = state.built?.concrete.elements.at(-1);
       const atExit = runsOf(f, side).some((r) => !r.walled && !r.end && r.pieces.at(-1)?.element === last && !r.pieces.at(-1)?.flat);
       const floor = atExit ? ` <label class="clad-range-wrap" title="Balustrada przechodzi za ostatni stopień, ostatni słup stoi na podłodze piętra (na nosku antresoli)"><input type="checkbox" data-floor-side="${f}:${side}" ${c.railingEndOnFloorSides?.[f]?.[side] ? 'checked' : ''} /> ostatni słup na podłodze</label>` : '';
-      return `<div class="clad-rail-side">${box('railingSides', f, side)} ${infill} <span class="clad-range-wrap">stopnie ${num('from', nums.length ? Math.min(...nums) : '', 'Od stopnia nr (jak na planie) — puste = od początku')}–${num('to', nums.length ? Math.max(...nums) : '', 'Do stopnia nr (jak na planie) — puste = do końca')}</span>${floor}</div>`;
+      return `<div class="clad-rail-side">${box('railingSides', f, side)} ${infill} ${pieces} ${add}${floor}</div>`;
     };
     sidesEl.innerHTML =
       `<table class="clad-table"><thead><tr><th></th><th>wanga obiciowa</th><th>balustrada</th><th>poręcz przyścienna</th></tr></thead><tbody>` +
       Array.from({ length: n }, (_, f) => `<tr><td>Bieg ${f + 1}</td><td>${box('coverStringers', f, 'left')} ${box('coverStringers', f, 'right')}</td><td>${railCell(f, 'left')}${railCell(f, 'right')}</td><td>${box('wallRails', f, 'left', true)} ${box('wallRails', f, 'right', true)}</td></tr>`).join('') +
       `</tbody></table><div class="clad-hint">L / P = strona lewa / prawa patrząc w górę biegu. Przy ścianie — listwa przyścienna (włącz ją w „Wykończenie → Listwy i wangi obiciowe”) i poręcz przyścienna na uchwytach (ustawienia w „Poręcz przyścienna”).</div>`;
   }
+  // a side's balustrade pieces (railingRangeSides[f][side] = [{from?, to?}, …]) edited as a list
+  function editRanges(f, side, edit) {
+    change((c) => {
+      const all = { ...(c.railingRangeSides || {}) };
+      const sides = { ...(all[f] || {}) };
+      const list = railingRangesOf(c, { flight: Number(f), side }).map((r) => ({ ...(r.from ? { from: r.from } : {}), ...(r.to ? { to: r.to } : {}) }));
+      edit(list);
+      sides[side] = list;
+      all[f] = sides;
+      c.railingRangeSides = all;
+    });
+  }
+  sidesEl.addEventListener('click', (ev) => {
+    const { rangeAdd, rangeDel } = ev.target.dataset;
+    if (rangeAdd) {
+      const [f, side] = rangeAdd.split(':');
+      // the next piece: the last one without an end ends before the first landing after its start and the new one
+      // starts past it (user report 2026-11-23: 1–9, the landing, 11 to the end); no landing — half way; the new piece
+      // starts one step after the last one's end (the user corrects both)
+      editRanges(f, side, (list) => {
+        const els = state.built.concrete.elements.filter((e) => e.flight === Number(f));
+        const nums = els.map((e) => e.index + 1);
+        const lo = Math.min(...nums);
+        const hi = Math.max(...nums);
+        const last = list[list.length - 1];
+        const from = last.from || lo;
+        if (!last.to) {
+          const landing = els.find((e) => e.kind === 'landing' && e.index + 1 > from && e.index + 1 < hi);
+          if (landing) {
+            last.to = landing.index;
+            list.push({ from: landing.index + 2 });
+            return;
+          }
+          last.to = Math.max(from, Math.floor((from + hi) / 2));
+        }
+        list.push({ from: Math.min(hi, last.to + 2) });
+      });
+    } else if (rangeDel) {
+      const [f, side, i] = rangeDel.split(':');
+      editRanges(f, side, (list) => list.splice(Number(i), 1));
+    }
+  });
   sidesEl.addEventListener('change', (ev) => {
-    const { infillSide, rangeSide, rangeF, floorSide } = ev.target.dataset;
+    const { infillSide, rangeSide, rangeF, rangeI, floorSide } = ev.target.dataset;
     if (floorSide) {
       const [f, side] = floorSide.split(':');
       change((c) => {
@@ -1038,15 +1085,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (rangeSide) {
       const [f, side] = rangeSide.split(':');
       const v = Math.round(Number(ev.target.value));
-      change((c) => {
-        const all = { ...(c.railingRangeSides || {}) };
-        const sides = { ...(all[f] || {}) };
-        const r = { ...(sides[side] || {}) };
+      editRanges(f, side, (list) => {
+        const r = list[Number(rangeI) || 0];
         if (ev.target.value === '' || !(v >= 1)) delete r[rangeF];
         else r[rangeF] = v;
-        sides[side] = r;
-        all[f] = sides;
-        c.railingRangeSides = all;
       });
       return;
     }
@@ -1218,6 +1260,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   // --- the selected step ---------------------------------------------------------------------------------------
   function renderStepEditor() {
     const box = $('.clad-step');
+    if (state.selectedPost && renderPostEditor(box)) return;
     const i = state.selected;
     const el = i === null ? null : state.built?.concrete.elements[i];
     if (!el) {
@@ -1249,6 +1292,84 @@ export function mountCladdingApp(rootEl, host = {}) {
     const chosen = set ? (own.nosingLeft && own.nosingRight ? 'PL' : own.nosingLeft ? 'L' : own.nosingRight ? 'P' : 'CZ') : '';
     return `<label class="clad-field">Typ stopnia (nosek boczny) <select data-o="sideType"><option value="" ${!set ? 'selected' : ''}>auto (wg ścian)${!set && current ? ` — teraz ${current}` : ''}</option>${Object.entries(TREAD_SIDE_TYPES).map(([k, l]) => `<option value="${k}" ${chosen === k ? 'selected' : ''}>${k} — ${l}</option>`).join('')}</select></label>`;
   }
+  // --- the selected balustrade post (user request 2026-11-23, as the self-supporting Inspektor): its section, its height
+  // over the handrail (0 = flush with the handrail's top), its cap — railingPostOverrides[post id]; a click on a post in
+  // the „▮ Słupy” mode selects it
+  const postById = (id) => {
+    for (const sec of state.built?.balustrade?.sections || []) {
+      const p = sec.posts.find((x) => x.id === id);
+      if (p) return { sec, p };
+    }
+    return null;
+  };
+  function postName(sec, p) {
+    const where = sec.kind === 'antresola' ? 'antresola' : `bieg ${sec.key.flight + 1}, ${sec.key.side === 'left' ? 'lewa' : 'prawa'}`;
+    const which = p.id.endsWith(':start') ? 'pierwszy' : p.id.endsWith(':end') ? 'ostatni' : p.id.includes(':m-') ? 'dodany ręcznie' : 'pośredni';
+    return `Słup ${which} — ${where}`;
+  }
+  function renderPostEditor(box) {
+    const hit = postById(state.selectedPost);
+    if (!hit) {
+      state.selectedPost = null;
+      return false;
+    }
+    const { sec, p } = hit;
+    const o = state.config.railingPostOverrides?.[p.id] || {};
+    const c = state.config;
+    const flag = (k) => (o[k] !== undefined ? ' <span class="clad-own" title="własna wartość tego słupa">✎</span>' : '');
+    box.innerHTML = `<h3>${escapeHtml(postName(sec, p))}</h3>
+      <label class="clad-field">Przekrój [mm]${flag('sizeMm')} <input type="number" min="40" max="250" step="1" data-po="sizeMm" value="${Math.round(p.size)}" /></label>
+      <label class="clad-field">Nad poręczą [mm]${flag('aboveMm')} <input type="number" min="-300" max="500" step="5" data-po="aboveMm" value="${Math.round(p.aboveMm)}" title="Ile góra słupa wystaje ponad górę poręczy; 0 = równo z poręczą" /></label>
+      <div class="clad-actions"><button type="button" data-po-flush title="Góra słupa równo z górą poręczy, bez czapki">Równo z poręczą</button></div>
+      <label class="clad-field">Czapka${flag('cap')} <select data-po="cap">${Object.entries(POST_CAP_LABELS).map(([k, l]) => `<option value="${k}" ${p.cap === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>
+      <div class="clad-hint">Wysokość słupa: ${Math.round(p.topZ - p.bottomZ)} mm. Domyślne dla wszystkich słupów: przekrój ${Math.round(c.postSizeMm)} mm, ${Math.round(c.postAboveHandrailMm)} mm nad poręczą, czapka ${escapeHtml(POST_CAP_LABELS[c.postCap])} (folder „Balustrada”).</div>
+      <div class="clad-actions"><button type="button" data-po-reset ${Object.keys(o).length ? '' : 'disabled'}>Jak wszystkie słupy</button> <button type="button" data-po-remove>Usuń słup</button> <button type="button" data-po-close>Zamknij</button></div>`;
+    return true;
+  }
+  function editPost(edit) {
+    const id = state.selectedPost;
+    change((c) => {
+      const all = { ...(c.railingPostOverrides || {}) };
+      const o = { ...(all[id] || {}) };
+      edit(o);
+      if (Object.keys(o).length) all[id] = o;
+      else delete all[id];
+      c.railingPostOverrides = all;
+    });
+  }
+  function removePost(sectionId, pid) {
+    change((c) => {
+      const e = (c.railingPostEdits[sectionId] ||= { added: [], removed: [] });
+      const m = pid.split(':m-')[1];
+      if (m !== undefined) e.added = e.added.filter((x) => x.id !== m);
+      else e.removed = [...new Set([...e.removed, pid])];
+    });
+  }
+  $('.clad-step').addEventListener('change', (ev) => {
+    const f = ev.target.dataset.po;
+    if (!f || !state.selectedPost) return;
+    const v = ev.target.value;
+    editPost((o) => {
+      if (f === 'cap') o.cap = v;
+      else if (v === '' || !Number.isFinite(Number(v))) delete o[f];
+      else o[f] = Number(v);
+    });
+  });
+  $('.clad-step').addEventListener('click', (ev) => {
+    if (!state.selectedPost) return;
+    const d = ev.target.dataset;
+    if (d.poFlush !== undefined) editPost((o) => Object.assign(o, { aboveMm: 0, cap: 'none' }));
+    else if (d.poReset !== undefined) editPost((o) => Object.keys(o).forEach((k) => delete o[k]));
+    else if (d.poRemove !== undefined) {
+      const hit = postById(state.selectedPost);
+      state.selectedPost = null;
+      if (hit) removePost(hit.sec.id, hit.p.id);
+    } else if (d.poClose !== undefined) {
+      state.selectedPost = null;
+      renderPlan();
+      renderStepEditor();
+    }
+  });
   // a starter step: widened past the concrete on its sides, rounded, bowed (starterProfile.js)
   function starterBlock(s) {
     const on = !!s;
@@ -1324,6 +1445,7 @@ export function mountCladdingApp(rootEl, host = {}) {
 
   function select(i) {
     state.selected = state.selected === i ? null : i;
+    state.selectedPost = null;
     renderPlan();
     renderStepEditor();
     renderReport();
@@ -1339,7 +1461,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   let planMode = 'select';
   const MODE_HINTS = {
     select: 'kółko = zoom, przeciągnij = przesuń, dwuklik = dopasuj, klik = stopień',
-    posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = usuń, klik na przerywanym = przywróć; poręcz przyścienna — przeciągnij kółko na jej końcu (skróć), klik na niej = usuń, klik na przerywanej linii przy ścianie = dodaj',
+    posts: 'SŁUPY: klik na linii balustrady = dodaj słup, klik na słupie = jego ustawienia (przekrój, wysokość, czapka), prawy klik na słupie = usuń, klik na przerywanym = przywróć; poręcz przyścienna — przeciągnij kółko na jej końcu (skróć), klik na niej = usuń, klik na przerywanej linii przy ścianie = dodaj',
     opening: 'OTWÓR: przeciągnij narożnik, klik na kwadracie = nowy narożnik, prawy klik na narożniku = usuń, klik na krawędzi = balustrada antresoli tak / nie',
     trim: 'FAJKA: klik na krawędzi otworu = obróbka (nosek + deska na stropie) tak / nie; zielona — z fajką, szara — bez, pomarańczowa — wyjście ze schodów (tam nosek antresoli). Wymiary — w „Wykończenie → Obróbka otworu (fajka)”',
     walls: 'ŚCIANY: przeciągnij kółko na końcu ściany wzdłuż boku (przyciąga do krawędzi stopni, co 10 mm — ściana może kończyć się w połowie stopnia), klik na boku stopnia = ściana tam albo nie (nowa — typ „z planu” w „Ściany przy biegach”), prawy klik = następny typ; ciemna pełna, brązowa od podłogi do wysokości, niebieska od płyty schodów w górę, fioletowa przerywana pod biegiem, szara przerywana — bez ściany',
@@ -1366,7 +1488,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   );
   function renderPlan() {
     if (!viewport) fitPlan();
-    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, otherFloor: state.floor?.reference?.planDrawing ?? null, mode: planMode, measures: planMeasures, measureDraft, mmPerPx: mmPerPx() }) + `<div class="clad-plan-hint">${MODE_HINTS[planMode]}</div>`;
+    planEl.innerHTML = renderCladdingPlanSVG(state.built, { viewport, selectedIndex: state.selected, selectedPost: state.selectedPost, otherFloor: state.floor?.reference?.planDrawing ?? null, mode: planMode, measures: planMeasures, measureDraft, mmPerPx: mmPerPx() }) + `<div class="clad-plan-hint">${MODE_HINTS[planMode]}</div>`;
   }
   // the opening as drawn by hand (the derived one taken over on the first edit)
   const manualOpening = (c) => (c.openingManual ||= (state.built.slab?.opening || []).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })));
@@ -1421,14 +1543,19 @@ export function mountCladdingApp(rootEl, host = {}) {
       const line = target.closest?.('.clad-rail-line');
       const id = (post || ghost || line)?.dataset.section;
       if (!id) return false;
+      if (post) {
+        // (a click selects the post — its own size / height / cap in the panel; a right-click removes it)
+        state.selectedPost = state.selectedPost === post.dataset.post ? null : post.dataset.post;
+        state.selected = null;
+        renderPlan();
+        renderStepEditor();
+        // (the panel with it: the „Pomiar” tab)
+        if (state.selectedPost && state.pane !== 'measure') rootEl.querySelector('[data-pane="measure"]')?.click();
+        return true;
+      }
       change((c) => {
         const e = (c.railingPostEdits[id] ||= { added: [], removed: [] });
-        if (post) {
-          const pid = post.dataset.post;
-          const m = pid.split(':m-')[1];
-          if (m !== undefined) e.added = e.added.filter((x) => x.id !== m);
-          else e.removed = [...new Set([...e.removed, pid])];
-        } else if (ghost) e.removed = e.removed.filter((x) => x !== ghost.dataset.ghost);
+        if (ghost) e.removed = e.removed.filter((x) => x !== ghost.dataset.ghost);
         else {
           const near = sNearest(sectionById(id), p);
           if (near) e.added = [...e.added, { id: Date.now().toString(36), s: Math.round(near.s) }];
@@ -1458,6 +1585,13 @@ export function mountCladdingApp(rootEl, host = {}) {
     return false;
   }
   planEl.addEventListener('contextmenu', (ev) => {
+    const postHit = planMode === 'posts' ? ev.target.closest?.('.clad-post') : null;
+    if (postHit) {
+      ev.preventDefault();
+      if (state.selectedPost === postHit.dataset.post) state.selectedPost = null;
+      removePost(postHit.dataset.section, postHit.dataset.post);
+      return;
+    }
     const wallCell = planMode === 'walls' ? ev.target.closest?.('.clad-wall-cell') : null;
     if (wallCell) {
       // the next type of the wall at that step (the whole wall)

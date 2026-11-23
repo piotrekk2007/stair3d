@@ -25,7 +25,7 @@ export function claddingPlanBounds(built) {
 
 // `mode` (the plan's edit mode — claddingApp.js): 'posts' shows every balustrade line and its posts to click (add /
 // remove), 'opening' the opening's vertices / edge middles to drag / click and its edges to switch the antresola on / off
-export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, otherFloor = null, clientView = false, mode = 'select', measures = [], measureDraft = null, mmPerPx = null } = {}) {
+export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, selectedPost = null, otherFloor = null, clientView = false, mode = 'select', measures = [], measureDraft = null, mmPerPx = null } = {}) {
   const { concrete, cladding } = built;
   const vb = viewport ? `${fmt(viewport.x)} ${fmt(viewport.y)} ${fmt(viewport.width)} ${fmt(viewport.height)}` : (() => {
     const b = claddingPlanBounds(built);
@@ -114,7 +114,7 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
         return `<line class="metal-baluster${b.loop ? ' loop' : ''}" x1="${fmt(b.at.x - b.dir.x * h)}" y1="${fmt(-(b.at.y - b.dir.y * h))}" x2="${fmt(b.at.x + b.dir.x * h)}" y2="${fmt(-(b.at.y + b.dir.y * h))}" stroke="#222" stroke-width="${fmt(b.size)}" pointer-events="none"/>`;
       }).join('');
       const editing = mode === 'posts';
-      const posts = s.posts.map((p) => `<rect class="clad-post" data-section="${escapeHtml(s.id)}" data-post="${escapeHtml(p.id)}" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="${p.manual ? '#b5651d' : '#5a3d24'}" stroke="#2b1a0c" stroke-width="1" ${editing ? '' : 'pointer-events="none"'} ${HAIR}><title>Słup — kliknij, żeby usunąć</title></rect>`).join('');
+      const posts = s.posts.map((p) => `<rect class="clad-post" data-section="${escapeHtml(s.id)}" data-post="${escapeHtml(p.id)}" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="${p.manual ? '#b5651d' : p.edited ? '#8a5a2b' : '#5a3d24'}" stroke="${p.id === selectedPost ? '#e67e22' : '#2b1a0c'}" stroke-width="${p.id === selectedPost ? 3 : 1}" ${editing ? '' : 'pointer-events="none"'} ${HAIR}><title>Słup — kliknij: jego ustawienia, prawy klik: usuń</title></rect>`).join('');
       // the post editor: the line to click (a post added there), removed posts as ghosts (a click restores)
       const line = editing ? `<polyline class="clad-rail-line" data-section="${escapeHtml(s.id)}" points="${pts(s.path)}" fill="none" stroke="#d35400" stroke-opacity="0.35" stroke-width="14" ${HAIR}><title>Kliknij, żeby dodać słup</title></polyline>` : '';
       const ghosts = editing ? (s.removedPosts || []).map((p) => `<rect class="clad-post-ghost" data-section="${escapeHtml(s.id)}" data-ghost="${escapeHtml(p.id)}" x="${fmt(p.at.x - 45)}" y="${fmt(-p.at.y - 45)}" width="90" height="90" fill="none" stroke="#5a3d24" stroke-width="1" stroke-dasharray="4,3" ${HAIR}><title>Usunięty słup — kliknij, żeby przywrócić</title></rect>`).join('') : '';

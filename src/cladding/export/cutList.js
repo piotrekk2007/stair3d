@@ -63,10 +63,13 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
       const len = Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ));
       rows.push({ code: `TR-${n}`, name: `Tralki — ${where}`, qty: s.balusters.length, lengthMm: r0(len), widthMm: r0(config.balusterSizeMm), thicknessMm: r0(config.balusterSizeMm), material: wood, notes: `${config.balusterShape === 'round' ? 'okrągłe Ø' : 'kwadratowe '}${r0(config.balusterSizeMm)} mm; długość najdłuższej, docinane na miejscu` });
     }
-    if (s.posts.length) {
-      const len = Math.max(...s.posts.map((p) => p.topZ - p.bottomZ)); // (the cap is within the post's height)
-      rows.push({ code: `SL-${n}`, name: `Słupy ozdobne — ${where}`, qty: s.posts.length, lengthMm: r0(len), widthMm: r0(config.postSizeMm), thicknessMm: r0(config.postSizeMm), material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}` });
-    }
+    // the posts by their section (one may be edited thicker — railingPostOverrides): a row per section size
+    const sizes = [...new Set(s.posts.map((p) => r0(p.size)))].sort((a, b) => a - b);
+    sizes.forEach((size, k) => {
+      const ps = s.posts.filter((p) => r0(p.size) === size);
+      const len = Math.max(...ps.map((p) => p.topZ - p.bottomZ)); // (the cap is within the post's height)
+      rows.push({ code: `SL-${n}${sizes.length > 1 ? String.fromCharCode(97 + k) : ''}`, name: `Słupy ozdobne — ${where}`, qty: ps.length, lengthMm: r0(len), widthMm: size, thicknessMm: size, material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}` });
+    });
   }
   for (const w of built.balustrade?.wallRails || []) {
     n += 1;
