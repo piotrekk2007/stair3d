@@ -7,7 +7,7 @@ import { renderRisers } from './riserRenderer.js';
 import { buildStringerModelsForFlight } from './stringerSolver.js';
 import { buildStringerConstructionGeometry } from './stringerConstructionGeometry.js';
 import { renderStringers } from './stringerRenderer.js';
-import { buildPostModels, buildAllPostModels, raisePostsToHandrail } from './postSolver.js';
+import { buildPostModels, buildAllPostModels, raisePostsToHandrail, applyPostTopCuts } from './postSolver.js';
 import { renderPosts } from './postRenderer.js';
 import { buildJointModel } from './jointSolver.js';
 import { buildRailingModel, endNewelOntoSlab, sanitizeRailingSections } from './railingSolver.js';
@@ -187,7 +187,7 @@ export function buildStaircase(rawConfig) {
   const railingModel = { ...solvedRailing, diagnostics: [...solvedRailing.diagnostics, ...evaluateRailingChecks(solvedRailing, fullConfig, structuralPostModels)] };
   // Also the removed ones (flagged), for the UI — a removed post is drawn as a ghost and can be restored.
   // (a structural post a handrail ends at is raised to the handrail's top — postSolver.js raisePostsToHandrail)
-  const allPostModels = [...(noWangi ? [] : raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds)), ...railingModel.posts];
+  const allPostModels = [...(noWangi ? [] : applyPostTopCuts(raisePostsToHandrail(buildAllPostModels(planLayout, fullConfig), railingModel.postTopNeeds), railingModel.postTopCuts)), ...railingModel.posts];
   const postModels = allPostModels.filter((p) => !p.removed);
   // the holes through the trim (openingTrimModel.js): every post standing in it (the opening balustrade's, an end newel
   // at the exit) and the opening balustrade's balusters

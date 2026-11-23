@@ -84,3 +84,28 @@ test('the offer printed by the shared document; the estimate; the facts; saved i
   assert.equal(back.offer.client.name, 'Jan Kowalski');
   assert.equal(priceOf(back.quote, 'railing-baluster'), 30);
 });
+
+// user request 2026-11-23: the material per group of goods (stopnie, podstopnice, balustrada, podesty…) and, apart, the
+// installation per its own group (stopnie i podstopnice, balustrada, listwowanie…)
+test('the offer: groups of goods (material) and the installation in groups, apart', async () => {
+  const { LABOUR_GROUPS } = await import('../quote/claddingOffer.js');
+  const q = buildCladdingQuote(built(), priced());
+  const o = buildCladdingOffer(q, sanitizeCladdingOffer({ mode: 'groups-split' }));
+  near(o.totals.net, q.totals.net, 'the whole quote');
+  const mat = o.lines.filter((l) => l.kind === 'material');
+  const lab = o.lines.filter((l) => l.kind === 'installation');
+  assert.ok(mat.length >= 3 && lab.length >= 2);
+  near(mat.reduce((s, l) => s + l.net, 0), q.totals.materialNet, 'the material lines = the material');
+  near(lab.reduce((s, l) => s + l.net, 0), q.totals.labourNet, 'the installation lines = the labour');
+  assert.ok(o.lines.indexOf(mat.at(-1)) < o.lines.indexOf(lab[0]), 'the material first, then the installation');
+  // the straight treads and the risers: material apart, one installation line „Montaż stopni i podstopnic”
+  assert.ok(mat.some((l) => l.label === 'Stopnie proste') && mat.some((l) => l.label === 'Podstopnice'));
+  const treads = lab.find((l) => l.label === 'Montaż stopni i podstopnic');
+  const want = q.lines.filter((l) => LABOUR_GROUPS[l.group] === 'Montaż stopni i podstopnic').reduce((s, l) => s + (l.labour?.value ?? 0), 0);
+  near(treads.net, want, 'the treads\' and risers\' installation together');
+  assert.ok(lab.some((l) => l.label === 'Montaż balustrady'));
+  // a renamed / hidden line as in every mode; a discount over all
+  const edited = buildCladdingOffer(q, sanitizeCladdingOffer({ mode: 'groups-split', lineEdits: { 'lab:Montaż balustrady': { label: 'Montaż balustrady dębowej' } }, discountPct: 10 }));
+  assert.ok(edited.lines.some((l) => l.label === 'Montaż balustrady dębowej'));
+  near(edited.totals.net, q.totals.net * 0.9, 'the discount');
+});

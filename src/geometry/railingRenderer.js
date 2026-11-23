@@ -83,8 +83,9 @@ export function handrailPieceSolid(piece, handrail, prev = null, next = null) {
   up = unit3(up);
   const across = unit3(cross3(d, up));
   const dirOf = (p) => unit3(sub3(p.end, p.start));
-  const ns = cutNormal(d, prev ? dirOf(prev) : null);
-  const ne = cutNormal(d, next ? dirOf(next) : null);
+  // (a handrail running into a post, mitred — railingSolver.js handrailMitre: the solver's own plane)
+  const ns = piece.startCut?.kind === 'mitre' && piece.startCut.normal ? unit3(piece.startCut.normal) : cutNormal(d, prev ? dirOf(prev) : null);
+  const ne = piece.endCut?.kind === 'mitre' && piece.endCut.normal ? unit3(piece.endCut.normal) : cutNormal(d, next ? dirOf(next) : null);
   const outline = profileOutline(handrail.shape, handrail.widthMm, handrail.heightMm);
   const offsets = outline.map((p) => add3(mul3(across, p.u), mul3(up, p.w)));
   // each corner's line a + o + t·d, cut by the plane through the piece's end point with that end's normal
@@ -106,8 +107,8 @@ function joinedNeighbours(pieces, i) {
   const meets = (p, q) => p && Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) <= JOIN_MATCH_MM;
   const prevKind = piece.startCut?.kind;
   const nextKind = piece.endCut?.kind;
-  const prev = prevKind === 'post' ? null : pieces.find((p, k) => k !== i && meets(p.end, piece.start)) || null;
-  const next = nextKind === 'post' ? null : pieces.find((p, k) => k !== i && meets(p.start, piece.end)) || null;
+  const prev = prevKind === 'post' || prevKind === 'mitre' ? null : pieces.find((p, k) => k !== i && meets(p.end, piece.start)) || null;
+  const next = nextKind === 'post' || nextKind === 'mitre' ? null : pieces.find((p, k) => k !== i && meets(p.start, piece.end)) || null;
   return { prev, next };
 }
 

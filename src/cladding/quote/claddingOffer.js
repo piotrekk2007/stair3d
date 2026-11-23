@@ -7,7 +7,25 @@
 
 import { escapeHtml as esc } from '../../util/format.js';
 
-export const OFFER_MODES = Object.freeze({ groups: 'pozycje zbiorcze (grupy)', detailed: 'każdy element osobno', split: 'materiał + montaż' });
+export const OFFER_MODES = Object.freeze({ groups: 'pozycje zbiorcze (grupy)', detailed: 'każdy element osobno', split: 'materiał + montaż', 'groups-split': 'grupy towarów: materiał, a osobno montaż w grupach' });
+
+// the installation's groups of the 'groups-split' offer (user request 2026-11-23: "materiał w grupach towarów (stopnie,
+// podstopnie, balustrada, podesty…) i montaż — też grupowo: stopnie i podstopnice, balustrada, listwowanie…") — the
+// quote's group of a line → its installation group (a group not listed: „Montaż — <group>”)
+export const LABOUR_GROUPS = Object.freeze({
+  'Stopnie zapraszające': 'Montaż stopni i podstopnic',
+  'Stopnie proste': 'Montaż stopni i podstopnic',
+  'Stopnie zabiegowe': 'Montaż stopni i podstopnic',
+  Podstopnice: 'Montaż stopni i podstopnic',
+  Noski: 'Montaż stopni i podstopnic',
+  Profilowanie: 'Profilowanie krawędzi stopni',
+  Podesty: 'Montaż podestów',
+  'Listwy i wangi': 'Listwowanie (listwy i wangi obiciowe)',
+  Balustrada: 'Montaż balustrady',
+  'Oświetlenie LED': 'Montaż oświetlenia LED',
+  Usługi: 'Pomiar i transport',
+  'Pozycje własne': 'Pozycje własne',
+});
 
 export function createDefaultCladdingOffer() {
   return {
@@ -109,6 +127,30 @@ export function buildCladdingOffer(quote, offer) {
   let rows;
   if (offer.mode === 'detailed') {
     rows = quote.lines.map((l) => ({ id: l.id, label: l.name, detail: l.dims, qty: l.qty, unit: l.unit, net: l.total }));
+  } else if (offer.mode === 'groups-split') {
+    // the material per group of goods, then the installation per its own group (LABOUR_GROUPS); a line of another
+    // stair's offer (quoteFromOfferLines: no material / labour of its own) counts as material
+    const mat = new Map();
+    const lab = new Map();
+    const add = (map, id, label, v, count = 0) => {
+      if (!map.has(id)) map.set(id, { id, label, net: 0, count: 0 });
+      const g = map.get(id);
+      g.net += v;
+      g.count += count;
+    };
+    for (const l of quote.lines) {
+      const m = l.material ? (l.material.value ?? 0) : l.labour ? 0 : l.total;
+      if (m) add(mat, `mat:${l.group}`, l.group, m, l.unit === 'szt.' ? l.qty : 0);
+      const w = l.labour?.value ?? 0;
+      if (w) {
+        const g = LABOUR_GROUPS[l.group] || `Montaż — ${l.group}`;
+        add(lab, `lab:${g}`, g, w);
+      }
+    }
+    rows = [
+      ...[...mat.values()].map((g) => ({ id: g.id, label: g.label, detail: `materiał${g.count ? `, ${g.count} szt.` : ''}`, qty: null, unit: '', net: g.net, kind: 'material' })),
+      ...[...lab.values()].map((g) => ({ id: g.id, label: g.label, detail: '', qty: null, unit: '', net: g.net, kind: 'installation' })),
+    ];
   } else if (offer.mode === 'split') {
     rows = [
       { id: 'material', label: 'Materiał — okładziny schodów wraz z przygotowaniem', detail: '', qty: null, unit: '', net: quote.totals.materialNet },

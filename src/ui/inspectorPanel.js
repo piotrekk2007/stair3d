@@ -192,18 +192,24 @@ function railingEndsHTML(railingModel, postId) {
   const fields = [];
   for (const s of railingModel?.sections || []) {
     if (!s.valid || s.kind === 'opening') continue; // a level balustrade on the floor has no end heights to correct
-    s.runs.forEach((run) => {
-      if (run.endPostId === postId) fields.push(['Poręcz dochodząca do słupa', railingEndKey(s.id, postId, 'end'), run.endOffsetMm || 0, s.id]);
-      if (run.startPostId === postId) fields.push(['Poręcz odchodząca od słupa', railingEndKey(s.id, postId, 'start'), run.startOffsetMm || 0, s.id]);
+    s.runs.forEach((run, k) => {
+      // (the joint: only the section's first run's start / last run's end can run into the post — handrailMitre)
+      if (run.endPostId === postId) fields.push(['Poręcz dochodząca do słupa', railingEndKey(s.id, postId, 'end'), run.endOffsetMm || 0, s.id, k === s.runs.filter((r) => !r.wallRail).length - 1 ? run.pieces.at(-1)?.endCut?.kind : null]);
+      if (run.startPostId === postId) fields.push(['Poręcz odchodząca od słupa', railingEndKey(s.id, postId, 'start'), run.startOffsetMm || 0, s.id, k === 0 ? run.pieces[0]?.startCut?.kind : null]);
     });
   }
   if (fields.length === 0) return '';
+  const joints = railingModel?.endJoints || {};
+  const jointField = (key, kind) =>
+    kind
+      ? `<label class="insp-field" title="Poręcz kończy się na licu słupa (cięta pionowo) albo przechodzi w słup — oba ścięte jednym skosem"><span class="insp-label">Połączenie ze słupem</span><select data-railing-joint="${key}"><option value="" ${!joints[key] ? 'selected' : ''}>jak wszystkie${!joints[key] ? ` (teraz: ${kind === 'mitre' ? 'na skos' : 'do lica'})` : ''}</option><option value="plumb" ${joints[key] === 'plumb' ? 'selected' : ''}>do lica słupa (pion)</option><option value="mitre" ${joints[key] === 'mitre' ? 'selected' : ''}>przechodzi w słup (na skos)</option></select></label>`
+      : '';
   return (
     section('Poręcz przy słupie') +
     fields
       .map(
-        ([label, key, value, sectionId]) =>
-          `<label class="insp-field" title="Wysokość końca poręczy na licu tego słupa: + w górę, − w dół (odcinek ${sectionId})"><span class="insp-label">${label}: wyżej (+) / niżej (−)</span><input type="number" step="10" min="${-MAX_RAILING_END_OFFSET_MM}" max="${MAX_RAILING_END_OFFSET_MM}" value="${value}" data-railing-end="${key}"> mm</label>`
+        ([label, key, value, sectionId, kind]) =>
+          `<label class="insp-field" title="Wysokość końca poręczy na licu tego słupa: + w górę, − w dół (odcinek ${sectionId})"><span class="insp-label">${label}: wyżej (+) / niżej (−)</span><input type="number" step="10" min="${-MAX_RAILING_END_OFFSET_MM}" max="${MAX_RAILING_END_OFFSET_MM}" value="${value}" data-railing-end="${key}"> mm</label>` + jointField(key, kind)
       )
       .join('') +
     `<div class="insp-hint">Poręcz zawsze kończy się na licu słupa. Tu przesuwasz ten punkt w pionie — prosty odcinek poręczy przy słupie zmienia pochylenie, tralki się dopasowują.</div>`

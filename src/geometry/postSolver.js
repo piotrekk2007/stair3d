@@ -140,6 +140,14 @@ export function applyPostOverrides(models, rawOverrides) {
  * @param {PostModel[]} posts
  * @param {Object<string, number>} needs  post id -> the lowest allowed nominal top (mm)
  */
+/**
+ * Posts a handrail runs into, mitred (railingSolver.js `postTopCuts`, user request 2026-11-23): the top at the mitre's
+ * highest point over the post, `topCut` = the plane {point, normal} the renderer cuts the top along.
+ */
+export function applyPostTopCuts(posts, cuts = {}) {
+  return posts.map((p) => (cuts[p.postId] ? { ...p, elevation: { ...p.elevation, top: cuts[p.postId].topZ }, topCut: { point: cuts[p.postId].point, normal: cuts[p.postId].normal } } : p));
+}
+
 export function raisePostsToHandrail(posts, needs = {}) {
   return posts.map((p) => {
     const need = needs[p.postId];

@@ -34,7 +34,7 @@
 //    identically and their heights differ from tread to tread; one that would fall on a post is dropped.
 
 import { rotate90CW } from './planLayout.js';
-import { applyPostOverrides } from './postSolver.js';
+import { applyPostOverrides, applyPostTopCuts } from './postSolver.js';
 import { constructionTypeForSide, CONSTRUCTION_TYPES } from './stringerModel.js';
 import { valueAtU } from './polylineProfile.js';
 import { curveToPolyline, filletPolyline } from './profileCurve.js';
@@ -584,6 +584,61 @@ function dropStartStub(path, post) {
   if (!sameWay) return path;
   const without = path.slice(1);
   return fitStartAlongLine(without, post).fitted ? without : path;
+}
+
+// --- the handrail running into a post, mitred (user request 2026-11-23, the user's picture): the run's line carried on
+// to the post's CENTRE, the handrail's end and the post's top cut along ONE plane through that point — the MITRE, the
+// plane bisecting the handrail's axis and the post's (normal = d + up at the start, where the post rises into the
+// handrail; d + down at the end, where it goes down from it) — as a joiner cuts it. (A structural newel is thicker
+// than the handrail, so a plane through the handrail's edges on the post's faces — the concrete module's rule for a
+// post the handrail's width — would lie almost flat on it.)
+const RAILING_END_JOINTS = ['mitre', 'plumb'];
+export function sanitizeRailingEndJoints(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) if (/\|(start|end)$/.test(k) && RAILING_END_JOINTS.includes(v)) out[k] = v;
+  return out;
+}
+/** Whether a handrail end (railingEndKey) runs into its post mitred: its own choice, else `railingPostJoint`. */
+export function endJointIsMitre(joints, config, key, end) {
+  if (joints[key]) return joints[key] === 'mitre';
+  return config.railingPostJoint === 'both' || (config.railingPostJoint === 'start' && end === 'start');
+}
+// the path (nosing level) from its first node carried on along its first segment to the post's centre's projection
+function pathToPostCentre(path, post) {
+  if (path.length < 2) return path;
+  const [a, b] = path;
+  const L = planDist(a, b);
+  if (L < SAME_POINT_MM) return path;
+  const u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L };
+  const t = (post.position.x - a.x) * u.x + (post.position.y - a.y) * u.y;
+  return [{ ...a, x: a.x + u.x * t, y: a.y + u.y * t, z: a.z + ((b.z - a.z) / L) * t }, ...path.slice(1)];
+}
+// The mitre of a piece at its `end` ('start' | 'end') into `post`: the piece's cut {kind: 'mitre', normal, verticalDeg}
+// and the post's top cut {point, normal, topZ} (topZ = the plane's highest point over the post).
+function handrailMitre(piece, post, end) {
+  const P = end === 'start' ? piece.start : piece.end;
+  const half = post.size / 2;
+  const ax = { x: piece.end.x - piece.start.x, y: piece.end.y - piece.start.y, z: piece.end.z - piece.start.z };
+  const al = Math.hypot(ax.x, ax.y, ax.z) || 1;
+  const vz = end === 'start' ? 1 : -1;
+  let n = { x: ax.x / al, y: ax.y / al, z: ax.z / al + vz };
+  const nl = Math.hypot(n.x, n.y, n.z) || 1;
+  n = { x: n.x / nl, y: n.y / nl, z: n.z / nl };
+  // (the workshop's angle: the cut off square to the axis, signed as the plumb cut at that end)
+  const off = deg(Math.acos(Math.min(1, Math.abs((n.x * ax.x + n.y * ax.y + n.z * ax.z) / al))));
+  const zAt = (x, y) => P.z - (n.x * (x - P.x) + n.y * (y - P.y)) / n.z;
+  const c = post.position;
+  const topZ = Math.max(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, k]) => zAt(c.x + i * half, c.y + k * half)));
+  return { cut: { kind: 'mitre', verticalDeg: end === 'start' ? -off : off, planDeg: 0, normal: n }, post: { point: { ...P }, normal: n, topZ } };
+}
+// the pieces' cut lengths again (annotateCuts' formula) after a cut changed
+function recutLengths(runPieces, handrailHeight) {
+  const h2 = handrailHeight / 2;
+  for (const piece of runPieces) {
+    const top = piece.lengthMm - h2 * Math.tan(rad(piece.startCut.verticalDeg)) - h2 * Math.tan(rad(piece.endCut.verticalDeg));
+    const bottom = piece.lengthMm + h2 * Math.tan(rad(piece.startCut.verticalDeg)) + h2 * Math.tan(rad(piece.endCut.verticalDeg));
+    piece.cutLengthMm = Math.max(top, bottom);
+  }
 }
 
 function fitPathToPosts(path, startPost, endPost) {
@@ -1137,6 +1192,8 @@ function buildSection(section, ctx) {
   const balusters = [];
   const bent = !!config.railingBent;
   const endOffsets = sanitizeRailingEndOffsets(config.railingEndOffsets);
+  const endJoints = sanitizeRailingEndJoints(config.railingEndJoints);
+  const postTopCuts = {};
   const profilePoints = sanitizeRailingProfileOverrides(config.railingProfileOverrides)[section.id] || {};
   let skippedPoints = 0;
   let edited = false;
@@ -1190,7 +1247,13 @@ function buildSection(section, ctx) {
       fit.startFitted = fit.startFitted || cut.startFitted;
       fit.endFitted = fit.endFitted || cut.endFitted;
     }
-    const path = fit.path;
+    // the handrail running INTO the section's first / last post, mitred (user request 2026-11-23): its line carried on
+    // to the post's centre, both cut along one plane (handrailMitre)
+    const mitreStart = j === 0 && startPost && fit.startFitted && endJointIsMitre(endJoints, config, railingEndKey(section.id, startPostId, 'start'), 'start');
+    const mitreEnd = j === runs.length - 1 && endPost && fit.endFitted && endJointIsMitre(endJoints, config, railingEndKey(section.id, endPostId, 'end'), 'end');
+    let path = fit.path;
+    if (mitreStart) path = pathToPostCentre(path, startPost);
+    if (mitreEnd) path = [...pathToPostCentre([...path].reverse(), endPost)].reverse();
     runPaths.push(path);
     const runPieces = [];
     for (let i = 0; i < path.length - 1; i++) {
@@ -1199,6 +1262,17 @@ function buildSection(section, ctx) {
       runPieces.push({ start, end, lengthMm: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z) });
     }
     annotateCuts(runPieces, handrailHeight);
+    if (mitreStart && runPieces.length) {
+      const m = handrailMitre(runPieces[0], startPost, 'start');
+      runPieces[0].startCut = m.cut;
+      postTopCuts[startPost.postId] = m.post;
+    }
+    if (mitreEnd && runPieces.length) {
+      const m = handrailMitre(runPieces[runPieces.length - 1], endPost, 'end');
+      runPieces[runPieces.length - 1].endCut = m.cut;
+      postTopCuts[endPost.postId] = m.post;
+    }
+    if (mitreStart || mitreEnd) recutLengths(runPieces, handrailHeight);
     pieces.push(...runPieces);
     for (const node of run) {
       const lineZ = zOnPaths([path], node);
@@ -1342,9 +1416,13 @@ function buildSection(section, ctx) {
     }
   }
   base.postTopNeeds = postTopNeeds;
-  base.posts = applyPostOverrides(
-    nominalPosts.map((p) => (postTopNeeds[p.postId] > p.elevation.top ? { ...p, elevation: { ...p.elevation, top: postTopNeeds[p.postId] } } : p)),
-    config.manualPostOverrides
+  base.postTopCuts = postTopCuts;
+  base.posts = applyPostTopCuts(
+    applyPostOverrides(
+      nominalPosts.map((p) => (postTopNeeds[p.postId] > p.elevation.top ? { ...p, elevation: { ...p.elevation, top: postTopNeeds[p.postId] } } : p)),
+      config.manualPostOverrides
+    ),
+    postTopCuts
   );
 
   base.handrail = {
@@ -1792,11 +1870,17 @@ export function buildRailingModel({ planLayout, treadModels, stringerModels, str
   const sections = [...stairSections, ...opening.sections];
   const postTopNeeds = {};
   for (const s of sections) for (const [postId, need] of Object.entries(s.postTopNeeds || {})) postTopNeeds[postId] = Math.max(postTopNeeds[postId] ?? -Infinity, need);
+  // the posts a handrail runs into, mitred (handrailMitre): their tops cut along it — the structural ones in
+  // buildStaircase (postSolver.js applyPostTopCuts)
+  const postTopCuts = Object.assign({}, ...sections.map((s) => s.postTopCuts || {}));
   return {
     enabled: true,
     sections,
     openingEdges: opening.edges,
     postTopNeeds,
+    postTopCuts,
+    // the handrail ends' own joints (railingEndKey → 'mitre' | 'plumb'), for the Inspektor
+    endJoints: sanitizeRailingEndJoints(config.railingEndJoints),
     posts: sections.flatMap((s) => s.posts),
     diagnostics: sections.flatMap((s) => s.diagnostics),
   };

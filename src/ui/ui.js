@@ -749,6 +749,9 @@ export function createUI({
   live(rail.add(config, 'railingWallBracketSpacingMm', 300, 1500, 10)).name('Poręcz przyścienna: wsporniki co maks. [mm]');
   // Poręcz gięta (railingSolver.js smoothRun): łuki w pionie przy zmianie pochylenia i łuk w rzucie w narożniku bez słupa.
   live(rail.add(config, 'railingBent')).name('Poręcz gięta (łuki zamiast załamań)');
+  // the handrail running into the section's first / last post on a mitre (railingSolver.js handrailMitre, user request
+  // 2026-11-23); per handrail end in the Inspektor's post view
+  live(rail.add(config, 'railingPostJoint', { 'nie — poręcz do lica słupa': 'none', 'pierwszy słup odcinka': 'start', 'pierwszy i ostatni słup odcinka': 'both' })).name('Poręcz przechodzi w słup (na skos)');
   live(rail.add(config, 'railingBendRadiusMm', 0, 2000, 10)).name('Gięcie w pionie: promień [mm]');
   live(rail.add(config, 'railingPlanBendRadiusMm', 0, 1000, 10)).name('Gięcie w rzucie: promień [mm]');
   // Podporęcz: tylko przy wandze wpuszczanej (tralki wchodzą w listwę na jej górnej krawędzi).

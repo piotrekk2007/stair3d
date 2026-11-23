@@ -3,6 +3,23 @@
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
 panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 (poręcz gięta, podporęcz) zrobiony. Decyzje z użytkownikiem są na końcu.
 
+## Poręcz przechodząca w słup — łączenie na skos (user request 2026-11-23)
+
+`config.railingPostJoint` 'none' (default) | 'start' (a section's first post) | 'both' (first and last) and per handrail
+end `config.railingEndJoints[railingEndKey(section, post, 'start'|'end')]` = 'mitre' | 'plumb' (the Inspektor's post
+view, „Poręcz przy słupie” → „Połączenie ze słupem”; `railingModel.endJoints`). Only the section's first run's start /
+last run's end, at a post the handrail was fitted to (`startFitted` / `endFitted`). The run's path is carried on along
+its first / last segment to the post's centre (`pathToPostCentre`), the piece's cut is `{kind: 'mitre', normal,
+verticalDeg}` — the plane through that point bisecting the handrail's axis and the post's (normal = unit(d + up) at the
+start, unit(d + down) at the end; the workshop angle (90 ∓ pitch) / 2, `handrailMitre`) — and the post gets
+`postTopCuts[postId] = {point, normal, topZ}` (topZ = the plane's highest point over the post): own balustrade posts in
+the section, the structural ones in `buildStaircase` (`postSolver.js applyPostTopCuts` → `post.topCut`, the top raised
+/ lowered to topZ). The renderers: `railingRenderer.js handrailPieceSolid` takes the solver's plane for a 'mitre' end,
+`postRenderer.js cutTopAlong` moves the post's top vertices onto it; the DXF's cut text „skos … (wchodzi w slup…)”.
+(A structural newel is thicker than the handrail — a plane through the handrail's edges on the post's faces, the
+concrete module's rule for a post the handrail's width, would lie almost flat on it.) Tests:
+`geometry/__tests__/railingPostMitre.test.js`.
+
 ## Słupki ręczne (decyzja użytkownika 2026-10-19) — `railingPostEdits.js`
 
 `config.railingPostEdits = { [sectionId]: { added: [{ id, s }], suppressed: [s] } }`; `s` = mm w rzucie wzdłuż

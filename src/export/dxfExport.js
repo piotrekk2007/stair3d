@@ -718,6 +718,7 @@ function developRun(run, depthMm) {
 
 function railCutText(cut) {
   if (!cut) return 'prosto';
+  if (cut.kind === 'mitre') return `skos ${angleText(cut.verticalDeg)} (wchodzi w slup, slup sciety tym samym skosem)`;
   return cut.kind === 'post' ? `pion ${angleText(cut.verticalDeg)} (przy slupku)` : `pion ${angleText(cut.verticalDeg)}, rzut ${angleText(cut.planDeg)} (laczenie)`;
 }
 

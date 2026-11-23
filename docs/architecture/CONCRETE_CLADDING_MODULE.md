@@ -298,7 +298,12 @@ purple), the clash findings (`REFERENCE-STAIR-HEADROOM`) in the module's list. T
   section — the decorative posts priced from it, per piece or per mb of their height); „💾 Zapisz / 📂 Wczytaj cały
   cennik” = `takeoff/priceListFile.js` (the same file both modules read). The module's own: the labour list, floor
   boards / OSB per m², skirting per mb. A project saved before took its handrail / baluster prices over.
-- `quote/claddingOffer.js` — the offer from the quote: `mode` groups / detailed / split (material + installation), a
+- `quote/claddingOffer.js` — the offer from the quote: `mode` groups / detailed / split (material + installation) /
+  groups-split (user request 2026-11-23: the MATERIAL per group of goods — the quote's groups: stopnie proste,
+  podstopnice, podesty, balustrada… —, then the INSTALLATION per its own group, `LABOUR_GROUPS`: „Montaż stopni i
+  podstopnic” (straight / starter / winder treads, risers, noses), „Profilowanie krawędzi stopni”, „Montaż podestów”,
+  „Listwowanie (listwy i wangi obiciowe)”, „Montaż balustrady”, „Montaż oświetlenia LED”, „Pomiar i transport”; lines
+  `kind` material / installation, ids `mat:<group>` / `lab:<group>`; another stair's lines count as material), a
   line renamed or left out (`lineEdits`), extra rows, a discount spread over the quote's lines (not the extras, no line
   of its own), the quote's VAT; `claddingFacts` (the stair's parameters, the comfort table with the self-supporting
   offer's requirements); printed by the SHARED `offer/offerDocument.js buildOfferHTML` (the same look) through

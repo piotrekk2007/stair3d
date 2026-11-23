@@ -1187,6 +1187,18 @@ function applyRailingEndOffset(key, valueMm) {
   commitHistory();
 }
 
+// How a handrail end meets its post (Inspektor → słup → "Poręcz przy słupie", user request 2026-11-23): '' = as the
+// default (config.railingPostJoint), 'mitre' = running into the post on a mitre, 'plumb' = to its face. Changes ONLY
+// config.railingEndJoints.
+function applyRailingEndJoint(key, value) {
+  const joints = { ...(config.railingEndJoints || {}) };
+  if (value === 'mitre' || value === 'plumb') joints[key] = value;
+  else delete joints[key];
+  config.railingEndJoints = joints;
+  rebuild();
+  commitHistory();
+}
+
 // Krańce odcinka balustrady ustawiane ze stopnia zaznaczonego w planie: zmienia WYŁĄCZNIE config.railingSections
 // (dane modelu), potem zwykły rebuild() + wpis do historii, jak każda inna edycja.
 function applyRailingEdit(action, sectionId, stepIndex, side) {
@@ -1481,6 +1493,8 @@ inspectorPanel.addEventListener('change', (e) => {
   if (key && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: key, value: Number(e.target.value) });
   const railingEnd = e.target?.dataset?.railingEnd;
   if (railingEnd) applyRailingEndOffset(railingEnd, Number(e.target.value));
+  const railingJoint = e.target?.dataset?.railingJoint;
+  if (railingJoint) applyRailingEndJoint(railingJoint, e.target.value);
   const railingPostS = e.target?.dataset?.railingPostS;
   if (railingPostS) {
     const [sectionId, manualId] = railingPostS.split('|');

@@ -336,6 +336,11 @@ export function createDefaultConfig() {
     // Ręczna korekta wysokości końca poręczy przy słupie (railingSolver.js railingEndKey/sanitizeRailingEndOffsets):
     // { 'odcinek|słup|start' albo '…|end': mm } — + w górę, − w dół. Edytowane w Inspektorze słupa.
     railingEndOffsets: {},
+    // Poręcz przechodząca w słup, łączona na skos (user request 2026-11-23, as the concrete module): the default for a
+    // section's first post ('start') / first and last ('both') / none, and per handrail end (railingEndKey) its own
+    // 'mitre' | 'plumb' — railingSolver.js handrailMitre
+    railingPostJoint: 'none',
+    railingEndJoints: {},
     // Ręczne punkty na linii poręczy (geometry/railingProfileModel.js, edytor „Profil poręczy”):
     // { [odcinek]: { [bieg 'słupA>słupB']: [{ s: mm wzdłuż biegu od lica słupa, dz: mm w górę (+) / w dół (−) }] } }
     railingProfileOverrides: {},
