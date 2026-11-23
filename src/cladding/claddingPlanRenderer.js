@@ -107,6 +107,12 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
     .map((s) => {
       const rail = `<polyline class="clad-handrail" points="${pts(s.handrail)}" fill="none" stroke="#7a4b22" stroke-width="3" pointer-events="none" ${HAIR}/>`;
       const bal = s.balusters.map((b) => `<rect x="${fmt(b.at.x - b.size / 2)}" y="${fmt(-b.at.y - b.size / 2)}" width="${fmt(b.size)}" height="${fmt(b.size)}" fill="#7a4b22" pointer-events="none"/>`).join('');
+      // metal balusters (balustradeModel.js metalBaluster): a square of the tube, one with a loop as the loop's width
+      // along the line
+      const metal = (s.metalBalusters || []).map((b) => {
+        const h = (b.loop ? b.loop.widthMm : b.size) / 2;
+        return `<line class="metal-baluster${b.loop ? ' loop' : ''}" x1="${fmt(b.at.x - b.dir.x * h)}" y1="${fmt(-(b.at.y - b.dir.y * h))}" x2="${fmt(b.at.x + b.dir.x * h)}" y2="${fmt(-(b.at.y + b.dir.y * h))}" stroke="#222" stroke-width="${fmt(b.size)}" pointer-events="none"/>`;
+      }).join('');
       const editing = mode === 'posts';
       const posts = s.posts.map((p) => `<rect class="clad-post" data-section="${escapeHtml(s.id)}" data-post="${escapeHtml(p.id)}" x="${fmt(p.at.x - p.size / 2)}" y="${fmt(-p.at.y - p.size / 2)}" width="${fmt(p.size)}" height="${fmt(p.size)}" fill="${p.manual ? '#b5651d' : '#5a3d24'}" stroke="#2b1a0c" stroke-width="1" ${editing ? '' : 'pointer-events="none"'} ${HAIR}><title>Słup — kliknij, żeby usunąć</title></rect>`).join('');
       // the post editor: the line to click (a post added there), removed posts as ghosts (a click restores)
@@ -132,7 +138,7 @@ export function renderCladdingPlanSVG(built, { viewport, selectedIndex = null, o
         : h.strips.map((st) => `<polyline points="${pts(st.points)}" fill="none" stroke="#c9a77a" stroke-opacity="0.45" stroke-width="${fmt(st.widthMm)}" pointer-events="none"/>`).join('') +
           h.brackets.map((b) => `<line x1="${fmt(b.at.x)}" y1="${fmt(-b.at.y)}" x2="${fmt(b.face.x)}" y2="${fmt(-b.face.y)}" stroke="#555" stroke-width="2" pointer-events="none" ${HAIR}/>`).join('') +
           h.rods.map((r) => (h.shape === 'round' ? `<circle cx="${fmt(r.at.x)}" cy="${fmt(-r.at.y)}" r="${fmt(h.sizeMm / 2)}" fill="${h.material === 'wood' ? '#7a4b22' : '#555'}" pointer-events="none"/>` : `<rect x="${fmt(r.at.x - h.sizeMm / 2)}" y="${fmt(-r.at.y - h.sizeMm / 2)}" width="${fmt(h.sizeMm)}" height="${fmt(h.sizeMm)}" fill="#7a4b22" pointer-events="none"/>`)).join('');
-      return (h ? '' : line) + rail + bal + glass + harp + posts + ghosts;
+      return (h ? '' : line) + rail + bal + metal + glass + harp + posts + ghosts;
     })
     .join('');
   // the wall handrails: the handrail line and a tick per bracket to the wall; in the post mode („▮ Słupy” — user request

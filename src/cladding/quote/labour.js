@@ -59,6 +59,9 @@ export function createDefaultQuoteSettings() {
     harpBalusterPerMb: 0,
     harpBracketPerPiece: 0,
     harpStripPerMb: 0,
+    // metal balusters with a loop (user request 2026-11-23): per piece, a straight one and one with a loop
+    metalBalusterPerPiece: 0,
+    metalLoopBalusterPerPiece: 0,
     // the SHARED material list (as the self-supporting takeoff settings): by material id, and the board pricing
     priceList: DEFAULT_PRICE_LIST.map((p) => ({ ...p })),
     wasteFactors: {},
@@ -107,6 +110,8 @@ export function sanitizeQuoteSettings(raw) {
     harpBalusterPerMb: Math.max(0, num(s.harpBalusterPerMb, 0)),
     harpBracketPerPiece: Math.max(0, num(s.harpBracketPerPiece, 0)),
     harpStripPerMb: Math.max(0, num(s.harpStripPerMb, 0)),
+    metalBalusterPerPiece: Math.max(0, num(s.metalBalusterPerPiece, 0)),
+    metalLoopBalusterPerPiece: Math.max(0, num(s.metalLoopBalusterPerPiece, 0)),
     priceList: mergePriceList(s),
     wasteFactors: s.wasteFactors && typeof s.wasteFactors === 'object' ? { ...s.wasteFactors } : {},
     withInstallation: s.withInstallation !== false,
@@ -119,7 +124,7 @@ export function sanitizeQuoteSettings(raw) {
 // its own block `cladding` beside them (the self-supporting side reads the file and ignores it): the labour rates
 // (every item's rate, the user's own items whole), the lump-sum switches, the per-m² / per-mb prices. Not the job's
 // choices (installation on / off, edge channels on / off).
-const PRICE_KEYS = ['floorboardPerM2', 'osbPerM2', 'skirtingPerMb', 'looseTonguePerMb', 'edgeChannelsPerTread', 'harpTubePerMb', 'harpBalusterPerMb', 'harpBracketPerPiece', 'harpStripPerMb'];
+const PRICE_KEYS = ['floorboardPerM2', 'osbPerM2', 'skirtingPerMb', 'looseTonguePerMb', 'edgeChannelsPerTread', 'harpTubePerMb', 'harpBalusterPerMb', 'harpBracketPerPiece', 'harpStripPerMb', 'metalBalusterPerPiece', 'metalLoopBalusterPerPiece'];
 
 /** The module's prices as the file block. */
 export function claddingPricesOf(settings) {

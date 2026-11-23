@@ -256,6 +256,44 @@ function railPiece(a, b, w, h, material, plumbA, plumbB) {
   g.computeVertexNormals();
   return new THREE.Mesh(g, material);
 }
+// a metal baluster of the 'metal-loop' infill (balustradeModel.js metalBaluster): a square tube `t` along each centre
+// line of its `parts` — one square prism per chord, its faces square to the balustrade's plane (normal = across `dir`)
+const LOOP_COLOR_HEX = { black: 0x1c1c1e, graphite: 0x3d4045, white: 0xefefec, steel: 0xb9bdc1 };
+const loopMaterials = new Map();
+function loopMaterial(color) {
+  if (!loopMaterials.has(color)) loopMaterials.set(color, new THREE.MeshStandardMaterial({ color: LOOP_COLOR_HEX[color] ?? LOOP_COLOR_HEX.black, roughness: color === 'steel' ? 0.35 : 0.6, metalness: color === 'steel' ? 0.9 : 0.4, side: THREE.DoubleSide }));
+  return loopMaterials.get(color);
+}
+function metalBalusterMesh(b, material) {
+  const t = b.size / 2;
+  const n = new THREE.Vector3(-b.dir.y, 0, -b.dir.x);
+  const pos = [];
+  for (const part of b.parts) {
+    const pts = part.points.map((p) => new THREE.Vector3(p.x, p.z, -p.y));
+    if (part.closed) pts.push(pts[0]);
+    for (let k = 1; k < pts.length; k++) {
+      const A = pts[k - 1];
+      const B = pts[k];
+      const u = B.clone().sub(A);
+      const len = u.length();
+      if (len < 1e-6) continue;
+      u.divideScalar(len);
+      // (a chord of a half circle: overlapping its neighbours by half the tube, no gap on the outside of the bend)
+      const ext = part.closed ? t : 0;
+      const A1 = A.clone().addScaledVector(u, -ext);
+      const B1 = B.clone().addScaledVector(u, ext);
+      const v = new THREE.Vector3().crossVectors(n, u).normalize();
+      const corner = (P, i, j) => P.clone().addScaledVector(n, i * t).addScaledVector(v, j * t);
+      const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+      const q = [...c.map(([i, j]) => corner(A1, i, j)), ...c.map(([i, j]) => corner(B1, i, j))];
+      for (const [p0, p1, p2, p3] of [[1, 2, 3, 0], [7, 6, 5, 4], [4, 5, 1, 0], [5, 6, 2, 1], [6, 7, 3, 2], [7, 4, 0, 3]]) for (const k2 of [p0, p1, p2, p0, p2, p3]) pos.push(q[k2].x, q[k2].y, q[k2].z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return Object.assign(new THREE.Mesh(g, material), { name: `MetalBaluster${b.loop ? '-loop' : ''}` });
+}
 function column(at, z0, z1, size, material) {
   const g = new THREE.BoxGeometry(size, z1 - z0, size);
   g.translate(at.x, (z0 + z1) / 2, -at.y);
@@ -413,6 +451,7 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
         railing.add(Object.assign(new THREE.Mesh(g, MATERIALS.baluster), { name: 'Baluster' }));
       } else railing.add(Object.assign(column(b.at, b.bottomZ, b.topZ, b.size, MATERIALS.baluster), { name: 'Baluster' }));
     }
+    for (const b of s.metalBalusters || []) railing.add(metalBalusterMesh(b, loopMaterial(config.loopColor)));
     for (const p of s.posts) railing.add(decorativePost(p));
     // the harp (balustradeModel.js harpOf): its rods (metal round / wooden baluster), a bracket per rod to the side
     // face, the mounting strip on the ceiling

@@ -711,6 +711,23 @@ on / off) and „📂 Wczytaj cały cennik” applies it (`applyCladdingPrices`,
 leaves the labour as it is, a concrete PROJECT file gives its whole quote's prices. The shared reader / writer is
 unchanged (the self-supporting side ignores the block). Test: `__tests__/priceListFile.test.js`.
 
+## Metal balusters with a loop (user request 2026-11-23, as built)
+
+A balustrade infill `railingInfill: 'metal-loop'` („tralki metalowe z oczkiem”, the user's picture): a square steel tube
+`loopTubeMm` (10) in the balusters' places (`balustersPerTread` on a flight, ≤ `railingMaxClearMm` on a landing /
+the antresola), from the tread / the floor up under the handrail; along the section every SECOND one has an elongated
+loop in the middle of its height — a stadium (two straights, two half circles) `loopWidthMm` (70) along the line ×
+`loopHeightMm` (400) outer, in the balustrade's plane (`balustradeModel.js metalBaluster`; one too short keeps
+60 mm of straight tube below and above, else it stays straight). Sizes ASSUMPTION. Posts and the wooden handrail as
+with balusters (user decision). The section's `metalBalusters` (never in the wooden `balusters`): `{s, at, dir,
+bottomZ, topZ, size, loop: {widthMm, heightMm, centreZ} | null, parts: [{points, closed}], lengthMm}` (centre lines,
+the tube's developed length). Colour `loopColor` (LOOP_COLORS: czarny mat / grafit / biały / stal). 3D: one mesh per
+baluster, a square prism per chord (`claddingRenderer.js metalBalusterMesh`); plan: the tube / the loop's width as a
+dark stroke (`.metal-baluster`). Priced per piece, two prices of the module (`quote/labour.js`
+`metalBalusterPerPiece` / `metalLoopBalusterPerPiece`, in the price-list file block): lines „Tralki metalowe proste” /
+„… z oczkiem” per section. Not joinery: not in the cut list / production order / DXF. Per side / the antresola like
+every infill (the sides table).
+
 ## The harp (user request 2026-11-18, as built)
 
 A balustrade infill `railingInfill: 'harp'` („harfa (od stopni do sufitu)”, `balustradeModel.js harpOf`), on the

@@ -22,7 +22,7 @@ import { exitEdgeTest } from './openingEdges.js';
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
-export const RAILING_INFILLS = Object.freeze({ balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu (rotule)', harp: 'harfa (od stopni do sufitu)' });
+export const RAILING_INFILLS = Object.freeze({ balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu (rotule)', harp: 'harfa (od stopni do sufitu)', 'metal-loop': 'tralki metalowe z oczkiem' });
 
 // The HARP (user request 2026-11-18 — „harfa”, as the self-supporting rods from the ceiling): rods from the treads (or
 // beside the stair's side on a bracket each) up to the ceiling — under the slab its soffit, in the opening the upper
@@ -335,12 +335,54 @@ function paneClamps(pa, pb, a0, b0, posts, zsAt, config) {
   return out;
 }
 
+/**
+ * A metal baluster of the 'metal-loop' infill (user request 2026-11-23): a square tube `loopTubeMm` from the tread (the
+ * floor) up under the handrail; with `loop` an elongated loop — a stadium, two straights joined by half circles, its
+ * outer size `loopWidthMm` along the line × `loopHeightMm` (ASSUMPTION, the user's picture) — in the middle of its
+ * height, in the balustrade's plane. One too short for its loop stays straight. `parts` = centre lines (plan x / y + z)
+ * for the renderer, `lengthMm` = the tube's developed length.
+ */
+export function metalBaluster(b, dir, loop, config) {
+  const t = b.size;
+  const len = b.topZ - b.bottomZ;
+  const W = config.loopWidthMm;
+  const H = Math.min(config.loopHeightMm, len - 2 * LOOP_MIN_STRAIGHT_MM);
+  const base = { ...b, dir, metal: true, loop: null, parts: [{ points: [{ ...b.at, z: b.bottomZ }, { ...b.at, z: b.topZ }], closed: false }], lengthMm: len };
+  if (!loop || W <= t || H < W) return base;
+  const R = (W - t) / 2;
+  const ch = H - t;
+  const zc = (b.bottomZ + b.topZ) / 2;
+  const z0 = zc - ch / 2;
+  const z1 = zc + ch / 2;
+  const p = (u, z) => ({ x: b.at.x + dir.x * u, y: b.at.y + dir.y * u, z });
+  // (from the left straight's foot round the bottom, up the right straight, round the top, back down the left)
+  const ring = [];
+  for (let k = 0; k <= LOOP_ARC_POINTS; k++) {
+    const a = Math.PI + (Math.PI * k) / LOOP_ARC_POINTS;
+    ring.push(p(R * Math.cos(a), z0 + R + R * Math.sin(a)));
+  }
+  for (let k = 0; k <= LOOP_ARC_POINTS; k++) {
+    const a = (Math.PI * k) / LOOP_ARC_POINTS;
+    ring.push(p(R * Math.cos(a), z1 - R + R * Math.sin(a)));
+  }
+  const parts = [
+    { points: [{ ...b.at, z: b.bottomZ }, { ...b.at, z: z0 }], closed: false },
+    { points: ring, closed: true },
+    { points: [{ ...b.at, z: z1 }, { ...b.at, z: b.topZ }], closed: false },
+  ];
+  const lengthMm = z0 - b.bottomZ + (b.topZ - z1) + 2 * Math.PI * R + 2 * (ch - 2 * R);
+  return { ...base, loop: { widthMm: W, heightMm: H, centreZ: zc }, parts, lengthMm };
+}
+// the straight tube left at least below and above a loop; the points of each half circle (the renderer's chords)
+const LOOP_MIN_STRAIGHT_MM = 60;
+const LOOP_ARC_POINTS = 10;
+
 function section(line, config, ceiling) {
   // a harp: only its rods (no posts, no handrail — user decision 2026-11-18)
   if (isHarp(config)) {
     const harp = harpOf(line, config, ceiling);
     const ss = [line.s0, ...(line.corners || []).filter((s) => s > line.s0 && s < line.s1), line.s1];
-    return { id: line.id, kind: line.kind, key: line.key, infill: 'harp', s0: line.s0, s1: line.s1, path: ss.map((s) => ({ s, ...line.at(s) })), handrail: [], plumb: { start: false, end: false }, posts: [], removedPosts: [], balusters: [], panes: [], fixings: 0, treadCount: line.treads.length, lengthMm: 0, harp };
+    return { id: line.id, kind: line.kind, key: line.key, infill: 'harp', s0: line.s0, s1: line.s1, path: ss.map((s) => ({ s, ...line.at(s) })), handrail: [], plumb: { start: false, end: false }, posts: [], removedPosts: [], balusters: [], metalBalusters: [], panes: [], fixings: 0, treadCount: line.treads.length, lengthMm: 0, harp };
   }
   const edits = config.railingPostEdits?.[line.id] || {};
   const removed = new Set(edits.removed || []);
@@ -380,9 +422,11 @@ function section(line, config, ceiling) {
   const balusters = [];
   const panes = [];
   let fixings = 0;
-  if (config.railingInfill === 'balusters') {
-    const w = config.balusterSizeMm;
-    const at = (s) => ({ at: line.at(s), bottomZ: line.groundAt(s), topZ: topAt(s) - config.handrailHeightMm, size: w, shape: config.balusterShape });
+  let metalBalusters = [];
+  const metalLoop = config.railingInfill === 'metal-loop';
+  if (config.railingInfill === 'balusters' || metalLoop) {
+    const w = metalLoop ? config.loopTubeMm : config.balusterSizeMm;
+    const at = (s) => ({ s, at: line.at(s), bottomZ: line.groundAt(s), topZ: topAt(s) - config.handrailHeightMm, size: w, shape: metalLoop ? 'square' : config.balusterShape });
     for (const p of line.treads) {
       const n = config.balustersPerTread;
       for (let j = 0; j < n; j++) {
@@ -399,6 +443,12 @@ function section(line, config, ceiling) {
         const count = Math.max(0, Math.ceil((b - a) / (config.railingMaxClearMm + w)) - 1);
         for (let j = 1; j <= count; j++) balusters.push(at(a + ((b - a) * j) / (count + 1)));
       }
+    }
+    // metal balusters with a loop (user request 2026-11-23): the same places, a square tube, every second one along the
+    // line with an elongated loop in its middle — kept apart from the wooden `balusters` (not joinery, own prices)
+    if (metalLoop) {
+      metalBalusters = balusters.sort((p, q) => p.s - q.s).map((b, k) => metalBaluster(b, line.dirAt(b.s), k % 2 === 1, config));
+      balusters.length = 0;
     }
   } else {
     // glass: panes along the line, each a polygon in its own vertical plane (straight pieces only — a pane never turns
@@ -480,6 +530,7 @@ function section(line, config, ceiling) {
     posts: postModels,
     removedPosts: spots.filter((p) => removed.has(p.id)).map((p) => ({ id: p.id, s: p.s, at: line.at(p.s) })),
     balusters,
+    metalBalusters,
     panes,
     fixings,
     treadCount: line.treads.length,

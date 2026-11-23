@@ -153,7 +153,7 @@ export function claddingAiAbsent(built) {
 
 // the offer's „Balustrada” row: one kind = as before; several (user request 2026-11-18 — a harp on one flight, balusters on
 // another) = each section with its own infill
-const INFILL_NAMES = { balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu', harp: 'harfa' };
+const INFILL_NAMES = { balusters: 'tralki', 'glass-posts': 'szkło między słupami', 'glass-side': 'szkło na boku betonu', harp: 'harfa', 'metal-loop': 'tralki metalowe z oczkiem' };
 const CAP_NAMES = { flat: 'czapka płaska', pyramid: 'czapka piramidka', ball: 'czapka kula', round: 'góra zaoblona (toczona)', none: 'bez czapki' };
 function railingFact(built) {
   const { config } = built;

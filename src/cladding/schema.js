@@ -130,7 +130,7 @@ export function createDefaultCladdingConfig() {
     handrailHeightMm: 50,
     // the infill (user request 2026-11-04 — the self-supporting types): balusters (square / round), glass between posts,
     // glass on the concrete's side (point fixings, the handrail on the glass); glass sizes ASSUMPTION / DO WERYFIKACJI
-    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side' | 'harp' — the default of every section
+    railingInfill: 'balusters', // 'balusters' | 'glass-posts' | 'glass-side' | 'harp' | 'metal-loop' — the default of every section
     // per flight side / the antresola its own (user request 2026-11-18: a harp on flight 1, balusters on flight 2, a harp
     // on the antresola): {[flight]: {[side]: infill}}, null = the default above — `railingInfillOf`
     railingInfillSides: {},
@@ -155,6 +155,12 @@ export function createDefaultCladdingConfig() {
     harpStrip: false, // a mounting strip on the ceiling the rods reach
     harpStripThicknessMm: 20,
     harpStripWidthMm: 100,
+    // metal balusters with a loop (balustradeModel.js metalBaluster, user request 2026-11-23): a square tube, every
+    // second baluster with an elongated loop in its middle — sizes ASSUMPTION (the user's picture: a 10 mm tube)
+    loopTubeMm: 10,
+    loopWidthMm: 70, // the loop's outer size along the balustrade
+    loopHeightMm: 400, // its outer height
+    loopColor: 'black', // LOOP_COLORS (powder coat)
     glassThicknessMm: 17,
     glassMaxWidthMm: 1200,
     glassGapMm: 20,
@@ -199,7 +205,9 @@ function sanitizeReferenceFloor(ref) {
 }
 
 /** The balustrade infills of the module (balustradeModel.js RAILING_INFILLS). */
-export const CLAD_INFILLS = Object.freeze(['balusters', 'glass-posts', 'glass-side', 'harp']);
+export const CLAD_INFILLS = Object.freeze(['balusters', 'glass-posts', 'glass-side', 'harp', 'metal-loop']);
+/** The metal balusters' colours (`loopColor`). */
+export const LOOP_COLORS = Object.freeze({ black: 'czarny mat', graphite: 'grafit', white: 'biały', steel: 'stal (surowa)' });
 
 // {[flight]: {left?, right?: infill}} — known infills only
 function sanitizeInfillSides(raw) {
@@ -469,6 +477,10 @@ export function sanitizeCladdingConfig(raw) {
     harpStrip: !!c.harpStrip,
     harpStripThicknessMm: num(c.harpStripThicknessMm, d.harpStripThicknessMm, 5, 80),
     harpStripWidthMm: num(c.harpStripWidthMm, d.harpStripWidthMm, 20, 300),
+    loopTubeMm: num(c.loopTubeMm, d.loopTubeMm, 6, 40),
+    loopWidthMm: num(c.loopWidthMm, d.loopWidthMm, 20, 300),
+    loopHeightMm: num(c.loopHeightMm, d.loopHeightMm, 50, 1200),
+    loopColor: Object.keys(LOOP_COLORS).includes(c.loopColor) ? c.loopColor : 'black',
     glassThicknessMm: num(c.glassThicknessMm, d.glassThicknessMm, 6, 40),
     glassMaxWidthMm: num(c.glassMaxWidthMm, d.glassMaxWidthMm, 300, 3000),
     glassGapMm: num(c.glassGapMm, d.glassGapMm, 0, 100),

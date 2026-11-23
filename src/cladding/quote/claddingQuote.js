@@ -6,6 +6,7 @@
 
 import { createDefaultBoardPricing, lookupBoardPricePerMb } from '../../takeoff/boardPricing.js';
 import { riserOn } from '../claddingModel.js';
+import { LOOP_COLORS } from '../schema.js';
 import { UNIT_LABELS, priceOf } from './labour.js';
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -149,6 +150,15 @@ export function buildCladdingQuote(built, settings) {
     // table by its section, per piece or per mb of its height — takeoff/boardPricing.js postPrices)
     lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
     if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(priceOf(settings, 'railing-baluster'), s.balusters.length, 'szt.'), labour: null });
+    // metal balusters with a loop (user request 2026-11-23): per piece, two prices — the module's own
+    if (s.metalBalusters?.length) {
+      const tube = `rurka ${Math.round(config.loopTubeMm)} × ${Math.round(config.loopTubeMm)} mm, ${LOOP_COLORS[config.loopColor]}`;
+      const longest = (list) => `do ${Math.round(Math.max(...list.map((x) => x.lengthMm)))} mm rurki`;
+      const plain = s.metalBalusters.filter((x) => !x.loop);
+      const loops = s.metalBalusters.filter((x) => x.loop);
+      if (plain.length) lines.push({ id: `${s.id}-metal-balusters`, group: 'Balustrada', name: `Tralki metalowe proste (${tube}) — ${where}`, qty: plain.length, unit: 'szt.', dims: longest(plain), material: perUnit(settings.metalBalusterPerPiece, plain.length, 'szt.'), labour: null });
+      if (loops.length) lines.push({ id: `${s.id}-metal-loop-balusters`, group: 'Balustrada', name: `Tralki metalowe z oczkiem ${Math.round(config.loopWidthMm)} × ${Math.round(config.loopHeightMm)} mm (${tube}) — ${where}`, qty: loops.length, unit: 'szt.', dims: longest(loops), material: perUnit(settings.metalLoopBalusterPerPiece, loops.length, 'szt.'), labour: null });
+    }
     // glass: the panes per m² of the rectangles they are cut from, the fixings (rotules / clamps) per piece
     if (s.panes?.length) {
       const m2 = round2(s.panes.reduce((sum, p) => sum + p.blankAreaM2, 0));

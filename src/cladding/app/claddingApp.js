@@ -22,7 +22,7 @@ import { createDefaultBoardPricing } from '../../takeoff/boardPricing.js';
 import { EDGE_PROFILE_LABELS } from '../starterProfile.js';
 import { TREAD_SIDE_TYPES } from '../claddingModel.js';
 import { wallListOf, wallCells, wallRange, toggleWallCell, newWall, moveWallEnd, sideSAt } from '../wallEdits.js';
-import { WALL_TYPES, POST_CAP_LABELS } from '../schema.js';
+import { WALL_TYPES, POST_CAP_LABELS, LOOP_COLORS } from '../schema.js';
 import { applyPriceListFile, priceListToFile } from '../../takeoff/priceListFile.js';
 import { buildOfferHTML } from '../../offer/offerDocument.js';
 import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM, HERO_BOX_MM } from '../../offer/offerDocumentModern.js';
@@ -403,6 +403,14 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(harp.add(proxy, 'harpStripThicknessMm', 5, 80, 1).name('Listwa: grubość [mm]'));
   live(harp.add(proxy, 'harpStripWidthMm', 20, 300, 5).name('Listwa: szerokość [mm]'));
   harp.close();
+  // metal balusters with a loop (balustradeModel.js metalBaluster, user request 2026-11-23): a square tube, every second
+  // one with an elongated loop in its middle — the places as the balusters' ("Tralki na stopień")
+  const loop = rail.addFolder('Tralki metalowe z oczkiem (Wypełnienie: tralki metalowe)');
+  live(loop.add(proxy, 'loopTubeMm', 6, 40, 1).name('Rurka kwadratowa [mm]'));
+  live(loop.add(proxy, 'loopWidthMm', 20, 300, 5).name('Oczko: szerokość (zewn.) [mm]'));
+  live(loop.add(proxy, 'loopHeightMm', 50, 1200, 10).name('Oczko: wysokość (zewn.) [mm]'));
+  live(loop.add(proxy, 'loopColor', Object.fromEntries(Object.entries(LOOP_COLORS).map(([k, l]) => [l, k]))).name('Kolor (malowanie proszkowe)'));
+  loop.close();
   live(rail.add(proxy, 'handrailWidthMm', 20, 150, 1).name('Poręcz: szerokość [mm]'));
   live(rail.add(proxy, 'handrailHeightMm', 20, 150, 1).name('Poręcz: wysokość [mm]'));
   live(rail.add(proxy, 'railingInsetMm', 0, 300, 1).name('Oś od końca stopnia [mm]'));
@@ -535,6 +543,9 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Tralka drewniana harfy [zł/mb] <input type="number" min="0" data-q="harpBalusterPerMb" value="${s.harpBalusterPerMb || ''}" placeholder="0" /></label>
       <label class="clad-field">Uchwyt rurki na boku [zł/szt.] <input type="number" min="0" data-q="harpBracketPerPiece" value="${s.harpBracketPerPiece || ''}" placeholder="0" /></label>
       <label class="clad-field">Listwa montażowa na suficie [zł/mb] <input type="number" min="0" data-q="harpStripPerMb" value="${s.harpStripPerMb || ''}" placeholder="0" /></label>
+      <div class="clad-subhead">Tralki metalowe z oczkiem</div>
+      <label class="clad-field">Tralka metalowa prosta [zł/szt.] <input type="number" min="0" data-q="metalBalusterPerPiece" value="${s.metalBalusterPerPiece || ''}" placeholder="0" /></label>
+      <label class="clad-field">Tralka metalowa z oczkiem [zł/szt.] <input type="number" min="0" data-q="metalLoopBalusterPerPiece" value="${s.metalLoopBalusterPerPiece || ''}" placeholder="0" /></label>
       <div class="clad-subhead">Wspólny cennik (jak w schodach samonośnych)</div>
       ${SHARED_PRICES.map(([id, label, unit]) => `<label class="clad-field">${label} [zł/${unit}] <input type="number" min="0" data-price="${id}" value="${priceValue(s, id) || ''}" placeholder="0" /></label>`).join('')}
       <div class="clad-subhead">Słupy — cena wg przekroju (najmniejszy przekrój ≥ słupa)</div>
