@@ -227,6 +227,8 @@ function beam(a, b, w, h, material) {
 }
 // a handrail piece with either end cut PLUMB (user report 2026-11-13: a square end on the pitch stuck out past the post
 // it stops at): the cross-section stays square to the axis, the end face vertical — flush with the post's face
+// (an end may instead be a plane — {point, normal} in plan x / y + z: the handrail mitred into a post, balustradeModel.js
+// `cuts` — its corners slid along the axis onto it)
 function railPiece(a, b, w, h, material, plumbA, plumbB) {
   if (!plumbA && !plumbB) return beam(a, b, w, h, material);
   const A = new THREE.Vector3(a.x, a.z, -a.y);
@@ -242,6 +244,12 @@ function railPiece(a, b, w, h, material, plumbA, plumbB) {
     [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => {
       const c = P.clone().addScaledVector(n, (i * w) / 2).addScaledVector(v, (j * h) / 2);
       // slide the corner along the axis onto the vertical plane through P (across the plan direction)
+      if (plumb && typeof plumb === 'object') {
+        const P0 = new THREE.Vector3(plumb.point.x, plumb.point.z, -plumb.point.y);
+        const N = new THREE.Vector3(plumb.normal.x, plumb.normal.z, -plumb.normal.y);
+        const un = u.dot(N);
+        return Math.abs(un) < 1e-9 ? c : c.addScaledVector(u, P0.clone().sub(c).dot(N) / un);
+      }
       return plumb ? c.addScaledVector(u, -(((j * h) / 2) * v.dot(flat)) / uf) : c;
     });
   const r0 = ring(A, plumbA);
@@ -303,6 +311,11 @@ function column(at, z0, z1, size, material) {
 function decorativePost(p) {
   const group = new THREE.Group();
   group.name = `Post-${p.id}`;
+  // the handrail running into it: the shaft's top cut along the mitre (no cap, no grooves)
+  if (p.mitre) {
+    group.add(new THREE.Mesh(planeBoardGeometry(p.mitre), MATERIALS.post));
+    return group;
+  }
   // (no cap: the shaft up to the post's top)
   const shaftTop = p.cap === 'none' ? p.topZ : p.topZ - p.capHeightMm;
   group.add(column(p.at, p.bottomZ, shaftTop, p.size, MATERIALS.post));
@@ -442,7 +455,7 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   const railing = new THREE.Group();
   railing.name = 'Railing';
   for (const s of built.balustrade?.sections || []) {
-    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(railPiece(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing, k === 1 && s.plumb?.start, k === s.handrail.length - 1 && s.plumb?.end), { name: `Handrail-${s.id}-${k}` }));
+    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(railPiece(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing, k === 1 && (s.cuts?.start || s.plumb?.start), k === s.handrail.length - 1 && (s.cuts?.end || s.plumb?.end)), { name: `Handrail-${s.id}-${k}` }));
     for (const b of s.balusters) {
       // a round baluster (toczona) or a square one
       if (b.shape === 'round') {

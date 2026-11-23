@@ -391,7 +391,17 @@ function section(line, config, ceiling) {
   // a post's own edits (user request 2026-11-23, as the self-supporting Inspektor): its section, its height over the
   // handrail (0 = flush with the handrail's top), its cap — `railingPostOverrides[post id]`
   const own = (id) => config.railingPostOverrides?.[id] || {};
-  const sizeOfId = (id) => own(id).sizeMm ?? size;
+  // the handrail running INTO an end post, mitred (user request 2026-11-23, the user's picture: „poręcz przechodzi w słup”)
+  // — a flight's first / last post: `postHandrailJoint` none | start | both the default, a post's own `mitre` over it; such
+  // a post takes the handrail's width unless it has its own size
+  const mitreEnd = (id) => (line.kind !== 'stairs' ? null : id === `${line.id}:start` ? 'start' : id === `${line.id}:end` ? 'end' : null);
+  const mitred = (id) => {
+    const end = mitreEnd(id);
+    if (!end) return false;
+    const o = own(id).mitre;
+    return o ?? (config.postHandrailJoint === 'both' || (config.postHandrailJoint === 'start' && end === 'start'));
+  };
+  const sizeOfId = (id) => own(id).sizeMm ?? (mitred(id) ? config.handrailWidthMm : size);
   const sizeOf = (p) => (p ? sizeOfId(p.id) : size);
   const postAt = (s) => posts.find((p) => Math.abs(p.s - s) < 1e-6);
   const glassSide = config.railingInfill === 'glass-side';
@@ -517,12 +527,50 @@ function section(line, config, ceiling) {
   // square end stuck out past it on the pitch; the renderer cuts that end plumb, `plumb`)
   const startPost = line.closed ? null : posts.find((p) => p.s - line.s0 <= sizeOf(p) + 1e-6);
   const endPost = line.closed ? null : [...posts].reverse().find((p) => line.s1 - p.s <= sizeOf(p) + 1e-6);
-  let h0 = startPost ? startPost.s + sizeOf(startPost) / 2 : line.s0;
-  let h1 = endPost && endPost !== startPost ? endPost.s - sizeOf(endPost) / 2 : line.s1;
+  // (a mitred end post: the handrail runs on to its OUTER face, both cut along one mitre — below)
+  const mitreStart = startPost && mitred(startPost.id) ? startPost : null;
+  const mitreEndPost = endPost && endPost !== startPost && mitred(endPost.id) ? endPost : null;
+  let h0 = startPost ? startPost.s + ((mitreStart ? -1 : 1) * sizeOf(startPost)) / 2 : line.s0;
+  let h1 = endPost && endPost !== startPost ? endPost.s - ((mitreEndPost ? -1 : 1) * sizeOf(endPost)) / 2 : line.s1;
   if (h1 - h0 < 1) [h0, h1] = [line.s0, line.s1];
   const stops = (a, b) => [a, ...line.top.map((q) => q.s).filter((s) => s > a && s < b), ...line.corners.filter((s) => s > a && s < b), b].sort((x, y) => x - y).filter((s, k, all) => k === 0 || s - all[k - 1] > 1e-6);
   const ss = stops(line.s0, line.s1);
   const handrail = stops(h0, h1).map((s) => ({ ...line.at(s), z: topAt(s) - config.handrailHeightMm / 2 }));
+  // the mitre: through the handrail's top edge on the post's outer face and its bottom edge on the post's inner face,
+  // across the line — the handrail's end and the post's top both cut along it (the renderer's `cuts`)
+  const cuts = { start: null, end: null };
+  const mitreAt = (post, end) => {
+    if (!post || handrail.length < 2) return;
+    const [c0, c1] = end === 'start' ? [handrail[0], handrail[1]] : [handrail[handrail.length - 1], handrail[handrail.length - 2]];
+    const d = sizeOf(post);
+    const sgn = end === 'start' ? 1 : -1;
+    const run = Math.hypot(c1.x - c0.x, c1.y - c0.y);
+    if (run < 1e-6) return;
+    const tan = (c1.z - c0.z) / run; // rising away from this end (> 0 at the start, < 0 at the top end)
+    const halfV = config.handrailHeightMm / 2 / Math.cos(Math.atan(tan));
+    const sOuter = end === 'start' ? h0 : h1;
+    const sInner = sOuter + sgn * d;
+    const outer = { ...line.at(sOuter), z: c0.z + halfV };
+    const inner = { ...line.at(sInner), z: c0.z + d * tan - halfV };
+    const dir = line.dirAt(post.s);
+    const across = { x: -dir.y, y: dir.x, z: 0 };
+    const e = { x: inner.x - outer.x, y: inner.y - outer.y, z: inner.z - outer.z };
+    // (the plane's normal = e × across, turned towards the handrail)
+    let n = { x: e.y * across.z - e.z * across.y, y: e.z * across.x - e.x * across.z, z: e.x * across.y - e.y * across.x };
+    if ((c1.x - c0.x) * n.x + (c1.y - c0.y) * n.y + (c1.z - c0.z) * n.z < 0) n = { x: -n.x, y: -n.y, z: -n.z };
+    cuts[end] = { point: outer, normal: n };
+    // the post: its side outline in the line's plane (s from its outer face), the top along the mitre
+    const m = postModels.find((p) => p.id === post.id);
+    const bottom = m.bottomZ;
+    const polygon = end === 'start'
+      ? [{ s: 0, z: bottom }, { s: d, z: bottom }, { s: d, z: inner.z }, { s: 0, z: outer.z }]
+      : [{ s: -d, z: bottom }, { s: 0, z: bottom }, { s: 0, z: outer.z }, { s: -d, z: inner.z }];
+    const at = line.at(sOuter);
+    const nrm = { x: -dir.y, y: dir.x };
+    Object.assign(m, { topZ: outer.z, aboveMm: 0, cap: 'none', grooves: 0, mitre: { end, polygon, dir, normal: nrm, origin: { x: at.x - (nrm.x * d) / 2, y: at.y - (nrm.y * d) / 2 }, thicknessMm: d } });
+  };
+  mitreAt(mitreStart, 'start');
+  mitreAt(mitreEndPost, 'end');
   let length = 0;
   for (let k = 1; k < handrail.length; k++) length += Math.hypot(handrail[k].x - handrail[k - 1].x, handrail[k].y - handrail[k - 1].y, handrail[k].z - handrail[k - 1].z);
   return {
@@ -536,7 +584,9 @@ function section(line, config, ceiling) {
     path: ss.map((s) => ({ s, ...line.at(s) })),
     handrail,
     // the handrail's ends at a post: cut plumb (flush with the post's face)
-    plumb: { start: h0 > line.s0 + 1e-6, end: h1 < line.s1 - 1e-6 },
+    plumb: { start: !mitreStart && h0 > line.s0 + 1e-6, end: !mitreEndPost && h1 < line.s1 - 1e-6 },
+    // ...or mitred into a post (a plane: a point + its normal, plan x / y + z)
+    cuts,
     posts: postModels,
     removedPosts: spots.filter((p) => removed.has(p.id)).map((p) => ({ id: p.id, s: p.s, at: line.at(p.s) })),
     balusters,

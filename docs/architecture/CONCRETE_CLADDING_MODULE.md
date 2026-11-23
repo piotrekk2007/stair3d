@@ -773,6 +773,16 @@ at its own face, balusters / glass / clamps keep clear of its own size), its top
 słupy”, „Usuń słup”), a right-click removes it. The quote / cut list group the posts by size. Tests:
 `__tests__/railingPostOverrides.test.js`.
 
+**The handrail running into the post** (user request 2026-11-23, the user's picture): `postHandrailJoint` 'none' |
+'start' (a flight's first post) | 'both' (first and last) — the default (folder „Balustrada i słupy”, „Poręcz przechodzi
+w słup (na skos)”), a post's own `mitre` (its editor) over it; only a stairs line's `:start` / `:end` post. Such a post
+takes the handrail's width (unless it has its own size), no cap / grooves; the handrail runs on to the post's OUTER face
+and both are cut along ONE plane — through the handrail's top edge on the outer face and its bottom edge on the inner
+face (the rendered beam's top / bottom: centre ± height / 2 / cos(pitch)), across the line: `section.cuts.start|end =
+{point, normal}` (the renderer's `railPiece` slides the end's corners along the axis onto it) and `post.mitre = {end,
+polygon (s from the outer face, z), dir, normal, origin, thicknessMm}` (`planeBoardGeometry`), `post.topZ` = the outer
+corner.
+
 **The opening's exit edge — one rule** (user report 2026-11-18, fixed): the antresola still took every opening edge on
 the last back edge's LINE for the exit (the trim's rule was fixed 2026-11-13), so a U's edge over the lower flight never
 got its balustrade though the plan showed it on. Now `openingEdges.js exitEdgeTest` (on the line AND overlapping it) is

@@ -176,6 +176,9 @@ export function createDefaultCladdingConfig() {
     // one post's own edits (user request 2026-11-23, as the self-supporting Inspektor): {[post id]: {sizeMm?, aboveMm?
     // (its top over the handrail's top, 0 = flush), cap?}}
     railingPostOverrides: {},
+    // the handrail running into a flight's end post, mitred (user request 2026-11-23): 'none' | 'start' (the first post)
+    // | 'both' (first and last) — the default; a post's own `mitre` (railingPostOverrides) over it
+    postHandrailJoint: 'none',
     railingAntresolaEdges: {},
     // the ceiling opening drawn by hand (plan points) — null = the one the headroom needs (surroundingsModel.js)
     openingManual: null,
@@ -291,7 +294,7 @@ function sanitizePostOverrides(raw) {
     if (!v || typeof v !== 'object') continue;
     const size = n(v.sizeMm, 40, 250);
     const above = n(v.aboveMm, -300, 500);
-    const o = { ...(size !== null ? { sizeMm: size } : {}), ...(above !== null ? { aboveMm: above } : {}), ...(POST_CAPS.includes(v.cap) ? { cap: v.cap } : {}) };
+    const o = { ...(size !== null ? { sizeMm: size } : {}), ...(above !== null ? { aboveMm: above } : {}), ...(POST_CAPS.includes(v.cap) ? { cap: v.cap } : {}), ...(typeof v.mitre === 'boolean' ? { mitre: v.mitre } : {}) };
     if (Object.keys(o).length) out[id] = o;
   }
   return out;
@@ -520,6 +523,7 @@ export function sanitizeCladdingConfig(raw) {
     glassTint: ['clear', 'optiwhite', 'grey', 'bronze'].includes(c.glassTint) ? c.glassTint : 'clear',
     railingPostEdits: sanitizePostEdits(c.railingPostEdits),
     railingPostOverrides: sanitizePostOverrides(c.railingPostOverrides),
+    postHandrailJoint: ['none', 'start', 'both'].includes(c.postHandrailJoint) ? c.postHandrailJoint : 'none',
     railingAntresolaEdges: Object.fromEntries(Object.entries(c.railingAntresolaEdges && typeof c.railingAntresolaEdges === 'object' ? c.railingAntresolaEdges : {}).filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'boolean')),
     openingManual: Array.isArray(c.openingManual) && c.openingManual.length >= 3 && c.openingManual.every((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) ? c.openingManual.map((p) => ({ x: p.x, y: p.y })) : null,
   };

@@ -418,6 +418,8 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'postSizeMm', 40, 250, 1).name('Słup: przekrój [mm]'));
   live(rail.add(proxy, 'postAboveHandrailMm', 0, 500, 5).name('Słup: ponad poręcz [mm]'));
   live(rail.add(proxy, 'postCap', Object.fromEntries(Object.entries(POST_CAP_LABELS).map(([k, l]) => [l, k]))).name('Słup: czapka'));
+  // the handrail running into the flight's end post, mitred (user request 2026-11-23); per post in its editor
+  live(rail.add(proxy, 'postHandrailJoint', { 'nie — poręcz do lica słupa': 'none', 'pierwszy słup biegu': 'start', 'pierwszy i ostatni słup biegu': 'both' }).name('Poręcz przechodzi w słup (na skos)'));
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
   rail.close();
@@ -1321,6 +1323,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Przekrój [mm]${flag('sizeMm')} <input type="number" min="40" max="250" step="1" data-po="sizeMm" value="${Math.round(p.size)}" /></label>
       <label class="clad-field">Nad poręczą [mm]${flag('aboveMm')} <input type="number" min="-300" max="500" step="5" data-po="aboveMm" value="${Math.round(p.aboveMm)}" title="Ile góra słupa wystaje ponad górę poręczy; 0 = równo z poręczą" /></label>
       <div class="clad-actions"><button type="button" data-po-flush title="Góra słupa równo z górą poręczy, bez czapki">Równo z poręczą</button></div>
+      ${p.id.endsWith(':start') || p.id.endsWith(':end') ? `<label class="clad-field">Poręcz przechodzi w słup (na skos)${flag('mitre')} <select data-po="mitre"><option value="" ${o.mitre === undefined ? 'selected' : ''}>jak wszystkie (${c.postHandrailJoint === 'both' || (c.postHandrailJoint === 'start' && p.id.endsWith(':start')) ? 'tak' : 'nie'})</option><option value="1" ${o.mitre === true ? 'selected' : ''}>tak</option><option value="0" ${o.mitre === false ? 'selected' : ''}>nie</option></select></label>` : ''}
       <label class="clad-field">Czapka${flag('cap')} <select data-po="cap">${Object.entries(POST_CAP_LABELS).map(([k, l]) => `<option value="${k}" ${p.cap === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>
       <div class="clad-hint">Wysokość słupa: ${Math.round(p.topZ - p.bottomZ)} mm. Domyślne dla wszystkich słupów: przekrój ${Math.round(c.postSizeMm)} mm, ${Math.round(c.postAboveHandrailMm)} mm nad poręczą, czapka ${escapeHtml(POST_CAP_LABELS[c.postCap])} (folder „Balustrada”).</div>
       <div class="clad-actions"><button type="button" data-po-reset ${Object.keys(o).length ? '' : 'disabled'}>Jak wszystkie słupy</button> <button type="button" data-po-remove>Usuń słup</button> <button type="button" data-po-close>Zamknij</button></div>`;
@@ -1351,6 +1354,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     const v = ev.target.value;
     editPost((o) => {
       if (f === 'cap') o.cap = v;
+      else if (f === 'mitre') {
+        if (v === '') delete o.mitre;
+        else o.mitre = v === '1';
+      }
       else if (v === '' || !Number.isFinite(Number(v))) delete o[f];
       else o[f] = Number(v);
     });
