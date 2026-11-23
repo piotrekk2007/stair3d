@@ -101,3 +101,26 @@ test('winders noted „kształt wg szablonów”; every line of the order has a 
   const lines = o.groups.reduce((n, x) => n + x.lines.length, 0);
   assert.equal((html.match(/<div class="l"><span class="box"><\/span>/g) || []).length, lines, 'a box per line');
 });
+
+// user decision 2026-11-23: the skirting ordered by the running metre (cutting the short pieces and fitting them is the
+// installer's work), the posts longer by a margin (fitted to the handrail on site)
+test('the skirting in running metres per section (stepped too); the posts with the margin for cutting', () => {
+  for (const style of ['raked', 'stepped']) {
+    const b = buildCladdingStair(cfg({ walls: { 0: { left: true } }, skirtingEnabled: true, skirtingStyle: style }));
+    const g = buildProductionOrder(b, createDefaultQuoteSettings()).groups.find((x) => x.title.startsWith('Listwy przyścienne'));
+    const sk = b.finish.skirting;
+    const mm = sk.reduce((s, x) => s + (x.parts ? x.parts.reduce((t, p) => t + p.lengthMm, 0) : x.lengthMm), 0);
+    assert.ok(g.lines.every((l) => l.unit === 'mb' && /^\d+x\d+$/.test(l.dims)), `${style}: per section, no lengths`);
+    const total = g.lines.reduce((s, l) => s + l.qty, 0);
+    assert.ok(total >= mm / 1000 && total < mm / 1000 + 0.5 * g.lines.length, `${style}: the sum rounded up to 0,5 mb (${total} for ${mm})`);
+    assert.ok(g.lines.every((l) => Math.abs(l.qty * 2 - Math.round(l.qty * 2)) < 1e-9));
+    assert.ok(g.lines.length < (sk[0].parts?.length ?? 2), `${style}: not a line per piece`);
+    assert.match(productionOrderHTML({ groups: [g] }), /<b>\d+x\d+<\/b> - <b>\d+(,5)? mb<\/b>/);
+  }
+  const b = buildCladdingStair(cfg({ railingSides: { 0: { right: true } }, orderPostMarginMm: 150 }));
+  const posts = buildProductionOrder(b, createDefaultQuoteSettings()).groups.find((x) => x.title.startsWith('Słupy'));
+  const p = b.balustrade.sections[0].posts[0];
+  const want = Math.ceil((p.topZ - p.bottomZ + 150) / 10) * 10;
+  assert.ok(posts.lines.some((l) => l.dims === `${p.size}x${p.size}x${want}`), JSON.stringify(posts.lines));
+  assert.match(posts.note, /zapasem 150 mm/);
+});

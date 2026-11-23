@@ -419,6 +419,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'postAboveHandrailMm', 0, 500, 5).name('Słup: ponad poręcz [mm]'));
   live(rail.add(proxy, 'postCap', Object.fromEntries(Object.entries(POST_CAP_LABELS).map(([k, l]) => [l, k]))).name('Słup: czapka'));
   // the handrail running into the flight's end post, mitred (user request 2026-11-23); per post in its editor
+  live(rail.add(proxy, 'orderPostMarginMm', 0, 500, 10).name('Słup w zamówieniu: zapas na docięcie [mm]'));
   live(rail.add(proxy, 'postHandrailJoint', { 'nie — poręcz do lica słupa': 'none', 'pierwszy słup biegu': 'start', 'pierwszy i ostatni słup biegu': 'both' }).name('Poręcz przechodzi w słup (na skos)'));
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));

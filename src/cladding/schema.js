@@ -200,6 +200,9 @@ export function createDefaultCladdingConfig() {
     postCap: 'pyramid', // 'flat' | 'pyramid' | 'ball' | 'round' (a turned, rounded top) | 'none' (the shaft square to its top)
     postCapHeightMm: 60,
     postGrooves: 2, // milled rings round the post under its cap
+    // the production order / cut list: a post ordered this much longer — fitted to the handrail and cut to length by
+    // the installer (user decision 2026-11-23; ASSUMPTION 100 mm)
+    orderPostMarginMm: 100,
   };
 }
 
@@ -479,6 +482,7 @@ export function sanitizeCladdingConfig(raw) {
     postCap: POST_CAPS.includes(c.postCap) ? c.postCap : 'pyramid',
     postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
     postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
+    orderPostMarginMm: num(c.orderPostMarginMm, d.orderPostMarginMm, 0, 500),
     ledTreadEnabled: !!c.ledTreadEnabled,
     ledSkirtingEnabled: !!c.ledSkirtingEnabled,
     ledHandrailEnabled: !!c.ledHandrailEnabled,

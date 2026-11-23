@@ -31,6 +31,21 @@ function grouped(items) {
   return [...out.values()];
 }
 const dims3 = (t, w, l) => `${r0(t)}x${r0(w)}x${r0(l)}`;
+// strips ordered by the running metre (user decision 2026-11-23: cutting the short pieces and fitting them is the
+// installer's work): per section (thickness x width) the lengths summed and rounded UP to MB_STEP — {dims, qty (mb),
+// unit: 'mb', codes, note}
+const MB_STEP = 0.5;
+function byRunningMetre(items, note) {
+  const out = new Map();
+  for (const it of items) {
+    const key = `${r0(it.thicknessMm)}x${r0(it.widthMm)}`;
+    if (!out.has(key)) out.set(key, { dims: key, type: '', note, qty: 0, unit: 'mb', codes: [], mm: 0 });
+    const g = out.get(key);
+    g.mm += it.lengthMm;
+    if (it.code && !g.codes.includes(it.code)) g.codes.push(it.code);
+  }
+  return [...out.values()].map(({ mm, ...g }) => ({ ...g, qty: Math.ceil(mm / 1000 / MB_STEP - 1e-9) * MB_STEP, netMm: mm }));
+}
 
 // a tread's grooves from below, measured from its front (the nose): the LED channel, the riser's groove, a carpet
 // riser's loose-tongue groove
@@ -104,26 +119,32 @@ export function buildProductionOrder(built, quoteSettings = {}) {
     });
   }
   // --- the skirting and the cover stringers
-  const boards = [];
+  // (the skirting by the running metre per section — not its pieces: cut and fitted by the installer)
+  const strips = [];
+  let stepped = false;
   for (const b of built.finish?.skirting || []) {
-    const base = `LS-${b.key.flight + 1}${side(b.key.side)}`;
-    if (b.parts) b.parts.forEach((p, k) => boards.push({ dims: dims3(b.thicknessMm, p.depthMm, p.lengthMm), type: side(b.key.side), code: `${base}-${pad(k + 1)}`, note: p.part === 'horizontal' ? 'schodkowa, poziomy, końce 45°' : `schodkowa, pionowy, 45°${p.notch ? `, wycięcie ${r0(p.notch.widthMm)}x${r0(p.notch.heightMm)}` : ''}` }));
-    else boards.push({ dims: dims3(b.thicknessMm, b.depthMm, b.lengthMm), type: side(b.key.side), code: base, note: 'pochyła, dół wycięty pod stopnie (wg DXF)' });
+    const code = `LS-${b.key.flight + 1}${side(b.key.side)}`;
+    if (b.parts) {
+      stepped = true;
+      for (const p of b.parts) strips.push({ thicknessMm: b.thicknessMm, widthMm: p.depthMm, lengthMm: p.lengthMm, code });
+    } else strips.push({ thicknessMm: b.thicknessMm, widthMm: b.depthMm, lengthMm: b.lengthMm, code });
   }
-  if (boards.length) groups.push({ title: `Listwy przyścienne ${woodName}`, lines: grouped(boards) });
+  if (strips.length) groups.push({ title: `Listwy przyścienne ${woodName}`, note: `łącznie w mb (suma długości w górę do ${String(MB_STEP).replace('.', ',')} mb) — cięte${stepped ? ' na odcinki schodkowe (45°)' : ''} i dopasowywane na montażu`, lines: byRunningMetre(strips, '') });
   const covers = (built.finish?.coverStringers || []).map((b) => ({ dims: dims3(b.thicknessMm, b.depthMm, b.lengthMm), type: side(b.key.side), code: `WO-${b.key.flight + 1}${side(b.key.side)}`, note: 'kształt wg DXF' }));
   if (covers.length) groups.push({ title: `Wangi obiciowe ${woodName}`, lines: grouped(covers) });
   // --- the balustrade: posts, balusters, handrails
   const sections = built.balustrade?.sections || [];
-  const posts = sections.flatMap((s) => s.posts.map((p) => ({ dims: dims3(p.size, p.size, p.topZ - p.bottomZ), note: `czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[p.cap]}, frezy: ${p.grooves}` })));
-  if (posts.length) groups.push({ title: `Słupy ${woodName}`, lines: grouped(posts) });
+  // (a post longer by the margin: fitted to the handrail / cut to length by the installer — user decision 2026-11-23)
+  const margin = Math.max(0, config.orderPostMarginMm ?? 0);
+  const posts = sections.flatMap((s) => s.posts.map((p) => ({ dims: dims3(p.size, p.size, Math.ceil((p.topZ - p.bottomZ + margin) / 10) * 10), note: p.mitre ? 'poręcz wchodzi w słup — skos docinany na montażu' : `czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[p.cap]}, frezy: ${p.grooves}` })));
+  if (posts.length) groups.push({ title: `Słupy ${woodName}`, ...(margin ? { note: `długość z zapasem ${r0(margin)} mm na docięcie na montażu` } : {}), lines: grouped(posts) });
   const balusters = sections.flatMap((s) => s.balusters.map((b) => ({ dims: b.shape === 'round' ? `Ø${r0(b.size)}x${r0(Math.ceil((b.topZ - b.bottomZ) / 10) * 10)}` : dims3(b.size, b.size, Math.ceil((b.topZ - b.bottomZ) / 10) * 10), note: b.shape === 'round' ? 'toczone' : 'kwadratowe' })));
   if (balusters.length) groups.push({ title: `Tralki ${woodName}`, note: 'długości zaokrąglone w górę do 10 mm — docinane na miejscu', lines: grouped(balusters) });
   // the harp's wooden balusters and its ceiling strips (balustradeModel.js harpOf; metal tubes are not joinery)
   const harpWood = sections.filter((s) => s.harp?.material === 'wood').flatMap((s) => s.harp.rods.map((r) => ({ dims: s.harp.shape === 'round' ? `Ø${r0(s.harp.sizeMm)}x${r0(Math.ceil(r.lengthMm / 10) * 10)}` : dims3(s.harp.sizeMm, s.harp.sizeMm, Math.ceil(r.lengthMm / 10) * 10), note: 'harfa, od stopnia do sufitu' })));
   if (harpWood.length) groups.push({ title: `Tralki harfy ${woodName}`, note: 'długości zaokrąglone w górę do 10 mm — docinane na miejscu', lines: grouped(harpWood) });
-  const harpStrips = sections.flatMap((s) => (s.harp?.strips || []).map((st) => ({ dims: dims3(st.thicknessMm, st.widthMm, st.lengthMm), note: `listwa montażowa harfy, ${st.ceiling === 'upper' ? 'sufit piętra' : 'spód stropu'}` })));
-  if (harpStrips.length) groups.push({ title: `Listwy montażowe harfy ${woodName}`, lines: grouped(harpStrips) });
+  const harpStrips = sections.flatMap((s) => (s.harp?.strips || []).map((st) => ({ thicknessMm: st.thicknessMm, widthMm: st.widthMm, lengthMm: st.lengthMm })));
+  if (harpStrips.length) groups.push({ title: `Listwy montażowe harfy ${woodName}`, note: 'łącznie w mb — cięte na montażu', lines: byRunningMetre(harpStrips, '') });
   const rails = [
     ...sections.filter((s) => !s.harp).map((s) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, s.lengthMm), note: s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}` })),
     ...(built.balustrade?.wallRails || []).map((w) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, w.lengthMm), note: `przyścienna, bieg ${w.key.flight + 1}, ${side(w.key.side)}, uchwyty ${w.brackets.length} szt.${config.wallRailReturn ? ', końce do ściany' : ''}` })),
@@ -179,7 +200,7 @@ export function productionOrderHTML(order, { projectName = '', date = new Date()
     .map((g) => {
       const draw = g.drawing ? (g.drawing.kind === 'trim' ? trimSVG(g.drawing) : treadSVG(g.drawing)) : '';
       // (a box per line to tick off when it is made — user request 2026-11-05)
-      const lines = g.lines.map((l) => `<div class="l"><span class="box"></span><b>${esc(l.dims)}</b>${l.type ? ` - <b>${esc(l.type)}</b>` : ''} - <b>${l.qty} szt.</b>${l.note ? ` <span class="nt">(${esc(l.note)})</span>` : ''}${l.codes.length ? `<div class="c">${esc(l.codes.join(', '))}</div>` : ''}</div>`).join('');
+      const lines = g.lines.map((l) => `<div class="l"><span class="box"></span><b>${esc(l.dims)}</b>${l.type ? ` - <b>${esc(l.type)}</b>` : ''} - <b>${l.unit === 'mb' ? `${String(l.qty).replace('.', ',')} mb` : `${l.qty} szt.`}</b>${l.note ? ` <span class="nt">(${esc(l.note)})</span>` : ''}${l.codes.length ? `<div class="c">${esc(l.codes.join(', '))}</div>` : ''}</div>`).join('');
       return `<section><h2>${esc(g.title)}</h2>${g.note ? `<div class="gn">${esc(g.note)}</div>` : ''}${draw}${lines}</section>`;
     })
     .join('');

@@ -67,8 +67,10 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
     const sizes = [...new Set(s.posts.map((p) => r0(p.size)))].sort((a, b) => a - b);
     sizes.forEach((size, k) => {
       const ps = s.posts.filter((p) => r0(p.size) === size);
-      const len = Math.max(...ps.map((p) => p.topZ - p.bottomZ)); // (the cap is within the post's height)
-      rows.push({ code: `SL-${n}${sizes.length > 1 ? String.fromCharCode(97 + k) : ''}`, name: `Słupy ozdobne — ${where}`, qty: ps.length, lengthMm: r0(len), widthMm: size, thicknessMm: size, material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}` });
+      // (the cap is within the post's height; ordered longer by the margin — cut to length on site, user decision 2026-11-23)
+      const margin = Math.max(0, config.orderPostMarginMm ?? 0);
+      const len = Math.max(...ps.map((p) => p.topZ - p.bottomZ)) + margin;
+      rows.push({ code: `SL-${n}${sizes.length > 1 ? String.fromCharCode(97 + k) : ''}`, name: `Słupy ozdobne — ${where}`, qty: ps.length, lengthMm: r0(len), widthMm: size, thicknessMm: size, material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}${margin ? `; z zapasem ${r0(margin)} mm na docięcie` : ''}` });
     });
   }
   for (const w of built.balustrade?.wallRails || []) {

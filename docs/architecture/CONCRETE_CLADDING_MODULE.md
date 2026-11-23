@@ -432,8 +432,11 @@ and the trim „fajka” with a SECTION DRAWING of the profile (`profileRings`: 
 groove / a carpet riser's tongue groove with their distances from the front; the trim's nose + board) —, then the lines
 „grubość x szerokość x długość - typ - n szt.” (identical pieces counted together, their codes under the line; the type
 L / P / CZ / PL — a riser takes its tread's). Groups: straight / starter / winder treads, landings, risers („Podstopnie
-dąb — za stopnicą, wpust …” / „dywanowe, na obce pióro”), noses, trims, skirting (stepped pieces with their mitres and
-notches), cover stringers, posts (cap, grooves), balusters (rounded up to 10 mm), handrails (wall handrails with their
+dąb — za stopnicą, wpust …” / „dywanowe, na obce pióro”), noses, trims, skirting — by the RUNNING METRE per section
+(user decision 2026-11-23: „t x w - n mb”, the lengths of every piece / run summed and rounded up to 0,5 mb,
+`byRunningMetre`; cutting the stepped pieces and fitting them is the installer's work; the harp's ceiling strips
+likewise), cover stringers, posts (cap, grooves; ordered `orderPostMarginMm` longer — 100 mm ASSUMPTION, fitted to the
+handrail and cut to length on site, the cut list's SL rows too), balusters (rounded up to 10 mm), handrails (wall handrails with their
 brackets), loose tongues. The both-sides tread type is now „PL” (the workshop's word, was LP). Layout (user request
 2026-11-05): two columns, the drawings half size (1.5 px/mm), the sizes 15 pt — the order on one or two A4 pages; the
 section outlines run the profile bottom → top (a crossing outline reported and fixed). The workshop's names: the

@@ -611,7 +611,7 @@ gets its frame from the zone, so its walls get skirting too. Risers behind the t
 groove (`riserMount 'behind'`, `riserTopOverlapMm`) or carpet ones between the treads on loose tongues (`'carpet'`,
 priced per mb); the quote option „kanały i obróbka krawędzi” (per tread). The production order „🏭 Zamówienie PDF”
 (`export/productionOrder.js`: groups with the edges + profile drawings, „t x w x l - typ - n szt.”, large type; the
-both-sides tread type is „PL”). The opening's trim „fajka” per opening
+both-sides tread type is „PL”; the skirting / the harp's strips by the running metre per section, the posts `orderPostMarginMm` longer — user decision 2026-11-23). The opening's trim „fajka” per opening
 edge (`openingTrimModel.js`, plan mode „▬ Fajka”; mitred into the antresola nosing too; the exit edge (one rule, `openingEdges.js exitEdgeTest`, also the antresola and the plan) = on the last back
 edge's line AND overlapping it — a U's edge over the lower flight takes a trim); the 3D view's layers; glass clamps on the posts; groups measured as finished elements (`measured`,
 `concreteFromFinished`); the posts' tops also rounded (turned) or none; a wall's end may sit
