@@ -204,7 +204,9 @@ function railingFact(built) {
   const harpText = (h) => `harfa — ${h.material === 'wood' ? 'tralki drewniane' : `rurki metalowe Ø${Math.round(h.sizeMm)} mm`} od ${h.mount === 'side' ? 'boku schodów' : 'stopni'} do sufitu${h.strips.length ? ', listwa montażowa na suficie' : ''}`;
   const kinds = new Set(secs.map((s) => s.infill));
   const count = `${secs.length} ${secs.length === 1 ? 'odcinek' : 'odcinki'}`;
-  if (kinds.size === 1) return secs[0].harp ? `${harpText(secs[0].harp)} (${count})` : `${count} (${INFILL_NAMES[secs[0].infill] || 'tralki'}; słupy: ${CAP_NAMES[config.postCap]})`;
+  // (the Socha type — user request 2026-11-24: its posts and its handrail)
+  const sochaText = config.railingStyle === 'socha' ? 'typ Socha (słupy z podstawą, frezami i czapką, poręcz profilowana)' : null;
+  if (kinds.size === 1) return secs[0].harp ? `${harpText(secs[0].harp)} (${count})` : `${count} (${INFILL_NAMES[secs[0].infill] || 'tralki'}; ${sochaText || `słupy: ${CAP_NAMES[config.postCap]}`})`;
   const where = (s) => (s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1} ${s.key.side === 'left' ? 'L' : 'P'}`);
   return secs.map((s) => `${where(s)}: ${s.harp ? harpText(s.harp) : INFILL_NAMES[s.infill] || 'tralki'}`).join('; ');
 }

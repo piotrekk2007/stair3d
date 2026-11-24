@@ -14,6 +14,9 @@ import { createTakeoffItem, ELEMENT_TYPES, TAKEOFF_ITEM_STATUS } from './takeoff
 import { wasteFactorFor } from './wasteFactors.js';
 import { RAILING_WALL_BRACKET_SPACING_MM } from '../geometry/railingSolver.js';
 import { sideShort } from '../util/sideNames.js';
+import { sochaHandrailArea } from '../geometry/sochaStyle.js';
+// the Socha balustrade's handrail (user request 2026-11-24): its own price per running metre
+export const RAILING_HANDRAIL_SOCHA_MATERIAL_ID = 'railing-handrail-socha';
 
 const MM3_TO_M3 = 1 / 1_000_000_000;
 export const RAILING_HANDRAIL_MATERIAL_ID = 'railing-handrail';
@@ -83,27 +86,31 @@ function glassItems(section, config, wasteFactors) {
 // zewn. / wewn. — an S: lewa / prawa (util/sideNames.js)
 const sideLabel = (side, config) => sideShort(side, config);
 
-function sectionArea(shape, a, b) {
+function sectionArea(shape, a, b, socha = null) {
+  if (shape === 'socha') return sochaHandrailArea(a, b, socha || {});
   return shape === 'round' ? (Math.PI * a * a) / 4 : a * b;
 }
 
 function handrailItems(section, config, wasteFactors) {
   const items = [];
-  const { shape, widthMm, heightMm } = section.handrail;
+  const { shape, widthMm, heightMm, socha } = section.handrail;
+  const sochaRail = shape === 'socha';
+  const railMaterialId = sochaRail ? RAILING_HANDRAIL_SOCHA_MATERIAL_ID : RAILING_HANDRAIL_MATERIAL_ID;
+  const sectionText = sochaRail ? `Socha ${widthMm}/${socha?.bottomWidthMm ?? ''} × ${heightMm}` : shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`;
   section.runs.forEach((run, r) => {
     // A BENT run (railingSolver.js smoothRun) is ONE piece of handrail (bent/laminated to shape), however densely its
     // curve is sampled into chords — one item with its true length along the axis.
     const pieces = run.bent ? [{ lengthMm: run.pieces.reduce((sum, piece) => sum + piece.lengthMm, 0), bent: true }] : run.pieces;
     pieces.forEach((piece, p) => {
       const lengthMm = piece.lengthMm;
-      const volume = sectionArea(shape, widthMm, heightMm) * lengthMm * MM3_TO_M3;
+      const volume = sectionArea(shape, widthMm, heightMm, socha) * lengthMm * MM3_TO_M3;
       items.push(
         createTakeoffItem({
           itemId: `railing-${section.id}-handrail-${r}-${p}`,
           elementType: ELEMENT_TYPES.HANDRAIL,
           sourceElementId: `railing:${section.id}:handrail:${r}-${p}`,
-          material: 'Poręcz',
-          materialId: RAILING_HANDRAIL_MATERIAL_ID,
+          material: sochaRail ? 'Poręcz Socha' : 'Poręcz',
+          materialId: railMaterialId,
           quantity: 1,
           unit: 'szt',
           nominalDimensions: { lengthMm, widthMm, heightMm, shape },
@@ -113,13 +120,13 @@ function handrailItems(section, config, wasteFactors) {
           netArea: 0,
           stockVolume: volume,
           stockArea: 0,
-          wasteFactor: wasteFactorFor(ELEMENT_TYPES.HANDRAIL, RAILING_HANDRAIL_MATERIAL_ID, wasteFactors),
+          wasteFactor: wasteFactorFor(ELEMENT_TYPES.HANDRAIL, railMaterialId, wasteFactors),
           optional: true,
           status: TAKEOFF_ITEM_STATUS.OK,
           notes: [
             piece.bent
-              ? `Poręcz GIĘTA ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1} — jeden element wygięty w pionie/rzucie, długość po osi 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm (rozwinięcie w DXF balustrady).`
-              : `Poręcz ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${shape === 'round' ? `Ø ${widthMm}` : `${widthMm} × ${heightMm}`} mm.`,
+              ? `Poręcz GIĘTA ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1} — jeden element wygięty w pionie/rzucie, długość po osi 3D; przekrój ${sectionText} mm (rozwinięcie w DXF balustrady).`
+              : `Poręcz ${sideLabel(section.side, config)} (odcinek ${section.id}), bieg ${r + 1}, element ${p + 1} — prosty odcinek o prawdziwej długości 3D; przekrój ${sectionText} mm.`,
           ],
         })
       );

@@ -719,6 +719,18 @@ on / off) and „📂 Wczytaj cały cennik” applies it (`applyCladdingPrices`,
 leaves the labour as it is, a concrete PROJECT file gives its whole quote's prices. The shared reader / writer is
 unchanged (the self-supporting side ignores the block). Test: `__tests__/priceListFile.test.js`.
 
+## The Socha balustrade (user request 2026-11-24, as built)
+
+As the self-supporting one (RAILING_MODEL.md „Balustrada Socha”), the shapes from the shared `geometry/sochaStyle.js`
+(added to the module's allowed shared list — pure numbers). `railingStyle` 'standard' | 'socha' („Typ balustrady” in
+„Balustrada i słupy” — sets `handrailWidthMm` / `HeightMm` to 60 / 70), `sochaBaseHeightMm` / `sochaBaseExtraMm` /
+`sochaTopHeightMm` / `sochaBottomWidthMm`, a post's own type `railingPostOverrides[id].style` (its editor in „▮ Słupy”).
+The post model `style` (+ `socha` sizes), the section `handrailProfile` {kind 'socha' | 'rect', …}. 3D: `claddingRenderer.js
+sochaPost` (a mitred post stays the plain mitred shaft), the handrail by `profiledRailPiece` (any outline, square /
+plumb / mitre ends). Quote: „Poręcz Socha” at `railing-handrail-socha` per mb, „Słupy Socha” at `railing-post-socha` per
+piece (the plain ones still from the post table). The cut list / production order name them („Słupy Socha”, the
+profile). The offer's „Balustrada” row says „typ Socha”.
+
 ## Metal balusters with a loop (user request 2026-11-23, as built)
 
 A balustrade infill `railingInfill: 'metal-loop'` („tralki metalowe z oczkiem”, the user's picture): a square steel tube

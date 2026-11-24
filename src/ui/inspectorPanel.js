@@ -176,8 +176,11 @@ function postEditFormHTML(post, o) {
     post.kind === 'railing'
       ? `<label class="insp-field"><span class="insp-label">Grubość słupka (kwadrat)</span><input type="number" step="5" min="20" max="300" value="${post.size}" data-post-edit="sizeMm"> mm</label>`
       : '';
+  // its type (user request 2026-11-24): as the balustrade / plain / Socha — manualPostOverrides[postId].style
+  const styleField = `<label class="insp-field"><span class="insp-label">Typ słupa</span><select data-post-style><option value="" ${!o.style ? 'selected' : ''}>jak balustrada (teraz: ${post.style === 'socha' ? 'Socha' : 'zwykły'})</option><option value="standard" ${o.style === 'standard' ? 'selected' : ''}>zwykły</option><option value="socha" ${o.style === 'socha' ? 'selected' : ''}>Socha</option></select></label>`;
   return (
     section('Edycja słupa') +
+    styleField +
     thickness +
     field('Wydłuż (+) / skróć (−) od GÓRY', 'topDeltaMm', o.topDeltaMm || 0) +
     field('Wydłuż (+) / skróć (−) od DOŁU', 'bottomDeltaMm', o.bottomDeltaMm || 0) +

@@ -720,6 +720,27 @@ export function createUI({
   live(rail.add(config, 'railingOpeningEnabled')).name('Balustrada przy otworze w stropie (piętro)');
   live(rail.add(config, 'railingOpeningHeightMm', 700, 1500, 1)).name('Przy otworze: wysokość nad posadzką [mm]');
   live(rail.add(config, 'railingOpeningSetbackMm', 0, 300, 1)).name('Przy otworze: oś słupków od krawędzi [mm]');
+  // the balustrade's type (user request 2026-11-24): Socha = its posts (plinth, flutes, stepped cap) and its stepped
+  // handrail (60 × 70, the lower part narrower) — choosing it sets the handrail to its size; a post's own type in the
+  // Inspektor
+  rail
+    .add(config, 'railingStyle', { zwykła: 'standard', Socha: 'socha' })
+    .name('Typ balustrady')
+    .onChange((v) => {
+      if (v === 'socha') {
+        config.railingHandrailWidthMm = 60;
+        config.railingHandrailHeightMm = 70;
+      }
+      refreshUI(gui);
+      onChange();
+      (onCommit || onChange)();
+    });
+  const socha = rail.addFolder('Socha: wymiary');
+  live(socha.add(config, 'railingSochaBaseHeightMm', 0, 500, 5)).name('Słup: wysokość podstawy [mm]');
+  live(socha.add(config, 'railingSochaBaseExtraMm', 0, 40, 1)).name('Słup: podstawa szersza o [mm]');
+  live(socha.add(config, 'railingSochaTopHeightMm', 10, 60, 1)).name('Poręcz: wysokość szerszej góry [mm]');
+  live(socha.add(config, 'railingSochaBottomWidthMm', 20, 100, 1)).name('Poręcz: szerokość węższego dołu [mm]');
+  socha.close();
   const handrailOptions = { '— własny —': '', ...Object.fromEntries(HANDRAIL_PRESETS.map((p) => [p.label, p.id])) };
   const handrailProxy = { preset: HANDRAIL_PRESETS.find((p) => p.shape === config.railingHandrailShape && p.width === config.railingHandrailWidthMm && p.height === config.railingHandrailHeightMm)?.id ?? '' };
   rail

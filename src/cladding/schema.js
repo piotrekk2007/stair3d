@@ -200,6 +200,14 @@ export function createDefaultCladdingConfig() {
     postCap: 'pyramid', // 'flat' | 'pyramid' | 'ball' | 'round' (a turned, rounded top) | 'none' (the shaft square to its top)
     postCapHeightMm: 60,
     postGrooves: 2, // milled rings round the post under its cap
+    // the balustrade's type (user request 2026-11-24, as the self-supporting one — geometry/sochaStyle.js): 'standard'
+    // | 'socha' (posts with a plinth, flutes and a stepped cap, the stepped handrail 60 × 70); a post's own type
+    // railingPostOverrides[id].style
+    railingStyle: 'standard',
+    sochaBaseHeightMm: 250,
+    sochaBaseExtraMm: 8,
+    sochaTopHeightMm: 25,
+    sochaBottomWidthMm: 50,
     // the production order / cut list: a post ordered this much longer — fitted to the handrail and cut to length by
     // the installer (user decision 2026-11-23; ASSUMPTION 100 mm)
     orderPostMarginMm: 100,
@@ -297,7 +305,7 @@ function sanitizePostOverrides(raw) {
     if (!v || typeof v !== 'object') continue;
     const size = n(v.sizeMm, 40, 250);
     const above = n(v.aboveMm, -300, 500);
-    const o = { ...(size !== null ? { sizeMm: size } : {}), ...(above !== null ? { aboveMm: above } : {}), ...(POST_CAPS.includes(v.cap) ? { cap: v.cap } : {}), ...(typeof v.mitre === 'boolean' ? { mitre: v.mitre } : {}) };
+    const o = { ...(size !== null ? { sizeMm: size } : {}), ...(above !== null ? { aboveMm: above } : {}), ...(POST_CAPS.includes(v.cap) ? { cap: v.cap } : {}), ...(typeof v.mitre === 'boolean' ? { mitre: v.mitre } : {}), ...(v.style === 'standard' || v.style === 'socha' ? { style: v.style } : {}) };
     if (Object.keys(o).length) out[id] = o;
   }
   return out;
@@ -482,6 +490,11 @@ export function sanitizeCladdingConfig(raw) {
     postCap: POST_CAPS.includes(c.postCap) ? c.postCap : 'pyramid',
     postCapHeightMm: num(c.postCapHeightMm, d.postCapHeightMm, 0, 300),
     postGrooves: Math.round(num(c.postGrooves, d.postGrooves, 0, 6)),
+    railingStyle: c.railingStyle === 'socha' ? 'socha' : 'standard',
+    sochaBaseHeightMm: num(c.sochaBaseHeightMm, d.sochaBaseHeightMm, 0, 500),
+    sochaBaseExtraMm: num(c.sochaBaseExtraMm, d.sochaBaseExtraMm, 0, 40),
+    sochaTopHeightMm: num(c.sochaTopHeightMm, d.sochaTopHeightMm, 10, 60),
+    sochaBottomWidthMm: num(c.sochaBottomWidthMm, d.sochaBottomWidthMm, 20, 100),
     orderPostMarginMm: num(c.orderPostMarginMm, d.orderPostMarginMm, 0, 500),
     ledTreadEnabled: !!c.ledTreadEnabled,
     ledSkirtingEnabled: !!c.ledSkirtingEnabled,

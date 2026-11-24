@@ -1166,7 +1166,10 @@ function applyPostEdit(postId, change) {
     if (Number.isFinite(change.value) && change.value > 0) entry.sizeMm = change.value;
     else delete entry.sizeMm;
   }
-  else if (change.action === 'remove') entry.removed = true;
+  else if (change.field === 'style') {
+    if (change.value === 'standard' || change.value === 'socha') entry.style = change.value;
+    else delete entry.style;
+  } else if (change.action === 'remove') entry.removed = true;
   else if (change.action === 'restore') delete entry.removed;
   else if (change.action === 'reset') {
     delete entry.topDeltaMm;
@@ -1493,6 +1496,7 @@ inspectorPanel.addEventListener('change', (e) => {
   if (key && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: key, value: Number(e.target.value) });
   const railingEnd = e.target?.dataset?.railingEnd;
   if (railingEnd) applyRailingEndOffset(railingEnd, Number(e.target.value));
+  if (e.target?.dataset?.postStyle !== undefined && selection?.elementType === 'post' && selection.postId) applyPostEdit(selection.postId, { field: 'style', value: e.target.value });
   const railingJoint = e.target?.dataset?.railingJoint;
   if (railingJoint) applyRailingEndJoint(railingJoint, e.target.value);
   const railingPostS = e.target?.dataset?.railingPostS;

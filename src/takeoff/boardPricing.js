@@ -374,7 +374,8 @@ export function applyBoardPricing(items, pricing) {
   return items.map((item) => {
     if (item.elementType === ELEMENT_TYPES.STRINGER_HOUSING) return excludedItem(item);
     if (item.status !== 'OK') return item;
-    if (item.elementType === ELEMENT_TYPES.POST) return pricePost(item, pricing);
+    // (a Socha post: its own price per piece from the general list — materialTakeoff.js POST_SOCHA_MATERIAL_ID)
+    if (item.elementType === ELEMENT_TYPES.POST) return item.calculatedDimensions?.style === 'socha' ? item : pricePost(item, pricing);
     if (item.materialId === LED_SUPPLY_MATERIAL_ID) return priceLedSupply(item, pricing);
     const blank = boardBlankOf(item, pricing.riserMaterial);
     if (!blank) return item;

@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { traceability } from '../scene/traceability.js';
 import { buildBoxWithBoxPockets } from './geometryUtils.js';
 import { pocketBox } from './jointSolver.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { sochaPostParts } from './sochaStyle.js';
 
 // A post with pockets (jointSolver.js — e.g. the housings the stringers enter) is the box with those boxes taken out;
 // the pockets are already decided in plan + elevation, here only converted to world (x, z up→y, −y→z).
@@ -43,6 +45,30 @@ function boxMeshFor(model, pockets = []) {
   return mesh;
 }
 
+// A Socha post (user request 2026-11-24, sochaStyle.js): the plinth, the fluted shaft and the stepped cap as one mesh in
+// world coordinates; a handrail running into it on a mitre — no cap, its top cut along the mitre. (Its stringer pockets
+// are not shown — they lie under the boards that enter them.)
+function sochaMeshFor(model) {
+  const parts = sochaPostParts({ sizeMm: model.size, bottomZ: model.elevation.bottom, topZ: model.elevation.top, capped: !model.topCut, ...(model.socha || {}) });
+  const { x, y } = model.position;
+  const geometries = parts.boxes.map((b) => {
+    const g = new THREE.BoxGeometry(b.x1 - b.x0, b.z1 - b.z0, b.y1 - b.y0);
+    g.translate(x + (b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, -(y + (b.y0 + b.y1) / 2));
+    return g;
+  });
+  if (parts.frustum) {
+    const f = parts.frustum;
+    // (a 4-sided frustum, its corners over the plates' corners)
+    const g = new THREE.CylinderGeometry(f.w1 / Math.SQRT2, f.w0 / Math.SQRT2, f.z1 - f.z0, 4, 1);
+    g.rotateY(Math.PI / 4);
+    g.translate(x, (f.z0 + f.z1) / 2, -y);
+    geometries.push(g);
+  }
+  const geometry = mergeGeometries(geometries.map((g) => g.toNonIndexed()));
+  if (model.topCut) cutTopAlong(geometry, model);
+  return new THREE.Mesh(geometry);
+}
+
 const MESH_NAME_BY_KIND = { start: 'Post_Start', end: 'Post_End' };
 
 export function renderPosts(postModels, material, pocketsByPost = {}) {
@@ -50,7 +76,7 @@ export function renderPosts(postModels, material, pocketsByPost = {}) {
   group.name = 'Posts';
   let cornerIndex = 0;
   for (const model of postModels) {
-    const mesh = boxMeshFor(model, pocketsByPost[model.postId] || []);
+    const mesh = model.style === 'socha' ? sochaMeshFor(model) : boxMeshFor(model, pocketsByPost[model.postId] || []);
     mesh.material = material;
     mesh.name = model.kind === 'corner' ? `Post_Corner_${cornerIndex++}` : model.kind === 'railing' ? `Post_Railing_${model.postId}` : MESH_NAME_BY_KIND[model.kind];
     // Posts aren't tied to one tread (stepId: null) — a corner post sits at a turn, a newel at

@@ -82,6 +82,8 @@ export function sanitizePostOverrides(raw) {
     if (Number.isFinite(entry.bottomDeltaMm) && entry.bottomDeltaMm !== 0) clean.bottomDeltaMm = entry.bottomDeltaMm;
     // Thickness (square section) of a balustrade post — the structural posts share config.postSize instead.
     if (Number.isFinite(entry.sizeMm) && entry.sizeMm >= MIN_POST_SIZE_MM && entry.sizeMm <= MAX_POST_SIZE_MM) clean.sizeMm = entry.sizeMm;
+    // its type (user request 2026-11-24): 'standard' | 'socha' (applyPostStyles)
+    if (entry.style === 'standard' || entry.style === 'socha') clean.style = entry.style;
     if (Object.keys(clean).length > 0) out[postId] = clean;
   }
   return out;
@@ -146,6 +148,21 @@ export function applyPostOverrides(models, rawOverrides) {
  */
 export function applyPostTopCuts(posts, cuts = {}) {
   return posts.map((p) => (cuts[p.postId] ? { ...p, elevation: { ...p.elevation, top: cuts[p.postId].topZ }, topCut: { point: cuts[p.postId].point, normal: cuts[p.postId].normal } } : p));
+}
+
+/**
+ * Every post's TYPE (user request 2026-11-24): its own (`manualPostOverrides[postId].style`), else the balustrade's —
+ * 'socha' for every post (structural and balustrade ones) when the balustrade is on and of the Socha type
+ * (`railingStyle`), else 'standard'. Appearance and price only (geometry/sochaStyle.js, the takeoff's post item).
+ */
+export function applyPostStyles(posts, config) {
+  const own = sanitizePostOverrides(config.manualPostOverrides);
+  const def = config.railingEnabled && config.railingStyle === 'socha' ? 'socha' : 'standard';
+  const socha = { baseHeightMm: Number(config.railingSochaBaseHeightMm) || 0, baseExtraMm: Number(config.railingSochaBaseExtraMm) || 0 };
+  return posts.map((p) => {
+    const style = own[p.postId]?.style ?? def;
+    return style === 'socha' ? { ...p, style, socha } : { ...p, style };
+  });
 }
 
 export function raisePostsToHandrail(posts, needs = {}) {

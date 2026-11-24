@@ -58,19 +58,29 @@ export function buildCutList(built, { species = '', cls = '' } = {}) {
       h.strips.forEach((st, k) => rows.push({ code: `LM-${n}${h.strips.length > 1 ? `-${k + 1}` : ''}`, name: `Listwa montażowa harfy (${st.ceiling === 'upper' ? 'sufit piętra' : 'spód stropu'}) — ${where}`, qty: 1, lengthMm: r0(st.lengthMm), widthMm: r0(st.widthMm), thicknessMm: r0(st.thicknessMm), material: wood, notes: 'na suficie, rurki dochodzą do niej' }));
       continue;
     }
-    rows.push({ code: `PR-${n}`, name: `Poręcz — ${where}`, qty: 1, lengthMm: r0(s.lengthMm), widthMm: r0(config.handrailWidthMm), thicknessMm: r0(config.handrailHeightMm), material: wood, notes: `przekrój ${handrailSize}` });
+    rows.push({ code: `PR-${n}`, name: `Poręcz — ${where}`, qty: 1, lengthMm: r0(s.lengthMm), widthMm: r0(config.handrailWidthMm), thicknessMm: r0(config.handrailHeightMm), material: wood, notes: `przekrój ${handrailSize}${s.handrailProfile?.kind === 'socha' ? `, profil Socha — dół ${r0(s.handrailProfile.bottomWidthMm)} mm, góra ${r0(s.handrailProfile.topHeightMm)} mm wys.` : ''}` });
     if (s.balusters.length) {
       const len = Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ));
       rows.push({ code: `TR-${n}`, name: `Tralki — ${where}`, qty: s.balusters.length, lengthMm: r0(len), widthMm: r0(config.balusterSizeMm), thicknessMm: r0(config.balusterSizeMm), material: wood, notes: `${config.balusterShape === 'round' ? 'okrągłe Ø' : 'kwadratowe '}${r0(config.balusterSizeMm)} mm; długość najdłuższej, docinane na miejscu` });
     }
     // the posts by their section (one may be edited thicker — railingPostOverrides): a row per section size
-    const sizes = [...new Set(s.posts.map((p) => r0(p.size)))].sort((a, b) => a - b);
-    sizes.forEach((size, k) => {
-      const ps = s.posts.filter((p) => r0(p.size) === size);
+    // (and by their type — a Socha post its own row, user request 2026-11-24)
+    const kinds = [...new Set(s.posts.map((p) => `${p.style === 'socha' ? 's' : 'z'}|${r0(p.size)}`))].sort((a, b) => {
+      // (the plain posts first, then the Socha ones; each by its size)
+      const [sa, za] = a.split('|');
+      const [sb, zb] = b.split('|');
+      return sa === sb ? Number(za) - Number(zb) : sa === 'z' ? -1 : 1;
+    });
+    kinds.forEach((kind, k) => {
+      const [st, sz] = kind.split('|');
+      const size = Number(sz);
+      const socha = st === 's';
+      const ps = s.posts.filter((p) => r0(p.size) === size && (p.style === 'socha') === socha);
+      const sizes = kinds;
       // (the cap is within the post's height; ordered longer by the margin — cut to length on site, user decision 2026-11-23)
       const margin = Math.max(0, config.orderPostMarginMm ?? 0);
       const len = Math.max(...ps.map((p) => p.topZ - p.bottomZ)) + margin;
-      rows.push({ code: `SL-${n}${sizes.length > 1 ? String.fromCharCode(97 + k) : ''}`, name: `Słupy ozdobne — ${where}`, qty: ps.length, lengthMm: r0(len), widthMm: size, thicknessMm: size, material: wood, notes: `z czapką; najwyższy; frezy: ${config.postGrooves}${margin ? `; z zapasem ${r0(margin)} mm na docięcie` : ''}` });
+      rows.push({ code: `SL-${n}${sizes.length > 1 ? String.fromCharCode(97 + k) : ''}`, name: `${socha ? 'Słupy Socha' : 'Słupy ozdobne'} — ${where}`, qty: ps.length, lengthMm: r0(len), widthMm: size, thicknessMm: size, material: wood, notes: `${socha ? `Socha: podstawa ${r0(config.sochaBaseHeightMm)} mm (+${r0(config.sochaBaseExtraMm)} mm), frezy na bokach, czapka schodkowa` : `z czapką; frezy: ${config.postGrooves}`}; najwyższy${margin ? `; z zapasem ${r0(margin)} mm na docięcie` : ''}` });
     });
   }
   for (const w of built.balustrade?.wallRails || []) {

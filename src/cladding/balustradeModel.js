@@ -436,7 +436,9 @@ function section(line, config, ceiling) {
   const topAt = (s) => zAt(line.top, s);
   const postModels = posts.map((p) => {
     const o = own(p.id);
-    return { id: p.id, s: p.s, manual: !!p.manual, edited: Object.keys(o).length > 0, at: line.at(p.s), bottomZ: line.groundAt(p.s), topZ: topAt(p.s) + (o.aboveMm ?? config.postAboveHandrailMm), aboveMm: o.aboveMm ?? config.postAboveHandrailMm, size: sizeOf(p), cap: o.cap ?? config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves };
+    // (its type — user request 2026-11-24: Socha = the plinth, the flutes and the stepped cap, sochaStyle.js)
+    const style = o.style ?? (config.railingStyle === 'socha' ? 'socha' : 'standard');
+    return { id: p.id, s: p.s, manual: !!p.manual, edited: Object.keys(o).length > 0, at: line.at(p.s), bottomZ: line.groundAt(p.s), topZ: topAt(p.s) + (o.aboveMm ?? config.postAboveHandrailMm), aboveMm: o.aboveMm ?? config.postAboveHandrailMm, size: sizeOf(p), cap: o.cap ?? config.postCap, capHeightMm: config.postCapHeightMm, grooves: config.postGrooves, style, ...(style === 'socha' ? { socha: { baseHeightMm: config.sochaBaseHeightMm, baseExtraMm: config.sochaBaseExtraMm } } : {}) };
   });
   const clear = (s, w) => posts.every((p) => Math.abs(s - p.s) > (sizeOf(p) + w) / 2 + 1);
   // the infill
@@ -587,6 +589,8 @@ function section(line, config, ceiling) {
     plumb: { start: !mitreStart && h0 > line.s0 + 1e-6, end: !mitreEndPost && h1 < line.s1 - 1e-6 },
     // ...or mitred into a post (a plane: a point + its normal, plan x / y + z)
     cuts,
+    // the handrail's section: the Socha balustrade's stepped profile (sochaStyle.js) or a plain rectangle
+    handrailProfile: config.railingStyle === 'socha' ? { kind: 'socha', bottomWidthMm: config.sochaBottomWidthMm, topHeightMm: config.sochaTopHeightMm } : { kind: 'rect' },
     posts: postModels,
     removedPosts: spots.filter((p) => removed.has(p.id)).map((p) => ({ id: p.id, s: p.s, at: line.at(p.s) })),
     balusters,

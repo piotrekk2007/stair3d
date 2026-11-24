@@ -25,6 +25,7 @@ const ALLOWED_SHARED = new Set([
   'geometry/polygonClip.js',
   'geometry/tolerances.js',
   'geometry/rectUnion.js',
+  'geometry/sochaStyle.js', // the Socha balustrade's shapes, pure numbers (user request 2026-11-24 — both modules)
   'takeoff/boardPricing.js',
   'takeoff/priceListFile.js',
   'takeoff/pricing.js',

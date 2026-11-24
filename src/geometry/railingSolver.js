@@ -52,6 +52,14 @@ export { applyRailingPostEdit, sanitizeRailingPostEdits } from './railingPostEdi
 
 export const RAILING_SIDES = Object.freeze(['outer', 'inner']);
 
+// The handrail's section kind: the Socha balustrade's stepped profile (user request 2026-11-24, geometry/sochaStyle.js —
+// its lower part narrower, `socha` = the step's sizes) or the chosen rect / round. Width / height stay
+// railingHandrailWidthMm / HeightMm (the Socha type sets them to its 60 × 70 in the panel).
+export function handrailShapeOf(config) {
+  if (config.railingStyle !== 'socha') return { shape: config.railingHandrailShape };
+  return { shape: 'socha', socha: { bottomWidthMm: Number(config.railingSochaBottomWidthMm) || 50, topHeightMm: Number(config.railingSochaTopHeightMm) || 25 } };
+}
+
 // Handrail cross-sections offered in the UI: width = across the stair, height = vertical (mm).
 export const HANDRAIL_PRESETS = Object.freeze([
   { id: '70x40', label: '70 x 40', shape: 'rect', width: 70, height: 40 },
@@ -985,7 +993,7 @@ function wallOnlySection(base, nodes, { config, sign, offsetMm, handrailHeight, 
     return base;
   }
   base.runs = [{ key: 'wall-all', startPostId: null, endPostId: null, pieces: wallRail.pieces, bent: false, wallRail: true, brackets: wallRail.brackets, startAtPostFace: false, endAtPostFace: false, startOffsetMm: 0, endOffsetMm: 0 }];
-  base.handrail = { pieces: wallRail.pieces, totalLengthMm: wallRail.pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
+  base.handrail = { pieces: wallRail.pieces, totalLengthMm: wallRail.pieces.reduce((sum, p) => sum + p.lengthMm, 0), ...handrailShapeOf(config), widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
   base.heightAboveNosing = { minMm: heightMm, maxMm: heightMm };
   base.valid = true;
   return base;
@@ -1428,7 +1436,7 @@ function buildSection(section, ctx) {
   base.handrail = {
     pieces,
     totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0),
-    shape: config.railingHandrailShape,
+    ...handrailShapeOf(config),
     widthMm: config.railingHandrailWidthMm,
     heightMm: handrailHeight,
   };
@@ -1795,7 +1803,7 @@ function buildOpeningSection(id, path, ctx, closed) {
       }
     }
   });
-  base.handrail = { pieces, totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0), shape: config.railingHandrailShape, widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
+  base.handrail = { pieces, totalLengthMm: pieces.reduce((sum, p) => sum + p.lengthMm, 0), ...handrailShapeOf(config), widthMm: config.railingHandrailWidthMm, heightMm: handrailHeight };
   base.balusters = balusters.filter((b) => b.zTop - b.zBottom > 0).map((b, i) => ({ id: `${id}-baluster-${i}`, ...b, heightMm: b.zTop - b.zBottom, topCutDeg: 0, bottomCutDeg: 0, longPointMm: b.zTop - b.zBottom }));
   base.heightAboveNosing = { minMm: height, maxMm: height };
   base.postTopNeeds = postTopNeeds;

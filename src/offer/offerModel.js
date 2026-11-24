@@ -217,7 +217,7 @@ export function stairFacts(config, derived, extras = {}) {
     concreteRange(config, derived.numTreads)
       ? ['Bieg betonowy', `${concreteRangeText(concreteRange(config, derived.numTreads), derived.numTreads)} — stopnie drewniane (okładziny) na betonie`]
       : null,
-    ['Balustrada', !config.railingEnabled ? 'nie' : RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'],
+    ['Balustrada', !config.railingEnabled ? 'nie' : `${RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'}${config.railingStyle === 'socha' ? ' — typ Socha (słupy z podstawą, frezami i czapką, poręcz profilowana)' : ''}`],
     extras.material ? ['Drewno', extras.material] : null,
   ].filter(Boolean);
   const comfort = [

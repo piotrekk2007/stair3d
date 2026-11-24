@@ -136,7 +136,7 @@ export function buildProductionOrder(built, quoteSettings = {}) {
   const sections = built.balustrade?.sections || [];
   // (a post longer by the margin: fitted to the handrail / cut to length by the installer — user decision 2026-11-23)
   const margin = Math.max(0, config.orderPostMarginMm ?? 0);
-  const posts = sections.flatMap((s) => s.posts.map((p) => ({ dims: dims3(p.size, p.size, Math.ceil((p.topZ - p.bottomZ + margin) / 10) * 10), note: p.mitre ? 'poręcz wchodzi w słup — skos docinany na montażu' : `czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[p.cap]}, frezy: ${p.grooves}` })));
+  const posts = sections.flatMap((s) => s.posts.map((p) => ({ dims: dims3(p.size, p.size, Math.ceil((p.topZ - p.bottomZ + margin) / 10) * 10), note: p.style === 'socha' ? `Socha: podstawa ${r0(config.sochaBaseHeightMm)} mm (+${r0(config.sochaBaseExtraMm)}), frezy, czapka schodkowa${p.mitre ? ', poręcz wchodzi w słup' : ''}` : p.mitre ? 'poręcz wchodzi w słup — skos docinany na montażu' : `czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[p.cap]}, frezy: ${p.grooves}` })));
   if (posts.length) groups.push({ title: `Słupy ${woodName}`, ...(margin ? { note: `długość z zapasem ${r0(margin)} mm na docięcie na montażu` } : {}), lines: grouped(posts) });
   const balusters = sections.flatMap((s) => s.balusters.map((b) => ({ dims: b.shape === 'round' ? `Ø${r0(b.size)}x${r0(Math.ceil((b.topZ - b.bottomZ) / 10) * 10)}` : dims3(b.size, b.size, Math.ceil((b.topZ - b.bottomZ) / 10) * 10), note: b.shape === 'round' ? 'toczone' : 'kwadratowe' })));
   if (balusters.length) groups.push({ title: `Tralki ${woodName}`, note: 'długości zaokrąglone w górę do 10 mm — docinane na miejscu', lines: grouped(balusters) });
@@ -146,7 +146,7 @@ export function buildProductionOrder(built, quoteSettings = {}) {
   const harpStrips = sections.flatMap((s) => (s.harp?.strips || []).map((st) => ({ thicknessMm: st.thicknessMm, widthMm: st.widthMm, lengthMm: st.lengthMm })));
   if (harpStrips.length) groups.push({ title: `Listwy montażowe harfy ${woodName}`, note: 'łącznie w mb — cięte na montażu', lines: byRunningMetre(harpStrips, '') });
   const rails = [
-    ...sections.filter((s) => !s.harp).map((s) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, s.lengthMm), note: s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}` })),
+    ...sections.filter((s) => !s.harp).map((s) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, s.lengthMm), note: `${s.kind === 'antresola' ? 'antresola' : `bieg ${s.key.flight + 1}, ${side(s.key.side)}`}${s.handrailProfile?.kind === 'socha' ? `, profil Socha (dół ${r0(s.handrailProfile.bottomWidthMm)}, góra ${r0(s.handrailProfile.topHeightMm)} wys.)` : ''}` })),
     ...(built.balustrade?.wallRails || []).map((w) => ({ dims: dims3(config.handrailHeightMm, config.handrailWidthMm, w.lengthMm), note: `przyścienna, bieg ${w.key.flight + 1}, ${side(w.key.side)}, uchwyty ${w.brackets.length} szt.${config.wallRailReturn ? ', końce do ściany' : ''}` })),
   ];
   if (rails.length) groups.push({ title: `Poręcze ${woodName}`, lines: grouped(rails) });

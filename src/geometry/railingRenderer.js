@@ -12,6 +12,7 @@ import { traceability } from '../scene/traceability.js';
 import { withWoodGrainUVs, textureOffsetFor } from '../scene/woodGrain.js';
 import { buildPrism, planToWorld } from './geometryUtils.js';
 import { ROTULE_DIAMETER_MM } from './railingGlass.js';
+import { sochaHandrailOutline } from './sochaStyle.js';
 
 const ROUND_SEGMENTS = 16;
 
@@ -86,8 +87,18 @@ export function handrailPieceSolid(piece, handrail, prev = null, next = null) {
   // (a handrail running into a post, mitred — railingSolver.js handrailMitre: the solver's own plane)
   const ns = piece.startCut?.kind === 'mitre' && piece.startCut.normal ? unit3(piece.startCut.normal) : cutNormal(d, prev ? dirOf(prev) : null);
   const ne = piece.endCut?.kind === 'mitre' && piece.endCut.normal ? unit3(piece.endCut.normal) : cutNormal(d, next ? dirOf(next) : null);
-  const outline = profileOutline(handrail.shape, handrail.widthMm, handrail.heightMm);
+  // (the Socha balustrade's stepped profile — sochaStyle.js, user request 2026-11-24)
+  const outline = handrail.shape === 'socha' ? sochaHandrailOutline(handrail.widthMm, handrail.heightMm, handrail.socha || {}) : profileOutline(handrail.shape, handrail.widthMm, handrail.heightMm);
   const offsets = outline.map((p) => add3(mul3(across, p.u), mul3(up, p.w)));
+  // each side face's own outward normal (the outline counter-clockwise: (dw, −du)) — a stepped profile's step faces
+  // are not where the corners' radial directions point
+  const edgeNormals =
+    handrail.shape === 'round'
+      ? null
+      : outline.map((p, k) => {
+          const q = outline[(k + 1) % outline.length];
+          return unit3(add3(mul3(across, q.w - p.w), mul3(up, -(q.u - p.u))));
+        });
   // each corner's line a + o + t·d, cut by the plane through the piece's end point with that end's normal
   const onPlane = (origin, o, n) => add3(add3(origin, o), mul3(d, -dot3(o, n) / dot3(d, n)));
   return {
@@ -97,6 +108,8 @@ export function handrailPieceSolid(piece, handrail, prev = null, next = null) {
     endNormal: ne,
     round: handrail.shape === 'round',
     radial: offsets.map(unit3),
+    edgeNormals,
+    outline2d: outline,
   };
 }
 
@@ -129,13 +142,16 @@ function solidGeometry(solid) {
   for (let k = 0; k < n; k++) {
     const k2 = (k + 1) % n;
     const [s0, s1, e0, e1] = [solid.start[k], solid.start[k2], solid.end[k], solid.end[k2]];
-    const face = unit3(add3(solid.radial[k], solid.radial[k2]));
+    const face = solid.edgeNormals ? solid.edgeNormals[k] : unit3(add3(solid.radial[k], solid.radial[k2]));
     const [n0, n1] = solid.round ? [solid.radial[k], solid.radial[k2]] : [face, face];
     tri(s0, s1, e1, n0, n1, n1, face);
     tri(s0, e1, e0, n0, n1, n0, face);
   }
+  // the end faces: a fan for a convex profile; a stepped one (not convex) triangulated properly
+  const caps = solid.outline2d && solid.edgeNormals ? THREE.ShapeUtils.triangulateShape(solid.outline2d.map((p) => new THREE.Vector2(p.u, p.w)), []) : null;
   for (const [ring, normal] of [[solid.start, solid.startNormal], [solid.end, solid.endNormal]]) {
-    for (let k = 1; k < n - 1; k++) tri(ring[0], ring[k], ring[k + 1], normal, normal, normal, normal);
+    if (caps) for (const [a, b, c] of caps) tri(ring[a], ring[b], ring[c], normal, normal, normal, normal);
+    else for (let k = 1; k < n - 1; k++) tri(ring[0], ring[k], ring[k + 1], normal, normal, normal, normal);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

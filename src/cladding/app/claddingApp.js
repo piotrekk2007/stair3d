@@ -420,6 +420,27 @@ export function mountCladdingApp(rootEl, host = {}) {
   live(rail.add(proxy, 'postCap', Object.fromEntries(Object.entries(POST_CAP_LABELS).map(([k, l]) => [l, k]))).name('Słup: czapka'));
   // the handrail running into the flight's end post, mitred (user request 2026-11-23); per post in its editor
   live(rail.add(proxy, 'orderPostMarginMm', 0, 500, 10).name('Słup w zamówieniu: zapas na docięcie [mm]'));
+  // the balustrade's type (user request 2026-11-24, as the self-supporting one): Socha = its posts and its stepped
+  // handrail 60 × 70 (set on choosing it); a post's own type in its editor („▮ Słupy”)
+  rail
+    .add(proxy, 'railingStyle', { zwykła: 'standard', Socha: 'socha' })
+    .name('Typ balustrady')
+    .onChange((v) => {
+      change((c) => {
+        c.railingStyle = v;
+        if (v === 'socha') {
+          c.handrailWidthMm = 60;
+          c.handrailHeightMm = 70;
+        }
+      });
+      gui.controllersRecursive().forEach((ctl) => ctl.updateDisplay());
+    });
+  const sochaDims = rail.addFolder('Socha: wymiary');
+  live(sochaDims.add(proxy, 'sochaBaseHeightMm', 0, 500, 5).name('Słup: wysokość podstawy [mm]'));
+  live(sochaDims.add(proxy, 'sochaBaseExtraMm', 0, 40, 1).name('Słup: podstawa szersza o [mm]'));
+  live(sochaDims.add(proxy, 'sochaTopHeightMm', 10, 60, 1).name('Poręcz: wysokość szerszej góry [mm]'));
+  live(sochaDims.add(proxy, 'sochaBottomWidthMm', 20, 100, 1).name('Poręcz: szerokość węższego dołu [mm]'));
+  sochaDims.close();
   live(rail.add(proxy, 'postHandrailJoint', { 'nie — poręcz do lica słupa': 'none', 'pierwszy słup biegu': 'start', 'pierwszy i ostatni słup biegu': 'both' }).name('Poręcz przechodzi w słup (na skos)'));
   live(rail.add(proxy, 'postCapHeightMm', 0, 300, 5).name('Słup: wysokość czapki [mm]'));
   live(rail.add(proxy, 'postGrooves', 0, 6, 1).name('Słup: frezy (pierścienie)'));
@@ -568,6 +589,8 @@ export function mountCladdingApp(rootEl, host = {}) {
   // the shared material prices shown here (material id, label, unit) — the rest of the list travels with the file
   const SHARED_PRICES = [
     ['railing-handrail', 'Poręcz', 'mb'],
+    ['railing-handrail-socha', 'Poręcz Socha', 'mb'],
+    ['railing-post-socha', 'Słup Socha (zamiast cennika słupów)', 'szt.'],
     ['railing-baluster', 'Tralka', 'szt.'],
     ['railing-glass', 'Szkło VSG', 'm²'],
     ['railing-glass-fixing', 'Uchwyt / rotula szyby', 'szt.'],
@@ -1325,6 +1348,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Nad poręczą [mm]${flag('aboveMm')} <input type="number" min="-300" max="500" step="5" data-po="aboveMm" value="${Math.round(p.aboveMm)}" title="Ile góra słupa wystaje ponad górę poręczy; 0 = równo z poręczą" /></label>
       <div class="clad-actions"><button type="button" data-po-flush title="Góra słupa równo z górą poręczy, bez czapki">Równo z poręczą</button></div>
       ${p.id.endsWith(':start') || p.id.endsWith(':end') ? `<label class="clad-field">Poręcz przechodzi w słup (na skos)${flag('mitre')} <select data-po="mitre"><option value="" ${o.mitre === undefined ? 'selected' : ''}>jak wszystkie (${c.postHandrailJoint === 'both' || (c.postHandrailJoint === 'start' && p.id.endsWith(':start')) ? 'tak' : 'nie'})</option><option value="1" ${o.mitre === true ? 'selected' : ''}>tak</option><option value="0" ${o.mitre === false ? 'selected' : ''}>nie</option></select></label>` : ''}
+      <label class="clad-field">Typ słupa${flag('style')} <select data-po="style"><option value="" ${o.style === undefined ? 'selected' : ''}>jak balustrada (${c.railingStyle === 'socha' ? 'Socha' : 'zwykły'})</option><option value="standard" ${o.style === 'standard' ? 'selected' : ''}>zwykły</option><option value="socha" ${o.style === 'socha' ? 'selected' : ''}>Socha</option></select></label>
       <label class="clad-field">Czapka${flag('cap')} <select data-po="cap">${Object.entries(POST_CAP_LABELS).map(([k, l]) => `<option value="${k}" ${p.cap === k ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>
       <div class="clad-hint">Wysokość słupa: ${Math.round(p.topZ - p.bottomZ)} mm. Domyślne dla wszystkich słupów: przekrój ${Math.round(c.postSizeMm)} mm, ${Math.round(c.postAboveHandrailMm)} mm nad poręczą, czapka ${escapeHtml(POST_CAP_LABELS[c.postCap])} (folder „Balustrada”).</div>
       <div class="clad-actions"><button type="button" data-po-reset ${Object.keys(o).length ? '' : 'disabled'}>Jak wszystkie słupy</button> <button type="button" data-po-remove>Usuń słup</button> <button type="button" data-po-close>Zamknij</button></div>`;
@@ -1355,6 +1379,10 @@ export function mountCladdingApp(rootEl, host = {}) {
     const v = ev.target.value;
     editPost((o) => {
       if (f === 'cap') o.cap = v;
+      else if (f === 'style') {
+        if (v === '') delete o.style;
+        else o.style = v;
+      }
       else if (f === 'mitre') {
         if (v === '') delete o.mitre;
         else o.mitre = v === '1';

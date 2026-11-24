@@ -148,7 +148,9 @@ export function buildCladdingQuote(built, settings) {
     }
     // (the shared price list: the handrail per mb, a baluster per piece — takeoff/pricing.js; a post from the post
     // table by its section, per piece or per mb of its height — takeoff/boardPricing.js postPrices)
-    lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm`, material: perUnit(priceOf(settings, 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
+    // (the Socha balustrade — user request 2026-11-24: its handrail and its posts each their own price)
+    const sochaRail = s.handrailProfile?.kind === 'socha';
+    lines.push({ id: `${s.id}-handrail`, group: 'Balustrada', name: `Poręcz${sochaRail ? ' Socha' : ''} — ${where}`, qty: mb, unit: 'mb', dims: `${Math.round(s.lengthMm)} mm${sochaRail ? `, ${Math.round(config.handrailWidthMm)}/${Math.round(s.handrailProfile.bottomWidthMm)} × ${Math.round(config.handrailHeightMm)} mm` : ''}`, material: perUnit(priceOf(settings, sochaRail ? 'railing-handrail-socha' : 'railing-handrail'), mb, 'mb'), labour: s.kind === 'antresola' ? labour('railing-antresola', mb) : labour('railing-stairs', s.treadCount) });
     if (s.balusters.length) lines.push({ id: `${s.id}-balusters`, group: 'Balustrada', name: `Tralki — ${where}`, qty: s.balusters.length, unit: 'szt.', dims: `${Math.round(Math.max(...s.balusters.map((b) => b.topZ - b.bottomZ)))} mm (najdłuższa)`, material: perUnit(priceOf(settings, 'railing-baluster'), s.balusters.length, 'szt.'), labour: null });
     // metal balusters with a loop (user request 2026-11-23): per piece, two prices — the module's own
     if (s.metalBalusters?.length) {
@@ -165,7 +167,10 @@ export function buildCladdingQuote(built, settings) {
       lines.push({ id: `${s.id}-glass`, group: 'Balustrada', name: `Szkło — ${where} (${s.panes.length} tafli)`, qty: m2, unit: 'm²', dims: s.panes.map((p) => `${Math.round(p.widthMm)}×${Math.round(p.heightMm)}`).join(', '), material: perUnit(priceOf(settings, 'railing-glass'), m2, 'm²'), labour: null });
       lines.push({ id: `${s.id}-glass-fixings`, group: 'Balustrada', name: `${s.infill === 'glass-side' ? 'Rotule' : 'Uchwyty szkła'} — ${where}`, qty: s.fixings, unit: 'szt.', dims: '', material: perUnit(priceOf(settings, 'railing-glass-fixing'), s.fixings, 'szt.'), labour: null });
     }
-    if (s.posts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[s.posts[0]?.cap] || '—'}, frezy: ${s.posts[0]?.grooves ?? 0})`, qty: s.posts.length, unit: 'szt.', dims: [...new Set(s.posts.map((p) => Math.round(p.size)))].map((z) => `${s.posts.filter((p) => Math.round(p.size) === z).length} × ${z} × ${z} mm`).join(', '), material: postsMaterial(s.posts, pricing), labour: labour('post', s.posts.length) });
+    const sochaPosts = s.posts.filter((p) => p.style === 'socha');
+    if (sochaPosts.length) lines.push({ id: `${s.id}-posts-socha`, group: 'Balustrada', name: `Słupy Socha — ${where}`, qty: sochaPosts.length, unit: 'szt.', dims: [...new Set(sochaPosts.map((p) => Math.round(p.size)))].map((z) => `${z} × ${z} mm`).join(', '), material: perUnit(priceOf(settings, 'railing-post-socha'), sochaPosts.length, 'szt.'), labour: labour('post', sochaPosts.length) });
+    const plainPosts = s.posts.filter((p) => p.style !== 'socha');
+    if (plainPosts.length) lines.push({ id: `${s.id}-posts`, group: 'Balustrada', name: `Słupy ozdobne — ${where} (czapka: ${{ flat: 'płaska', pyramid: 'piramidka', ball: 'kula', round: 'zaoblona (toczona)', none: 'bez czapki' }[plainPosts[0]?.cap] || '—'}, frezy: ${plainPosts[0]?.grooves ?? 0})`, qty: plainPosts.length, unit: 'szt.', dims: [...new Set(plainPosts.map((p) => Math.round(p.size)))].map((z) => `${plainPosts.filter((p) => Math.round(p.size) === z).length} × ${z} × ${z} mm`).join(', '), material: postsMaterial(plainPosts, pricing), labour: labour('post', plainPosts.length) });
   }
   // the wall handrail: the handrail per mb, the brackets per piece (the shared list), its fitting per mb
   for (const w of built.balustrade?.wallRails || []) {

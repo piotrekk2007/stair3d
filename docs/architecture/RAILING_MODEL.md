@@ -3,6 +3,27 @@
 Status: **etapy 1, 2 i 3a (kosztorys + walidacja) zaimplementowane** (bieg prosty, odcinki od–do, oba typy wangi, parametry, solver, render 3D,
 panel z tabelą odcinków, ostrzeżenie o błędnym odcinku w Walidacji; zakręty i podesty). Etap 3b: plan 2D zrobiony (warstwa balustrady + krańce odcinków z Inspektora) i DXF zrobiony (jeden arkusz); etap 4 (poręcz gięta, podporęcz) zrobiony. Decyzje z użytkownikiem są na końcu.
 
+## Balustrada Socha (user request 2026-11-24)
+
+The user's photos: a post with a taller plinth a little wider than the shaft, one shallow flute on each face and a
+stepped cap; plain balusters; the handrail 70 mm high with a wider top (60 × 25) over a narrower lower part (50).
+Behaves as any balustrade — only its look and its prices differ. The shapes in ONE pure module
+`geometry/sochaStyle.js` (shared with the concrete module): `sochaPostParts({sizeMm, bottomZ, topZ, capped,
+baseHeightMm, baseExtraMm})` → boxes round the axis (plinth, the fluted shaft as a core + strips beside each flute, the
+cap's two plates) + the cap's bevel (a frustum), no cap when a handrail runs into the post on a mitre;
+`sochaHandrailOutline(width, height, {bottomWidthMm, topHeightMm})` (8 corners, counter-clockwise) and
+`sochaHandrailArea`. Config: `railingStyle` 'standard' | 'socha' („Typ balustrady”, folder 9; choosing Socha sets
+`railingHandrailWidthMm` / `HeightMm` to 60 / 70), `railingSochaBaseHeightMm` (250), `railingSochaBaseExtraMm` (8),
+`railingSochaTopHeightMm` (25), `railingSochaBottomWidthMm` (50) (sub-folder „Socha: wymiary”); a post's own type
+`manualPostOverrides[postId].style` (the Inspektor's „Typ słupa”: jak balustrada / zwykły / Socha). The solver's handrail
+`{shape: 'socha', socha: {bottomWidthMm, topHeightMm}}` (`handrailShapeOf`); `postSolver.js applyPostStyles` gives every
+post its `style` (+ `socha` sizes) — Socha for every post when the balustrade is on and of that type. Renderers:
+`railingRenderer.js handrailPieceSolid` (the outline, each side face's own normal, the end faces triangulated —
+`THREE.ShapeUtils`), `postRenderer.js sochaMeshFor` (one merged mesh; a mitre cuts its top). Takeoff: a Socha post
+`materialId: 'railing-post-socha'` priced per piece from the general list (`boardPricing.js` skips the post table for
+it), the handrail `railing-handrail-socha` per mb (its volume from the stepped section). Tests:
+`geometry/__tests__/sochaStyle.test.js`, `cladding/__tests__/socha.test.js`.
+
 ## Poręcz przechodząca w słup — łączenie na skos (user request 2026-11-23)
 
 `config.railingPostJoint` 'none' (default) | 'start' (a section's first post) | 'both' (first and last) and per handrail

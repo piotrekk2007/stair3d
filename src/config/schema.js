@@ -341,6 +341,14 @@ export function createDefaultConfig() {
     // 'mitre' | 'plumb' — railingSolver.js handrailMitre
     railingPostJoint: 'none',
     railingEndJoints: {},
+    // Typ balustrady (user request 2026-11-24): 'standard' | 'socha' — Socha = posts with a plinth, flutes and a stepped
+    // cap + the stepped handrail (geometry/sochaStyle.js); behaves as any balustrade. A post's own type:
+    // manualPostOverrides[postId].style ('standard' | 'socha'). The Socha sizes (sochaStyle.js SOCHA_DEFAULTS):
+    railingStyle: 'standard',
+    railingSochaBaseHeightMm: 250,
+    railingSochaBaseExtraMm: 8,
+    railingSochaTopHeightMm: 25,
+    railingSochaBottomWidthMm: 50,
     // Ręczne punkty na linii poręczy (geometry/railingProfileModel.js, edytor „Profil poręczy”):
     // { [odcinek]: { [bieg 'słupA>słupB']: [{ s: mm wzdłuż biegu od lica słupa, dz: mm w górę (+) / w dół (−) }] } }
     railingProfileOverrides: {},

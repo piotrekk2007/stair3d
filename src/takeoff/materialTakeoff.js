@@ -328,11 +328,16 @@ function buildStringerSideItems(side, stringerModel, constructionGeometries, con
 
 // --- Posts (słupy) — one item per physical post -------------------------------------------------
 
+export const POST_SOCHA_MATERIAL_ID = 'railing-post-socha';
+
 function buildPostItem(post, config, wasteFactors) {
   const materialId = TIMBER_MATERIAL_ID(config.timberGrade);
   const heightMm = post.elevation.top - post.elevation.bottom;
   const netVolumeMm3 = post.size * post.size * heightMm;
   const label = { start: 'Słupek początkowy', end: 'Słupek końcowy', corner: 'Słup narożny (konstrukcyjny)', railing: 'Słupek balustrady' }[post.kind] || post.kind;
+  // a Socha post (user request 2026-11-24, postSolver.js applyPostStyles): its own price per piece in the general list
+  // (`railing-post-socha`), not the post table by section
+  const socha = post.style === 'socha';
   // A post is square in section, so its cross-section maps onto BOTH the catalog's width and
   // thickness lists — the current illustrative timber-c24 catalog only lists sawn-board sizes
   // (thickness <= 60mm, width >= 150mm), which don't cover a typical ~110mm square post
@@ -343,12 +348,12 @@ function buildPostItem(post, config, wasteFactors) {
     itemId: `post-${post.postId}`,
     elementType: ELEMENT_TYPES.POST,
     sourceElementId: `post:${post.postId}`,
-    material: config.timberGrade,
-    materialId,
+    material: socha ? 'Słup Socha' : config.timberGrade,
+    materialId: socha ? POST_SOCHA_MATERIAL_ID : materialId,
     quantity: 1,
     unit: 'szt',
-    nominalDimensions: { crossSectionMm: post.size, heightMm },
-    calculatedDimensions: { crossSectionMm: post.size, heightMm },
+    nominalDimensions: { crossSectionMm: post.size, heightMm, ...(socha ? { style: 'socha' } : {}) },
+    calculatedDimensions: { crossSectionMm: post.size, heightMm, ...(socha ? { style: 'socha' } : {}) },
     catalogStock,
     netVolume: netVolumeMm3 * MM3_TO_M3,
     netArea: 0,
@@ -357,7 +362,7 @@ function buildPostItem(post, config, wasteFactors) {
     wasteFactor: wasteFactorFor(ELEMENT_TYPES.POST, materialId, wasteFactors),
     optional: post.kind === 'corner' || post.kind === 'railing', // corner posts depend on config.hasCornerPost, balustrade posts on the balustrade
     status: TAKEOFF_ITEM_STATUS.OK,
-    notes: [label, ...catalogNotes],
+    notes: socha ? [`${label} — typ Socha (podstawa, frezy, czapka)`] : [label, ...catalogNotes],
   });
 }
 

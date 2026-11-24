@@ -6,6 +6,7 @@ import { applyWoodGrainToTree, getOakPhotoTexture, getOakTexture, getOakMeanLumi
 import { applyAppearanceToMaterials, defaultAppearance } from '../scene/appearance.js';
 import { insetExposed, profileRings } from './starterProfile.js';
 import { GLASS_TINTS } from './balustradeModel.js';
+import { sochaPostParts, sochaHandrailOutline } from '../geometry/sochaStyle.js';
 
 // A solid between a plan outline's top and bottom heights (one height per outline point); plan (x, y) at z → three
 // (x, z, −y). The outline is made counter-clockwise.
@@ -308,9 +309,83 @@ function column(at, z0, z1, size, material) {
   return new THREE.Mesh(g, material);
 }
 // a decorative post (user, 2026-11-04): the square shaft, milled rings under the top, a flat / pyramid / ball cap
+// A handrail piece with any outline round its axis (the Socha balustrade's stepped profile — sochaStyle.js, user request
+// 2026-11-24): [{u across, w up}] swept from a to b, each end square, PLUMB (true) or cut by a plane ({point, normal}),
+// as railPiece; every face wound outward
+function profiledRailPiece(a, b, outline, material, cutA, cutB) {
+  const A = new THREE.Vector3(a.x, a.z, -a.y);
+  const B = new THREE.Vector3(b.x, b.z, -b.y);
+  const u = B.clone().sub(A).normalize();
+  const flat = new THREE.Vector3(u.x, 0, u.z);
+  const n = flat.lengthSq() < 1e-9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3().crossVectors(u, new THREE.Vector3(0, 1, 0)).normalize();
+  if (flat.lengthSq() >= 1e-9) flat.normalize();
+  const v = new THREE.Vector3().crossVectors(n, u).normalize();
+  const uf = u.dot(flat) || 1;
+  const ring = (P, cut) =>
+    outline.map(({ u: cu, w }) => {
+      const c = P.clone().addScaledVector(n, cu).addScaledVector(v, w);
+      if (cut && typeof cut === 'object') {
+        const P0 = new THREE.Vector3(cut.point.x, cut.point.z, -cut.point.y);
+        const N = new THREE.Vector3(cut.normal.x, cut.normal.z, -cut.normal.y);
+        const un = u.dot(N);
+        return Math.abs(un) < 1e-9 ? c : c.addScaledVector(u, P0.clone().sub(c).dot(N) / un);
+      }
+      return cut ? c.addScaledVector(u, -(w * v.dot(flat)) / uf) : c;
+    });
+  const r0 = ring(A, cutA);
+  const r1 = ring(B, cutB);
+  const pos = [];
+  const tri = (p, q, r, out) => {
+    const nrm = new THREE.Vector3().crossVectors(q.clone().sub(p), r.clone().sub(p));
+    if (nrm.dot(out) < 0) [q, r] = [r, q];
+    for (const x of [p, q, r]) pos.push(x.x, x.y, x.z);
+  };
+  const m = outline.length;
+  for (let k = 0; k < m; k++) {
+    const k2 = (k + 1) % m;
+    const out = n.clone().multiplyScalar(outline[k2].w - outline[k].w).addScaledVector(v, -(outline[k2].u - outline[k].u));
+    tri(r0[k], r0[k2], r1[k2], out);
+    tri(r0[k], r1[k2], r1[k], out);
+  }
+  const caps = THREE.ShapeUtils.triangulateShape(outline.map((p) => new THREE.Vector2(p.u, p.w)), []);
+  for (const [i, j, k] of caps) {
+    tri(r0[i], r0[j], r0[k], u.clone().negate());
+    tri(r1[i], r1[j], r1[k], u);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, material);
+}
+
+// a Socha post (sochaStyle.js): the plinth, the fluted shaft, the stepped cap — one mesh
+function sochaPost(p) {
+  const parts = sochaPostParts({ sizeMm: p.size, bottomZ: p.bottomZ, topZ: p.topZ, capped: true, ...(p.socha || {}) });
+  const geometries = parts.boxes.map((bx) => {
+    const g = new THREE.BoxGeometry(bx.x1 - bx.x0, bx.z1 - bx.z0, bx.y1 - bx.y0);
+    g.translate(p.at.x + (bx.x0 + bx.x1) / 2, (bx.z0 + bx.z1) / 2, -(p.at.y + (bx.y0 + bx.y1) / 2));
+    return g.toNonIndexed();
+  });
+  if (parts.frustum) {
+    const f = parts.frustum;
+    const g = new THREE.CylinderGeometry(f.w1 / Math.SQRT2, f.w0 / Math.SQRT2, f.z1 - f.z0, 4, 1);
+    g.rotateY(Math.PI / 4);
+    g.translate(p.at.x, (f.z0 + f.z1) / 2, -p.at.y);
+    geometries.push(g.toNonIndexed());
+  }
+  const group = new THREE.Group();
+  for (const g of geometries) group.add(new THREE.Mesh(g, MATERIALS.post));
+  return group;
+}
+
 function decorativePost(p) {
   const group = new THREE.Group();
   group.name = `Post-${p.id}`;
+  // a Socha post (user request 2026-11-24) — unless the handrail runs into it on a mitre (the shaft cut along it)
+  if (p.style === 'socha' && !p.mitre) {
+    group.add(sochaPost(p));
+    return group;
+  }
   // the handrail running into it: the shaft's top cut along the mitre (no cap, no grooves)
   if (p.mitre) {
     group.add(new THREE.Mesh(planeBoardGeometry(p.mitre), MATERIALS.post));
@@ -455,7 +530,14 @@ export function renderCladdingStair(built, { riserMaterial: riserMat = null, roo
   const railing = new THREE.Group();
   railing.name = 'Railing';
   for (const s of built.balustrade?.sections || []) {
-    for (let k = 1; k < s.handrail.length; k++) railing.add(Object.assign(railPiece(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing, k === 1 && (s.cuts?.start || s.plumb?.start), k === s.handrail.length - 1 && (s.cuts?.end || s.plumb?.end)), { name: `Handrail-${s.id}-${k}` }));
+    // (the Socha balustrade's stepped profile — sochaStyle.js)
+    const sochaOutline = s.handrailProfile?.kind === 'socha' ? sochaHandrailOutline(config.handrailWidthMm, config.handrailHeightMm, s.handrailProfile) : null;
+    for (let k = 1; k < s.handrail.length; k++) {
+      const cutA = k === 1 && (s.cuts?.start || s.plumb?.start);
+      const cutB = k === s.handrail.length - 1 && (s.cuts?.end || s.plumb?.end);
+      const piece = sochaOutline ? profiledRailPiece(s.handrail[k - 1], s.handrail[k], sochaOutline, MATERIALS.railing, cutA, cutB) : railPiece(s.handrail[k - 1], s.handrail[k], config.handrailWidthMm, config.handrailHeightMm, MATERIALS.railing, cutA, cutB);
+      railing.add(Object.assign(piece, { name: `Handrail-${s.id}-${k}` }));
+    }
     for (const b of s.balusters) {
       // a round baluster (toczona) or a square one
       if (b.shape === 'round') {
