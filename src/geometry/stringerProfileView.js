@@ -81,6 +81,9 @@ export function buildProfileViewModel(geometries, model, config) {
 
     return {
       segmentId: g.segmentId,
+      // the board's profile group (the key of its own line shift) and the shift its lines got
+      profileGroupId: g.profileGroupId ?? g.segmentId,
+      profileShift: g.profileShift || { lower: 0, upper: 0 },
       constructionType: g.constructionType,
       // the board's silhouette (filled in the editor) and where its two end faces are
       outline: g.outerContour,

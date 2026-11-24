@@ -11,7 +11,7 @@ Zakładka **Oferta** w prawym panelu: ustawienia oferty, podgląd pozycji i sum 
 | Pozycje spoza cennika | jak dotąd, Kosztorys → „Pozycje dodatkowe” (np. lakierowanie wang na biało) — w ofercie osobne pozycje |
 | Rabat (`discountPct`, decyzje użytkownika 2026-10-14) | procent od **materiału**: materiał wyliczony z kosztorysu + ręczne pozycje dodatkowe; **nie** od CNC + projekt (choć ten siedzi w pozycjach materiału) ani od montażu. **Wewnętrzny**: w PDF nie ma pozycji „Rabat” — każda pozycja materiału traci rabat od swojej części materiałowej (jej udział CNC + projekt zostaje), pozycja dodatkowa od ceny; kwota rabatu tylko w podglądzie wyceny |
 | Obrazy w PDF | wizualizacja 3D i rzut jeden pod drugim, na całą szerokość strony (do 112 / 110 mm wysokości) |
-| Montaż | kwota ręczna netto, osobna pozycja |
+| Montaż | kwota ręczna netto, osobna pozycja; **dodatkowe pozycje montażu** (prośba użytkownika 2026-11-24: „montaż konstrukcji to jedno, a montaż balustrady na antresoli to co innego”) — `installationItems` `[{name, qty, unit kpl / szt / mb / m², price}]`, każda osobną pozycją montażu (ilość × cena netto) po kwocie „Montaż”, **bez rabatu**; edytowane w „Oferta” → Koszty („+ pozycja montażu”), zapisane w projekcie (`offer`); wiersz bez ilości / ceny nie trafia do oferty |
 | Ceny | netto + VAT + brutto; stawka VAT wybierana w projekcie (23 / 8 / 0 %) |
 | PDF | druk z przeglądarki („Zapisz jako PDF” w oknie drukowania) — bez biblioteki PDF |
 | Cennik | import CSV (jak dotąd) wystarcza |

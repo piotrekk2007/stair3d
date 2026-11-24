@@ -143,3 +143,23 @@ test('the PDF shows the 3D view and the plan one under the other, at full width'
   assert.match(html, /\.images img \{[^}]*max-height: 112mm/);
   assert.match(html, /\.images svg \{[^}]*height: 110mm/);
 });
+
+// user request 2026-11-24: "installing the structure is one thing, the balustrade on the antresola another" — the
+// seller's own installation rows, each its own installation line (quantity × net price), never discounted
+test('own installation rows: each its own installation line after the lump sum, not discounted; saved in the project', () => {
+  const rows = [
+    { name: 'Montaż balustrady na antresoli', qty: 4.5, unit: 'mb', price: 120 },
+    { name: '', qty: 1, unit: 'kpl', price: 0 }, // being typed: kept in the settings, not printed
+  ];
+  const o = buildOffer({ summary, manualItems, settings: { ...settings, discountPct: 10, installationItems: rows } });
+  const inst = o.lines.filter((l) => l.kind === 'installation');
+  assert.deepEqual(inst.map((l) => [l.label, l.qty, l.unit, l.unitNet, l.net]), [['Montaż', undefined, undefined, undefined, 800], ['Montaż balustrady na antresoli', 4.5, 'mb', 120, 540]]);
+  assert.equal(o.lines[o.lines.length - 1].label, 'Montaż balustrady na antresoli', 'after everything else');
+  assert.equal(sanitizeOfferSettings({ installationItems: rows }).installationItems.length, 2, 'the row being typed stays');
+  assert.deepEqual(sanitizeOfferSettings({ installationItems: [{ name: 'X', qty: -1, unit: 'kg', price: 'a' }] }).installationItems, [{ name: 'X', qty: 1, unit: 'kpl', price: 0 }]);
+  const config = createDefaultConfig();
+  const html = buildOfferHTML({ offer: o, settings, company: {}, facts: stairFacts(config, deriveStairData(config)) });
+  assert.match(html, /Montaż balustrady na antresoli/);
+  const { meta } = parseProjectFile(JSON.stringify(buildProjectPayload(config, { offer: { ...settings, installationItems: rows } })));
+  assert.equal(sanitizeOfferSettings(meta.offer).installationItems[0].name, 'Montaż balustrady na antresoli');
+});

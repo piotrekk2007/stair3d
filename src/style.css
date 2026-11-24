@@ -1551,6 +1551,11 @@ code {
 #profile-panel .pe-count.error { background: #fdeaea; color: #9b1c1c; }
 #profile-panel .pe-count.warning { background: #fff5e0; color: #8a5a00; }
 #profile-panel [data-pe-action="prune"] { margin-left: 8px; padding: 2px 8px; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#profile-panel .pe-shift { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e3e6ea; }
+#profile-panel .pe-shift-row { display: inline-flex; align-items: center; gap: 3px; }
+#profile-panel .pe-shift-row input { width: 58px; padding: 2px 5px; text-align: right; }
+#profile-panel .pe-shift-row button { width: 24px; padding: 2px 0; border: 1px solid #c9ced6; border-radius: 5px; background: #fff; cursor: pointer; }
+#profile-panel .pe-shift small { color: #6b7684; }
 #profile-panel .pe-point { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 #profile-panel .pe-point.muted { color: #6b7684; }
 #profile-panel .pe-point input { width: 72px; padding: 2px 5px; }
@@ -1740,6 +1745,11 @@ code {
 #offer-panel .of-actions { margin-bottom: 6px; }
 #offer-panel .of-primary { width: 100%; padding: 8px; font-weight: 600; background: #8a5a34; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
 #offer-panel .of-primary:hover { background: #6f4526; }
+#offer-panel .of-install-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 3px 0 7px; }
+#offer-panel .of-install-row input[data-inst-field="name"] { flex: 1 1 100%; min-width: 0; box-sizing: border-box; }
+#offer-panel .of-install-row input[type="number"] { width: 58px; box-sizing: border-box; }
+#offer-panel .of-install-row select { width: 52px; }
+#offer-panel .of-install-row button { padding: 1px 6px; }
 #offer-panel .of-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
 #offer-panel .of-row input, #offer-panel .of-row select { width: 55%; box-sizing: border-box; }
 #offer-panel .of-col { flex-direction: column; align-items: stretch; }

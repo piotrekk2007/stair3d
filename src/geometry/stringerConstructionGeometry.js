@@ -71,7 +71,7 @@ import { pointsEqual, segmentsProperlyIntersect, signedPolygonArea } from './pat
 import { simplifyCollinear, distancePointToPolyline, valueAtU, slicePolylineByU } from './polylineProfile.js';
 import { CONSTRUCTION_TYPES, CONNECTION_TYPES, housingDepthMm, postHousingDepthMm } from './stringerModel.js';
 import { unionRectangles, pointInPolygonUV } from './rectUnion.js';
-import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, closingAnchorId, DEPTH_TOLERANCE_MM, postAnchorId } from './stringerProfileModel.js';
+import { profileParamsFromConfig, activeOverridesFor, anchorIdForTread, closingAnchorId, DEPTH_TOLERANCE_MM, postAnchorId, BOARD_SHIFT_PREFIX } from './stringerProfileModel.js';
 import { solveStringerProfile, measureLocalDepth } from './stringerProfileSolver.js';
 import { sliceCurveByU, translateCurveU, mergeCollinearLines, curveToPolyline, polylineToCurve, filletPolyline, turnSignAt, edgeSlope, lineSegment, curveStart, curveEnd } from './profileCurve.js';
 import { createDiagnostic } from '../diagnostics/diagnostic.js';
@@ -766,7 +766,8 @@ function emptySegmentGeometry(segment) {
 // ids actually used are recorded in `used`, so the side can report an override that fits NO board as out of date
 // (instead of every other board reporting it as "orphaned" — which is what happened once posts split a wanga into
 // independent boards). Null in, null out.
-function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
+// The whole-line shift of the group = the wanga's own + the group's board's own (keyed by `groupId`, its first board).
+function overridesForGroup(profileOverrides, knotIds, anchorIds, used, groupId = null) {
   if (!profileOverrides) return null;
   const pick = (obj, ids) => Object.fromEntries(Object.entries(obj || {}).filter(([id]) => ids.has(id)));
   const lower = pick(profileOverrides.lower, knotIds);
@@ -774,7 +775,10 @@ function overridesForGroup(profileOverrides, knotIds, anchorIds, used) {
   const anchors = pick(profileOverrides.anchors, anchorIds);
   const inserted = (profileOverrides.inserted || []).filter((i) => knotIds.has(i.after));
   for (const id of [...Object.keys(lower), ...Object.keys(upper), ...Object.keys(anchors), ...inserted.map((i) => i.id)]) used.add(id);
-  return { ...profileOverrides, lower, upper, anchors, inserted };
+  const own = groupId ? profileOverrides.boardShift?.[groupId] : null;
+  if (own) used.add(`${BOARD_SHIFT_PREFIX}${groupId}`);
+  const shift = { lower: (profileOverrides.shift?.lower || 0) + (own?.lower || 0), upper: (profileOverrides.shift?.upper || 0) + (own?.upper || 0) };
+  return { ...profileOverrides, lower, upper, anchors, inserted, shift };
 }
 
 // A curve continued LEVEL from its first point back to u0 and from its last point on to u1 (where it does not reach).
@@ -801,7 +805,8 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
     if (segment.startPost) postAnchors.push({ id: postAnchorId(segment.startPost.postId, segment.id), u: offsets[i] + segment.startPost.faceU, postId: segment.startPost.postId });
     if (segment.endPost) postAnchors.push({ id: postAnchorId(segment.endPost.postId, segment.id), u: offsets[i] + segment.endPost.faceU, postId: segment.endPost.postId });
   });
-  const groupOverrides = overridesForGroup(profileOverrides, new Set(groupKnots.map((k) => k.id)), new Set(postAnchors.map((a) => a.id)), usedOverrideIds);
+  const profileGroupId = withBearings[0].id;
+  const groupOverrides = overridesForGroup(profileOverrides, new Set(groupKnots.map((k) => k.id)), new Set(postAnchors.map((a) => a.id)), usedOverrideIds, profileGroupId);
   const constructionType = withBearings[0].constructionType;
   const boardWidth = withBearings[0].width;
 
@@ -1030,6 +1035,10 @@ function buildGroupConstructionGeometry(group, extendInfo, config, profileOverri
       localDepthMm,
       requiredDepthMm: params.minimumDepthMm,
       profileOverridden: profileOverrides !== null,
+      // the board's profile group (its boards lap-jointed into one profile) — the key of a board's own line shift — and
+      // the shift applied to its lines (mm, + = deeper)
+      profileGroupId,
+      profileShift: solved.shift || { lower: 0, upper: 0 },
       minRemainingSectionMm,
       diagnostics,
     };
@@ -1176,6 +1185,7 @@ function reportOutOfDateOverrides(ordered, profileOverrides, used) {
     ...Object.keys(profileOverrides.upper || {}),
     ...Object.keys(profileOverrides.anchors || {}),
     ...(profileOverrides.inserted || []).map((i) => i.id),
+    ...Object.keys(profileOverrides.boardShift || {}).map((id) => `${BOARD_SHIFT_PREFIX}${id}`),
   ];
   const stale = [...new Set(all.filter((id) => !used.has(id)))];
   const first = ordered[0];

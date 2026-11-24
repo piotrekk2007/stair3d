@@ -3,7 +3,7 @@
 // and a live preview of the offer's lines and totals. Computes nothing itself: the lines come from offer/offerModel.js
 // buildOffer, the PDF from offer/offerDocument.js (printed by main.js).
 
-import { OFFER_VAT_RATES, OFFER_STYLES } from '../offer/offerModel.js';
+import { OFFER_VAT_RATES, OFFER_STYLES, INSTALLATION_UNITS } from '../offer/offerModel.js';
 import { money } from '../offer/offerDocument.js';
 import { HERO_BOX_MM } from '../offer/offerDocumentModern.js';
 import { escapeHtml as esc } from '../util/format.js';
@@ -55,6 +55,9 @@ export function createOfferPanel(container, handlers) {
     <label class="of-row">Rabat na materiał [%]<input type="number" min="0" max="100" step="0.5" data-set="discountPct"></label>
     <div class="of-hint">Wewnętrzny — w PDF nie ma pozycji „Rabat”, pozycje materiału i dodatkowe są po prostu niższe. Liczony od materiału z kosztorysu i pozycji dodatkowych — nie od CNC + projekt ani od montażu.</div>
     <label class="of-row">Montaż (netto) [zł]<input type="number" min="0" step="10" data-set="installationCostNet"></label>
+    <div class="of-sub">Dodatkowe pozycje montażu (netto, bez rabatu)</div>
+    <div data-of="install-rows" class="of-install"></div>
+    <div class="of-actions"><button type="button" data-of="install-add" title="Np. montaż balustrady na antresoli — osobna pozycja montażu w ofercie">+ pozycja montażu</button></div>
     <label class="of-row">Stawka VAT
       <select data-set="vatRatePct">${OFFER_VAT_RATES.map((r) => `<option value="${r}">${r}%</option>`).join('')}</select>
     </label>
@@ -92,6 +95,48 @@ export function createOfferPanel(container, handlers) {
     </details>
   `;
   container.appendChild(panel);
+
+  // the seller's own installation rows: kept here while edited (the form is not redrawn on every key), sent whole
+  let installRows = [];
+  const installBox = panel.querySelector('[data-of="install-rows"]');
+  const drawInstallRows = () => {
+    installBox.innerHTML = installRows
+      .map(
+        (r, i) => `<div class="of-install-row" data-inst="${i}">
+          <input type="text" data-inst-field="name" placeholder="np. Montaż balustrady na antresoli" value="${esc(r.name)}">
+          <input type="number" min="0" step="0.5" data-inst-field="qty" value="${r.qty}" title="Ilość">
+          <select data-inst-field="unit" title="Jednostka">${INSTALLATION_UNITS.map((u) => `<option${u === r.unit ? ' selected' : ''}>${u}</option>`).join('')}</select>
+          × <input type="number" min="0" step="10" data-inst-field="price" value="${r.price}" title="Cena netto za jednostkę [zł]"> zł
+          <button type="button" data-inst-remove title="Usuń pozycję">×</button>
+        </div>`
+      )
+      .join('');
+  };
+  panel._setInstallRows = (rows) => {
+    installRows = (rows || []).map((r) => ({ ...r }));
+    drawInstallRows();
+  };
+  const sendInstallRows = () => handlers.onSettings({ installationItems: installRows.map((r) => ({ ...r })) });
+  installBox.addEventListener('input', (e) => {
+    const el = e.target;
+    const i = Number(el.closest('[data-inst]')?.dataset.inst);
+    if (!el.dataset.instField || !installRows[i]) return;
+    installRows[i][el.dataset.instField] = el.type === 'number' ? Number(el.value) || 0 : el.value;
+    sendInstallRows();
+  });
+  installBox.addEventListener('change', (e) => e.stopPropagation()); // the rows are sent on input (a select too)
+  installBox.addEventListener('click', (e) => {
+    if (e.target.dataset.instRemove === undefined) return;
+    installRows.splice(Number(e.target.closest('[data-inst]').dataset.inst), 1);
+    drawInstallRows();
+    sendInstallRows();
+  });
+  panel.querySelector('[data-of="install-add"]').addEventListener('click', () => {
+    installRows.push({ name: '', qty: 1, unit: 'kpl', price: 0 });
+    drawInstallRows();
+    sendInstallRows();
+    installBox.querySelector('.of-install-row:last-child [data-inst-field="name"]')?.focus();
+  });
 
   // (a select is a number — the VAT — unless marked data-str: the style)
   const value = (el) => (el.type === 'number' ? Number(el.value) || 0 : el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' && el.dataset.str === undefined ? Number(el.value) : el.value);
@@ -143,6 +188,7 @@ export function fillOfferForm(panel, settings, company) {
   for (const el of panel.querySelectorAll('[data-client]')) el.value = settings.client?.[el.dataset.client] ?? '';
   for (const el of panel.querySelectorAll('[data-company]')) el.value = company?.[el.dataset.company] ?? '';
   panel.querySelector('[data-of="modern"]').hidden = settings.offerStyle !== 'modern';
+  panel._setInstallRows?.(settings.installationItems);
 }
 
 /** Refreshes the preview part only (lines, totals, warnings, category checkboxes). */

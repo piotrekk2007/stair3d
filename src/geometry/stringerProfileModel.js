@@ -135,8 +135,14 @@ export function scopeIncludes(scope, contour) {
 //     lower: { [anchorId]: { ds?, dn?, radiusMm? } },
 //     upper: { [anchorId]: { ds?, dn?, radiusMm? } },     // 'closed' only
 //     inserted: [{ id, contour, after, t, dn?, radiusMm? }],
-//     anchors: { [postAnchorId]: { lower?: { dv }, upper?: { dv } } }   // post anchors: height on the post face
+//     anchors: { [postAnchorId]: { lower?: { dv }, upper?: { dv } } },  // post anchors: height on the post face
+//     shift: { lower?, upper? },                    // the WHOLE line moved parallel to itself, mm (+ = deeper)
+//     boardShift: { [groupId]: { lower?, upper? } } // the same for one board (its lap-jointed group), on top
 //   }
+//
+// `shift` (user request 2026-11-24: "the lower line is fine, just 20–30 mm too far — move it whole") moves the SOLVED
+// contour, its shape unchanged, after every point edit (stringerProfileSolver.js shiftContour); the key of a board's
+// own shift is the first board of its group (stringerConstructionGeometry.js `profileGroupId`).
 //
 // `ds` moves a control point ALONG the reference curve, `dn` along the contour's own outward
 // normal (positive = deeper, further from the reference), both measured from the NOMINAL
@@ -164,6 +170,19 @@ function sanitizeContourOverrides(raw) {
   return out;
 }
 
+// A whole-line shift {lower?, upper?}: finite, non-zero, at most MAX_CONTOUR_SHIFT_MM either way; null when empty.
+export const MAX_CONTOUR_SHIFT_MM = 300;
+export const BOARD_SHIFT_PREFIX = 'shift:';
+function sanitizeShift(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const contour of [PROFILE_CONTOURS.LOWER, PROFILE_CONTOURS.UPPER]) {
+    const d = Number(raw[contour]);
+    if (Number.isFinite(d) && Math.abs(d) > 1e-9) out[contour] = Math.max(-MAX_CONTOUR_SHIFT_MM, Math.min(MAX_CONTOUR_SHIFT_MM, d));
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export function sanitizeStringerProfileOverrides(raw) {
   const result = {};
   if (!raw || typeof raw !== 'object') return result;
@@ -187,7 +206,14 @@ export function sanitizeStringerProfileOverrides(raw) {
       for (const contour of [PROFILE_CONTOURS.LOWER, PROFILE_CONTOURS.UPPER]) if (Number.isFinite(a[contour]?.dv)) clean[contour] = { dv: a[contour].dv };
       if (Object.keys(clean).length > 0) anchors[id] = clean;
     }
-    if (Object.keys(lower).length === 0 && Object.keys(upper).length === 0 && inserted.length === 0 && Object.keys(anchors).length === 0) continue;
+    const shift = sanitizeShift(entry.shift);
+    const boardShift = {};
+    for (const [id, b] of Object.entries(entry.boardShift && typeof entry.boardShift === 'object' ? entry.boardShift : {})) {
+      const clean = sanitizeShift(b);
+      if (clean) boardShift[id] = clean;
+    }
+    const hasShift = !!shift || Object.keys(boardShift).length > 0;
+    if (Object.keys(lower).length === 0 && Object.keys(upper).length === 0 && inserted.length === 0 && Object.keys(anchors).length === 0 && !hasShift) continue;
     result[side] = {
       // A layer with entries but no explicit mode is a manual profile — the entries exist because
       // someone edited it.
@@ -197,6 +223,8 @@ export function sanitizeStringerProfileOverrides(raw) {
       inserted,
       // only when there are any, so a file without post anchors keeps its exact previous shape
       ...(Object.keys(anchors).length > 0 ? { anchors } : {}),
+      ...(shift ? { shift } : {}),
+      ...(Object.keys(boardShift).length > 0 ? { boardShift } : {}),
     };
   }
   return result;
@@ -209,6 +237,7 @@ export function countProfileOverrides(all) {
     if (entry.mode === PROFILE_MODES.AUTO) continue;
     count += Object.keys(entry.lower).length + Object.keys(entry.upper).length + entry.inserted.length;
     count += Object.values(entry.anchors || {}).reduce((n, a) => n + Object.keys(a).length, 0);
+    count += Object.keys(entry.shift || {}).length + Object.values(entry.boardShift || {}).reduce((n, b) => n + Object.keys(b).length, 0);
   }
   return count;
 }
@@ -252,7 +281,15 @@ export const PROFILE_EDITS = Object.freeze({
   SET_MODE: 'setMode',
   RESET_SIDE: 'resetSide',
   PRUNE: 'prune', // remove the listed out-of-date override ids (edit.ids)
+  SHIFT_CONTOUR: 'shiftContour', // the whole line: edit.contour, edit.dn (mm, + = deeper, 0 = none), edit.board (group id) or none = the wanga
 });
+
+/** The whole-line shift set on one side (`board` null) or one board's own, {lower, upper} in mm (0 when none). */
+export function contourShiftOf(all, side, board = null) {
+  const entry = sanitizeStringerProfileOverrides(all)[side];
+  const s = (board ? entry?.boardShift?.[board] : entry?.shift) || {};
+  return { lower: s.lower || 0, upper: s.upper || 0 };
+}
 
 function withEntry(current, side, entry) {
   return sanitizeStringerProfileOverrides({ ...current, [side]: { ...entry, mode: entry.mode === PROFILE_MODES.AUTO ? PROFILE_MODES.AUTO : PROFILE_MODES.MANUAL } });
@@ -310,6 +347,15 @@ export function applyProfileEdit(all, edit) {
       const { [edit.side]: _dropped, ...rest } = current;
       return sanitizeStringerProfileOverrides(rest);
     }
+    case PROFILE_EDITS.SHIFT_CONTOUR: {
+      if (edit.contour !== PROFILE_CONTOURS.LOWER && edit.contour !== PROFILE_CONTOURS.UPPER) return current;
+      const dn = Number.isFinite(edit.dn) ? edit.dn : 0;
+      const set = (obj) => ({ ...(obj || {}), [edit.contour]: dn });
+      // like moving a point, it switches the wanga to its manual profile
+      const manual = { ...entry, mode: PROFILE_MODES.MANUAL };
+      if (edit.board) return withEntry(current, edit.side, { ...manual, boardShift: { ...(entry.boardShift || {}), [edit.board]: set(entry.boardShift?.[edit.board]) } });
+      return withEntry(current, edit.side, { ...manual, shift: set(entry.shift) });
+    }
     case PROFILE_EDITS.PRUNE:
       return pruneProfileOverrides(all, edit.side, edit.ids || []);
     case PROFILE_EDITS.SET_MODE:
@@ -329,5 +375,7 @@ export function pruneProfileOverrides(all, side, ids) {
   if (!entry || !ids || ids.length === 0) return current;
   const drop = new Set(ids);
   const keep = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([id]) => !drop.has(id)));
-  return withEntry(current, side, { ...entry, lower: keep(entry.lower), upper: keep(entry.upper), anchors: keep(entry.anchors), inserted: entry.inserted.filter((i) => !drop.has(i.id)) });
+  // a board's own shift is listed as `shift:<groupId>`
+  const boardShift = Object.fromEntries(Object.entries(entry.boardShift || {}).filter(([id]) => !drop.has(`${BOARD_SHIFT_PREFIX}${id}`)));
+  return withEntry(current, side, { ...entry, lower: keep(entry.lower), upper: keep(entry.upper), anchors: keep(entry.anchors), inserted: entry.inserted.filter((i) => !drop.has(i.id)), boardShift });
 }

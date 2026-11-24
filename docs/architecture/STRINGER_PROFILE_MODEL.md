@@ -148,6 +148,18 @@ manualStringerProfileOverrides = {
   (it can be accepted as a waiver like any finding).
 * Edit events for a future editor (`applyProfileEdit`): `moveVertex`, `setRadius`, `insertVertex`,
   `resetVertex`, `setMode`.
+* **The whole line moved** (user request 2026-11-24: "the lower line is fine, just 20–30 mm too far — move it whole,
+  not point by point"): `shift: {lower?, upper?}` per side and `boardShift: {[groupId]: {lower?, upper?}}` per board
+  (mm, + = deeper / outwards, ±300 at most; `groupId` = the first board of its lap-jointed group —
+  `stringerConstructionGeometry.js profileGroupId`, the two add up in `overridesForGroup`). The SOLVED contour (every
+  point edit, spline, push included) is moved parallel to itself — `stringerProfileSolver.js shiftContour` →
+  `profileCurve.js offsetCurve` (lines along their normal, arcs about their own centre; the chords offset and unfolded
+  when an arc would vanish) — and its control points with it (a post anchor by the edge's height change at its face),
+  so the shape stays exactly. A cut board's top is its comb (only the lower line). Never corrected to the minimum depth:
+  a hand edit, `STRINGER-MIN-DEPTH` as a WARNING. Event `shiftContour` {side, contour, dn, board?}; a board's shift of
+  a board that is gone is listed as `shift:<groupId>` among the out-of-date edits (`PRUNE`). Editor: „Przesuń całą
+  linię” (cała wanga / ta deska, dolna / górna, −/+ 5 mm or a number); „Kopiuj profil na drugą wangę” copies the
+  wanga's own shift.
 
 ## 9. Winders
 

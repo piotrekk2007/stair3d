@@ -293,7 +293,10 @@ Docs: [STRINGER_CONSTRUCTION_MODEL.md](docs/architecture/STRINGER_CONSTRUCTION_M
 - **Manual profile edits**: `manualStringerProfileOverrides` per side — vertex `(ds, dn, radius)` by stable anchor ids
   (`support:step-N`, closing `end:top` / `end:<segmentId>`, post anchors `post:<postId>@<segmentId>` moving only
   vertically); handed to each board group only (`overridesForGroup`); out-of-date ones → one INFO + "Usuń nieaktualne
-  edycje" (`PRUNE`); collinear unedited knots are passive so a first edit stays local.
+  edycje" (`PRUNE`); collinear unedited knots are passive so a first edit stays local. The WHOLE line moved parallel
+  (user request 2026-11-24): `shift {lower, upper}` per side + `boardShift[profileGroupId]` per board (mm, + = deeper)
+  — the solved contour offset, shape unchanged (`stringerProfileSolver.js shiftContour`, `profileCurve.js offsetCurve`),
+  the control points with it; editor „Przesuń całą linię” (cała wanga / ta deska).
 - **Profile editor** ("Profil wangi" tab): `profileEditor/profileEditorRenderer.js` (pure SVG), `profileEditorSnapping.js`,
   `stringerProfileView.js` (view model), `ui/profileEditorPanel.js`; gestures → `applyProfileEdit` events only.
 - `stringerRenderer.js` extrudes what it is given (housed board = solid layer + layer with pocket holes, no CSG).
@@ -500,7 +503,9 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   textured plane the viewer keeps facing the camera, button „Skrajnia”). Never the project, its parameters or prices.
 - Offer (`offer/offerModel.js`, `offerDocument.js`, `ui/offerPanel.js`): CNC + projekt is a hidden lump sum spread over
   material lines; categories can be shown separately; extras, discount (`discountPct`: % of the material + extras only,
-  never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation, VAT
+  never of CNC + projekt or installation; INTERNAL — no line, the line prices are simply lower), installation (a lump
+  sum + own rows `installationItems` [{name, qty, unit, price}] — each its own installation line, no discount; user
+  request 2026-11-24: e.g. the antresola balustrade's installation), VAT
   23/8/0, gross; 3D view and plan one under the other at full width; printed via the
   browser's print-to-PDF. Company data = browser setting (`localStorage`), offer data = project.
 - **Offer style** (user decision 2026-11-06, both modules; docs in OFFER_MODEL.md): `offerStyle` classic (default,

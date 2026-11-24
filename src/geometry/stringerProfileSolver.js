@@ -37,6 +37,7 @@ import {
   curveDistance,
   splinePointsThrough,
   curveToPolyline,
+  offsetCurve,
 } from './profileCurve.js';
 import { CONSTRUCTION_TYPES } from './stringerModel.js';
 import { PROFILE_CONTOURS, TRANSITION_STYLES, DEPTH_TOLERANCE_MM, MIN_VERTEX_SPACING_MM, scopeIncludes } from './stringerProfileModel.js';
@@ -636,15 +637,53 @@ export function solveStringerProfile({ reference, constructionType, params, over
 
   const withVirtual = (control, virtual, contour) =>
     [...control, ...virtual.map((v) => ({ id: v.id, contour, u: v.u, v: v.v, radius: 0, overridden: false, inserted: false, anchor: true, postId: v.postId, nominal: v.nominal, tangent: v.tangent, normal: v.normal }))].sort((a, b) => a.u - b.u);
+  const lowerControl = withVirtual([...lower.control, ...passiveControls(lowerAnchored.vertices, passiveFor(lowerAnchored.vertices, passiveKnots), lower.curve, PROFILE_CONTOURS.LOWER)], lowerAnchored.virtual, PROFILE_CONTOURS.LOWER);
+  const upperControl = upper ? withVirtual([...upper.control, ...passiveControls(upperAnchored.vertices, passiveFor(upperAnchored.vertices, passiveKnots), upper.curve, PROFILE_CONTOURS.UPPER)], upperAnchored.virtual, PROFILE_CONTOURS.UPPER) : null;
+  // The whole line moved by hand (user request 2026-11-24): the solved contour — its shape exactly as above — moved
+  // parallel to itself, and its control points with it (their nominal place too, so a point's own edit still counts
+  // from where it is drawn). Never corrected towards the minimum depth: a manual edit, reported by the caller.
+  const shift = contourShift(overrides, closed);
+  const lowerShifted = shiftContour(lower.curve, lowerControl, shift.lower, PROFILE_CONTOURS.LOWER);
+  const upperShifted = upper ? shiftContour(upper.curve, upperControl, shift.upper, PROFILE_CONTOURS.UPPER) : null;
   return {
     referenceCurve,
-    lowerCurve: lower.curve,
-    upperCurve: upper ? upper.curve : null,
-    depthReferenceCurve: closed ? upper.curve : referenceCurve,
-    lowerControl: withVirtual([...lower.control, ...passiveControls(lowerAnchored.vertices, passiveFor(lowerAnchored.vertices, passiveKnots), lower.curve, PROFILE_CONTOURS.LOWER)], lowerAnchored.virtual, PROFILE_CONTOURS.LOWER),
-    upperControl: upper ? withVirtual([...upper.control, ...passiveControls(upperAnchored.vertices, passiveFor(upperAnchored.vertices, passiveKnots), upper.curve, PROFILE_CONTOURS.UPPER)], upperAnchored.virtual, PROFILE_CONTOURS.UPPER) : null,
+    lowerCurve: lowerShifted.curve,
+    upperCurve: upperShifted ? upperShifted.curve : null,
+    depthReferenceCurve: closed ? upperShifted.curve : referenceCurve,
+    lowerControl: lowerShifted.control,
+    upperControl: upperShifted ? upperShifted.control : null,
+    shift,
     findings,
   };
+}
+
+// The whole-line shift of a group's contours (stringerProfileModel.js: the side's `shift` plus the board's own, summed
+// by the construction layer into `overrides.shift`), mm, + = outwards (a deeper board). A cut board's top is its comb.
+function contourShift(overrides, closed) {
+  const of = (contour) => {
+    const d = Number(overrides?.shift?.[contour]);
+    return Number.isFinite(d) ? d : 0;
+  };
+  return { lower: of(PROFILE_CONTOURS.LOWER), upper: closed ? of(PROFILE_CONTOURS.UPPER) : 0 };
+}
+
+// One contour moved parallel to itself by `d` (outwards +): its true lines and arcs when they offset cleanly, else its
+// chords offset (straightened where they would fold, as the nominal offset is). The control points follow: each along
+// its own normal, a post anchor (it only moves up / down its post face) by the curve's own height change there.
+function shiftContour(curve, control, d, contour) {
+  if (!d || !curve || curve.length === 0) return { curve, control };
+  const direction = contour === PROFILE_CONTOURS.LOWER ? 'down' : 'up';
+  const moved =
+    offsetCurve(curve, d, direction) ||
+    polylineToCurve(unfoldOffsetPolyline(offsetPolylineByNormal(curveToPolyline(curve), d, direction), contour));
+  const before = curveToPolyline(curve);
+  const after = curveToPolyline(moved);
+  const heightChange = (u) => (before.length >= 2 && after.length >= 2 ? valueAtU(after, u) - valueAtU(before, u) : 0);
+  const shifted = control.map((c) => {
+    const step = c.anchor || !c.normal ? { u: 0, v: heightChange(c.u) } : { u: c.normal.u * d, v: c.normal.v * d };
+    return { ...c, u: c.u + step.u, v: c.v + step.v, nominal: c.nominal ? { u: c.nominal.u + step.u, v: c.nominal.v + step.v } : c.nominal };
+  });
+  return { curve: moved, control: shifted };
 }
 
 /**

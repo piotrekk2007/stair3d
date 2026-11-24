@@ -18,10 +18,12 @@
 //   kółko / przeciągnięcie tła   — powiększenie / przesunięcie widoku
 //   pasek pozycji pod widokiem   — które miejsce całej wangi ogląda się teraz; klik przełącza deskę
 //   formularz pod widokiem       — dokładne wartości (przesunięcie, promień zaokrąglenia)
+//   „Przesuń całą linię”         — dolna / górna linia całej wangi albo jednej deski równolegle o ± mm, kształt bez
+//                                  zmian (zdarzenie SHIFT_CONTOUR; prośba użytkownika 2026-11-24)
 
 import { buildProfileViewModel, offsetFromDrag } from '../geometry/stringerProfileView.js';
 import { buildStringerConstructionGeometry } from '../geometry/stringerConstructionGeometry.js';
-import { PROFILE_EDITS, PROFILE_MODES, sanitizeStringerProfileOverrides } from '../geometry/stringerProfileModel.js';
+import { PROFILE_EDITS, PROFILE_MODES, sanitizeStringerProfileOverrides, contourShiftOf } from '../geometry/stringerProfileModel.js';
 import {
   renderProfileEditorSVG,
   renderPositionRibbonSVG,
@@ -49,6 +51,8 @@ const PAN_START_THRESHOLD_PX = 3;
 // Krok precyzyjnego przesuwania strzałkami; z Shift — dziesięciokrotność.
 const NUDGE_STEP_MM = 1;
 const NUDGE_STEP_FAST_MM = 10;
+// Krok przycisków „−/+” przesuwania całej linii.
+const SHIFT_STEP_MM = 5;
 
 
 /**
@@ -120,6 +124,7 @@ export function createProfileEditor(container, handlers) {
     drag: null,
     pan: null,
     focus: null, // id deski, na której skaluje się widok; 'all' = wszystkie deski w jednym rzędzie
+    shiftScope: 'side', // „Przesuń całą linię”: 'side' = cała wanga, 'board' = widoczna deska (jej grupa desek)
     lastFitKey: '',
   };
 
@@ -192,7 +197,7 @@ export function createProfileEditor(container, handlers) {
     modeButton.disabled = !entry;
     $('[data-pe="reset"]').disabled = !entry;
 
-    const parts = [];
+    const parts = [shiftControlsHTML(ctx)];
     const found = state.selected ? findControlPoint(state.selected.id, state.selected.contour) : null;
     if (found) {
       const { cp } = found;
@@ -229,6 +234,39 @@ export function createProfileEditor(container, handlers) {
     info.querySelector('.pe-findings')?.addEventListener('toggle', (e) => {
       state.findingsOpen = e.target.open;
     });
+  }
+
+  // The board whose own shift „ta deska” edits: the focused one (its lap-jointed group shares one profile), else none.
+  function shiftBoard() {
+    const view = state.focus && state.focus !== 'all' ? state.views.find((v) => v.segmentId === state.focus) : null;
+    return view ? view.profileGroupId : null;
+  }
+
+  // „Przesuń całą linię”: the lower (and a housed board's upper) line of the whole wanga or of the shown board moved
+  // parallel by ± mm — its shape unchanged (the solver's shiftContour).
+  function shiftControlsHTML(ctx) {
+    const board = shiftBoard();
+    if (!board) state.shiftScope = 'side';
+    const scopeBoard = state.shiftScope === 'board' && board;
+    const all = ctx.config.manualStringerProfileOverrides;
+    const own = contourShiftOf(all, state.side, scopeBoard ? board : null);
+    const closed = state.views.some((v) => v.constructionType === 'closed');
+    const view = state.views.find((v) => v.segmentId === state.focus) || state.views[0];
+    const applied = view?.profileShift || { lower: 0, upper: 0 };
+    const row = (contour, label) => {
+      const total = applied[contour] || 0;
+      const sum = scopeBoard || total !== own[contour] ? ` <small title="Razem z przesunięciem całej wangi / deski">(razem ${Math.round(total * 10) / 10})</small>` : '';
+      return `<span class="pe-shift-row">${label} <button type="button" data-pe-shift="${contour}" data-step="${-SHIFT_STEP_MM}" title="Płycej o ${SHIFT_STEP_MM} mm">−</button><input type="number" step="1" data-pe-shift-field="${contour}" value="${Math.round(own[contour] * 10) / 10}"><button type="button" data-pe-shift="${contour}" data-step="${SHIFT_STEP_MM}" title="Głębiej o ${SHIFT_STEP_MM} mm">+</button> mm${sum}</span>`;
+    };
+    const scope = `<select data-pe-shift-scope title="Cała wanga: wszystkie jej deski. Ta deska: tylko widoczna deska (deski połączone na zakładkę mają jeden wspólny profil) — dodatkowo do przesunięcia całej wangi."><option value="side"${scopeBoard ? '' : ' selected'}>cała wanga</option>${board ? `<option value="board"${scopeBoard ? ' selected' : ''}>ta deska (${escapeHtml(state.focus)})</option>` : ''}</select>`;
+    return `<div class="pe-shift" title="Przesuwa całą linię równolegle, bez zmiany jej kształtu: + głębiej (dalej od stopni), − płycej. Ręczne punkty przesuwają się razem z nią."><b>Przesuń całą linię</b> ${scope} ${row('lower', 'dolna')}${closed ? ` ${row('upper', 'górna')}` : ''} <small>+ głębiej / − płycej</small></div>`;
+  }
+
+  function applyShift(contour, dn) {
+    const board = state.shiftScope === 'board' ? shiftBoard() : null;
+    handlers.applyEdit({ type: PROFILE_EDITS.SHIFT_CONTOUR, side: state.side, contour, dn: Math.round(dn * 10) / 10, board });
+    handlers.commit();
+    refresh();
   }
 
   // the wangi's names (util/sideNames.js — an S: lewa / prawa)
@@ -583,6 +621,8 @@ export function createProfileEditor(container, handlers) {
     const otherSide = OTHER_SIDE[state.side];
     handlers.applyEdit({ type: PROFILE_EDITS.SET_MODE, side: otherSide, mode: PROFILE_MODES.MANUAL });
     for (const contour of ['lower', 'upper']) {
+      // the whole wanga's line shift too (a board's own is tied to this wanga's boards)
+      if (entry.shift?.[contour]) handlers.applyEdit({ type: PROFILE_EDITS.SHIFT_CONTOUR, side: otherSide, contour, dn: entry.shift[contour] });
       for (const [anchorId, o] of Object.entries(entry[contour] || {})) {
         handlers.applyEdit({ type: PROFILE_EDITS.MOVE_VERTEX, side: otherSide, contour, anchorId, ds: o.ds || 0, dn: o.dn || 0 });
         if (o.radiusMm !== undefined) handlers.applyEdit({ type: PROFILE_EDITS.SET_RADIUS, side: otherSide, contour, anchorId, radiusMm: o.radiusMm });
@@ -658,6 +698,16 @@ export function createProfileEditor(container, handlers) {
   }
 
   info.addEventListener('change', (e) => {
+    if (e.target?.dataset?.peShiftScope !== undefined) {
+      state.shiftScope = e.target.value;
+      refresh();
+      return;
+    }
+    const shiftField = e.target?.dataset?.peShiftField;
+    if (shiftField) {
+      applyShift(shiftField, Number(e.target.value) || 0);
+      return;
+    }
     const field = e.target?.dataset?.peField;
     if (!field || !state.selected) return;
     const found = findControlPoint(state.selected.id, state.selected.contour);
@@ -674,6 +724,14 @@ export function createProfileEditor(container, handlers) {
     refresh();
   });
   info.addEventListener('click', (e) => {
+    const shiftButton = e.target?.closest?.('[data-pe-shift]');
+    if (shiftButton) {
+      const contour = shiftButton.dataset.peShift;
+      const ctx = handlers.getContext();
+      const board = state.shiftScope === 'board' ? shiftBoard() : null;
+      applyShift(contour, (contourShiftOf(ctx?.config.manualStringerProfileOverrides, state.side, board)[contour] || 0) + Number(shiftButton.dataset.step));
+      return;
+    }
     if (e.target?.dataset?.peAction === 'reset-point') resetSelectedPoint();
     if (e.target?.dataset?.peAction === 'prune') {
       const ids = [...new Set(state.views.flatMap((v) => v.outOfDateOverrideIds || []))];

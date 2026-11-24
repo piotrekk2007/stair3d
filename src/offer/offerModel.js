@@ -13,7 +13,9 @@
 //    material lines) nor of the installation. INTERNAL: no line of its own — every material line loses the discount on
 //    its own material part (not on its CNC + projekt share), every extra item on its price; the client sees only the
 //    lower amounts;
-//  * installation: a manual net amount, its own line;
+//  * installation: a manual net amount, its own line; plus the seller's own installation rows (user request 2026-11-24:
+//    "installing the structure is one thing, the balustrade on the antresola another") — name, quantity, unit, net
+//    unit price, each its own installation line, never discounted;
 //  * net, VAT (rate chosen per project), gross.
 //
 // Company data (name, address, NIP, …) is a COMPANY setting — kept in the browser like the presentation logo, not in
@@ -32,12 +34,15 @@ export const OFFER_VAT_RATES = Object.freeze([23, 8, 0]);
 export const OFFER_STYLES = Object.freeze({ classic: 'klasyczny', modern: 'nowoczesny' });
 export const DEFAULT_LEAD_TIME = '3–5 tygodni';
 export const DEFAULT_LEAD_TIME_NOTE = 'gotowe schody na miejscu';
+// the units of an installation row (the seller's own — offer settings `installationItems`)
+export const INSTALLATION_UNITS = Object.freeze(['kpl', 'szt', 'mb', 'm²']);
 const MAIN_LINE_LABEL = 'Schody — materiał wraz z przygotowaniem';
 
 export function createDefaultOfferSettings() {
   return {
     cncProjectCostNet: 0,
     installationCostNet: 0,
+    installationItems: [], // [{name, qty, unit, price}] — own installation rows, each its own line (net)
     discountPct: 0, // % rabatu na materiał (z kosztorysu i pozycje dodatkowe) — nie na CNC + projekt ani montaż
     vatRatePct: 23,
     separateCategories: [],
@@ -68,6 +73,7 @@ export function sanitizeOfferSettings(value) {
   return {
     cncProjectCostNet: num(value.cncProjectCostNet),
     installationCostNet: num(value.installationCostNet),
+    installationItems: sanitizeInstallationItems(value.installationItems),
     discountPct: Math.min(100, num(value.discountPct)),
     vatRatePct: OFFER_VAT_RATES.includes(Number(value.vatRatePct)) ? Number(value.vatRatePct) : d.vatRatePct,
     separateCategories: Array.isArray(value.separateCategories) ? value.separateCategories.filter((c) => typeof c === 'string') : [],
@@ -78,6 +84,22 @@ export function sanitizeOfferSettings(value) {
     showComfort: value.showComfort !== false,
     ...sanitizeOfferStyleFields(value),
   };
+}
+
+/**
+ * The seller's own installation rows. A row being typed (no name, no amount yet) is kept — the form edits these
+ * settings live; buildOffer prints only a row with a quantity and a price.
+ */
+export function sanitizeInstallationItems(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => ({
+      name: typeof r.name === 'string' ? r.name : '',
+      qty: num(r.qty, 1),
+      unit: INSTALLATION_UNITS.includes(r.unit) ? r.unit : 'kpl',
+      price: num(r.price),
+    }));
 }
 
 /** The modern style's fields (shared with the concrete module's offer — cladding/quote/claddingOffer.js). */
@@ -164,6 +186,10 @@ export function buildOffer({ summary, manualItems = [], settings, blocked = fals
   const discountBaseNet = round2(materialNet + extrasBefore);
   const discountNet = round2(materialDiscount + extrasBefore - extrasAfter);
   if (s.installationCostNet > 0) lines.push({ kind: 'installation', label: 'Montaż', net: round2(s.installationCostNet) });
+  for (const r of s.installationItems) {
+    if (!(r.qty > 0) || !(r.price > 0)) continue;
+    lines.push({ kind: 'installation', label: r.name.trim() || 'Montaż', qty: r.qty, unit: r.unit, unitNet: round2(r.price), net: round2(r.qty * r.price) });
+  }
 
   const net = round2(lines.reduce((sum, l) => sum + l.net, 0));
   const vat = round2((net * s.vatRatePct) / 100);

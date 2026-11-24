@@ -427,6 +427,64 @@ export function mergeCollinearLines(curve, eps = COLLINEAR_EPS) {
   return out;
 }
 
+// Where the infinite lines through (a1, a2) and (b1, b2) cross, or null when they are parallel.
+function lineCrossing(a1, a2, b1, b2) {
+  const du1 = a2.u - a1.u;
+  const dv1 = a2.v - a1.v;
+  const du2 = b2.u - b1.u;
+  const dv2 = b2.v - b1.v;
+  const den = du1 * dv2 - dv1 * du2;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((b1.u - a1.u) * dv2 - (b1.v - a1.v) * du2) / den;
+  return { u: a1.u + du1 * t, v: a1.v + dv1 * t };
+}
+
+/**
+ * The curve moved PARALLEL to itself by `distance` mm (negative = the other way): 'up' = to the left of the direction
+ * of travel (above a u-increasing curve), 'down' = to the right. A line moves along its own normal, an arc keeps its
+ * centre and its radius grows or shrinks by the distance — so the shape stays the same, only every point of it is
+ * `distance` further. Where two moved pieces no longer meet (a sharp corner), two lines are joined at their lines'
+ * crossing, anything else by a short line. Null when an arc would shrink to nothing or a piece would turn back in u
+ * (the distance is larger than the curve's own radius there) — the caller then offsets the chords instead.
+ */
+export function offsetCurve(curve, distance, direction) {
+  if (!curve.length || !distance) return curve.slice();
+  const s = direction === 'up' ? distance : -distance; // along the LEFT normal
+  const moved = [];
+  for (const prim of curve) {
+    if (prim.type === 'line') {
+      const len = dist(prim.a, prim.b) || 1;
+      const nu = -(prim.b.v - prim.a.v) / len;
+      const nv = (prim.b.u - prim.a.u) / len;
+      moved.push(lineSegment({ u: prim.a.u + nu * s, v: prim.a.v + nv * s }, { u: prim.b.u + nu * s, v: prim.b.v + nv * s }));
+    } else {
+      // the left normal of a counter-clockwise arc points at its centre: moving left shrinks it
+      const r = prim.radius + (prim.sweep > 0 ? -s : s);
+      if (!(r > GEOMETRY_EPS)) return null;
+      moved.push(makeArc(prim.center, r, prim.startAngle, prim.sweep));
+    }
+  }
+  const out = [moved[0]];
+  for (let i = 1; i < moved.length; i++) {
+    const prev = out[out.length - 1];
+    const next = moved[i];
+    if (dist(prev.b, next.a) <= 1e-6) {
+      out.push(next.type === 'line' ? lineSegment(prev.b, next.b) : next);
+      continue;
+    }
+    const x = prev.type === 'line' && next.type === 'line' ? lineCrossing(prev.a, prev.b, next.a, next.b) : null;
+    if (x) {
+      out[out.length - 1] = lineSegment(prev.a, x);
+      out.push(lineSegment(x, next.b));
+    } else {
+      out.push(lineSegment(prev.b, next.a), next);
+    }
+  }
+  const result = out.filter((prim) => prim.type === 'arc' || dist(prim.a, prim.b) > GEOMETRY_EPS);
+  for (const prim of result) if (prim.b.u < prim.a.u - GEOMETRY_EPS) return null;
+  return result;
+}
+
 /** A copy of the curve moved by `du` along u (used to express a slice in a segment's own frame). */
 export function translateCurveU(curve, du) {
   return curve.map((prim) => {
