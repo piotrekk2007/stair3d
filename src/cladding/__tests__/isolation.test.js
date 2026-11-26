@@ -35,6 +35,8 @@ const ALLOWED_SHARED = new Set([
   'scene/offerFraming.js',
   // the AI render of the offer's picture (test, 2026-11-06) — the shared panel of both presentation modes
   'app/aiRenderPanel.js',
+  // the offer's text and the e-mail to the client by AI (user request 2026-11-26) — the shared panel of both offers
+  'app/aiOfferTextPanel.js',
   // the frames for the offer (user request 2026-11-07) — the shared panel of both presentation modes
   'app/offerFramesPanel.js',
   'app/printHtml.js',

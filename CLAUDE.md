@@ -540,6 +540,12 @@ Docs: [OFFER_MODEL.md](docs/architecture/OFFER_MODEL.md).
   of stair (concrete + self-supporting) are each priced from their own file (`stairFilePrices`, `ownOffer`).
   „🖼 Kadry do oferty” in both presentation modes (`app/offerFramesPanel.js`): frames from the user's camera — a
   gallery on the offer's last page (`gallery` input of both documents, „Wizualizacje”) or the hero picture; session only.
+  The offer's „Wstęp” (`intro`, both modules, both styles — modern: under the title on sheet 1 when it fits, else sheet 2
+  / the appendix) and „✨ Tekst oferty i mail (AI)” (user request 2026-11-26; shared `app/aiOfferTextPanel.js` + pure
+  `offer/aiOfferText.js`, `gemini-2.5-flash`, the same key): from the offer's facts / lines / gross / terms the model
+  writes the intro, a title + subtitle and the e-mail (tone, length, PL / DE / EN); NO personal data is sent — the
+  greeting (name typed locally), the closing and the signature are put round it locally (`composeEmail`); copy /
+  `mailto:` — the program sends nothing itself.
 
 ## Plan 2D and workspace UI
 

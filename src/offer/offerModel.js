@@ -49,6 +49,9 @@ export function createDefaultOfferSettings() {
     client: { name: '', address: '', phone: '', email: '' },
     offerNumber: '',
     validityDays: 30,
+    // the offer's opening paragraph, printed at its start (both styles) — typed or written by the AI (user request
+    // 2026-11-26, offer/aiOfferText.js)
+    intro: '',
     notes: '',
     showComfort: true,
     // the modern style's own data (optional in the project file — an older project prints the classic offer)
@@ -80,6 +83,7 @@ export function sanitizeOfferSettings(value) {
     client: { name: str(value.client?.name), address: str(value.client?.address), phone: str(value.client?.phone), email: str(value.client?.email) },
     offerNumber: str(value.offerNumber),
     validityDays: Math.round(num(value.validityDays, d.validityDays)) || d.validityDays,
+    intro: str(value.intro),
     notes: str(value.notes),
     showComfort: value.showComfort !== false,
     ...sanitizeOfferStyleFields(value),

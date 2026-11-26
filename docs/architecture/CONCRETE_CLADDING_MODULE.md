@@ -51,7 +51,9 @@ The self-supporting engine must not be touched: it works and the user does not w
      `Room` → `Slab`, hides the walls); the AI render of the offer's picture (test, 2026-11-06): the shared
      `app/aiRenderPanel.js` on the allow-list (its button in the presentation bar, the result as the module's
      `aiHero` — also „Z pliku…” in the offer panel), `sceneSetup.js renderFrameImage` (a new method, nothing else
-     changed);
+     changed); the offer's text and the e-mail to the client by AI (user request 2026-11-26): the shared
+     `app/aiOfferTextPanel.js` on the allow-list (button „✨ Tekst oferty i mail (AI)” in „Oferta”, the result into the
+     offer's own `intro` / `offerTitle` / `offerSubtitle`);
    - (made 2026-11-07, user request) two floors in one offer: main.js hands the module `priceLinkedStair` (a linked
      self-supporting floor priced by `app/linkedFloorOffer.js stairFloorOfferLines` with the module's price list) and
      itself imports `cladding/floorOffer.js claddingFloorOfferPart` (a linked concrete floor quoted for a self-supporting

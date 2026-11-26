@@ -1960,6 +1960,11 @@ code {
 .ai-panel .ai-result figure { margin: 0; }
 .ai-panel .ai-result img { width: 100%; display: block; border: 1px solid #d8d9db; }
 .ai-panel .ai-result figcaption { font-size: 11px; color: #5e5f61; text-align: center; }
+.ai-panel.ai-text-panel { position: fixed; z-index: 1000; right: 16px; top: 56px; bottom: 16px; width: 420px; max-width: calc(100vw - 32px); }
+.ai-panel .ai-text-block { border-top: 1px solid #e1e3e6; padding-top: 6px; margin-top: 8px; }
+.ai-panel .ai-text-block textarea, .ai-panel .ai-text-block input[type="text"] { margin-top: 4px; }
+.ai-panel .ai-text-block small { color: #5e5f61; }
+.ai-panel [hidden] { display: none; }
 .ai-panel .ai-used { background: #eef6dd; padding: 4px 6px; border-radius: 4px; }
 /* „Kadry do oferty” (app/offerFramesPanel.js — the AI panel's look) */
 .offer-frames-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }

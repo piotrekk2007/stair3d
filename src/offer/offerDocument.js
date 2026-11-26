@@ -52,6 +52,7 @@ const CSS = `
   .totals .num { text-align: right; }
   .totals .gross td { font-size: 12.5pt; font-weight: 700; color: #5a3d24; border-top: 2px solid #8a5a34; }
   .notes { white-space: pre-wrap; font-size: 9.5pt; }
+  .intro { white-space: pre-wrap; margin: 4mm 0 2mm; line-height: 1.45; }
   footer { margin-top: 8mm; font-size: 8pt; color: #888; border-top: 1px solid #e3d6c6; padding-top: 2mm; }
 `;
 
@@ -92,6 +93,7 @@ export function buildOfferHTML({ offer, facts, settings, company = {}, logoDataU
     <div class="box">${clientLines.length ? `<div class="muted">Dla:</div>${clientLines.map(esc).join('<br>')}` : ''}</div>
     <div class="box" style="text-align:right">Data: ${dateFmt(date)}<br>Ważna do: ${dateFmt(valid)}${projectName ? `<br>Projekt: ${esc(projectName)}` : ''}</div>
   </div>
+  ${String(settings.intro || '').trim() ? `<p class="intro">${esc(String(settings.intro).trim())}</p>` : ''}
   ${image3d || planSvg ? `<div class="images">
     ${image3d ? `<figure><img src="${esc(image3d)}" alt="wizualizacja"><figcaption>Wizualizacja</figcaption></figure>` : ''}
     ${planSvg ? `<figure>${planSvg}<figcaption>Rzut z góry (wymiary w mm)</figcaption></figure>` : ''}

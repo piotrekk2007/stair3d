@@ -9,6 +9,7 @@ import { buildModernOfferHTML, HERO_BACKGROUND, HERO_FULL_MM } from '../offer/of
 import { createOfferPanel, fillOfferForm, updateOfferPanel, setOfferHeroStatus, setOfferGalleryStatus } from '../ui/offerPanel.js';
 import { summarizeByCategory } from '../ui/takeoffView.js';
 import { printHtml } from './printHtml.js';
+import { createAiOfferTextPanel } from './aiOfferTextPanel.js';
 
 const COMPANY_STORAGE_KEY = 'stair3d.company';
 
@@ -114,8 +115,22 @@ export function createOfferController(opts) {
     onHeroRemove: () => setHeroImage(null),
     onGalleryClear: () => setGallery([]),
     onClientModel: (kind) => opts.onClientModel?.(kind),
+    onAiText: () => aiText.toggle(),
   });
   fillOfferForm(panel, settings, company);
+
+  // „✨ Tekst oferty i mail (AI)” (user request 2026-11-26): the offer's intro, title and the e-mail to the client
+  const aiText = createAiOfferTextPanel({
+    getContext: () => {
+      const c = current();
+      return { kind: 'stair', facts: facts() || {}, offer: c?.offer || null, settings, company };
+    },
+    onApply: (patch) => {
+      settings = sanitizeOfferSettings({ ...settings, ...patch });
+      fillOfferForm(panel, settings, company);
+      refresh();
+    },
+  });
 
   /** Replaces the project's offer settings (new project: defaults; loaded file: its `offer`). */
   function load(value) {

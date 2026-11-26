@@ -28,6 +28,9 @@ import { qrSvg } from '../util/qrCode.js';
 /** At most this many lines on sheet 1; more → one line pointing to sheet 2 and the full table there. */
 export const MAX_P1_LINES = 6;
 const NOTES_P1_MAX_CHARS = 280;
+// the offer's „Wstęp” (user request 2026-11-26): under the title on sheet 1 when it fits (a longer one never does), else
+// at the top of sheet 2, else in the appendix
+const INTRO_P1_MAX_CHARS = 600;
 const NOTES_P1_MAX_LINES = 4;
 const LONG_TITLE_CHARS = 60;
 const SPEC_MAX_LINES = 7;
@@ -110,6 +113,8 @@ const CSS = `
   .gross .label { color: var(--on-dark-muted); }
   .gross .amount { font-size: 24pt; line-height: 1; white-space: nowrap; }
 
+  .intro { margin: 3.2mm 0 0; line-height: 1.45; white-space: pre-wrap; }
+  .intro2 { margin: 0 0 2mm; line-height: 1.45; white-space: pre-wrap; }
   .notes { margin-top: 3.2mm; border: 0.26mm solid var(--line); border-radius: 1.6mm; padding: 2.6mm 3.7mm; }
   .notes b { display: block; font-weight: 600; margin-bottom: 0.6mm; }
   .notes p { margin: 0; color: var(--muted); white-space: pre-wrap; }
@@ -183,7 +188,7 @@ const CSS = `
 `;
 
 /** Is the offer's installation in it (a line „Montaż…”, or the concrete module's facts saying so)? */
-function hasInstallation(offer, facts) {
+export function hasInstallation(offer, facts) {
   return offer.lines.some((l) => l.kind === 'installation' || /montaż/i.test(l.label || '')) || (facts.rows || []).some(([k, v]) => k === 'Montaż' && /^tak/i.test(String(v)));
 }
 
@@ -236,11 +241,12 @@ const textEm = (text) => [...String(text)].reduce((n, ch) => n + (EM[ch] ?? (/[0
 const fitPt = (text, availMm, maxPt, minPt) => Math.max(minPt, Math.min(maxPt, Math.floor((availMm / (Math.max(0.5, textEm(text)) * 0.3528)) * 2) / 2));
 const wrapped = (text, perLine) => String(text || '').split('\n').reduce((n, p) => n + Math.max(1, Math.ceil(p.length / perLine)), 0);
 
-export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime, qr = false }) {
+export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP1, notes, notesOnP1, leadTime, qr = false, intro = '', introOnP1 = false }) {
   let h = 19; // number, its label, the date
   if (peopleRows) h += 7.2 + (peopleRows + 1) * LINE_MM.text * PEOPLE_SCALE;
   h += 6.8 + 4.9; // the eyebrow
   h += 2 + wrapped(titleText, long ? CHARS.titleLong : CHARS.title) * (long ? LINE_MM.titleLong : LINE_MM.title);
+  if (intro && introOnP1) h += 3.2 + wrapped(intro, CHARS.notes) * LINE_MM.text;
   if (spec.length) h += 3.7 + spec.reduce((n, t) => n + wrapped(t, CHARS.spec), 0) * LINE_MM.text;
   h += 5.8; // the lines' top rule
   if (linesOnP1) for (const l of lines) h += 4.8 + wrapped(l.label, CHARS.name) * LINE_MM.name + (l.detail ? wrapped(l.detail, CHARS.detail) * LINE_MM.text : 0);
@@ -259,11 +265,14 @@ export function page1Height({ titleText, long, peopleRows, spec, lines, linesOnP
  * lines), then the lines go to sheet 2 (and what was taken off comes back where it fits again). A title over 2 lines
  * (or > LONG_TITLE_CHARS) is set one size smaller.
  */
-export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime, qr = false }) {
+export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime, qr = false, intro = '' }) {
   const long = titleText.length > LONG_TITLE_CHARS || wrapped(titleText, CHARS.title) > 2;
-  const plan = { long, linesOnP1: lines.length <= MAX_P1_LINES, notesOnP1: !!notes && !notesGoToP2(notes), spec: [...spec] };
-  const fits = () => page1Height({ titleText, long, peopleRows, spec: plan.spec, lines, linesOnP1: plan.linesOnP1, notes, notesOnP1: plan.notesOnP1, leadTime, qr }) + SAFETY_MM <= MAIN_HEIGHT_MM;
+  const introFits = !!intro && intro.length <= INTRO_P1_MAX_CHARS;
+  const plan = { long, linesOnP1: lines.length <= MAX_P1_LINES, notesOnP1: !!notes && !notesGoToP2(notes), introOnP1: introFits, spec: [...spec] };
+  const fits = () => page1Height({ titleText, long, peopleRows, spec: plan.spec, lines, linesOnP1: plan.linesOnP1, notes, notesOnP1: plan.notesOnP1, leadTime, qr, intro, introOnP1: plan.introOnP1 }) + SAFETY_MM <= MAIN_HEIGHT_MM;
+  // what goes first: the notes, then the intro, then the specification shortens, then the lines
   if (!fits() && plan.notesOnP1) plan.notesOnP1 = false;
+  if (!fits() && plan.introOnP1) plan.introOnP1 = false;
   while (!fits() && plan.spec.length > 4) plan.spec.pop();
   if (!fits() && plan.linesOnP1) {
     // the lines to sheet 2 free a lot: the specification and the short notes come back where they fit again
@@ -274,6 +283,10 @@ export function planPage1({ titleText, peopleRows, spec, lines, notes, leadTime,
         plan.spec.pop();
         break;
       }
+    }
+    if (introFits && !plan.introOnP1) {
+      plan.introOnP1 = true;
+      if (!fits()) plan.introOnP1 = false;
     }
     if (notes && !notesGoToP2(notes) && !plan.notesOnP1) {
       plan.notesOnP1 = true;
@@ -289,8 +302,9 @@ const P2_HEIGHT_MM = 297 - 21 - 10.5 - 8; // the sheet less the footer and .p2's
 const H2_MM = 7 + 2.6 + 6.5;
 const P2_CHARS = { notes: 105, col: 46, label: 24 };
 const COL_ROW_MM = 2.8 + 4.3 + 0.3;
-export function sheet2Height({ notes = '', plan = false, rows = [], comfort = [], closing = false }) {
+export function sheet2Height({ notes = '', plan = false, rows = [], comfort = [], closing = false, intro = '' }) {
   let h = 13; // the head
+  if (intro) h += 2 + wrapped(intro, P2_CHARS.notes) * LINE_MM.text;
   if (notes) h += H2_MM + wrapped(notes, P2_CHARS.notes) * LINE_MM.text;
   if (plan) h += H2_MM + 40 + 8 + 6.5; // the plan at its minimum, its padding and caption
   const rowsH = rows.reduce((n, [k, v]) => n + COL_ROW_MM + (wrapped(`${k} ${v}`, P2_CHARS.col) - 1) * 4.3, 0);
@@ -332,11 +346,12 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const title = (s.offerTitle || '').trim() || defaultTitle(facts);
   const subtitle = (s.offerSubtitle || '').trim();
   const notes = String(s.notes || '').trim();
+  const intro = String(s.intro || '').trim();
   const clientRows = [client.name, client.address, client.phone, client.email].filter(Boolean).length;
   const handlerRows = [c.contactName, c.contactPhone, c.contactEmail].filter(Boolean).length;
   const card = s.showContactQr ? contactCardText(c) : null;
   const qr = card ? qrSvg(card.text, { quiet: QR_QUIET, color: '#141414' }) : null;
-  const plan = planPage1({ titleText: `${title}${subtitle ? ` ${subtitle}` : ''}`, peopleRows: Math.max(clientRows, handlerRows), spec: specLines(facts), lines: offer.lines.map((l) => ({ label: l.label, detail: lineDetail(l) })), notes, leadTime: (s.leadTime || '').trim(), qr: !!qr });
+  const plan = planPage1({ titleText: `${title}${subtitle ? ` ${subtitle}` : ''}`, peopleRows: Math.max(clientRows, handlerRows), spec: specLines(facts), lines: offer.lines.map((l) => ({ label: l.label, detail: lineDetail(l) })), notes, leadTime: (s.leadTime || '').trim(), qr: !!qr, intro });
   const linesP2 = !plan.linesOnP1;
 
   const heroCaption = textOr(s.heroCaption, 'Wizualizacja poglądowa');
@@ -345,13 +360,14 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const closingNote = textOr(s.closingNote, 'Cena materiału obejmuje jego przygotowanie (projekt i obróbkę).');
   const technical = s.technicalSheet !== false;
   const comfortOn = technical && s.showComfort !== false && !!facts.comfort?.length;
-  // notes off sheet 1: on sheet 2 when they fit it, else in the appendix
-  const notesOff1 = !!notes && !plan.notesOnP1;
+  // the intro, then the notes off sheet 1: on sheet 2 when they fit it, else in the appendix
   const hasSheet2Data = technical && (!!planSvg || !!(facts.rows || []).length || comfortOn);
-  const notesP2 =
-    notesOff1 &&
-    sheet2Height({ notes, plan: technical && !!planSvg, rows: technical ? facts.rows || [] : [], comfort: comfortOn ? facts.comfort : [], closing: !!closingNote }) + SAFETY_MM <= P2_HEIGHT_MM &&
-    (hasSheet2Data || !linesP2);
+  const sheet2Fits = (extra) => sheet2Height({ plan: technical && !!planSvg, rows: technical ? facts.rows || [] : [], comfort: comfortOn ? facts.comfort : [], closing: !!closingNote, ...extra }) + SAFETY_MM <= P2_HEIGHT_MM && (hasSheet2Data || !linesP2);
+  const introOff1 = !!intro && !plan.introOnP1;
+  const introP2 = introOff1 && sheet2Fits({ intro });
+  const introApp = introOff1 && !introP2;
+  const notesOff1 = !!notes && !plan.notesOnP1;
+  const notesP2 = notesOff1 && sheet2Fits({ notes, intro: introP2 ? intro : '' });
   const notesApp = notesOff1 && !notesP2;
 
   // --- sheet 1
@@ -373,6 +389,7 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
     ${people}
     <div class="eyebrow">${esc(eyebrow)}</div>
     <h1 class="display${plan.long ? ' long' : ''}">${esc(title)}${subtitle ? ` <span class="sub">${esc(subtitle)}</span>` : ''}</h1>
+    ${intro && plan.introOnP1 ? `<p class="intro">${esc(intro)}</p>` : ''}
     <div class="spec">${plan.spec.map((t) => `<div>${esc(t)}</div>`).join('')}</div>
     <div class="lines">${lines1}</div>
     <div class="sum"><span>Razem netto</span><span>${nb(money(offer.totals.net))}</span></div>
@@ -428,13 +445,14 @@ export function buildModernOfferHTML({ offer, facts, settings, company = {}, log
   const sheet3 = frames.length
     ? `<section class="sheet"><div class="p2">${headOf('wizualizacje')}<h2>Wizualizacje</h2><div class="gallery${frames.length === 1 ? ' one' : ''}">${frames.map((src) => `<figure><img src="${esc(src)}" alt="wizualizacja"></figure>`).join('')}</div></div>${footerHTML(c)}</section>`
     : '';
-  const body2 = `${notes2}${planFig}${data2}`;
+  const introHTML = `<p class="intro2">${esc(intro)}</p>`;
+  const body2 = `${introP2 ? introHTML : ''}${notes2}${planFig}${data2}`;
   const closing = closingNote ? `<p class="muted" style="margin:5mm 0 0">${esc(closingNote)}</p>` : '';
   // ONE fixed A4 (the price table and notes too long for it are in the appendix)
   const sheet2 = body2 ? `<section class="sheet fit"><div class="p2">${head}${body2}${closing}</div>${footerHTML(c)}</section>` : '';
   const appendix =
-    table || notesApp
-      ? `<section class="sheet flow appendix"><div class="p2">${headOf('załącznik')}${table}${notesApp ? notesHTML : ''}${body2 ? '' : closing}</div>${footerHTML(c)}</section>`
+    table || notesApp || introApp
+      ? `<section class="sheet flow appendix"><div class="p2">${headOf('załącznik')}${introApp ? introHTML : ''}${table}${notesApp ? notesHTML : ''}${body2 ? '' : closing}</div>${footerHTML(c)}</section>`
       : '';
 
   const docTitle = `Oferta${number ? ` nr ${number}` : ''}${projectName ? ` — ${esc(projectName)}` : ''}`;

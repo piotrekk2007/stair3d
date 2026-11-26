@@ -20,6 +20,7 @@ export function createOfferPanel(container, handlers) {
   panel.innerHTML = `
     <div class="of-actions">
       <button type="button" data-of="generate" class="of-primary" title="Otwiera okno drukowania — wybierz „Zapisz jako PDF”">📄 Generuj ofertę (PDF)</button>
+      <button type="button" data-of="ai-text" title="AI (Google Gemini) pisze wstęp oferty, tytuł i mail do klienta z danych tej oferty — bez danych klienta">✨ Tekst oferty i mail (AI)</button>
     </div>
     <label class="of-row">Styl oferty
       <select data-set="offerStyle" data-str>${Object.entries(OFFER_STYLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
@@ -76,6 +77,7 @@ export function createOfferPanel(container, handlers) {
     <div class="of-row of-col">Wizualizacje — osobna strona (do 6 kadrów)<span class="of-inline"><span data-of="gallery-status">brak (tryb Prezentacji → „🖼 Kadry do oferty”)</span><button type="button" data-of="gallery-clear" hidden>Wyczyść</button></span></div>
     <label class="of-check"><input type="checkbox" data-set="includeLinkedFloor"> Dolicz podpięte piętro (wyżej / niżej) do tej oferty</label>
     <div class="of-hint" data-of="floor-status">Brak podpiętego piętra (folder „2. Budynek” — bieg wyżej / niżej).</div>
+    <label class="of-row of-col">Wstęp (drukowany na początku oferty)<textarea rows="4" data-set="intro" placeholder="np. krótki opis schodów — albo „✨ Tekst oferty i mail (AI)”"></textarea></label>
     <label class="of-row of-col">Uwagi (drukowane w ofercie)<textarea rows="3" data-set="notes"></textarea></label>
 
     <details class="of-company">
@@ -157,6 +159,7 @@ export function createOfferPanel(container, handlers) {
     }
   });
   panel.querySelector('[data-of="generate"]').addEventListener('click', () => handlers.onGenerate());
+  panel.querySelector('[data-of="ai-text"]').addEventListener('click', () => handlers.onAiText?.());
   panel.querySelectorAll('[data-client-model]').forEach((b) => b.addEventListener('click', () => handlers.onClientModel?.(b.dataset.clientModel)));
   panel.querySelector('[data-of="suggest"]').addEventListener('click', () => handlers.onSuggestNumber());
   // the modern hero's own picture (an AI render / a file) instead of the 3D render

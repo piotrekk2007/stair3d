@@ -38,6 +38,7 @@ export function createDefaultCladdingOffer() {
     // group / line id → {label?, hidden?}
     lineEdits: {},
     extras: [], // [{id, label, qty, unit, unitNet}]
+    intro: '', // the offer's opening paragraph (both styles) — typed or written by the AI (user request 2026-11-26)
     showComfort: true,
     // the printed style (user decision 2026-11-06 — as the self-supporting offer's offerModel.js): classic / modern
     offerStyle: 'classic',
@@ -72,6 +73,7 @@ export function sanitizeCladdingOffer(raw) {
     offerNumber: str(s.offerNumber),
     validityDays: Math.max(1, Math.round(num(s.validityDays, d.validityDays))),
     notes: str(s.notes),
+    intro: str(s.intro),
     discountPct: Math.min(100, Math.max(0, num(s.discountPct))),
     lineEdits: edits,
     extras: (Array.isArray(s.extras) ? s.extras : []).filter((x) => x && typeof x === 'object').map((x, i) => ({ id: str(x.id) || `extra-${i}`, label: str(x.label) || 'Pozycja', qty: Math.max(0, num(x.qty, 1)), unit: str(x.unit) || 'szt.', unitNet: Math.max(0, num(x.unitNet)) })),

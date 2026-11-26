@@ -44,6 +44,7 @@ import { claddingExportRoot, buildCladdingOBJ, buildCladdingDAE } from '../expor
 import { downloadTextFile } from '../../export/downloadTextFile.js';
 import { createPresentationLogo, savePresentationSnapshot } from '../../app/presentation.js';
 import { createAiRenderPanel } from '../../app/aiRenderPanel.js';
+import { createAiOfferTextPanel } from '../../app/aiOfferTextPanel.js';
 import { createOfferFramesPanel } from '../../app/offerFramesPanel.js';
 import { LOGO_CORNERS, LOGO_SIZE_PCT } from '../../scene/presentationImage.js';
 
@@ -743,6 +744,8 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : state.floor.reference.other?.kind === 'cladding' ? 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.' : 'Schody samonośne (inny typ) — wycenione własnym cennikiem z ich projektu (z CNC + projekt i montażem), pozycje razem z tymi; w danych technicznych ich rzut i parametry.'}</div>` : ''}
       <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
+      <label class="clad-field clad-notes">Wstęp (drukowany na początku oferty) <textarea data-offer="intro" rows="4" placeholder="np. krótki opis okładzin — albo „✨ Tekst oferty i mail (AI)”">${escapeHtml(o.intro)}</textarea></label>
+      <div class="clad-actions"><button type="button" data-ai-text title="AI (Google Gemini) pisze wstęp oferty, tytuł i mail do klienta z danych tej oferty — bez danych klienta">✨ Tekst oferty i mail (AI)</button></div>
       <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
       <table class="clad-table clad-totals"><tbody><tr><td>Razem netto</td><td>${money(offer.totals.net)} zł</td></tr><tr><td>VAT ${offer.totals.vatRatePct}%</td><td>${money(offer.totals.vat)} zł</td></tr><tr><td><b>Razem brutto</b></td><td><b>${money(offer.totals.gross)} zł</b></td></tr></tbody></table>
       ${q.unpriced ? `<div class="clad-finding warning">${q.unpriced} pozycji kosztorysu jest bez ceny — oferta ich nie liczy (zakładka Kosztorys).</div>` : ''}
@@ -793,6 +796,8 @@ export function mountCladdingApp(rootEl, host = {}) {
     if (b.dataset.offerNumber !== undefined) {
       state.offer.offerNumber = suggestOfferNumber();
       offerChanged();
+    } else if (b.dataset.aiText !== undefined) {
+      aiTextPanel.toggle();
     } else if (b.dataset.extraAdd !== undefined) {
       state.offer.extras.push({ id: `extra-${Date.now().toString(36)}`, label: 'Pozycja dodatkowa', qty: 1, unit: 'szt.', unitNet: 0 });
       offerChanged();
@@ -918,6 +923,18 @@ export function mountCladdingApp(rootEl, host = {}) {
     const counted = state.offer.includeLinkedFloor && floor?.quote ? floor : null;
     return { q: counted ? mergeQuotes(q, counted.quote, counted.name) : q, floor, counted };
   }
+  // „✨ Tekst oferty i mail (AI)” — the shared panel (user request 2026-11-26): the intro, the title, the e-mail
+  const aiTextPanel = createAiOfferTextPanel({
+    getContext: () => {
+      if (!state.built) return null;
+      const { q } = offerQuote();
+      return { kind: 'cladding', facts: claddingFacts(state.built, state.quote), offer: buildCladdingOffer(q, state.offer), settings: state.offer, company };
+    },
+    onApply: (patch) => {
+      Object.assign(state.offer, patch);
+      offerChanged();
+    },
+  });
   function printOffer() {
     const { q, counted } = offerQuote();
     const offer = buildCladdingOffer(q, state.offer);

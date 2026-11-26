@@ -23,9 +23,10 @@ const loadPrefs = () => {
     return {};
   }
 };
+// (merged with what is stored: the offer-text panel — app/aiOfferTextPanel.js — keeps the same key there)
 const savePrefs = (p) => {
   try {
-    localStorage.setItem(KEY, JSON.stringify(p));
+    localStorage.setItem(KEY, JSON.stringify({ ...loadPrefs(), ...p }));
   } catch {
     // (remembered until the tab is closed)
   }
@@ -209,6 +210,8 @@ export function createAiRenderPanel({ hostEl, viewportEl, getSceneApi, getFacts,
   });
 
   function open() {
+    // the key may have been typed in the offer-text panel meanwhile
+    prefs.key = loadPrefs().key ?? prefs.key;
     panel.hidden = false;
     frame.hidden = false;
     render();

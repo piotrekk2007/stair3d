@@ -122,6 +122,31 @@ mocna reguła „NO balustrade of any kind … the client's choice, not somethin
 not in IMAGE 1” i na końcu „Final check … above all: no …”. Panel pokazuje listę („Zakaz dodawania (z projektu): …”). Testy: `src/offer/__tests__/aiRender.test.js`
 (prompt, treść zapytania, klucz tylko w nagłówku, odpowiedzi / błędy).
 
+## Wstęp oferty, tytuł i mail do klienta przez AI (prośba użytkownika 2026-11-26, oba moduły)
+
+- **Pole „Wstęp”** (`intro` w ustawieniach oferty obu modułów — `offerModel.js`, `claddingOffer.js`, zapisane w
+  projekcie): akapit drukowany na początku oferty. Klasyczna: pod danymi klienta, przed obrazami i wyceną (`.intro`).
+  Nowoczesna: na stronie 1 pod tytułem, jeśli się mieści (do 600 znaków; w budżecie strony 1 — `planPage1`: najpierw na
+  stronę 2 idą uwagi, potem wstęp, potem skraca się specyfikacja, na końcu pozycje), inaczej na górze strony 2
+  (`sheet2Height` z `intro`), a gdy i tam brak miejsca — w załączniku.
+- **„✨ Tekst oferty i mail (AI)”** (przycisk w „Oferta” obu modułów → wspólny panel `app/aiOfferTextPanel.js`; czyste
+  `offer/aiOfferText.js`): model tekstowy Google (`gemini-2.5-flash`, nazwa do zmiany, klucz ten sam co przy obrazie
+  AI) dostaje fakty oferty (te same wiersze, które drukuje), jej pozycje, kwotę brutto (dokładnie, „przepisz”),
+  ważność, termin, dostawę / montaż oraz ton (oficjalny / przyjazny), długość (krótko / szerzej) i język maila
+  (polski / niemiecki / angielski). Zwraca JSON wg schematu: `intro` (po polsku), `title` / `subtitle` (≤ 60 znaków,
+  styl nowoczesny), `emailSubject`, `emailBody`. Zasady w prompcie: tylko podane fakty, nic nie wymyślać (cech,
+  gwarancji, rabatów, terminów), żadnych kwot poza brutto, żadnych nazwisk ani podpisów.
+- **Bez danych osobowych** (decyzja użytkownika): do Google nie idzie nic o kliencie ani o ludziach firmy. Powitanie
+  (lista: Szanowni Państwo / Szanowny Panie … / Szanowna Pani … / Dzień dobry; nazwisko wpisane w panelu, tylko w tej
+  sesji), zakończenie (wg tonu i języka) i podpis (opiekun oferty, firma, telefon, e-mail, www) składa program
+  (`composeEmail`). Program usuwa też powitanie / zakończenie, które model mimo zakazu dopisał.
+- Wyniki są edytowalne. „Wstaw do oferty” wpisuje wstęp, „Wstaw tytuł i podtytuł” — tytuł i podtytuł. Mail:
+  „📋 Kopiuj treść” / „Kopiuj temat” / „✉ Otwórz w poczcie” (`mailto:` do e-maila klienta z oferty). PDF dołącza się
+  w programie pocztowym, program nic nie wysyła sam. Ustawienia panelu: `localStorage stair3d.aiText`, klucz w
+  `stair3d.ai` (oba panele zapisują go pole po polu, żeby się nie nadpisywały).
+- Testy: `src/offer/__tests__/aiOfferText.test.js` (prompt bez danych osobowych, zapytanie, odpowiedź, mail, wstęp w
+  obu stylach i obu modułach).
+
 ## Ograniczenia
 
 - Jedna wizualizacja (widok izometryczny) i rzut; bez wyboru ujęcia.
