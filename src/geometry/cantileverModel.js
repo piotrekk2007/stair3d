@@ -226,7 +226,7 @@ export function buildCantileverBox(tread, planTread, config) {
     const s0 = wallPath.crossing(first.through, first.dir);
     const s1 = wallPath.crossing(last.through, last.dir);
     if (s0 === null || s1 === null || (s1 - s0) * Math.sign(wallPath.along(bOuter) - wallPath.along(fOuter)) <= 0) {
-      warnings.push(`stopień ${tread.index + 1}: przy ścianie nie ma miejsca na profil ${w} mm między frontem a tyłem okładziny.`);
+      warnings.push(`stopień ${tread.index + 1}: przy ścianie nie ma miejsca na profil ${w} mm między frontem a tyłem stopnia.`);
     } else {
       if (Math.abs(s1 - s0) < (p.profileCount - 1) * (w + 2 * p.clearanceMm)) {
         warnings.push(`stopień ${tread.index + 1}: przy ścianie mieści się mniej niż ${p.profileCount} profile ${w} mm — za wąski stopień (np. zabiegowy przy narożniku).`);
@@ -247,7 +247,7 @@ export function buildCantileverBox(tread, planTread, config) {
             if (!pointInPolygon({ x: line.start.x + line.dir.x * r, y: line.start.y + line.dir.y * r }, inner)) break;
             fit = r;
           }
-          warnings.push(`stopień ${tread.index + 1}: profil ${k + 1} (wysięg ${Math.round(lengthMm)} mm) wychodzi poza wnętrze okładziny — w tym miejscu mieści się profil do ok. ${Math.floor(fit / 5) * 5} mm.`);
+          warnings.push(`stopień ${tread.index + 1}: profil ${k + 1} (wysięg ${Math.round(lengthMm)} mm) wychodzi poza wnętrze stopnia — w tym miejscu mieści się profil do ok. ${Math.floor(fit / 5) * 5} mm.`);
         }
         profiles.push({ start: line.start, dir: line.dir, lengthMm, shortenedToNeighbour: lengthMm < p.profileProjectionMm - 1e-6, widthMm: w, heightMm: p.profileHeightMm, zBottom: bottom + p.shellMm + p.clearanceMm / 2 });
       });

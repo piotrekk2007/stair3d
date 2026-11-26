@@ -38,7 +38,7 @@ export function createWorkspace(app, handlers) {
       <span id="toolbar-brand">Stair3D</span>
       <div id="module-switch" role="tablist" aria-label="Moduł">
         <button type="button" role="tab" data-module="self-supporting" class="active" title="Schody samonośne (projekt dopasowany do otworu i klatki)">Samonośne</button>
-        <button type="button" role="tab" data-module="cladding" title="Schody na beton — okładziny na zmierzony bieg betonowy (osobny moduł)">Na beton</button>
+        <button type="button" role="tab" data-module="cladding" title="Schody na beton — stopnie drewniane na zmierzony bieg betonowy (osobny moduł)">Na beton</button>
       </div>
       <input id="project-name" type="text" placeholder="Nazwa projektu" maxlength="80" aria-label="Nazwa projektu" />
       <button type="button" id="project-notes-toggle" title="Notatki do projektu">📝 Notatki</button>

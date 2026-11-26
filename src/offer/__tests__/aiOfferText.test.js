@@ -34,7 +34,10 @@ test('the prompt: the facts, the lines, the exact gross total and the terms — 
   assert.match(p, /intro \(in Polish\)/);
   assert.match(p, /Never invent/);
   // the concrete module's offer says what it is about
-  assert.match(buildOfferTextPrompt({ kind: 'cladding', facts, offer }), /cladding .* concrete staircase/);
+  assert.match(buildOfferTextPrompt({ kind: 'cladding', facts, offer }), /timber stairs laid on an existing concrete staircase/);
+  // the trade's words (user decision 2026-11-26): the treads are never „okładzina”
+  assert.match(p, /NEVER call the treads or the stairs „okładzina”/);
+  assert.ok(!/wooden cladding \(/.test(buildOfferTextPrompt({ kind: 'cladding', facts, offer })));
   // the request asks for JSON by the schema
   const body = offerTextRequestBody('x');
   assert.equal(body.generationConfig.responseMimeType, 'application/json');

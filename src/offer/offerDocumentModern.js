@@ -198,7 +198,7 @@ const factValue = (facts, ...keys) => (facts.rows || []).find(([k]) => keys.incl
 function defaultTitle(facts) {
   const concrete = /betonow/i.test(factValue(facts, 'Rodzaj'));
   const material = factValue(facts, 'Drewno', 'Materiał');
-  const base = concrete ? 'Okładziny schodów betonowych' : 'Schody';
+  const base = concrete ? 'Schody drewniane na betonie' : 'Schody';
   return material && material !== '—' ? `${base} — ${material}` : base;
 }
 

@@ -155,7 +155,7 @@ export function buildCladdingOffer(quote, offer) {
     ];
   } else if (offer.mode === 'split') {
     rows = [
-      { id: 'material', label: 'Materiał — okładziny schodów wraz z przygotowaniem', detail: '', qty: null, unit: '', net: quote.totals.materialNet },
+      { id: 'material', label: 'Materiał — schody drewniane wraz z przygotowaniem', detail: '', qty: null, unit: '', net: quote.totals.materialNet },
       { id: 'installation', label: 'Montaż', detail: '', qty: null, unit: '', net: quote.totals.labourNet },
     ];
   } else {
@@ -224,7 +224,7 @@ export function claddingFacts(built, quoteSettings) {
   const avg = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
   const bp = quoteSettings.boardPricing || {};
   const rows = [
-    ['Rodzaj', 'Okładziny drewniane na biegu betonowym'],
+    ['Rodzaj', 'Schody drewniane na biegu betonowym'],
     ['Stopnie', `${steps} prostych${winders ? `, ${winders} zabiegowych` : ''}${landings ? `, ${landings} ${landings === 1 ? 'podest' : 'podesty'}` : ''}${starters ? `, ${starters} zapraszający` : ''}`],
     ['Wysokość całkowita', `${Math.round(built.totalRise)} mm`],
     ['Wysokość stopnia (po wykończeniu)', `${Math.round(Math.min(...rises))}–${Math.round(Math.max(...rises))} mm`],

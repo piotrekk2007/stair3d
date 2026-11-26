@@ -151,7 +151,7 @@ function cantileverTreadItems(t, config, wasteFactors) {
       wasteFactor: wasteFactorFor(elementType, materialId, wasteFactors),
       optional: false,
       status: TAKEOFF_ITEM_STATUS.OK,
-      notes: [`Okładzina stopnia wspornikowego — ${CANTILEVER_PART_LABELS[part.kind] || part.kind}, ${part.thicknessMm} mm, formatka ${Math.round(lengthMm)} × ${Math.round(widthMm)} mm.`],
+      notes: [`Element stopnia wspornikowego — ${CANTILEVER_PART_LABELS[part.kind] || part.kind}, ${part.thicknessMm} mm, formatka ${Math.round(lengthMm)} × ${Math.round(widthMm)} mm.`],
     });
   });
 }

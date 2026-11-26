@@ -75,7 +75,7 @@ test('the offer printed by the shared document; the estimate; the facts; saved i
   const html = buildOfferHTML({ offer: buildCladdingOffer(q, o), facts: claddingFacts(b, s), settings: o, company: { name: 'Stolarnia' }, planSvg: renderCladdingPlanSVG(b, { clientView: true }), projectName: 'Test' });
   assert.match(html, /Oferta nr OF\/1/);
   assert.match(html, /Jan Kowalski/);
-  assert.match(html, /Okładziny drewniane na biegu betonowym/);
+  assert.match(html, /Schody drewniane na biegu betonowym/);
   assert.doesNotMatch(html, /clad-edge-handle/, 'no editing aids on the client plan');
   const est = buildEstimateHTML({ quote: q, projectName: 'Test' });
   assert.match(est, /Kosztorys/);

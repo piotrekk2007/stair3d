@@ -60,7 +60,7 @@ export function buildOfferTextPrompt({ kind = 'stair', facts = {}, offer = {}, t
   const rows = (facts.rows || []).filter(([k, v]) => k && v && v !== '—');
   const lines = offer.lines || [];
   const t = offer.totals || {};
-  const what = kind === 'cladding' ? 'the wooden cladding (treads, risers, finishing) of an existing concrete staircase' : 'a made-to-measure self-supporting timber staircase';
+  const what = kind === 'cladding' ? 'timber stairs laid on an existing concrete staircase (wooden treads, risers and finishing on the concrete)' : 'a made-to-measure self-supporting timber staircase';
   const out = [
     `You write for a Polish joinery workshop that makes timber staircases. The offer is for ${what}.`,
     'Write the texts below from the FACTS only. Return JSON with the fields intro, title, subtitle, emailSubject, emailBody.',
@@ -71,6 +71,8 @@ export function buildOfferTextPrompt({ kind = 'stair', facts = {}, offer = {}, t
     '- No names of people, no placeholders, no brackets like [Name], no signatures, no contact data.',
     `- Tone: ${tone === 'friendly' ? 'warm and personal, but professional' : 'formal and polite, business style'}. Address the client politely in the plural form (Polish: „Państwo”).`,
     '- Plain text only: no markdown, no bullet characters, no emojis.',
+    // the trade's own words (user decision 2026-11-26): a tread is never „okładzina”
+    '- Polish trade terms: say „schody drewniane”, „stopnie drewniane” or „trepy schodowe”. NEVER call the treads or the stairs „okładzina” / „okładziny” (nor „wooden cladding” in German or English) — „okładzina” only for wood covering something that is not a step (a wall, a stringer, a beam).',
     '',
     'THE TEXTS:',
     `- intro (in Polish): the opening paragraph of the printed offer — what we offer and its main features in plain words, why it is a good choice. ${size.intro}. No greeting.`,

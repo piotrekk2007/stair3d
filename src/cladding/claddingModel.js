@@ -402,7 +402,7 @@ function heightDiagnostics(rows, config) {
       value: Math.round(r.finishedRiseMm),
       expected: `${Math.round(m)} ± ${config.riseToleranceMm}`,
       unit: 'mm',
-      message: `${r.label}: po wykończeniu ${Math.round(r.finishedRiseMm)} mm wysokości — inaczej niż reszta (${Math.round(m)} mm, różnica ${Math.round(r.finishedRiseMm - m)} mm). Wyrównaj beton albo grubość okładziny / posadzki.`,
+      message: `${r.label}: po wykończeniu ${Math.round(r.finishedRiseMm)} mm wysokości — inaczej niż reszta (${Math.round(m)} mm, różnica ${Math.round(r.finishedRiseMm - m)} mm). Wyrównaj beton albo grubość stopnia drewnianego / posadzki.`,
     })
   );
 }

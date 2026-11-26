@@ -237,7 +237,7 @@ export function stairFacts(config, derived, extras = {}) {
     ['Grubość stopnia / nosek', `${config.treadThickness} mm / ${config.nosing} mm`],
     ['Podstopnie', config.hasRiserBoards ? `tak (${config.riserBoardThickness} mm)` : 'nie (schody otwarte)'],
     config.stairConstruction === 'cantilever'
-      ? ['Konstrukcja', 'schody wspornikowe — okładziny drewniane na profilach stalowych w ścianie']
+      ? ['Konstrukcja', 'schody wspornikowe — stopnie drewniane nasuwane na profile stalowe w ścianie']
       : config.stairConstruction === 'metal-profile'
         ? ['Konstrukcja', `metalowa — stopnie drewniane na ${Number(config.metalBeamCount) >= 2 ? 'dwóch belkach stalowych' : 'centralnej belce stalowej'}`]
         : config.stairConstruction === 'metal-flat'
@@ -245,7 +245,7 @@ export function stairFacts(config, derived, extras = {}) {
           : ['Wangi', `${sideShort('outer', config)} ${CONSTRUCTION[config.stringerConstructionTypeOuter] || '-'}, ${sideShort('inner', config)} ${CONSTRUCTION[config.stringerConstructionTypeInner] || '-'}`],
     // a part on a concrete flight (concreteStair.js)
     concreteRange(config, derived.numTreads)
-      ? ['Bieg betonowy', `${concreteRangeText(concreteRange(config, derived.numTreads), derived.numTreads)} — stopnie drewniane (okładziny) na betonie`]
+      ? ['Bieg betonowy', `${concreteRangeText(concreteRange(config, derived.numTreads), derived.numTreads)} — stopnie drewniane na betonie`]
       : null,
     ['Balustrada', !config.railingEnabled ? 'nie' : `${RAILING_INFILL_LABELS[config.railingInfill]?.(config) || 'tak (tralki)'}${config.railingStyle === 'socha' ? ' — typ Socha (słupy z podstawą, frezami i czapką, poręcz profilowana)' : ''}`],
     extras.material ? ['Drewno', extras.material] : null,

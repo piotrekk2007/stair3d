@@ -71,11 +71,11 @@ export function mountCladdingApp(rootEl, host = {}) {
         <button type="button" data-act="save">Zapisz</button>
         <button type="button" data-act="load">Wczytaj</button>
         <span class="clad-sep"></span>
-        <button type="button" data-act="dxf" title="Wszystkie elementy okładziny płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
-        <button type="button" data-act="dae" title="Model 3D okładziny dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnice / Listwy i wangi / Balustrada / Beton">⬇ DAE</button>
+        <button type="button" data-act="dxf" title="Wszystkie elementy schodów drewnianych płasko 1:1 (mm): stopnie, podesty, noski, podstopnice, listwy, wangi obiciowe, szyby — z kodami i wymiarami">⬇ DXF 1:1</button>
+        <button type="button" data-act="dae" title="Model 3D schodów drewnianych dla SketchUpa (COLLADA, mm) — grupy Stopnie / Podstopnice / Listwy i wangi / Balustrada / Beton">⬇ DAE</button>
         <button type="button" data-act="cutlist" title="Lista formatek dla warsztatu (CSV dla Excela): kod, element, ilość, wymiary formatki, grubość, materiał, uwagi — te same kody co w DXF">⬇ Formatki CSV</button>
         <button type="button" data-act="order" title="Zamówienie na produkcję (PDF): elementy z krawędziami i rysunkami profili, wymiary grubość x szerokość x długość, typ L / P / CZ / PL, ilości — duża czcionka">🏭 Zamówienie PDF</button>
-        <button type="button" data-act="obj" title="Model 3D okładziny z betonem (OBJ, mm — przy imporcie ustaw milimetry); grupy jak w DAE">⬇ OBJ</button>
+        <button type="button" data-act="obj" title="Model 3D schodów drewnianych z betonem (OBJ, mm — przy imporcie ustaw milimetry); grupy jak w DAE">⬇ OBJ</button>
         <span class="clad-meta"></span>
         <span class="clad-sep"></span>
         <button type="button" data-act="undo" title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
@@ -188,7 +188,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   const openEdges = new Set();
   // how a group was measured: the raw concrete or the finished elements (the concrete derived — buildCladdingStair.js
   // concreteFromFinished)
-  const measuredSel = (g, i) => `<select data-i="${i}" data-f="measured" class="clad-measured" title="Wymiary betonu — albo gotowych stopni / podestów / zabiegów (beton wyliczony: głębokość bez noska, szerokość bez nosków bocznych, wysokość bez grubości okładzin; przy zabiegach krawędzie = gdzie nosek gotowego stopnia dochodzi do ściany / duszy)"><option value="concrete" ${g.measured !== 'finished' ? 'selected' : ''}>beton</option><option value="finished" ${g.measured === 'finished' ? 'selected' : ''}>gotowe</option></select>`;
+  const measuredSel = (g, i) => `<select data-i="${i}" data-f="measured" class="clad-measured" title="Wymiary betonu — albo gotowych stopni / podestów / zabiegów (beton wyliczony: głębokość bez noska, szerokość bez nosków bocznych, wysokość bez grubości drewna; przy zabiegach krawędzie = gdzie nosek gotowego stopnia dochodzi do ściany / duszy)"><option value="concrete" ${g.measured !== 'finished' ? 'selected' : ''}>beton</option><option value="finished" ${g.measured === 'finished' ? 'selected' : ''}>gotowe</option></select>`;
   function windersRow(g, i, tools) {
     const zone = state.built?.concrete.zones.find((z) => z.groupIndex === i);
     const turn = `<select data-i="${i}" data-f="turn">${Object.entries(WINDER_TURN_LABELS).map(([v, l]) => `<option value="${v}" ${v === g.turn ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
@@ -318,7 +318,7 @@ export function mountCladdingApp(rootEl, host = {}) {
   $('.clad-exit').addEventListener('change', (ev) => change((c) => (c.exitRiseMm = ev.target.value === '' ? null : Number(ev.target.value))));
 
   // --- the finish (lil-gui) ------------------------------------------------------------------------------------
-  const gui = new GUI({ container: $('.clad-gui'), title: 'Okładzina', autoPlace: false });
+  const gui = new GUI({ container: $('.clad-gui'), title: 'Schody drewniane', autoPlace: false });
   const live = (ctrl) => ctrl.onChange(() => change(() => {}, { record: false })).onFinishChange(() => commitHistory());
   const proxy = new Proxy({}, { get: (_, k) => state.config[k], set: (_, k, v) => ((state.config[k] = v), true) });
   live(gui.add(proxy, 'treadThicknessMm', 10, 100, 1).name('Grubość stopnia [mm]'));
@@ -655,7 +655,7 @@ export function mountCladdingApp(rootEl, host = {}) {
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.ownAdd !== undefined) {
-      const label = window.prompt('Nazwa pozycji (np. „Demontaż starych okładzin”):');
+      const label = window.prompt('Nazwa pozycji (np. „Demontaż starych stopni”):');
       if (!label) return;
       const unit = window.prompt(`Jednostka (${Object.values(LABOUR_UNITS).join(' / ')}):`, 'szt') || 'szt';
       state.quote.labour.push({ id: `own-${Date.now().toString(36)}`, label, unit, rate: 0, qty: 1 });
@@ -736,7 +736,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       <label class="clad-field">Nr oferty <span><input type="text" data-offer="offerNumber" value="${escapeHtml(o.offerNumber)}" /><button type="button" data-offer-number title="Zaproponuj numer">#</button></span></label>
       ${field('validityDays', 'Ważna [dni]', o.validityDays, 'number')}
       <label class="clad-field">Styl oferty <select data-offer="offerStyle"><option value="classic" ${o.offerStyle !== 'modern' ? 'selected' : ''}>klasyczny</option><option value="modern" ${o.offerStyle === 'modern' ? 'selected' : ''}>nowoczesny</option></select></label>
-      ${o.offerStyle === 'modern' ? `${field('offerEyebrow', 'Nadtytuł', o.offerEyebrow)}${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><label class="clad-field">Kod QR z kontaktem <input type="checkbox" data-offer="showContactQr" ${o.showContactQr ? 'checked' : ''} /></label><div class="clad-field">Obraz po lewej: <b>${aiHero ? `${{ ai: 'obraz AI', frame: 'kadr z prezentacji' }[aiHero.source] || 'obraz z pliku'} (${aiHero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height}`})` : 'wizualizacja 3D'}</b> <button type="button" data-hero-file title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button>${aiHero ? ' <button type="button" data-hero-remove>Wróć do wizualizacji 3D</button>' : ''}<input type="file" accept="image/*" data-hero-input hidden /></div><div class="clad-hint">Obraz AI: 🎬 Prezentacja → „✨ Obraz AI do oferty” (test); kadr z widoku 3D: „🖼 Kadry do oferty”.</div><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty nadtytuł = „Schody drewniane [z montażem]”, pusty tytuł = „Okładziny schodów betonowych — materiał”.</div>` : ''}
+      ${o.offerStyle === 'modern' ? `${field('offerEyebrow', 'Nadtytuł', o.offerEyebrow)}${field('offerTitle', 'Tytuł', o.offerTitle)}${field('offerSubtitle', 'Podtytuł', o.offerSubtitle)}${field('leadTime', 'Termin realizacji', o.leadTime)}${field('leadTimeNote', 'Opis terminu', o.leadTimeNote)}<label class="clad-field">Cena zawiera dostawę <input type="checkbox" data-offer="deliveryIncluded" ${o.deliveryIncluded ? 'checked' : ''} /></label><label class="clad-field">Kod QR z kontaktem <input type="checkbox" data-offer="showContactQr" ${o.showContactQr ? 'checked' : ''} /></label><div class="clad-field">Obraz po lewej: <b>${aiHero ? `${{ ai: 'obraz AI', frame: 'kadr z prezentacji' }[aiHero.source] || 'obraz z pliku'} (${aiHero.full ? 'cała wysokość' : `środek ${HERO_BOX_MM.width} × ${HERO_BOX_MM.height}`})` : 'wizualizacja 3D'}</b> <button type="button" data-hero-file title="Własny obraz (np. zdjęcie realizacji) zamiast wizualizacji">Z pliku…</button>${aiHero ? ' <button type="button" data-hero-remove>Wróć do wizualizacji 3D</button>' : ''}<input type="file" accept="image/*" data-hero-input hidden /></div><div class="clad-hint">Obraz AI: 🎬 Prezentacja → „✨ Obraz AI do oferty” (test); kadr z widoku 3D: „🖼 Kadry do oferty”.</div><div class="clad-hint">Strona 1 — oferta z wizualizacją w pionie, strona 2 — dane techniczne. Pusty nadtytuł = „Schody drewniane [z montażem]”, pusty tytuł = „Schody drewniane na betonie — materiał”.</div>` : ''}
       <label class="clad-field">Pozycje w ofercie <select data-offer="mode">${Object.entries(OFFER_MODES).map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${field('discountPct', 'Rabat [%] (wliczony w ceny pozycji)', o.discountPct, 'number')}
       <label class="clad-field">Tabela wygody i przepisów <input type="checkbox" data-offer="showComfort" ${o.showComfort ? 'checked' : ''} /></label>
@@ -744,7 +744,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       ${floor ? `<label class="clad-field">Dolicz piętro „${escapeHtml(floor.name)}” <input type="checkbox" data-offer="includeLinkedFloor" ${o.includeLinkedFloor ? 'checked' : ''} /></label><div class="clad-hint">${floor.error ? `Nie da się wycenić piętra: ${escapeHtml(floor.error)}` : floor.blocked ? 'Jego kosztorys jest zablokowany przez błędy walidacji — nie zostanie doliczony (rozwiąż je w jego projekcie).' : state.floor.reference.other?.kind === 'cladding' ? 'Wycenione cennikiem (i robocizną) tego projektu, pozycje razem z tymi; w danych technicznych jego rzut i parametry.' : 'Schody samonośne (inny typ) — wycenione własnym cennikiem z ich projektu (z CNC + projekt i montażem), pozycje razem z tymi; w danych technicznych ich rzut i parametry.'}</div>` : ''}
       <table class="clad-table clad-offer-rows"><thead><tr><th></th><th>pozycja (nazwę można zmienić)</th><th>netto</th></tr></thead><tbody>${offer.rows.map(rowHtml).join('')}${o.extras.map(extraHtml).join('')}</tbody></table>
       <div class="clad-actions"><button type="button" data-extra-add>+ Pozycja dodatkowa</button></div>
-      <label class="clad-field clad-notes">Wstęp (drukowany na początku oferty) <textarea data-offer="intro" rows="4" placeholder="np. krótki opis okładzin — albo „✨ Tekst oferty i mail (AI)”">${escapeHtml(o.intro)}</textarea></label>
+      <label class="clad-field clad-notes">Wstęp (drukowany na początku oferty) <textarea data-offer="intro" rows="4" placeholder="np. krótki opis schodów — albo „✨ Tekst oferty i mail (AI)”">${escapeHtml(o.intro)}</textarea></label>
       <div class="clad-actions"><button type="button" data-ai-text title="AI (Google Gemini) pisze wstęp oferty, tytuł i mail do klienta z danych tej oferty — bez danych klienta">✨ Tekst oferty i mail (AI)</button></div>
       <label class="clad-field clad-notes">Uwagi w ofercie <textarea data-offer="notes" rows="3">${escapeHtml(o.notes)}</textarea></label>
       <table class="clad-table clad-totals"><tbody><tr><td>Razem netto</td><td>${money(offer.totals.net)} zł</td></tr><tr><td>VAT ${offer.totals.vatRatePct}%</td><td>${money(offer.totals.vat)} zł</td></tr><tr><td><b>Razem brutto</b></td><td><b>${money(offer.totals.gross)} zł</b></td></tr></tbody></table>
@@ -1485,7 +1485,7 @@ export function mountCladdingApp(rootEl, host = {}) {
       })
       .join('');
     $('.clad-heights').innerHTML = `<table class="clad-table"><thead><tr><th>nr</th><th>beton</th><th>gotowa</th><th>głęb.</th><th>2h+s</th><th title="Nosek boczny: L — z lewej, P — z prawej, CZ — czołowy (między ścianami, bez noska bocznego), PL — z obu stron">typ</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="clad-hint">Wysokość gotowa = od posadzki / stopnia niżej do wierzchu okładziny [mm]. Wysokość całkowita: ${r0(state.built.totalRise)} mm.</div>`;
+      <div class="clad-hint">Wysokość gotowa = od posadzki / stopnia niżej do wierzchu stopnia drewnianego [mm]. Wysokość całkowita: ${r0(state.built.totalRise)} mm.</div>`;
     const ref = state.floor?.reference;
     const diags = [...state.built.diagnostics, ...(ref?.diagnostics || []), ...(ref?.error ? [{ severity: 'WARNING', message: ref.error }] : [])];
     $('.clad-findings').innerHTML = diags.length ? diags.map((d) => `<div class="clad-finding ${d.severity.toLowerCase()}">${escapeHtml(d.message)}</div>`).join('') : '<div class="clad-hint">Brak uwag.</div>';

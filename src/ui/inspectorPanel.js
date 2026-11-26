@@ -314,7 +314,7 @@ function summaryHTML(ctx) {
   const outerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeOuter] || config.stringerConstructionTypeOuter;
   const innerType = CONSTRUCTION_TYPE_LABELS_PL[config.stringerConstructionTypeInner] || config.stringerConstructionTypeInner;
   if (config.stairConstruction === 'cantilever') {
-    rows.push(row('Konstrukcja', 'wspornikowa (profile w ścianie, okładziny)', 'user'));
+    rows.push(row('Konstrukcja', 'wspornikowa (profile w ścianie, stopnie nasuwane)', 'user'));
   } else if (config.stairConstruction === 'metal-profile') {
     rows.push(row('Konstrukcja', `metalowa — wanga na profilu (${Number(config.metalBeamCount) >= 2 ? '2 belki' : '1 belka centralna'}, podpory pod stopniami)`, 'user'));
   } else if (config.stairConstruction === 'metal-flat') {
@@ -323,7 +323,7 @@ function summaryHTML(ctx) {
     rows.push(row('Typ wangi', outerType === innerType ? outerType : `${sideShort('outer', config)}: ${outerType} · ${sideShort('inner', config)}: ${innerType}`, 'user'));
   }
   if (planLayout.concreteRange) {
-    rows.push(row('Bieg betonowy', `${concreteRangeText(planLayout.concreteRange, planLayout.treads.length)} (okładziny na betonie)`, 'user'));
+    rows.push(row('Bieg betonowy', `${concreteRangeText(planLayout.concreteRange, planLayout.treads.length)} (stopnie drewniane na betonie)`, 'user'));
   }
   rows.push(row('Ręczne zmiany geometrii', manualCount === 0 ? 'brak (wszystko wyliczone)' : `${manualCount}`, manualCount === 0 ? 'auto' : 'manual'));
   rows.push(`<div class="insp-hint">Zaznacz stopień, wangę lub słup w Planie 2D (albo element w widoku 3D), żeby zobaczyć jego szczegóły, stan AUTO/RĘCZNA i uwagi walidatora.</div>`);

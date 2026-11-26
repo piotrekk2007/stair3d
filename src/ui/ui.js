@@ -148,7 +148,7 @@ export function createUI({
     },
   };
   const concreteOn = live(stairFolder.add(config, 'concreteEnabled')).name('Część schodów na biegu betonowym');
-  concreteOn.domElement.title = 'Część schodów leży na wylanym biegu betonowym (okładziny na betonie); reszta — schody drewniane na wangach, wangi dochodzą do betonu (albo stoją na nim). Tylko dla konstrukcji „Na wangach”.';
+  concreteOn.domElement.title = 'Część schodów leży na wylanym biegu betonowym (stopnie drewniane na betonie); reszta — schody drewniane na wangach, wangi dochodzą do betonu (albo stoją na nim). Tylko dla konstrukcji „Na wangach”.';
   const concretePart = live(stairFolder.add(config, 'concretePart', { 'górna (od stopnia do wyjścia)': 'upper', 'dolna (od posadzki do stopnia)': 'lower' })).name('Która część na betonie');
   const concreteFrom = live(stairFolder.add(concreteProxy, 'from', 1, 40, 1)).name('Beton od stopnia nr');
   const concreteTo = live(stairFolder.add(concreteProxy, 'to', 1, 40, 1)).name('Beton do stopnia nr');
@@ -181,7 +181,7 @@ export function createUI({
   const concreteWallRail = live(stairFolder.add(railProxy, 'mode', { 'brak': 'none', 'na uchwytach przy ścianie': 'wall', 'leżąca na murku': 'top' })).name('Poręcz przy ścianie nad biegiem');
   concreteWallRail.domElement.title = 'Na uchwytach: poręcz przyścienna wzdłuż lica ściany (odstęp i rozstaw uchwytów jak przy poręczy przyściennej, wysokość jak balustrada — folder 9). Leżąca na murku: na wierzchu murka (tylko gdy podana jest wysokość ściany). W kosztorysie jak poręcz (cena za mb) + uchwyty.';
   const concreteRailing = live(stairFolder.add(config, 'concreteRailingEnabled')).name('Balustrada także na biegu betonowym');
-  concreteRailing.domElement.title = 'Odcinki balustrady (folder 9) biegną dalej po stopniach na betonie: słupki i tralki stoją tam na stopniach okładzinowych (jak przy wandze nakładanej). Wyłączone — balustrada tylko na części drewnianej.';
+  concreteRailing.domElement.title = 'Odcinki balustrady (folder 9) biegną dalej po stopniach na betonie: słupki i tralki stoją tam na stopniach drewnianych na betonie (jak przy wandze nakładanej). Wyłączone — balustrada tylko na części drewnianej.';
   const syncConcrete = () => {
     const on = !!config.concreteEnabled && (config.stairConstruction || 'stringers') === 'stringers';
     concreteOn.show((config.stairConstruction || 'stringers') === 'stringers');
@@ -690,11 +690,11 @@ export function createUI({
   live(cant.add(config, 'cantileverProfileCount', 2, 4, 1)).name('Profile na stopień (min. 2)');
   live(cant.add(config, 'cantileverProfileProjectionMm', 200, 1500, 10)).name('Profil: wysięg ze ściany [mm]');
   live(cant.add(config, 'cantileverClearanceMm', 0, 10, 0.5)).name('Luz na nasunięcie [mm]');
-  live(cant.add(config, 'cantileverTopThicknessMm', 20, 60, 1)).name('Okładzina: góra [mm]');
-  live(cant.add(config, 'cantileverFrontThicknessMm', 20, 60, 1)).name('Okładzina: front [mm]');
-  live(cant.add(config, 'cantileverShellThicknessMm', 10, 40, 1)).name('Okładzina: spód/tył/bok [mm]');
+  live(cant.add(config, 'cantileverTopThicknessMm', 20, 60, 1)).name('Stopień: góra [mm]');
+  live(cant.add(config, 'cantileverFrontThicknessMm', 20, 60, 1)).name('Stopień: front [mm]');
+  live(cant.add(config, 'cantileverShellThicknessMm', 10, 40, 1)).name('Stopień: spód/tył/bok [mm]');
   live(cant.add(config, 'cantileverWallGapMm', 0, 30, 1)).name('Szczelina przy ścianie [mm]');
-  live(cant.add(config, 'cantileverMaxWidthMm', 600, 2400, 10)).name('Maks. szerokość okładziny [mm]');
+  live(cant.add(config, 'cantileverMaxWidthMm', 600, 2400, 10)).name('Maks. szerokość stopnia [mm]');
   // Konstrukcja metalowa (geometry/metalStructureModel.js): prosta belka + podpory albo dwa płaskowniki w zęby;
   // bez wang drewnianych, słupów konstrukcyjnych i podstopni. Wymiary stali — DO WERYFIKACJI.
   live(cant.add(config, 'metalBeamCount', { '1 belka centralna': 1, '2 belki': 2 })).name('Profil: liczba belek');

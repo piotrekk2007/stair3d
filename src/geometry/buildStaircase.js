@@ -148,7 +148,7 @@ export function buildStaircase(rawConfig) {
     });
     const widthMm = fullConfig.stairWidth - (fullConfig.cantileverWallGapMm || 0);
     if (widthMm > (fullConfig.cantileverMaxWidthMm || 1800)) {
-      cantileverResult.diagnostics.push(createDiagnostic({ ruleId: 'CANTILEVER-WIDTH', severity: 'WARNING', elementType: 'stair', elementId: 'stair', parameter: 'stairWidth', value: Math.round(widthMm), expected: `<= ${fullConfig.cantileverMaxWidthMm || 1800}`, unit: 'mm', message: `Okładzina stopnia wspornikowego ma ${Math.round(widthMm)} mm szerokości — więcej niż maks. ${fullConfig.cantileverMaxWidthMm || 1800} mm.` }));
+      cantileverResult.diagnostics.push(createDiagnostic({ ruleId: 'CANTILEVER-WIDTH', severity: 'WARNING', elementType: 'stair', elementId: 'stair', parameter: 'stairWidth', value: Math.round(widthMm), expected: `<= ${fullConfig.cantileverMaxWidthMm || 1800}`, unit: 'mm', message: `Stopień wspornikowy ma ${Math.round(widthMm)} mm szerokości — więcej niż maks. ${fullConfig.cantileverMaxWidthMm || 1800} mm.` }));
     }
   }
   const riserModels = buildRiserModels(planLayout, fullConfig);

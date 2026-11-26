@@ -129,8 +129,8 @@ test('the delivery and installation wording; the eyebrow; the default title; a l
   assert.match(html({ offerTitle: 'Schody dębowe', offerSubtitle: 'podstopnie czarny MDF' }), /<h1 class="display">Schody dębowe <span class="sub">podstopnie czarny MDF<\/span>/);
   assert.match(html({ offerTitle: 'Schody dębowe kl. AB, klasyczne z noskiem i podstopniami ze sklejki szczotkowanej' }), /<h1 class="display long">/);
   // the concrete module's facts: its own default title
-  const concrete = { rows: [['Rodzaj', 'Okładziny drewniane na biegu betonowym'], ['Materiał', 'Dąb, Klasa Natura']], comfort: [] };
-  assert.match(buildModernOfferHTML({ offer: offerOf(1), facts: concrete, settings: settings(), company, date: new Date(2026, 10, 6) }), /Okładziny schodów betonowych — Dąb, Klasa Natura/);
+  const concrete = { rows: [['Rodzaj', 'Schody drewniane na biegu betonowym'], ['Materiał', 'Dąb, Klasa Natura']], comfort: [] };
+  assert.match(buildModernOfferHTML({ offer: offerOf(1), facts: concrete, settings: settings(), company, date: new Date(2026, 10, 6) }), /Schody drewniane na betonie — Dąb, Klasa Natura/);
 });
 
 test('sheet 1\'s specification: the facts but „Montaż”, at most 7; sheet 2: the parameters, the plan, the comfort', () => {
